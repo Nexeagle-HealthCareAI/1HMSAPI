@@ -1,0 +1,103 @@
+trigger:
+- main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+# ==== EDIT THESE VALUES ====
+variables:
+  apiProject: 'EasyHMSAPI.Api/EasyHMSAPI.Api.csproj'   # <— your csproj path
+  publishDir: '$(Build.ArtifactStagingDirectory)/publish'
+  artifactName: 'api-drop'
+
+  # Dev App Service
+  devAppName: 'easyHMSAPIServices'                           # <— CHANGE
+  devResourceGroup: 'website-dev-rg'     # <— CHANGE
+
+
+  # QA App Service
+  qaAppName: 'easyHMSAPISevices'                             # <— CHANGE
+  qaResourceGroup: 'website-qa-rg'       # <— CHANGE
+
+
+stages:
+# ===================== Build once =====================
+- stage: Build
+  displayName: Build & Package API
+  jobs:
+  - job: BuildJob
+    steps:
+    - task: UseDotNet@2
+      displayName: 'Use .NET 8 SDK'
+      inputs:
+        version: '8.x'
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Restore'
+      inputs:
+        command: 'restore'
+        projects: '$(apiProject)'
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Build'
+      inputs:
+        command: 'build'
+        projects: '$(apiProject)'
+        arguments: '--configuration Release --no-restore'
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Publish (zip)'
+      inputs:
+        command: 'publish'
+        projects: '$(apiProject)'
+        arguments: '--configuration Release --no-restore --output $(publishDir)'
+        publishWebProjects: false
+        zipAfterPublish: true
+
+    - publish: $(publishDir)
+      artifact: $(artifactName)
+
+# ===================== Deploy to Dev =====================
+- stage: Deploy_Dev
+  displayName: Deploy to App Service (Dev)
+  dependsOn: Build
+  jobs:
+  - deployment: DeployDev
+    environment: 'dev'   # add approvals/checks if you want
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: current
+            artifact: $(artifactName)
+
+          - task: AzureWebApp@1
+            displayName: 'Deploy ZIP to Dev App Service'
+            inputs:
+              azureSubscription: 'svc-conn-nexeagle-dev'
+              appType: 'webAppLinux'
+              appName: '$(devAppName)'
+              package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'         
+
+# ===================== Deploy to QA =====================
+- stage: Deploy_QA
+  displayName: Deploy to App Service (QA)
+  dependsOn: Deploy_Dev
+  condition: succeeded()
+  jobs:
+  - deployment: DeployQA
+    environment: 'qa'   # add Approvals & Checks here for a gate
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: current
+            artifact: $(artifactName)        
+
+          - task: AzureWebApp@1
+            displayName: 'Deploy ZIP to QA App Service'
+            inputs:
+              azureSubscription: 'svc-conn-nexeagle-qa'
+              appType: 'webAppLinux'
+              appName: '$(qaAppName)'
+              package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
