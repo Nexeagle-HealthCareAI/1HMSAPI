@@ -1,0 +1,34 @@
+namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
+{
+    public class GetHospitalDetailsResponseModel
+    {
+        public Guid HospitalId { get; set; }
+        public Guid? HospitalDepartmentMappingId { get; set; }
+        public string? Name { get; set; }
+        public string? Type { get; set; }
+        public string? Email { get; set; }
+        public string? Contact { get; set; }
+        public string? AlternateContact { get; set; }
+        public string? Website { get; set; }
+        public string? Location { get; set; }
+        public string? City { get; set; }
+        public string? State { get; set; }
+        public string? Country { get; set; }
+        public string? Pincode { get; set; }
+        public string? RegistrationNumber { get; set; }
+        public string? TimeZone { get; set; }
+        public bool IsActive { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime LastUpdatedAt { get; set; }
+        public HospitalProfileStatusDto? ProfileStatus { get; set; }
+    }
+
+    public class HospitalProfileStatusDto
+    {
+        public bool IsBasicInfoComplete { get; set; }
+        public bool IsContactInfoComplete { get; set; }
+        public bool IsLocationInfoComplete { get; set; }
+        public int ProfileCompletionPercent { get; set; }
+        public DateTime LastUpdatedAt { get; set; }
+    }
+} 

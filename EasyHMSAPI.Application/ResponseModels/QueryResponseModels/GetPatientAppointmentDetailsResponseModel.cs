@@ -1,0 +1,38 @@
+namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
+{
+    public class GetPatientAppointmentDetailsResponseModel
+    {
+        public List<AppointmentDetail> Items { get; set; } = new List<AppointmentDetail>();
+        public int TotalAppointments => Items.Count;
+    }
+
+    public class AppointmentDetail
+    {
+        public Guid AppointmentId { get; set; }
+        public string? PatientId { get; set; }
+        public string? PatientFullName { get; set; }
+        public string? PatientMobile { get; set; }
+        public string? PatientSex { get; set; }
+        public int? PatientAgeYears { get; set; }
+        public Guid DoctorId { get; set; }
+        public string? DoctorName { get; set; }
+        public DateTime AppointmentDate { get; set; }
+        public DateTime StartAt { get; set; }
+        public DateTime EndAt { get; set; }
+        public string? FinalStatusCode { get; set; }
+        public string? Reason { get; set; }
+        public string? InsuranceId { get; set; }
+        public string? PaymentMode { get; set; }
+        public DateTime LastStatusAt { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public TokenDetail? Token { get; set; }
+    }
+
+    public class TokenDetail
+    {
+        public Guid TokenId { get; set; }
+        public int? TokenNumber { get; set; }
+        public string? Status { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+}

@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.AzureAppServices" Version="9.0.10" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.0" />
+    <PackageReference Include="Microsoft.OpenApi" Version="1.4.3" />
+    <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\EasyHMSAPI.Application\EasyHMSAPI.Application.csproj" />
+    <ProjectReference Include="..\EasyHMSAPI.Domain\EasyHMSAPI.Domain.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="HandlerTests\CommandHandlerTests\" />
+    <Folder Include="HandlerTests\QueryHandlerTests\" />
+  </ItemGroup>
+</Project>

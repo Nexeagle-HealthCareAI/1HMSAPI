@@ -1,0 +1,62 @@
+trigger:
+  - main
+  - release
+
+pr: none
+
+pool:
+  vmImage: 'windows-latest'
+
+variables:
+  buildConfiguration: 'Release'
+  testResultsDir: '$(Build.SourcesDirectory)/TestResults'
+
+steps:
+# 1. Install .NET 8 SDK
+- task: UseDotNet@2
+  displayName: 'Install .NET 8 SDK'
+  inputs:
+    packageType: 'sdk'
+    version: '8.0.x'
+
+# 2. Restore dependencies
+- task: DotNetCoreCLI@2
+  displayName: 'Restore Packages'
+  inputs:
+    command: 'restore'
+    projects: '**/*.csproj'
+
+# 3. Build solution
+- task: DotNetCoreCLI@2
+  displayName: 'Build Solution'
+  inputs:
+    command: 'build'
+    projects: '**/*.csproj'
+    arguments: '--configuration $(buildConfiguration)'
+
+# 4. Publish artifacts
+- task: DotNetCoreCLI@2
+  displayName: 'Publish Packages'
+  inputs:
+    command: 'publish'
+    projects: '**/EasyHMS.Api/*.csproj'
+    arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)'
+    publishWebProjects: true
+    zipAfterPublish: true
+
+# 5. Final artifact publish
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish Build Artifacts'
+  inputs:
+    PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+    ArtifactName: 'drop'
+    publishLocation: 'Container'
+
+# 6. Deploy to Azure App Service
+- task: AzureWebApp@1
+  displayName: 'Deploy to Azure App Service'
+  inputs:
+    azureSubscription: 'AzureConnection-EasyHMS'
+    appType: 'webApp'
+    appName: 'easyHMSAPI'
+    package: '$(Build.ArtifactStagingDirectory)/**/*.zip'

@@ -1,0 +1,25 @@
+using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using MediatR;
+using System.ComponentModel.DataAnnotations;
+
+namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
+{
+    public class UpdatePatientProfileRequestModel : IRequest<UpdatePatientProfileResponseModel>
+    {
+        [Required]
+        public Guid HospitalId { get; set; }
+        [Required]
+        public string PatientId { get; set; } = string.Empty;
+        public string? FullName { get; set; }
+        public string? Mobile { get; set; }
+        public short? AgeYears { get; set; }
+        public string? Sex { get; set; }
+        public string? AddressLine1 { get; set; }
+        public string? City { get; set; }
+        public string? State { get; set; }
+        public string? Country { get; set; }
+        public string? Pincode { get; set; }
+        public string? InsuranceId { get; set; }
+        public string? PaymentMode { get; set; }
+    }
+}

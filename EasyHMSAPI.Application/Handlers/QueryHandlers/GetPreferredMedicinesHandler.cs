@@ -1,0 +1,41 @@
+using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
+using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Domain.Context;
+using MediatR;
+using Microsoft.EntityFrameworkCore;
+
+namespace EasyHMSAPI.Application.Handlers.QueryHandlers
+{
+    public class GetPreferredMedicinesHandler : IRequestHandler<GetPreferredMedicinesRequestModel, List<GetPreferredMedicineResponseModel>>
+    {
+        private readonly AppDbContext _dbContext;
+        public GetPreferredMedicinesHandler(AppDbContext dbContext)
+        {
+            _dbContext = dbContext;
+        }
+
+        public async Task<List<GetPreferredMedicineResponseModel>> Handle(GetPreferredMedicinesRequestModel request, CancellationToken cancellationToken)
+        {
+            var list = await _dbContext.DoctorPreferredMedicines
+                .AsNoTracking()
+                .Where(d => d.DoctorId == request.DoctorId && d.IsActive)
+                .Select(d => new GetPreferredMedicineResponseModel
+                {
+                    PrefferedId = d.PreferrredId,
+                    GenericName = d.GenericName,
+                    BrandName = d.BrandName ?? string.Empty,
+                    Form = d.Form ?? string.Empty,
+                    StrengthValue = d.StrengthValue ?? string.Empty,
+                    StrengthUnit = d.StrengthUnit ?? string.Empty,
+                    Route = d.Route ?? string.Empty,
+                    Dose = d.Dose ?? string.Empty,
+                    Indication = d.Indication ?? string.Empty,
+                    Notes = d.Notes ?? string.Empty,
+                    MedicineId = d.MedicineId ?? string.Empty
+                })
+                .ToListAsync(cancellationToken);
+
+            return list;
+        }
+    }
+}
