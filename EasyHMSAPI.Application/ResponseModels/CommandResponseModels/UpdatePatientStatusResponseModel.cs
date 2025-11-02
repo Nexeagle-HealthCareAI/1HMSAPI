@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
 {
+    [ExcludeFromCodeCoverage]
     public class UpdatePatientStatusResponseModel
     {
         public bool Success { get; set; }
@@ -9,6 +12,7 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public string? NewStatus { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class StatusHistoryItem
     {
         public string? Status { get; set; }

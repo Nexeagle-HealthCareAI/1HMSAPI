@@ -1,5 +1,8 @@
-﻿namespace EasyHMSAPI.Data.Constants
+﻿using System.Diagnostics.CodeAnalysis;
+
+namespace EasyHMSAPI.Data.Constants
 {
+    [ExcludeFromCodeCoverage]
     public static class AppConstants
     {
         public static readonly string[] AllowedShiftNames = { "afternoon", "evening", "morning" };

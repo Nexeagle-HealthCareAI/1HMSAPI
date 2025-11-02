@@ -1,9 +1,11 @@
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using MediatR;
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
 {
+    [ExcludeFromCodeCoverage]
     public class GetPatientProfileRequestModel : IRequest<GetPatientProfileResponseModel>
     {
         [Required]

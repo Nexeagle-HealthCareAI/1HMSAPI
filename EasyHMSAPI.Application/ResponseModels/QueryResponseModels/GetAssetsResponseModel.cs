@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
 {
+    [ExcludeFromCodeCoverage]
     public class GetAssetsResponseModel
     {
         public Guid PrescriptionAssestId { get; set; }
@@ -8,6 +11,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public bool Success { get; set; }
         public string? Message { get; set; }
     }
+
+    [ExcludeFromCodeCoverage]
     public class AssetsDataModel
     {
         public Guid PrescriptionAssestId { get; set; }

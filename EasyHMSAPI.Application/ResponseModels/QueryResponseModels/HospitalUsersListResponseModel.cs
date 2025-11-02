@@ -1,11 +1,15 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
 {
+    [ExcludeFromCodeCoverage]
     public class HospitalUsersListResponseModel
     {
         public Guid HospitalId { get; set; }
         public List<HospitalUsersListItem> Users { get; set; } = new();
     }
 
+    [ExcludeFromCodeCoverage]
     public class HospitalUsersListItem
     {
         public Guid UserId { get; set; }

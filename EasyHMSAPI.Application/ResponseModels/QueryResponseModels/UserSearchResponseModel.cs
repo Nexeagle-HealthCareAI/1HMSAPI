@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
 {
+    [ExcludeFromCodeCoverage]
     public class UserSearchResponseModel
     {
         public Guid UserId { get; set; }
@@ -12,6 +15,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         
     }
 
+    [ExcludeFromCodeCoverage]
     public class UserAuthInfo
     {
         public Guid UserAuthId { get; set; }
@@ -24,6 +28,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public DateTime CreatedAt { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class UserProfileInfo
     {
         public Guid UserProfileId { get; set; }

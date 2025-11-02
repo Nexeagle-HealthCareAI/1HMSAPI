@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace EasyHMSAPI.Domain.Entities
 {
+    [ExcludeFromCodeCoverage]
     public class LookupType
     {
         public int LookupTypeId { get; set; }

@@ -1,11 +1,15 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
 {
+    [ExcludeFromCodeCoverage]
     public class DoctorTimeOffListResponseModel
     {
         public Guid DoctorId { get; set; }
         public List<DoctorTimeOffItem> TimeOffs { get; set; } = new();
     }
 
+    [ExcludeFromCodeCoverage]
     public class DoctorTimeOffItem
     {
         public Guid TimeOffId { get; set; }

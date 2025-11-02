@@ -1,8 +1,9 @@
-using System;
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Domain.Entities
 {
+    [ExcludeFromCodeCoverage]
     public class DoctorShiftTemplate
     {
         [Key]

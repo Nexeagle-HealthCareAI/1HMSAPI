@@ -1,9 +1,10 @@
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
-using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 
 namespace EasyHMSAPI.Application.RequestModels.CommandRequestModel
 {
+    [ExcludeFromCodeCoverage]
     public class HospitalUpdateRequestModel : MediatR.IRequest<HospitalUpdateResponseModel>
     {
         [JsonIgnore]

@@ -1,8 +1,9 @@
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
-using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
 {
+    [ExcludeFromCodeCoverage]
     public class GetHospitalUsersRequestModel : MediatR.IRequest<GetHospitalUsersResponseModel?>
     {
         public Guid UserId { get; }

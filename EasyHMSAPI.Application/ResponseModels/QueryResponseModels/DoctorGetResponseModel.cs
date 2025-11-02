@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
 {
+    [ExcludeFromCodeCoverage]
     public class DoctorGetResponseModel
     {
         public Guid DoctorId { get; set; }
@@ -18,6 +21,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public List<DoctorSpecializationInfo> DoctorSpecializations { get; set; } = new List<DoctorSpecializationInfo>();
     }
 
+    [ExcludeFromCodeCoverage]
     public class DoctorDepartmentInfo
     {
         public Guid DoctorDepartmentId { get; set; }
@@ -27,6 +31,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public DateTime AssignedAt { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class DoctorSpecializationInfo
     {
         public Guid DoctorSpecializationId { get; set; }

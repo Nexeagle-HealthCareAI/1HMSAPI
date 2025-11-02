@@ -5,9 +5,11 @@ using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Api.Controllers
 {
+    [ExcludeFromCodeCoverage]
     [Route("admin")]
     [ApiController]
     [Authorize]

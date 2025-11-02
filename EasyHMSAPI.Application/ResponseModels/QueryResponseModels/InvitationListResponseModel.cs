@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
 {
+    [ExcludeFromCodeCoverage]
     public class InvitationListResponseModel
     {
         public bool Success { get; set; }
@@ -7,6 +10,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public List<InvitationItem> Invitations { get; set; } = new();
     }
 
+    [ExcludeFromCodeCoverage]
     public class InvitationItem
     {
         public Guid InvitationId { get; set; }

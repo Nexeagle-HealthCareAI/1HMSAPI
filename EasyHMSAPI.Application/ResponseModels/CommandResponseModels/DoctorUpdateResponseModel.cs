@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
 {
+    [ExcludeFromCodeCoverage]
     public class DoctorUpdateResponseModel
     {
         public bool Success { get; set; }

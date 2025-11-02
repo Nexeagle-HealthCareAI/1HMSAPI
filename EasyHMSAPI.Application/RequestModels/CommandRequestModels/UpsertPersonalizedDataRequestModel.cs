@@ -1,8 +1,10 @@
 ﻿using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using MediatR;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
 {
+    [ExcludeFromCodeCoverage]
     public class UpsertPersonalizedDataRequestModel : IRequest<UpsertPersonalizedDataResponseModel>
     {
         public Guid HospitalId { get; set; }
@@ -11,6 +13,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public PersonalizedLookupDataModel Data { get; set; } = null!;
     }
 
+    [ExcludeFromCodeCoverage]
     public class PersonalizedLookupDataModel
     {
         public string Name { get; set; } = string.Empty;

@@ -1,8 +1,8 @@
-using System;
-using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
 {
+    [ExcludeFromCodeCoverage]
     public class DoctorBookedSlotsResponseModel
     {
         public Guid DoctorId { get; set; }

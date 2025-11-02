@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace EasyHMSAPI.Api.Controllers
 {
+    [ExcludeFromDescription]
     [Route("doctors")]
     [ApiController]
     public class DoctorsController : ControllerBase

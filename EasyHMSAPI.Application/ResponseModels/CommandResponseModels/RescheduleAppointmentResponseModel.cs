@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
 {
+    [ExcludeFromCodeCoverage]
     public class RescheduleAppointmentResponseModel
     {
         public Guid ApptId { get; set; }
@@ -10,6 +13,7 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public string? Message { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class TokenInfo
     {
         public int TokenNo { get; set; }

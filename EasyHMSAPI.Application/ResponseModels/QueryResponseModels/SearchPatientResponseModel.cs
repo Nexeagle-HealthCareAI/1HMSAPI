@@ -1,11 +1,15 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
 {
+    [ExcludeFromCodeCoverage]
     public class SearchPatientResponseModel
     {
         public List<PatientSearchResult> Items { get; set; } = new List<PatientSearchResult>();
         public int TotalPatients => Items.Count;
     }
 
+    [ExcludeFromCodeCoverage]
     public class PatientSearchResult
     {
         public string? PatientId { get; set; }
@@ -25,6 +29,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? TokenNumber { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class MatchInfo
     {
         public string? By { get; set; }

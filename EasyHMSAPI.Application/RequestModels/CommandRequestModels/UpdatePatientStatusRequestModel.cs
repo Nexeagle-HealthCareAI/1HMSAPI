@@ -1,10 +1,12 @@
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using MediatR;
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 
 namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
 {
+    [ExcludeFromCodeCoverage]
     public class UpdatePatientStatusRequestModel : IRequest<UpdatePatientStatusResponseModel>
     {
         [Required]

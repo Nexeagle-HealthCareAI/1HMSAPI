@@ -1,9 +1,11 @@
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using MediatR;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 
 namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
 {
+    [ExcludeFromCodeCoverage]
     public class RegisterAppointmentRequestModel : IRequest<RegisterAppointmentResponseModel>
     {
         [JsonIgnore]
@@ -19,6 +21,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public Guid? UserId { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class Patient
     {
         public string? FullName { get; set; }

@@ -1,7 +1,9 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
 {
+    [ExcludeFromCodeCoverage]
     public class DoctorSectionPreferenceUpdateModel
     {
         public bool? Vitals { get; set; }

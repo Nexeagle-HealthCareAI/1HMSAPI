@@ -1,11 +1,15 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
 {
+    [ExcludeFromCodeCoverage]
     public class GetPatientAppointmentDetailsResponseModel
     {
         public List<AppointmentDetail> Items { get; set; } = new List<AppointmentDetail>();
         public int TotalAppointments => Items.Count;
     }
 
+    [ExcludeFromCodeCoverage]
     public class AppointmentDetail
     {
         public Guid AppointmentId { get; set; }
@@ -28,6 +32,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public TokenDetail? Token { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class TokenDetail
     {
         public Guid TokenId { get; set; }

@@ -3,9 +3,11 @@ using MediatR;
 using Microsoft.AspNetCore.Http;
 using System;
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
 {
+    [ExcludeFromCodeCoverage]
     public class UploadAssetRequestModel : IRequest<UploadAssetResponseModel>
     {
         [Required]

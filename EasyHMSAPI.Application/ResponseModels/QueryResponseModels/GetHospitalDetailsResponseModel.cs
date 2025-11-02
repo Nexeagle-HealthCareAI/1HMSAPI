@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
 {
+    [ExcludeFromCodeCoverage]
     public class GetHospitalDetailsResponseModel
     {
         public Guid HospitalId { get; set; }
@@ -23,6 +26,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public HospitalProfileStatusDto? ProfileStatus { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class HospitalProfileStatusDto
     {
         public bool IsBasicInfoComplete { get; set; }

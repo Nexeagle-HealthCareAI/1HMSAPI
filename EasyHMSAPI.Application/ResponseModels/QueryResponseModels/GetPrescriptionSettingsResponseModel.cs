@@ -1,7 +1,9 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
 {
+    [ExcludeFromCodeCoverage]
     public class GetPrescriptionSettingsResponseModel
     {
         public Guid? PrescriptionSettingsId { get; set; }

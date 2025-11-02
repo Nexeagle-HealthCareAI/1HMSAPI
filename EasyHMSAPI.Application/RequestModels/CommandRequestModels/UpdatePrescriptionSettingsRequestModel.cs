@@ -1,14 +1,17 @@
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using MediatR;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
 {
+    [ExcludeFromCodeCoverage]
     public class UpdatePrescriptionSettingsRequestModel : IRequest<UpdatePrescriptionSettingsResponseModel>
     {
         public Guid DoctorId { get; set; }
         public PrescriptionSettingsDataModel Settings { get; set; } = null!;
     }
 
+    [ExcludeFromCodeCoverage]
     public class PrescriptionSettingsDataModel
     {
         public PageLayoutDataModel? PageLayout { get; set; }
@@ -22,12 +25,14 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public DoctorSettingDataModel? DoctorSetting { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class PageLayoutDataModel
     {
         public string? Orientation { get; set; }
         public MarginDataModel? Margin { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class MarginDataModel
     {
         public int Top { get; set; }
@@ -36,12 +41,14 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public int Left { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class LetterheadSettingsDataModel
     {
         public int HeaderHeight { get; set; }
         public int FooterHeight { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class HeaderSettingsDataModel
     {
         public int Height { get; set; }
@@ -50,6 +57,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public bool ShowOnAllPages { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class FooterSettingsDataModel
     {
         public int Height { get; set; }
@@ -58,6 +66,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public bool ShowOnAllPages { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class DoctorSettingDataModel
     {
         public bool ShowSignature { get; set; }

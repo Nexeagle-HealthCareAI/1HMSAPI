@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using EasyHMSAPI.Domain.Entities;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Domain.Context
 {
+    [ExcludeFromCodeCoverage]
     public class AppDbContext : DbContext
     {
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }

@@ -1,10 +1,14 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
 {
+    [ExcludeFromCodeCoverage]
     public class DoctorDashboardAppointmentDetailsResponseModel
     {
         public List<DoctorDashboardAppointmentDetail> Items { get; set; } = new List<DoctorDashboardAppointmentDetail>();
     }
 
+    [ExcludeFromCodeCoverage]
     public class DoctorDashboardAppointmentDetail
     {
         public string? PatientId { get; set; }
@@ -24,6 +28,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public DateTime CreatedAt { get; set; }
         public TokenDetailsDataModel? TokenDetails { get; set; }
     }
+
+    [ExcludeFromCodeCoverage]
     public class TokenDetailsDataModel
     {
         public Guid TokenId { get; set; }

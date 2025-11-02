@@ -1,7 +1,9 @@
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
 {
+    [ExcludeFromCodeCoverage]
     public class UserProfileUpdateRequestModel : MediatR.IRequest<UserProfileUpdateResponseModel>
     {
         public Guid UserId { get; set; }

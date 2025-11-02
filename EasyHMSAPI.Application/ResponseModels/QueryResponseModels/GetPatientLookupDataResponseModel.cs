@@ -1,17 +1,22 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
 {
+    [ExcludeFromCodeCoverage]
     public class LookupTypeInfo
     {
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
     }
 
+    [ExcludeFromCodeCoverage]
     public class ScopeInfo
     {
         public Guid HospitalId { get; set; }
         public Guid DoctorId { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class LookupItemPersonal
     {
         public Guid PersonalId { get; set; }
@@ -22,6 +27,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public long UsageCount { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class LookupItemGeneral
     {
         public string? Code { get; set; }
@@ -32,6 +38,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public long UsageCount { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class GetPatientLookupDataResponseModel
     {
         public LookupTypeInfo LookupType { get; set; } = new LookupTypeInfo();

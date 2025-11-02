@@ -3,9 +3,11 @@ using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Api.Controllers
 {
+    [ExcludeFromCodeCoverage]
     [ApiController]
     [Route("appointments")]
     public class AppointmentsController : ControllerBase

@@ -1,5 +1,8 @@
-﻿namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
+﻿using System.Diagnostics.CodeAnalysis;
+
+namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
 {
+    [ExcludeFromCodeCoverage]
     public class GetPreferredMedicineResponseModel
     {
         public long PrefferedId { get; set; }

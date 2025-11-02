@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
 {
+    [ExcludeFromCodeCoverage]
     public class DoctorShiftConfigResponseModel
     {
         public Guid DoctorId { get; set; }
@@ -8,6 +11,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public List<ShiftInfo>? ShiftInfo { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class ShiftInfo
     {
         public DateOnly ShiftDate { get; set; }
@@ -15,6 +19,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public List<ShiftDayDetails>? ShiftDayDetails { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class ShiftDayDetails
     {
         public Guid? OverrideId { get; set; }

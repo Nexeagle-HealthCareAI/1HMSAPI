@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
 {
+    [ExcludeFromCodeCoverage]
     public class HospitalKpiMatrixResponseModel
     {
         public Guid HospitalId { get; set; }
@@ -9,6 +12,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public List<StatusKpi> StatusKpis { get; set; } = new List<StatusKpi>();
     }
 
+    [ExcludeFromCodeCoverage]
     public class StatusKpi
     {
         public string StatusCode { get; set; } = string.Empty;

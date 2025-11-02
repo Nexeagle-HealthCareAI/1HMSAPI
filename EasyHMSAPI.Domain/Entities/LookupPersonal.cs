@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace EasyHMSAPI.Domain.Entities
 {
+    [ExcludeFromCodeCoverage]
     public class LookupPersonal
     {
         public Guid PersonalId { get; set; }
@@ -21,7 +24,6 @@ namespace EasyHMSAPI.Domain.Entities
         public DateTime? ModifiedAt { get; set; }
         public Guid? ModifiedBy { get; set; }
         public byte[]? RowVersion { get; set; }
-
         public LookupType? LookupType { get; set; }
         public LookupMaster? MasterLookup { get; set; }
     }

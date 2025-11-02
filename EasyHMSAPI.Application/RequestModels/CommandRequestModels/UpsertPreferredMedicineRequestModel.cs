@@ -1,14 +1,17 @@
 ﻿using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using MediatR;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
 {
+    [ExcludeFromCodeCoverage]
     public class UpsertPreferredMedicineRequestModel : IRequest<UpsertPreferredMedicineResponseModel>
     {
         public Guid DoctorId { get; set; }
         public PreferredMedicineDataModel Medicine { get; set; } = null!;
     }
 
+    [ExcludeFromCodeCoverage]
     public class PreferredMedicineDataModel
     {
         public string GenericName { get; set; } = string.Empty;

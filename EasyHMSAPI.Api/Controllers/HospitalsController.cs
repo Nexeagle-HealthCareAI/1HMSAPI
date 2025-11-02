@@ -6,9 +6,12 @@ using EasyHMSAPI.Application.RequestModels.CommandRequestModel;
 using Microsoft.AspNetCore.Authorization;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Api.Controllers
 {
+
+    [ExcludeFromCodeCoverage]
     [Route("hospitals")]
     [ApiController]
     public class HospitalsController : ControllerBase

@@ -1,7 +1,9 @@
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
 {
+    [ExcludeFromCodeCoverage]
     public class DoctorOverrideCreateRequestModel : MediatR.IRequest<DoctorOverrideCreateResponseModel>
     {
         public Guid DoctorId { get; set; }
@@ -11,6 +13,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public List<ShiftDetails>? ShiftDetails{ get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class ShiftDetails
     {
         public string? ShiftName { get; set; }

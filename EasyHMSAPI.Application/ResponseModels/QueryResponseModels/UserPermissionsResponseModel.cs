@@ -1,7 +1,9 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 
 namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
 {
+    [ExcludeFromCodeCoverage]
     public class UserPermissionsResponseModel
     {
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -20,6 +22,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public List<Roles>? AllRoles { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class Roles
     {
         public Guid RoleId { get; set; }

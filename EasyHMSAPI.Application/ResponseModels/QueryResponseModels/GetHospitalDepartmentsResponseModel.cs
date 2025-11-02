@@ -1,10 +1,14 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
 {
+    [ExcludeFromCodeCoverage]
     public class GetHospitalDepartmentsResponseModel
     {
         public List<HospitalDepartmentInfo> Departments { get; set; } = new List<HospitalDepartmentInfo>();
     }
 
+    [ExcludeFromCodeCoverage]
     public class HospitalDepartmentInfo
     {
         public Guid MappingID { get; set; }

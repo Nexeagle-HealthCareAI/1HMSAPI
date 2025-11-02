@@ -1,12 +1,12 @@
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Application.RequestModels.CommandRequestModel
 {
+    [ExcludeFromCodeCoverage]
     public class HospitalRegisterRequestModel : MediatR.IRequest<HospitalRegisterResponseModel>
     {
         public Guid UserId { get; set; }
-        
-
         public string? Name { get; set; } = null!;
         public string? Type { get; set; } = null!;
         public string? RegistrationNumber { get; set; } = null!;

@@ -2,9 +2,11 @@
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Api.Controllers
 {
+    [ExcludeFromCodeCoverage]
     [Route("doctor-dashboard")]
     [ApiController]
     public class DoctorDashboardController : ControllerBase

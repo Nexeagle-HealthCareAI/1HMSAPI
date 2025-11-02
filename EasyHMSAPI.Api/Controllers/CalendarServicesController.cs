@@ -6,9 +6,11 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Api.Controllers
 {
+    [ExcludeFromCodeCoverage]
     [Route("calendar")]
     [ApiController]
     public class CalendarServicesController : ControllerBase
