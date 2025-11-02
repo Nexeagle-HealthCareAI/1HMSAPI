@@ -1,4 +1,4 @@
-using EasyHMSAPI.Application.Handlers.CommandHandlers;
+﻿using EasyHMSAPI.Application.Handlers.CommandHandlers;
 using EasyHMSAPI.Application.Services.Implementations;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
@@ -6,29 +6,53 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.AzureAppServices;
 using Microsoft.IdentityModel.Tokens;
-using System.Text;
 using Microsoft.OpenApi.Models;
+using System.Text;
+using Microsoft.ApplicationInsights.Extensibility;
+using Microsoft.ApplicationInsights.DependencyCollector;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Load configuration
+// ------------------------------------------------------------
+// 1️⃣ Load configuration
+// ------------------------------------------------------------
 builder.Configuration
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
     .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
     .AddEnvironmentVariables();
 
-//Add basic console logging
+// ------------------------------------------------------------
+// 2️⃣ Logging setup (console + Azure + App Insights)
+// ------------------------------------------------------------
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Logging.AddDebug();
-// Add Azure App Service file/blob logger so logs are captured by App Service Log Stream / filesystem
 builder.Logging.AddAzureWebAppDiagnostics();
 
-// Add services
+// ✅ Add Application Insights Logging & Telemetry
+// Pulls Connection String from appsettings.json or environment variables
+builder.Services.AddApplicationInsightsTelemetry(builder.Configuration["ApplicationInsights:ConnectionString"]);
+
+// (Optional) — configure adaptive sampling and dependency tracking
+builder.Services.ConfigureTelemetryModule<DependencyTrackingTelemetryModule>((module, o) =>
+{
+    module.EnableSqlCommandTextInstrumentation = true; // capture SQL queries
+});
+builder.Services.Configure<TelemetryConfiguration>((config) =>
+{
+    // Optional: Enable/disable adaptive sampling (default is enabled)
+    // config.DefaultTelemetrySink.TelemetryProcessorChainBuilder.UseSampling(5.0);
+});
+
+// ------------------------------------------------------------
+// 3️⃣ Add services
+// ------------------------------------------------------------
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddControllers();
 
-// Swagger
+// ------------------------------------------------------------
+// 4️⃣ Swagger
+// ------------------------------------------------------------
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -56,7 +80,9 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// --- CORS ---
+// ------------------------------------------------------------
+// 5️⃣ CORS
+// ------------------------------------------------------------
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendCors", policy =>
@@ -67,7 +93,9 @@ builder.Services.AddCors(options =>
     });
 });
 
-// --- JWT Auth ---
+// ------------------------------------------------------------
+// 6️⃣ JWT Auth
+// ------------------------------------------------------------
 var jwtIssuer = builder.Configuration["Jwt:Issuer"]
                 ?? throw new InvalidOperationException("Jwt:Issuer missing.");
 var jwtAudience = builder.Configuration["Jwt:Audience"]
@@ -95,7 +123,9 @@ builder.Services
         };
     });
 
-// --- EF Core ---
+// ------------------------------------------------------------
+// 7️⃣ EF Core
+// ------------------------------------------------------------
 var sqlConn = builder.Configuration.GetConnectionString("DefaultConnection")
              ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection missing.");
 
@@ -109,23 +139,31 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         }
     ));
 
-// --- MediatR ---
+// ------------------------------------------------------------
+// 8️⃣ MediatR
+// ------------------------------------------------------------
 builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(UserLoginHandler).Assembly));
 
-// --- Custom Services ---
+// ------------------------------------------------------------
+// 9️⃣ Custom Services
+// ------------------------------------------------------------
 builder.Services.AddScoped<IJwtAuthService, JwtAuthService>();
 builder.Services.AddScoped<IBlobStorageService, BlobStorageService>();
 builder.Services.AddScoped<ISmsService, SmsService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 
-// Configure Azure App Service logger options (optional)
+// ------------------------------------------------------------
+// 🔟 Azure App Service File Logger Options (optional)
+// ------------------------------------------------------------
 builder.Services.Configure<AzureFileLoggerOptions>(options =>
 {
-    options.FileName = "apnahospital-log-"; // prefix
+    options.FileName = "apnahospital-log-";
     options.RetainedFileCountLimit = 5;
 });
 
-// --- App Pipeline ---
+// ------------------------------------------------------------
+// 11️⃣ Build and Configure Pipeline
+// ------------------------------------------------------------
 var app = builder.Build();
 
 var swaggerEnabled = builder.Configuration.GetValue<bool>("Swagger:Enabled")
@@ -151,10 +189,14 @@ app.UseRouting();
 app.UseCors("FrontendCors");
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
+
+// Simple redirect for root
 app.MapGet("/", context =>
 {
     context.Response.Redirect("/swagger");
     return Task.CompletedTask;
 });
+
 app.Run();
