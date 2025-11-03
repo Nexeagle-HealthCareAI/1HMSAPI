@@ -169,20 +169,15 @@ builder.Services.Configure<AzureFileLoggerOptions>(options =>
 var app = builder.Build();
 
 var swaggerEnabled = builder.Configuration.GetValue<bool>("Swagger:Enabled")
- || !app.Environment.IsProduction();
+                      || !app.Environment.IsProduction();
 
 if (swaggerEnabled)
 {
- app.UseSwagger();
- app.UseSwaggerUI(c =>
- {
- c.SwaggerEndpoint("/swagger/v1/swagger.json", "NexEagle EasyHMS API v1");
- });
-}
-
-if (app.Environment.IsProduction())
-{
-    app.UseHsts();
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "NexEagle EasyHMS API v1");
+    });
 }
 
 app.UseStaticFiles();
@@ -191,7 +186,6 @@ app.UseRouting();
 app.UseCors("FrontendCors");
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
 
 // Simple redirect for root
