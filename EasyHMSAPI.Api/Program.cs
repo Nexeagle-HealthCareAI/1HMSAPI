@@ -166,8 +166,7 @@ builder.Services.Configure<AzureFileLoggerOptions>(options =>
 // ------------------------------------------------------------
 var app = builder.Build();
 
-var swaggerEnabled = builder.Configuration.GetValue<bool>("Swagger:Enabled")
-                      || !app.Environment.IsProduction();
+var swaggerEnabled = true;
 
 if (swaggerEnabled)
 {
