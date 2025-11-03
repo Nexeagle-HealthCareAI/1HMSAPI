@@ -53,6 +53,7 @@ builder.Services.AddControllers();
 // ------------------------------------------------------------
 // 4️⃣ Swagger
 // ------------------------------------------------------------
+// Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -164,17 +165,19 @@ builder.Services.Configure<AzureFileLoggerOptions>(options =>
 // ------------------------------------------------------------
 // 11️⃣ Build and Configure Pipeline
 // ------------------------------------------------------------
+// --- App Pipeline ---
 var app = builder.Build();
 
-var swaggerEnabled = true;
+var swaggerEnabled = builder.Configuration.GetValue<bool>("Swagger:Enabled")
+ || !app.Environment.IsProduction();
 
 if (swaggerEnabled)
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "NexEagle EasyHMS API v1");
-    });
+ app.UseSwagger();
+ app.UseSwaggerUI(c =>
+ {
+ c.SwaggerEndpoint("/swagger/v1/swagger.json", "NexEagle EasyHMS API v1");
+ });
 }
 
 if (app.Environment.IsProduction())
@@ -194,7 +197,7 @@ app.MapControllers();
 // Simple redirect for root
 app.MapGet("/", context =>
 {
-    context.Response.Redirect("/swagger");
+    context.Response.Redirect("/swagger/index.html");
     return Task.CompletedTask;
 });
 
