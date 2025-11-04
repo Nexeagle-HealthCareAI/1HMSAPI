@@ -168,17 +168,12 @@ builder.Services.Configure<AzureFileLoggerOptions>(options =>
 // --- App Pipeline ---
 var app = builder.Build();
 
-var swaggerEnabled = builder.Configuration.GetValue<bool>("Swagger:Enabled")
-                      || !app.Environment.IsProduction();
-
-if (swaggerEnabled)
+// Always enable Swagger, regardless of environment
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "NexEagle EasyHMS API v1");
-    });
-}
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "NexEagle EasyHMS API v1");
+});
 
 app.UseStaticFiles();
 app.UseHttpsRedirection();
