@@ -35,9 +35,8 @@ namespace EasyHMSAPI.Api.Controllers
 
                 var request = new GetPatientProfileRequestModel { HospitalId = hospitalId, PatientId = patientId };
                 var response = await _mediator.Send(request);
-                if (response == null)
-                    return NotFound(new { Message = "Patient not found." });
                 _logger.LogInformation("GetPatientProfile ended for hospitalId: {HospitalId}, patientId: {PatientId}", hospitalId, patientId);
+
                 return Ok(response);
             }
             catch (Exception ex)
@@ -60,9 +59,8 @@ namespace EasyHMSAPI.Api.Controllers
                 request.HospitalId = hospitalId;
                 request.PatientId = patientId;
                 var response = await _mediator.Send(request);
-                if (!response.Success)
-                    return BadRequest(response);
                 _logger.LogInformation("UpdatePatientProfile ended for hospitalId: {HospitalId}, patientId: {PatientId}", hospitalId, patientId);
+
                 return Ok(response);
             }
             catch (Exception ex)

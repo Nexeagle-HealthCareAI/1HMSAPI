@@ -33,6 +33,7 @@ namespace EasyHMSAPI.Api.Controllers
                 var request = new GetPrescriptionSettingsRequestModel { DoctorId = doctorId };
                 var result = await _mediator.Send(request);
                 _logger.LogInformation("GetPrescriptionSettings ended for doctorId: {DoctorId}", doctorId);
+
                 return Ok(result);
             }
             catch (Exception ex)
@@ -51,6 +52,7 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 var result = await _mediator.Send(request);
                 _logger.LogInformation("UpdatePrescriptionSettings ended for doctorId: {DoctorId}", request.DoctorId);
+
                 return Ok(result);
             }
             catch (Exception ex)
@@ -70,6 +72,7 @@ namespace EasyHMSAPI.Api.Controllers
                 var request = new ResetPrescriptionSettingsRequestModel { DoctorId = doctorId };
                 var result = await _mediator.Send(request);
                 _logger.LogInformation("ResetPrescriptionSettings ended for doctorId: {DoctorId}", doctorId);
+
                 return Ok(result);
             }
             catch (Exception ex)
@@ -100,6 +103,7 @@ namespace EasyHMSAPI.Api.Controllers
 
                 var result = await _mediator.Send(request);
                 _logger.LogInformation("UploadAsset ended for doctorId: {DoctorId}", request.DoctorId);
+
                 return Ok(result);
             }
             catch (Exception ex)
@@ -119,6 +123,7 @@ namespace EasyHMSAPI.Api.Controllers
                 var request = new GetAssetsRequestModel { DoctorId = doctorId };
                 var result = await _mediator.Send(request);
                 _logger.LogInformation("GetAssets ended for doctorId: {DoctorId}", doctorId);
+
                 return Ok(result);
             }
             catch (Exception ex)
@@ -137,6 +142,7 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 var result = await _mediator.Send(request);
                 _logger.LogInformation("DeleteAsset ended");
+
                 return Ok(result);
             }
             catch (Exception ex)

@@ -31,6 +31,7 @@ namespace EasyHMSAPI.Api.Controllers
             var request = new GetAppointmentDepartmentsRequestModel { HospitalId = hospitalId };
             var response = await _mediator.Send(request);
             _logger.LogInformation("GetDepartments ended for hospitalId: {HospitalId}", hospitalId);
+
             return Ok(response);
         }
 
@@ -45,6 +46,7 @@ namespace EasyHMSAPI.Api.Controllers
             var request = new GetDepartmentDoctorsRequestModel { DepartmentId = departmentId };
             var response = await _mediator.Send(request);
             _logger.LogInformation("GetDepartmentDoctors ended for departmentId: {DepartmentId}", departmentId);
+
             return Ok(response);
         }
 
@@ -75,6 +77,7 @@ namespace EasyHMSAPI.Api.Controllers
                 request.AllocateToken = allocateToken;
                 var response = await _mediator.Send(request);
                 _logger.LogInformation("RegisterAppointment successful for hospitalId: {HospitalId}, UserId: {UserId}", hospitalId, request.UserId);
+
                 return Ok(response);
             }
             catch (Exception ex)
@@ -103,6 +106,7 @@ namespace EasyHMSAPI.Api.Controllers
 
                 var response = await _mediator.Send(request);
                 _logger.LogInformation("SearchPatient ended successfully for query: {Q}", q);
+
                 return Ok(response);
             }
             catch (Exception ex)
@@ -129,14 +133,8 @@ namespace EasyHMSAPI.Api.Controllers
             try
             {
                 var response = await _mediator.Send(request);
-
-                if (!response.Success)
-                {
-                    _logger.LogWarning("UpdatePatientStatus failed for UserId: {UserId} - {Message}", request.UserId, response.Message);
-                    return BadRequest(new { response.Message });
-                }
-
                 _logger.LogInformation("UpdatePatientStatus successful for UserId: {UserId}", request.UserId);
+
                 return Ok(response);
             }
             catch (Exception ex)
@@ -170,14 +168,8 @@ namespace EasyHMSAPI.Api.Controllers
                 }
 
                 var response = await _mediator.Send(request);
-
-                if (!response.Success)
-                {
-                    _logger.LogWarning("UpdatePatientVitals failed for RecordedBy: {RecordedBy} - {Message}", request.RecordedBy, response.Message);
-                    return BadRequest(new { response.Message });
-                }
-
                 _logger.LogInformation("UpdatePatientVitals successful for RecordedBy: {RecordedBy}", request.RecordedBy);
+
                 return Ok(response);
             }
             catch (Exception ex)
@@ -205,14 +197,8 @@ namespace EasyHMSAPI.Api.Controllers
                 }
 
                 var response = await _mediator.Send(request);
-
-                if (!response.Success)
-                {
-                    _logger.LogWarning("RescheduleAppointment failed for AppointmentId: {AppointmentId} - {Message}", request.AppointmentId, response.Message);
-                    return BadRequest(new { response.Message });
-                }
-
                 _logger.LogInformation("RescheduleAppointment successful for AppointmentId: {AppointmentId}", request.AppointmentId);
+
                 return Ok(response);
             }
             catch (Exception ex)
@@ -233,14 +219,8 @@ namespace EasyHMSAPI.Api.Controllers
             try
             {
                 var response = await _mediator.Send(request);
-
-                if (!response.Success)
-                {
-                    _logger.LogWarning("CancelAppointment failed for AppointmentId: {AppointmentId} - {Message}", request.AppointmentId, response.Message);
-                    return BadRequest(new { response.Message });
-                }
-
                 _logger.LogInformation("CancelAppointment successful for AppointmentId: {AppointmentId}", request.AppointmentId);
+
                 return Ok(response);
             }
             catch (Exception ex)
@@ -276,6 +256,7 @@ namespace EasyHMSAPI.Api.Controllers
 
                 var response = await _mediator.Send(request);
                 _logger.LogInformation("GetPatientAppointmentDetails ended for hospitalId: {HospitalId}", hospitalId);
+
                 return Ok(response);
             }
             catch (Exception ex)
@@ -302,6 +283,7 @@ namespace EasyHMSAPI.Api.Controllers
             };
             var response = await _mediator.Send(request);
             _logger.LogInformation("GetPatientBookedSlots ended for doctorId: {DoctorId}", doctorId);
+
             return Ok(response);
         }
 
@@ -322,6 +304,7 @@ namespace EasyHMSAPI.Api.Controllers
             };
             var response = await _mediator.Send(request);
             _logger.LogInformation("GetHospitalKpiMatrix ended for hospitalId: {HospitalId}", hospitalId);
+
             return Ok(response);
         }
     }

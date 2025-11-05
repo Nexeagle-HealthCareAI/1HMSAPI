@@ -31,6 +31,7 @@ namespace EasyHMSAPI.Api.Controllers
                 var request = new GetDepartmentsRequestModel { HospitalId = hospitalId };
                 var response = await _mediator.Send(request);
                 _logger.LogInformation("GetDepartments ended for hospitalId: {HospitalId}", hospitalId);
+
                 return Ok(response);
             }
             catch (Exception ex)
@@ -50,6 +51,7 @@ namespace EasyHMSAPI.Api.Controllers
                 var request = new GetGlobalDepartmentsRequestModel();
                 var response = await _mediator.Send(request);
                 _logger.LogInformation("GetGlobalDepartments ended");
+
                 return Ok(response);
             }
             catch (Exception ex)
@@ -69,6 +71,7 @@ namespace EasyHMSAPI.Api.Controllers
                 var request = new GetHospitalDepartmentsRequestModel { HospitalId = hospitalId };
                 var response = await _mediator.Send(request);
                 _logger.LogInformation("GetHospitalDepartments ended for hospitalId: {HospitalId}", hospitalId);
+
                 return Ok(response);
             }
             catch (Exception ex)
@@ -87,6 +90,7 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 var response = await _mediator.Send(request);
                 _logger.LogInformation("CreateDepartment ended with response: {@Response}", response);
+
                 return Ok(response);
             }
             catch (Exception ex)
@@ -106,6 +110,7 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 var response = await _mediator.Send(request);
                 _logger.LogInformation("UpdateDepartment ended for departmentId: {DepartmentId} with response: {@Response}", departmentId, response);
+
                 return Ok(response);
             }
             catch (Exception ex)
@@ -125,6 +130,7 @@ namespace EasyHMSAPI.Api.Controllers
                 var request = new ToggleDepartmentStatusRequestModel { DepartmentId = departmentId };
                 var response = await _mediator.Send(request);
                 _logger.LogInformation("ToggleDepartmentStatus ended for departmentId: {DepartmentId} with response: {@Response}", departmentId, response);
+
                 return Ok(response);
             }
             catch (Exception ex)

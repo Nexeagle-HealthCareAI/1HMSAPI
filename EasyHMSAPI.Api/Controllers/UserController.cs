@@ -57,14 +57,9 @@ namespace EasyHMSAPI.Api.Controllers
                 }
 
                 var response = await _mediator.Send(request);
-                
-                if (response.Success)
-                {
-                    _logger.LogInformation("UpdateUserDetails API ended for userId: {UserId}", request.UserId);
-                    return Ok(response);
-                }
-                
-                return BadRequest(response);
+                _logger.LogInformation("UpdateUserDetails API ended for userId: {UserId}", request.UserId);
+
+                return Ok(response);
             }
             catch (Exception ex)
             {
@@ -92,13 +87,7 @@ namespace EasyHMSAPI.Api.Controllers
 
                 var response = await _mediator.Send(request);
 
-                if (response != null)
-                {
-                    _logger.LogInformation("GetUserPermissions API ended for userId: {UserId}", userId);
-                    return Ok(response);
-                }
-
-                return NotFound(new { Message = "User not found or user has no assigned role", UserId = userId });
+                return Ok(response);
             }
             catch (Exception ex)
             {
@@ -116,6 +105,7 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 var result = await _mediator.Send(command);
                 _logger.LogInformation("UploadProfilePicture ended for userId: {UserId}", command.UserId);
+
                 return Ok(result);
             }
             catch (Exception ex)
@@ -135,6 +125,7 @@ namespace EasyHMSAPI.Api.Controllers
                 var request = new GetProfilePictureRequestModel { UserId = userId };
                 var result = await _mediator.Send(request);
                 _logger.LogInformation("GetProfilePicture ended for userId: {UserId}", userId);
+
                 return Ok(result);
             }
             catch (Exception ex)
@@ -153,6 +144,7 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 var result = await _mediator.Send(requestModel);
                 _logger.LogInformation("DeleteProfilePicture ended for userId: {UserId}", requestModel.UserId);
+
                 return Ok(result);
             }
             catch (Exception ex)

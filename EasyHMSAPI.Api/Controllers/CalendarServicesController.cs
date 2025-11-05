@@ -51,9 +51,8 @@ namespace EasyHMSAPI.Api.Controllers
                 };
 
                 var response = await _mediator.Send(request);
-                if (response == null)
-                    return NotFound(new { Message = "No config found" });
                 _logger.LogInformation("GetDoctorShiftConfig ended for doctorId: {DoctorId}", doctorId);
+
                 return Ok(response);
             }
             catch (Exception ex)
@@ -75,13 +74,9 @@ namespace EasyHMSAPI.Api.Controllers
                     return BadRequest(new { Message = "doctorId is required" });
                 }
                 var response = await _mediator.Send(request);
-                if (response.Success) 
-                { 
-                    _logger.LogInformation("CreateDoctorOverride successful for doctorId: {DoctorId}", request.DoctorId);
-                    return Ok(response); 
-                }
-                _logger.LogWarning("CreateDoctorOverride failed for doctorId: {DoctorId}", request.DoctorId);
-                return BadRequest(response);
+                _logger.LogInformation("CreateDoctorOverride successful for doctorId: {DoctorId}", request.DoctorId);
+
+                return Ok(response);
             }
             catch (Exception ex)
             {
@@ -98,13 +93,9 @@ namespace EasyHMSAPI.Api.Controllers
             if (overrideId == Guid.Empty) return BadRequest(new { Message = "overrideId is required" });
             var request = new DoctorOverrideDeleteRequestModel { OverrideId = overrideId };
             var response = await _mediator.Send(request);
-            if (response.Success) 
-            { 
-                _logger.LogInformation("DeleteDoctorOverride successful for overrideId: {OverrideId}", overrideId);
-                return Ok(response); 
-            }
-            _logger.LogWarning("DeleteDoctorOverride not found for overrideId: {OverrideId}", overrideId);
-            return NotFound(response);
+            _logger.LogInformation("DeleteDoctorOverride successful for overrideId: {OverrideId}", overrideId);
+
+            return Ok(response); 
         }
 
         [HttpPost("doctor/timeoff")]
@@ -114,13 +105,9 @@ namespace EasyHMSAPI.Api.Controllers
             _logger.LogInformation("CreateDoctorTimeOff called at {Time} for doctorId: {DoctorId}", DateTime.UtcNow, request.DoctorId);
             if (request.DoctorId == Guid.Empty) return BadRequest(new { Message = "doctorId is required" });
             var response = await _mediator.Send(request);
-            if (response.Success) 
-            { 
-                _logger.LogInformation("CreateDoctorTimeOff successful for doctorId: {DoctorId}", request.DoctorId);
-                return Ok(response); 
-            }
-            _logger.LogWarning("CreateDoctorTimeOff failed for doctorId: {DoctorId}", request.DoctorId);
-            return BadRequest(response);
+            _logger.LogInformation("CreateDoctorTimeOff successful for doctorId: {DoctorId}", request.DoctorId);
+
+            return Ok(response); 
         }
 
         [HttpGet("doctor/timeoff")]
@@ -131,6 +118,7 @@ namespace EasyHMSAPI.Api.Controllers
             if (doctorId == Guid.Empty) return BadRequest(new { Message = "doctorId is required" });
             var request = new DoctorTimeOffListRequestModel { DoctorId = doctorId };
             var response = await _mediator.Send(request);
+
             return Ok(response);
         }
 
@@ -142,13 +130,9 @@ namespace EasyHMSAPI.Api.Controllers
             if (timeOffId == Guid.Empty) return BadRequest(new { Message = "timeOffId is required" });
             var request = new DoctorTimeOffDeleteRequestModel { TimeOffId = timeOffId };
             var response = await _mediator.Send(request);
-            if (response.Success) 
-            { 
-                _logger.LogInformation("DeleteDoctorTimeOff successful for timeOffId: {TimeOffId}", timeOffId);
-                return Ok(response); 
-            }
-            _logger.LogWarning("DeleteDoctorTimeOff not found for timeOffId: {TimeOffId}", timeOffId);
-            return NotFound(response);
+            _logger.LogInformation("DeleteDoctorTimeOff successful for timeOffId: {TimeOffId}", timeOffId);
+
+            return Ok(response); 
         }
 
         [HttpGet("doctor/slots")]
@@ -160,6 +144,7 @@ namespace EasyHMSAPI.Api.Controllers
 
             var request = new DoctorSlotsRequestModel { DoctorId = doctorId, SlotDate = slotDate };
             var response = await _mediator.Send(request);
+
             return Ok(response);
         }
     }

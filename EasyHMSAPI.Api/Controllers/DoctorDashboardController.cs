@@ -41,6 +41,7 @@ namespace EasyHMSAPI.Api.Controllers
                 };
                 var response = await _mediator.Send(request);
                 _logger.LogInformation("GetAppointmentDetails ended for hospitalId: {HospitalId}, doctorId: {DoctorId}", hospitalId, doctorId);
+
                 return Ok(response);
             }
             catch (Exception ex)

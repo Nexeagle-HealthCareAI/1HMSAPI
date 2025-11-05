@@ -45,13 +45,9 @@ namespace EasyHMSAPI.Api.Controllers
                 }
                 var response = await _mediator.Send(request);
 
-                if (response.Success)
-                {
-                    _logger.LogInformation("CreateInvitation ended for scope: {Scope}", scope);
-                    return Ok(response);
-                }
+                _logger.LogInformation("CreateInvitation ended for scope: {Scope}", scope);
 
-                return BadRequest(response);
+                return Ok(response);
             }
             catch (Exception ex)
             {
@@ -85,14 +81,9 @@ namespace EasyHMSAPI.Api.Controllers
                 };
 
                 var response = await _mediator.Send(updateReq);
+                _logger.LogInformation("ManageInvitation ended for invitationId: {InvitationId}, scope: {Scope}", invitationId, scope);
 
-                if (response.Success)
-                {
-                    _logger.LogInformation("ManageInvitation ended for invitationId: {InvitationId}, scope: {Scope}", invitationId, scope);
-                    return Ok(response);
-                }
-
-                return BadRequest(response);
+                return Ok(response);
             }
             catch (Exception ex)
             {
@@ -109,6 +100,7 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 var req = new InvitationListRequestModel { HospitalId = hospitalId, Scope = scope };
                 var resp = await _mediator.Send(req);
+
                 return Ok(resp);
             }
             catch (Exception ex)
@@ -127,8 +119,8 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 var req = new InvitationValidateRequestModel { Token = token };
                 var resp = await _mediator.Send(req);
-                if (resp.Success) return Ok(resp);
-                return BadRequest(resp);
+
+                return Ok(resp);
             }
             catch (Exception ex)
             {
@@ -149,8 +141,8 @@ namespace EasyHMSAPI.Api.Controllers
                 if (request.PerformedByUserId == Guid.Empty) return BadRequest(new { Message = "performedByUserId is required." });
 
                 var resp = await _mediator.Send(request);
-                if (resp.Success) return Ok(resp);
-                return BadRequest(resp);
+
+                return Ok(resp);
             }
             catch (Exception ex)
             {
@@ -168,6 +160,7 @@ namespace EasyHMSAPI.Api.Controllers
                 if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
                 var req = new HospitalUsersListRequestModel { HospitalId = hospitalId };
                 var resp = await _mediator.Send(req);
+
                 return Ok(resp);
             }
             catch (Exception ex)
@@ -188,8 +181,8 @@ namespace EasyHMSAPI.Api.Controllers
                 if (request.UserId == Guid.Empty) return BadRequest(new { Message = "userId is required." });
 
                 var resp = await _mediator.Send(request);
-                if (resp.Success) return Ok(resp);
-                return BadRequest(resp);
+
+                return Ok(resp);
             }
             catch (Exception ex)
             {

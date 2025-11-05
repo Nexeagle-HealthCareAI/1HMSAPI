@@ -40,14 +40,9 @@ namespace EasyHMSAPI.Api.Controllers
                 }
 
                 var response = await _mediator.Send(request);
+                _logger.LogInformation("CreateDoctor ended for userId: {UserId}", request.UserId);
 
-                if (response.Success)
-                {
-                    _logger.LogInformation("CreateDoctor ended for userId: {UserId}", request.UserId);
-                    return Ok(response);
-                }
-
-                return BadRequest(response);
+                return Ok(response);
             }
             catch (Exception ex)
             {
@@ -70,14 +65,9 @@ namespace EasyHMSAPI.Api.Controllers
 
                 var request = new DoctorGetRequestModel { UserId = userId };
                 var response = await _mediator.Send(request);
+                _logger.LogInformation("GetDoctor ended for userId: {UserId}", userId);
 
-                if (response != null)
-                {
-                    _logger.LogInformation("GetDoctor ended for userId: {UserId}", userId);
-                    return Ok(response);
-                }
-
-                return NotFound(new { Message = "Doctor not found", UserId = userId });
+                return Ok(response);
             }
             catch (Exception ex)
             {
@@ -104,14 +94,9 @@ namespace EasyHMSAPI.Api.Controllers
                 }
 
                 var response = await _mediator.Send(request);
+                _logger.LogInformation("UpdateDoctorProfile ended for userId: {UserId}", request.UserId);
 
-                if (response.Success)
-                {
-                    _logger.LogInformation("UpdateDoctorProfile ended for userId: {UserId}", request.UserId);
-                    return Ok(response);
-                }
-
-                return BadRequest(response);
+                return Ok(response);
             }
             catch (Exception ex)
             {
@@ -141,6 +126,7 @@ namespace EasyHMSAPI.Api.Controllers
 
                 var response = await _mediator.Send(request);
                 _logger.LogInformation("GetSpecializations ended for departmentId: {DepartmentId}", departmentId);
+
                 return Ok(response);
             }
             catch (Exception ex)

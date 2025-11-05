@@ -32,12 +32,9 @@ namespace EasyHMSAPI.Api.Controllers
             try
             {
                 var response = await _mediator.Send(request);
-                if (response.Success)
-                {
-                    _logger.LogInformation("RegisterHospital ended");
-                    return Ok(response);
-                }
-                return BadRequest(response);
+                _logger.LogInformation("RegisterHospital ended");
+
+                return Ok(response);
             }
             catch (Exception ex)
             {
@@ -61,12 +58,9 @@ namespace EasyHMSAPI.Api.Controllers
                 request.HospitalId = hospitalId;
 
                 var response = await _mediator.Send(request);
-                if (response.Success)
-                {
-                    _logger.LogInformation("UpdateHospital ended for hospitalId: {HospitalId}", hospitalId);
-                    return Ok(response);
-                }
-                return BadRequest(response);
+                _logger.LogInformation("UpdateHospital ended for hospitalId: {HospitalId}", hospitalId);
+
+                return Ok(response);
             }
             catch (Exception ex)
             {
@@ -89,12 +83,9 @@ namespace EasyHMSAPI.Api.Controllers
 
                 var request = new GetHospitalDetailsRequestModel(hospitalId);
                 var response = await _mediator.Send(request);
-                if (response != null)
-                {
-                    _logger.LogInformation("GetHospitalById ended for hospitalId: {HospitalId}", hospitalId);
-                    return Ok(response);
-                }
-                return BadRequest();
+                _logger.LogInformation("GetHospitalById ended for hospitalId: {HospitalId}", hospitalId);
+
+                return Ok(response);
             }
             catch (Exception ex)
             {
@@ -116,12 +107,9 @@ namespace EasyHMSAPI.Api.Controllers
                 }
                 var request = new GetHospitalUsersRequestModel(userId);
                 var response = await _mediator.Send(request);
-                if (response != null)
-                {
-                    _logger.LogInformation("GetHospitalUserById ended for userId: {UserId}", userId);
-                    return Ok(response);
-                }
-                return NotFound();
+                _logger.LogInformation("GetHospitalUserById ended for userId: {UserId}", userId);
+
+                return Ok(response);
             }
             catch (Exception ex)
             {

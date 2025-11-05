@@ -29,6 +29,7 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 var response = await _mediator.Send(request);
                 _logger.LogInformation("Login ended");
+
                 return Ok(response);
             }
             catch (Exception ex)
@@ -46,6 +47,7 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 var response = await _mediator.Send(request);
                 _logger.LogInformation("Signup ended");
+
                 return Ok(response);
             }
             catch (Exception ex)
@@ -63,6 +65,7 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 var response = await _mediator.Send(request);
                 _logger.LogInformation("OtpGenerater ended for mobile: {MobileNumber}", request.MobileNumber);
+
                 return Ok(response);
             }
             catch (Exception ex)
@@ -80,6 +83,7 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 var response = await _mediator.Send(request);
                 _logger.LogInformation("OtpChecker ended for mobile: {MobileNumber}", request.MobileNumber);
+
                 return Ok(response);
             }
             catch (Exception ex)
@@ -96,13 +100,10 @@ namespace EasyHMSAPI.Api.Controllers
             _logger.LogInformation("SetOrResetPassword started at {Time} for scope: {Scope}", DateTime.UtcNow, scope);
             try
             {
-                if(string.IsNullOrEmpty(scope))
-                {
-                    return BadRequest(new { Success = false, Message = "Invalid scope provided." });
-                }
                 request.Scope = scope;
                 var result = await _mediator.Send(request);
                 _logger.LogInformation("SetOrResetPassword ended for scope: {Scope}", scope);
+
                 return Ok(result);
             }
             catch (Exception ex)

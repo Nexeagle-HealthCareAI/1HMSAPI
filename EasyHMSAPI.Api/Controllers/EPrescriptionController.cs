@@ -37,6 +37,7 @@ namespace EasyHMSAPI.Api.Controllers
             });
 
             _logger.LogInformation("GetPatientVitals ended for patientId: {PatientId}, appointmentId: {AppointmentId}", patientId, appointmentId);
+
             return Ok(result);
         }
 
@@ -61,6 +62,7 @@ namespace EasyHMSAPI.Api.Controllers
             var result = await _mediator.Send(request);
 
             _logger.LogInformation("GetLookupData ended for hospitalId: {HospitalId}, doctorId: {DoctorId}, lookupType: {LookupType}", hospitalId, doctorId, lookupType);
+
             return Ok(result);
         }
 
@@ -72,6 +74,7 @@ namespace EasyHMSAPI.Api.Controllers
             var result = await _mediator.Send(new GetDoctorPreferenceSettingRequestModel { DoctorId = doctorId });
             
             _logger.LogInformation("GetDoctorPreferenceSetting ended for doctorId: {DoctorId}", doctorId);
+
             return Ok(result);
         }
 
@@ -88,8 +91,8 @@ namespace EasyHMSAPI.Api.Controllers
                 Preference = model
             };
             var result = await _mediator.Send(request);
-           
             _logger.LogInformation("UpdateDoctorPreferenceSetting ended for doctorId: {DoctorId}", doctorId);
+
             return Ok(result);
         }
 
@@ -114,6 +117,7 @@ namespace EasyHMSAPI.Api.Controllers
             var result = await _mediator.Send(request);
 
             _logger.LogInformation("UpsertPersonalizedData ended for hospitalId: {HospitalId}, doctorId: {DoctorId}, lookupType: {LookupType}", hospitalId, doctorId, lookupType);
+
             return Ok(result);
         }
 
@@ -137,6 +141,7 @@ namespace EasyHMSAPI.Api.Controllers
             var result = await _mediator.Send(request);
 
             _logger.LogInformation("GetPersonalizedData ended for hospitalId: {HospitalId}, doctorId: {DoctorId}, lookupType: {LookupType}", hospitalId, doctorId, lookupType);
+
             return Ok(result);
         }
 
@@ -157,6 +162,7 @@ namespace EasyHMSAPI.Api.Controllers
             var result = await _mediator.Send(request);
 
             _logger.LogInformation("DeletePersonalizedData ended for hospitalId: {HospitalId}, doctorId: {DoctorId}, personalId: {PersonalId}", hospitalId, doctorId, personalId);
+
             return Ok(result);
         }
 
@@ -174,8 +180,8 @@ namespace EasyHMSAPI.Api.Controllers
                 Medicine = model
             };
             var result = await _mediator.Send(request);
-
             _logger.LogInformation("UpsertPreferredMedicine ended for doctorId: {DoctorId}", doctorId);
+
             return Ok(result);
         }
 
@@ -192,8 +198,8 @@ namespace EasyHMSAPI.Api.Controllers
                 DoctorId = doctorId
             };
             var result = await _mediator.Send(request);
-
             _logger.LogInformation("GetPreferredMedicines ended for doctorId: {DoctorId}", doctorId);
+
             return Ok(result);
         }
     }
