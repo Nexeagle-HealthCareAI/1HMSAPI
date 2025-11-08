@@ -2,19 +2,19 @@
 using EasyHMSAPI.Application.Services.Implementations;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
+using Microsoft.ApplicationInsights.DependencyCollector;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.AzureAppServices;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
-using Microsoft.ApplicationInsights.Extensibility;
-using Microsoft.ApplicationInsights.DependencyCollector;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // ------------------------------------------------------------
-// 1️⃣ Load configuration
+// Load configuration
 // ------------------------------------------------------------
 builder.Configuration
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
@@ -22,36 +22,33 @@ builder.Configuration
     .AddEnvironmentVariables();
 
 // ------------------------------------------------------------
-// 2️⃣ Logging setup (console + Azure + App Insights)
+// Logging setup (console + Azure + App Insights)
 // ------------------------------------------------------------
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Logging.AddDebug();
 builder.Logging.AddAzureWebAppDiagnostics();
 
-// ✅ Add Application Insights Logging & Telemetry
-// Pulls Connection String from appsettings.json or environment variables
-builder.Services.AddApplicationInsightsTelemetry(builder.Configuration["ApplicationInsights:ConnectionString"]);
+// Add Application Insights Logging & Telemetry
+builder.Services.AddApplicationInsightsTelemetry(options =>
+{
+    options.ConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"];
+});
 
-// (Optional) — configure adaptive sampling and dependency tracking
+// configure adaptive sampling and dependency tracking
 builder.Services.ConfigureTelemetryModule<DependencyTrackingTelemetryModule>((module, o) =>
 {
     module.EnableSqlCommandTextInstrumentation = true; // capture SQL queries
 });
-builder.Services.Configure<TelemetryConfiguration>((config) =>
-{
-    // Optional: Enable/disable adaptive sampling (default is enabled)
-    // config.DefaultTelemetrySink.TelemetryProcessorChainBuilder.UseSampling(5.0);
-});
 
 // ------------------------------------------------------------
-// 3️⃣ Add services
+// Add services
 // ------------------------------------------------------------
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddControllers();
 
 // ------------------------------------------------------------
-// 4️⃣ Swagger
+// Swagger
 // ------------------------------------------------------------
 // Swagger
 builder.Services.AddEndpointsApiExplorer();
@@ -82,7 +79,7 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // ------------------------------------------------------------
-// 5️⃣ CORS
+// CORS
 // ------------------------------------------------------------
 builder.Services.AddCors(options =>
 {
@@ -95,7 +92,7 @@ builder.Services.AddCors(options =>
 });
 
 // ------------------------------------------------------------
-// 6️⃣ JWT Auth
+// JWT Auth
 // ------------------------------------------------------------
 var jwtIssuer = builder.Configuration["Jwt:Issuer"]
                 ?? throw new InvalidOperationException("Jwt:Issuer missing.");
@@ -125,7 +122,7 @@ builder.Services
     });
 
 // ------------------------------------------------------------
-// 7️⃣ EF Core
+// EF Core
 // ------------------------------------------------------------
 var sqlConn = builder.Configuration.GetConnectionString("DefaultConnection")
              ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection missing.");
@@ -141,12 +138,12 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     ));
 
 // ------------------------------------------------------------
-// 8️⃣ MediatR
+// MediatR
 // ------------------------------------------------------------
 builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(UserLoginHandler).Assembly));
 
 // ------------------------------------------------------------
-// 9️⃣ Custom Services
+// Custom Services
 // ------------------------------------------------------------
 builder.Services.AddScoped<IJwtAuthService, JwtAuthService>();
 builder.Services.AddScoped<IBlobStorageService, BlobStorageService>();
@@ -154,7 +151,7 @@ builder.Services.AddScoped<ISmsService, SmsService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 
 // ------------------------------------------------------------
-// 🔟 Azure App Service File Logger Options (optional)
+// Azure App Service File Logger Options (optional)
 // ------------------------------------------------------------
 builder.Services.Configure<AzureFileLoggerOptions>(options =>
 {
@@ -163,7 +160,25 @@ builder.Services.Configure<AzureFileLoggerOptions>(options =>
 });
 
 // ------------------------------------------------------------
-// 11️⃣ Build and Configure Pipeline
+// Rate Limiting
+// ------------------------------------------------------------
+builder.Services.AddRateLimiter(options =>
+{
+     options.AddPolicy("PerIpPolicy", context =>
+         RateLimitPartition.GetFixedWindowLimiter(
+         partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+         factory: key => new FixedWindowRateLimiterOptions
+         {
+             PermitLimit = 100,
+             Window = TimeSpan.FromMinutes(1),
+             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+             QueueLimit = 0
+         })
+     );
+});
+
+// ------------------------------------------------------------
+// Build and Configure Pipeline
 // ------------------------------------------------------------
 // --- App Pipeline ---
 var app = builder.Build();
@@ -172,13 +187,14 @@ var app = builder.Build();
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "NexEagle EasyHMS API v1");
+ c.SwaggerEndpoint("/swagger/v1/swagger.json", "NexEagle EasyHMS API v1");
 });
 
 app.UseStaticFiles();
 app.UseHttpsRedirection();
 app.UseRouting();
 app.UseCors("FrontendCors");
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
