@@ -1,24 +1,24 @@
 trigger:
-- main
+  branches:
+    include:
+      - main
+      - release-*
 
 pool:
   vmImage: 'ubuntu-latest'
 
-# ==== EDIT THESE VALUES ====
 variables:
-  apiProject: 'EasyHMSAPI.Api/EasyHMSAPI.Api.csproj'   # <— your csproj path
+  apiProject: 'EasyHMSAPI.Api/EasyHMSAPI.Api.csproj'
   publishDir: '$(Build.ArtifactStagingDirectory)/publish'
   artifactName: 'api-drop'
 
   # Dev App Service
-  devAppName: 'easyHMSAPIServices'                           # <— CHANGE
-  devResourceGroup: 'website-dev-rg'     # <— CHANGE
-
+  devAppName: 'easyHMSAPIServices'
+  devResourceGroup: 'website-dev-rg'
 
   # QA App Service
-  qaAppName: 'easyHMSAPISevices'                             # <— CHANGE
-  qaResourceGroup: 'website-qa-rg'       # <— CHANGE
-
+  qaAppName: 'easyHMSAPISevices'   # <-- keep as-is if that's really the app name; otherwise fix to easyHMSAPIServices
+  qaResourceGroup: 'website-qa-rg'
 
 stages:
 # ===================== Build once =====================
@@ -61,9 +61,10 @@ stages:
 - stage: Deploy_Dev
   displayName: Deploy to App Service (Dev)
   dependsOn: Build
+  condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')))
   jobs:
   - deployment: DeployDev
-    environment: 'dev'   # add approvals/checks if you want
+    environment: 'dev'
     strategy:
       runOnce:
         deploy:
@@ -77,22 +78,22 @@ stages:
               azureSubscription: 'svc-conn-nexeagle-dev'
               appType: 'webAppLinux'
               appName: '$(devAppName)'
-              package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'         
+              package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
 
 # ===================== Deploy to QA =====================
 - stage: Deploy_QA
   displayName: Deploy to App Service (QA)
-  dependsOn: Deploy_Dev
-  condition: succeeded()
+  dependsOn: Build
+  condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'))
   jobs:
   - deployment: DeployQA
-    environment: 'qa'   # add Approvals & Checks here for a gate
+    environment: 'qa'
     strategy:
       runOnce:
         deploy:
           steps:
           - download: current
-            artifact: $(artifactName)        
+            artifact: $(artifactName)
 
           - task: AzureWebApp@1
             displayName: 'Deploy ZIP to QA App Service'
