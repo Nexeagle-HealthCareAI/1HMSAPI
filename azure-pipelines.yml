@@ -1,12 +1,25 @@
+# ============================================
+#   Build & Deploy EasyHMS API (.NET 8)
+#   Dev deploy: release-* AND feature/*
+#   QA deploy: release-* only (recommended)
+# ============================================
+
 trigger:
   branches:
     include:
-      - main
-      - release-*
+      - 'release-*'
+      - 'feature/*'
+
+pr:
+  branches:
+    include:
+      - 'release-*'
+      - 'feature/*'
 
 pool:
   vmImage: 'ubuntu-latest'
 
+# ==== EDIT THESE VALUES ====
 variables:
   apiProject: 'EasyHMSAPI.Api/EasyHMSAPI.Api.csproj'
   publishDir: '$(Build.ArtifactStagingDirectory)/publish'
@@ -17,11 +30,13 @@ variables:
   devResourceGroup: 'website-dev-rg'
 
   # QA App Service
-  qaAppName: 'easyHMSAPISevices'   # <-- keep as-is if that's really the app name; otherwise fix to easyHMSAPIServices
+  qaAppName: 'easyHMSAPISevices'
   qaResourceGroup: 'website-qa-rg'
 
+# ================================================================
+#  STAGE 1 — Build Artifacts (Runs for both release-* & feature/*)
+# ================================================================
 stages:
-# ===================== Build once =====================
 - stage: Build
   displayName: Build & Package API
   jobs:
@@ -57,11 +72,21 @@ stages:
     - publish: $(publishDir)
       artifact: $(artifactName)
 
-# ===================== Deploy to Dev =====================
+# ================================================================
+#  STAGE 2 — Deploy DEV
+#  Runs for release-* AND feature/*
+# ================================================================
 - stage: Deploy_Dev
   displayName: Deploy to App Service (Dev)
   dependsOn: Build
-  condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')))
+  condition: >
+    and(
+      succeeded(),
+      or(
+        startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'),
+        startsWith(variables['Build.SourceBranch'], 'refs/heads/feature/')
+      )
+    )
   jobs:
   - deployment: DeployDev
     environment: 'dev'
@@ -80,11 +105,18 @@ stages:
               appName: '$(devAppName)'
               package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
 
-# ===================== Deploy to QA =====================
+# ================================================================
+#  STAGE 3 — Deploy QA
+#  (Recommended: Only for release-*; feature/* should not go to QA)
+# ================================================================
 - stage: Deploy_QA
   displayName: Deploy to App Service (QA)
-  dependsOn: Build
-  condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'))
+  dependsOn: Deploy_Dev
+  condition: >
+    and(
+      succeeded(),
+      startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')
+    )
   jobs:
   - deployment: DeployQA
     environment: 'qa'
