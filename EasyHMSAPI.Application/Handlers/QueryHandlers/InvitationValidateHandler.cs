@@ -55,7 +55,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 Name = invitation.RecipientName,
                 RoleName = invitation.Role.RoleName,
                 Email = invitation.RecipientEmail,
-                Mobile = invitation.RecipientMobile
+                Mobile = invitation.RecipientMobile,
+                InvitationId = invitation.InvitationID.ToString()
             };
         }
     }
