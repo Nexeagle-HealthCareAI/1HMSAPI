@@ -11,5 +11,6 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? RoleName { get; set; }
         public string? Email { get; set; }
         public string Mobile { get; set; } = string.Empty;
+        public string InvitationId { get;set; } = string.Empty;
     }
 }
