@@ -36,7 +36,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     d.CreatedAt,
                     ProfileCompletionPercentage = d.ProfileCompletionPercent ?? 0,
 
-                    DoctorDepartments = d.DoctorDepartments.Select(dd => new DoctorDepartmentInfo
+                    DoctorDepartments = d.DoctorDepartments.Select(dd => new
                     {
                         DoctorDepartmentId = dd.DoctorDepartmentID,
                         DepartmentId = dd.DepartmentID,
@@ -58,6 +58,21 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
             if (temp == null) return null;
 
+            var departmentIds = temp.DoctorDepartments.Select(dd => dd.DepartmentId).ToList();
+            var hospitalDepartmentMappings = await _context.HospitalDepartmentMappings
+                .Where(hdm => departmentIds.Contains(hdm.DepartmentID))
+                .ToListAsync(cancellationToken);
+
+            var doctorDepartments = temp.DoctorDepartments.Select(dd => new DoctorDepartmentInfo
+            {
+                DoctorDepartmentId = dd.DoctorDepartmentId,
+                DepartmentId = dd.DepartmentId,
+                DepartmentName = dd.DepartmentName,
+                DepartmentDescription = dd.DepartmentDescription,
+                AssignedAt = dd.AssignedAt,
+                HospitalDepartmentMappingId = hospitalDepartmentMappings.FirstOrDefault(hdm => hdm.DepartmentID == dd.DepartmentId)?.MappingID
+            }).ToList();
+
             var response = new DoctorGetResponseModel
             {
                 DoctorId = temp.DoctorId,
@@ -71,7 +86,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 PrimaryDepartmentName = temp.PrimaryDepartmentName,
                 CreatedAt = temp.CreatedAt,
                 ProfileCompletionPercentage = temp.ProfileCompletionPercentage,
-                DoctorDepartments = temp.DoctorDepartments,
+                DoctorDepartments = doctorDepartments,
                 DoctorSpecializations = temp.DoctorSpecializations,
                 Qualifications = string.IsNullOrWhiteSpace(temp.Qualifications)
                     ? []

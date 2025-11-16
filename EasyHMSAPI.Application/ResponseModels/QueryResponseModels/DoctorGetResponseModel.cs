@@ -29,6 +29,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string DepartmentName { get; set; } = null!;
         public string? DepartmentDescription { get; set; }
         public DateTime AssignedAt { get; set; }
+        public Guid? HospitalDepartmentMappingId { get; set; }
     }
 
     [ExcludeFromCodeCoverage]
