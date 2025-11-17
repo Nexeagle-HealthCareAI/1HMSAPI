@@ -243,13 +243,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             if (!string.IsNullOrWhiteSpace(d.Qualification?.Trim()) && d.Qualification.Trim().Length >= 2) score += 15;
             if (d.ExperienceYears.HasValue && d.ExperienceYears >= 0 && d.ExperienceYears <= 60) score += 15;
             if (!string.IsNullOrWhiteSpace(d.MedicalCouncil?.Trim())) score += 10;
-            if (d.RegistrationYear.HasValue && d.RegistrationYear >= 1950 && d.RegistrationYear <= currentYear) score += 5;
+            if (d.RegistrationYear.HasValue && d.RegistrationYear >= 1950 && d.RegistrationYear <= currentYear) score += 10;
             
             var bioLength = string.IsNullOrWhiteSpace(d.Bio) ? 0 : d.Bio.Trim().Length;
             if (bioLength >= 50) score += 10;
-            else if (bioLength >= 10) score += 5;
-            
-            if (d.PrimaryDepartmentID.HasValue) score += 15;
+            else if (bioLength >= 10) score += 10;       
+           
             
             if (score < 0) score = 0;
             if (score > 100) score = 100;
