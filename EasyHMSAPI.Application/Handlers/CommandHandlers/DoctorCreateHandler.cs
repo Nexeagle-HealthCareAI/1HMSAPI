@@ -245,7 +245,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             if (!string.IsNullOrWhiteSpace(d.MedicalCouncil?.Trim())) score += 10;
             if (d.RegistrationYear.HasValue && d.RegistrationYear >= 1950 && d.RegistrationYear <= currentYear) score += 10;
             if (!string.IsNullOrWhiteSpace(d.Bio)) score += 10;
-            
+            if(hasDepartment) score += 10;
+
             if (score < 0) score = 0;
             if (score > 100) score = 100;
 
