@@ -22,7 +22,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         {
             try
             {
-                // Validate appointment exists and belongs to the patient
                 var appointment = await _context.Appointments
                     .FirstOrDefaultAsync(a => a.ApptId == request.AppointmentId && a.PatientId == request.PatientId, cancellationToken);
 
@@ -35,7 +34,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     };
                 }
 
-                // Create or update vitals
                 var vitals = await _context.AppointmentVitals
                     .FirstOrDefaultAsync(v => v.ApptId == request.AppointmentId && v.PatientId == request.PatientId, cancellationToken);
 
@@ -46,18 +44,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         VitalId = Guid.NewGuid(),
                         ApptId = request.AppointmentId,
                         HospitalId = appointment.HospitalId,
-                        PatientId = appointment.PatientId,
+                        PatientId = appointment.PatientId ?? string.Empty,
                         VitalsJson = JsonSerializer.Serialize(request.VitalsJson),
-                        BP_Sys = request?.VitalsJson?.Bp?.Sys,
-                        BP_Dia = request?.VitalsJson?.Bp?.Dia,
-                        Pulse = request?.VitalsJson?.Pulse,
-                        TempC = request?.VitalsJson?.TempC,
-                        SpO2 = (byte?)request?.VitalsJson?.Spo2,
-                        HeightCm  = request?.VitalsJson?.HeightCm,
-                        WeightKg = request?.VitalsJson?.WeightKg,
-                        BMI = request?.VitalsJson?.Bmi,
                         RecordedAt = DateTime.UtcNow,
-                        RecordedBy = request?.RecordedBy
+                        RecordedBy = request.RecordedBy
                     };
 
                     appointment.CurrentStatusCode = AppConstants.AppointmentStatus_Ready;
@@ -67,16 +57,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 else
                 {
                     vitals.VitalsJson = JsonSerializer.Serialize(request.VitalsJson);
-                    //vitals.BP_Sys = request?.VitalsJson?.Bp?.Sys;
-                    //vitals.BP_Dia = request?.VitalsJson?.Bp?.Dia;
-                    //vitals.Pulse = request?.VitalsJson?.Pulse;
-                    //vitals.TempC = request?.VitalsJson?.TempC;
-                    //vitals.SpO2 = (byte?)request?.VitalsJson?.Spo2;
-                    //vitals.HeightCm = request?.VitalsJson?.HeightCm;
-                    //vitals.WeightKg = request?.VitalsJson?.WeightKg;
-                    //vitals.BMI = request?.VitalsJson?.Bmi;
                     vitals.RecordedAt = DateTime.UtcNow;
-                    vitals.RecordedBy = request?.RecordedBy;
+                    vitals.RecordedBy = request.RecordedBy;
 
                     _context.AppointmentVitals.Update(vitals);
                 }

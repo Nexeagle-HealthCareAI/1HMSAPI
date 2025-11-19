@@ -13,28 +13,12 @@ namespace EasyHMSAPI.Domain.Entities
         [Required]
         public Guid HospitalId { get; set; }
         [Required]
-        public string? PatientId { get; set; }
+        [MaxLength(20)]
+        public string PatientId { get; set; } = string.Empty;
         [Required]
         public Guid ApptId { get; set; }
         [Required]
         public string VitalsJson { get; set; } = string.Empty;
-        [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
-        public short? BP_Sys { get; set; }
-        [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
-        public short? BP_Dia { get; set; }
-        [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
-        public short? Pulse { get; set; }
-        [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
-        public decimal? TempC { get; set; }
-        [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
-        public byte? SpO2 { get; set; }
-        [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
-        public short? HeightCm { get; set; }
-        [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
-        public decimal? WeightKg { get; set; }
-        [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
-        public decimal? BMI { get; set; }
-        [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
         public Guid? RecordedBy { get; set; }
         [Required]
         public DateTime RecordedAt { get; set; }
