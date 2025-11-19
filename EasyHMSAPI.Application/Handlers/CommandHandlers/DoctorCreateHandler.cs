@@ -195,7 +195,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 doctor.ProfileCompletionPercent = CalculateProfileCompletion(doctor, hasDepartment: departmentIdForSpecializations != null, hasSpecializations: request.Specializations != null && request.Specializations.Count > 0);
 
 
-                if (errors.Count != 0)
+                if (errors.Count <= 0)
                 {
                     SaveDefaultPrescriptionSettings(doctorId, createdAt);
                     SaveDefaultDoctorSectionPreference(request.HospitalId ?? Guid.Empty, doctorId);
