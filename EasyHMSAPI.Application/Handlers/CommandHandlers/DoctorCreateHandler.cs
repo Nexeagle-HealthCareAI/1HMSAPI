@@ -194,12 +194,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 doctor.ProfileCompletionPercent = CalculateProfileCompletion(doctor, hasDepartment: departmentIdForSpecializations != null, hasSpecializations: request.Specializations != null && request.Specializations.Count > 0);
 
+                SaveDefaultPrescriptionSettings(doctorId, createdAt);
+                SaveDefaultDoctorSectionPreference(request.HospitalId ?? Guid.Empty, doctorId);
 
-                if (errors.Count <= 0)
+
+                if (errors.Count > 0)
                 {
-                    SaveDefaultPrescriptionSettings(doctorId, createdAt);
-                    SaveDefaultDoctorSectionPreference(request.HospitalId ?? Guid.Empty, doctorId);
-                    await _context.SaveChangesAsync(cancellationToken);
                     return new DoctorCreateResponseModel
                     {
                         Success = false,
@@ -211,7 +211,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 await _context.SaveChangesAsync(cancellationToken);
                 
-
                 return new DoctorCreateResponseModel
                 {
                     Success = true,
