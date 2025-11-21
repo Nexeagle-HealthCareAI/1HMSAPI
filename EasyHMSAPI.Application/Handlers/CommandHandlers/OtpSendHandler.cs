@@ -42,7 +42,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             var user = await _context.Users.FirstOrDefaultAsync(u => u.MobileNumber == request.MobileNumber, cancellationToken);
             if (user == null)
             {
-                response.Success = true;
+                response.Success = false;
                 response.Message = "User not found.";
                 return response;
             }
