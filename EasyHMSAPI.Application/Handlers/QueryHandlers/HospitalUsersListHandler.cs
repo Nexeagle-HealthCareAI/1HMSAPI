@@ -61,7 +61,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             var roleIds = userRoles.Select(x => x.RoleID).Distinct().ToList();
 
             var rolePerms = await (from rp in _context.RolePermissions.AsNoTracking()
-                                   where roleIds.Contains(rp.RoleID) && rp.IsAllowed
+                                   where roleIds.Contains(rp.RoleID)
                                    select new
                                    {
                                        rp.RoleID,

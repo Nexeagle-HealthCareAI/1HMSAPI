@@ -16,7 +16,6 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<UserAuth> UserAuths { get; set; }
         public DbSet<UserProfile> UserProfiles { get; set; }
         public DbSet<Role> Roles { get; set; }
-        public DbSet<Permission> Permissions { get; set; }
         public DbSet<RolePermission> RolePermissions { get; set; }
         public DbSet<UserRole> UserRoles { get; set; }
         public DbSet<Hospital> Hospitals { get; set; }
@@ -51,7 +50,6 @@ namespace EasyHMSAPI.Domain.Context
             modelBuilder.Entity<UserProfile>().ToTable("UserProfiles");
             
             modelBuilder.Entity<Role>().ToTable("Roles");
-            modelBuilder.Entity<Permission>().ToTable("Permissions");
             modelBuilder.Entity<RolePermission>().ToTable("RolePermissions");
             modelBuilder.Entity<UserRole>().ToTable("UserRoles");
 
@@ -117,7 +115,6 @@ namespace EasyHMSAPI.Domain.Context
             modelBuilder.Entity<UserInvitation>().HasKey(e => e.InvitationID);
             
             modelBuilder.Entity<Role>().HasKey(e => e.RoleID);
-            modelBuilder.Entity<Permission>().HasKey(e => e.PermissionKey);
             modelBuilder.Entity<RolePermission>().HasKey(e => new { e.RoleID, e.PermissionKey });
             modelBuilder.Entity<UserRole>().HasKey(e => new { e.UserID, e.RoleID });
 
@@ -157,11 +154,6 @@ namespace EasyHMSAPI.Domain.Context
                 .HasOne(rp => rp.Role)
                 .WithMany(r => r.RolePermissions)
                 .HasForeignKey(rp => rp.RoleID);
-
-            modelBuilder.Entity<RolePermission>()
-                .HasOne(rp => rp.Permission)
-                .WithMany(p => p.RolePermissions)
-                .HasForeignKey(rp => rp.PermissionKey);
 
             modelBuilder.Entity<UserRole>()
                 .HasOne(ur => ur.User)

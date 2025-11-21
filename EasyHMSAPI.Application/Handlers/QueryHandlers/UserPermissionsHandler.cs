@@ -39,7 +39,6 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     RoleName = userRole.Role.RoleName,
                     Description = userRole.Role.Description,
                     PermissionKeys = userRole.Role.RolePermissions
-                        .Where(rp => rp.IsAllowed)
                         .Select(rp => rp.PermissionKey)
                         .ToList(),
                     AllRoles = null
