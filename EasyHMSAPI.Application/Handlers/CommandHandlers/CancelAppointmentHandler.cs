@@ -38,10 +38,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     {
                         return new CancelAppointmentResponseModel { Success = false, Message = "Doctor is not active or has been revoked." };
                     }
-                }
 
-                appt.CurrentStatusCode = AppConstants.AppointmentStatus_Cancelled;
-                appt.LastStatusCodeAt = DateTime.UtcNow;
+                    appt.CurrentStatusCode = AppConstants.AppointmentStatus_Cancelled;
+                    appt.LastStatusCodeAt = DateTime.UtcNow;
+                }
 
                 var history = string.IsNullOrEmpty(appt.StatusHistoryJson)
                     ? new List<object>()
