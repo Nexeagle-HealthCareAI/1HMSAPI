@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -20,9 +21,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
             var query = from hu in _context.HospitalUsers.AsNoTracking()
                         join u in _context.Users.AsNoTracking() on hu.UserID equals u.UserID
-                        join up in _context.UserProfiles.AsNoTracking() on u.UserID equals up.UserID into upg
+                        where hu.HospitalID == request.HospitalId && u.UserStatusId != (int)UserStatusEnum.Revoked
+                        join up in _context.UserProfiles.AsNoTracking()
+                            .Where(up => up.UserStatusId != (int)UserStatusEnum.Revoked) on u.UserID equals up.UserID into upg
                         from up in upg.OrderByDescending(x => x.UpdatedAt).Take(1).DefaultIfEmpty()
-                        where hu.HospitalID == request.HospitalId
                         select new HospitalUsersListItem
                         {
                             UserId = u.UserID,
@@ -31,7 +33,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                             Email = u.Email,
                             EmployeeID = hu.EmployeeID,
                             IsPrimary = hu.IsPrimary,
-                            IsActive = u.IsActive,
+                            UsersStatusId = u.UserStatusId,
                             Roles = new List<Roles>(),
                             PermissionKeys = new List<string>()
                         };

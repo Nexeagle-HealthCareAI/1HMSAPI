@@ -1,6 +1,7 @@
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Data.Constants;
+using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -37,8 +38,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
             try
             {
-                var doctorExists = await _context.Doctors
-                    .AnyAsync(d => d.DoctorID == request.DoctorId, cancellationToken);
+                var doctorExists = await (from d in _context.Doctors
+ join u in _context.Users on d.UserID equals u.UserID
+ where d.DoctorID == request.DoctorId && u.UserStatusId != (int)UserStatusEnum.Revoked
+ select d.DoctorID).AnyAsync(cancellationToken);
 
                 if (!doctorExists)
                 {

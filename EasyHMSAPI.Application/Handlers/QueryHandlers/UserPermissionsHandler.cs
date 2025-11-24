@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -20,7 +21,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             if (request.UserId != Guid.Empty)
             {
                 var userExists = await _context.Users
-                    .AnyAsync(u => u.UserID == request.UserId, cancellationToken);
+                    .AnyAsync(u => u.UserID == request.UserId && u.UserStatusId != (int)UserStatusEnum.Revoked, cancellationToken);
 
                 if (!userExists)
                     return null;

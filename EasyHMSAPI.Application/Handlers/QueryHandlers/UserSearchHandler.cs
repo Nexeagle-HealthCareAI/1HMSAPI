@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -25,7 +26,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .Include(u => u.UserRoles)
                     .ThenInclude(ur => ur.Role)
                         .ThenInclude(r => r.Hospital)
-                .FirstOrDefaultAsync(u => u.UserID == request.UserId, cancellationToken);
+                .FirstOrDefaultAsync(u => u.UserID == request.UserId && u.UserStatusId != (int)UserStatusEnum.Revoked, cancellationToken);
 
             if (user == null)
                 return null;
@@ -39,7 +40,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 UserId = user.UserID,
                 MobileNumber = user.MobileNumber,
                 Email = user.Email,
-                IsActive = user.IsActive,
+                UserStatusId = user.UserStatusId,
                 CreatedAt = user.CreatedAt,
 
                 UserAuth = userAuth != null ? new UserAuthInfo

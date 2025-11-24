@@ -1,12 +1,14 @@
-using System.Security.Cryptography;
-using System.Text;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
+using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
@@ -29,6 +31,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         {
             var invitation = await _context.UserInvitations
                 .FirstOrDefaultAsync(i => i.InvitationID == request.InvitationId, cancellationToken);
+            var currentDateTime = DateTime.Now;
 
             if (invitation == null)
             {
@@ -101,9 +104,43 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
             else if (scope == "revoke")
             {
-                invitation.RevokedAt = DateTime.UtcNow;
-                invitation.ExpiresAt = DateTime.UtcNow;
+                invitation.RevokedAt = currentDateTime;
+                invitation.ExpiresAt = currentDateTime;
                 invitation.Status = "Revoked";
+
+                var userExists = await _context.Users
+                    .Where(x => x.MobileNumber == invitation.RecipientMobile && x.UserStatusId != (int)UserStatusEnum.Revoked)
+                    .FirstOrDefaultAsync();
+                if(userExists != null)
+                {
+                    var userAuth = await _context.UserAuths
+                        .Where(ua => ua.UserID == userExists.UserID)
+                        .FirstOrDefaultAsync();
+                    var userProfile = await _context.UserProfiles
+                        .Where(up => up.UserID == userExists.UserID)
+                        .FirstOrDefaultAsync();
+
+                    userExists.UserStatusId = (int)UserStatusEnum.Revoked;
+                    if (userAuth != null)
+                    {
+                        userAuth.IsLocked = true;
+                        userAuth.UserStatusId = (int)UserStatusEnum.Revoked;
+                    }
+                    if (userProfile != null)
+                    {
+                        userProfile.UserStatusId = (int)UserStatusEnum.Revoked;
+                    }
+
+                    var userHistory = new UserHistory
+                    {
+                        UserId = userExists.UserID,
+                        UserStatusId = (int)UserStatusEnum.Revoked,
+                        UpdatedBy = request.PerformedByUserId,
+                        UpdatedDate = currentDateTime
+                    };
+                    _context.UserHistories.Add(userHistory);
+                }
+
                 await _context.SaveChangesAsync(cancellationToken);
 
                 return new InvitationUpdateResponseModel

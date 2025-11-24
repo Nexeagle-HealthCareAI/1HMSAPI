@@ -2,6 +2,7 @@ using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
+using EasyHMSAPI.Data.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,6 +21,15 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             var response = new DoctorDashboardAppointmentDetailsResponseModel();
             var query = _context.Appointments.AsQueryable();
             query = query.Where(a => a.HospitalId == request.HospitalId && a.DoctorId == request.DoctorId);
+            // Add doctor status check
+            var doctorActive = await (from d in _context.Doctors
+                 join u in _context.Users on d.UserID equals u.UserID
+                 where d.DoctorID == request.DoctorId && u.UserStatusId != (int)UserStatusEnum.Revoked
+                 select d.DoctorID).AnyAsync(cancellationToken);
+            if (!doctorActive)
+            {
+                return response;
+            }
             if (!string.IsNullOrWhiteSpace(request.Status) && !string.Equals(request.Status, "All", StringComparison.OrdinalIgnoreCase))
             {
                 query = query.Where(a => a.CurrentStatusCode == request.Status);

@@ -9,6 +9,8 @@ namespace EasyHMSAPI.Domain.Entities
         [Key]
         public Guid UserAuthID { get; set; }
         public Guid UserID { get; set; }
+        public int UserStatusId { get; set; }
+        public UserStatus? UserStatus { get; set; }
         public string? HashedPassword { get; set; }
         public string? LoginMethod { get; set; }
         public string? Otp { get; set; }

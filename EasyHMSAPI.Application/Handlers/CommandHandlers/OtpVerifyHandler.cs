@@ -1,13 +1,15 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
+using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.Extensions.Configuration;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
@@ -36,12 +38,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
             else
             {
-                var user = await _context.Users.FirstOrDefaultAsync(u => u.MobileNumber == request.MobileNumber, cancellationToken);
+                var currentDateTime = DateTime.Now;
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.MobileNumber == request.MobileNumber && u.UserStatusId != (int)UserStatusEnum.Revoked, cancellationToken);
                 if (user != null)
                 {
-                    var userAuth = await _context.UserAuths.FirstOrDefaultAsync(ua => ua.UserID == user.UserID, cancellationToken);
+                    var userAuth = await _context.UserAuths.FirstOrDefaultAsync(ua => ua.UserID == user.UserID , cancellationToken);
                     if (userAuth != null)
                     {
+                        var userProfile = await _context.UserProfiles.FirstOrDefaultAsync(up => up.UserID == user.UserID, cancellationToken);
                         // Compute hash of incoming OTP with the same pepper and compare against stored Base64 hash
                         var pepper = _configuration["Security:OtpPepper"] ?? string.Empty;
                         var key = Encoding.UTF8.GetBytes(pepper);
@@ -71,7 +75,22 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         {
                             userAuth.IsOtpUsed = true;
                             userAuth.IsLocked = false;
-                            user.IsActive = true;
+                            userAuth.UserStatusId = (int)UserStatusEnum.Active;
+                            user.UserStatusId = (int)UserStatusEnum.Active;
+                            if (userProfile != null)
+                            {
+                                userProfile.UserStatusId = (int)UserStatusEnum.Active;
+                            }
+                            
+                            var userHistory = new UserHistory
+                            {
+                                UserId = user.UserID,
+                                UserStatusId = (int)UserStatusEnum.Active,
+                                UpdatedBy = user.UserID,
+                                UpdatedDate = currentDateTime
+                            };
+                            _context.UserHistories.Add(userHistory);
+
                             await _context.SaveChangesAsync(cancellationToken);
 
                             List<Claim> claims = new()
@@ -91,7 +110,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         }
                         else
                         {
-                            if (!userAuth.OtpExpireAt.HasValue || userAuth.OtpExpireAt.Value < DateTime.UtcNow)
+                            if (!userAuth.OtpExpireAt.HasValue || userAuth.OtpExpireAt.Value < currentDateTime)
                             {
                                 return new OtpVerifyResponseModel
                                 {

@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
@@ -28,7 +29,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     .Include(u => u.UserAuths)
                     .Include(u => u.UserProfiles)
                     .Include(u => u.UserRoles)
-                    .FirstOrDefaultAsync(u => u.UserID == request.UserId, cancellationToken);
+                    .FirstOrDefaultAsync(u => u.UserID == request.UserId && u.UserStatusId != (int)UserStatusEnum.Revoked, cancellationToken);
 
                 if (user == null)
                 {
@@ -47,11 +48,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     updatedFields.Add("MobileNumber");
                 }
 
-                if (request.IsActive.HasValue && request.IsActive.Value != user.IsActive)
-                {
-                    user.IsActive = request.IsActive.Value;
-                    updatedFields.Add("IsActive");
-                }
+                //if (request.IsActive.HasValue && request.IsActive.Value != user.IsActive)
+                //{
+                //    user.IsActive = request.IsActive.Value;
+                //    updatedFields.Add("IsActive");
+                //}
 
 
                 var userProfile = user.UserProfiles.FirstOrDefault();

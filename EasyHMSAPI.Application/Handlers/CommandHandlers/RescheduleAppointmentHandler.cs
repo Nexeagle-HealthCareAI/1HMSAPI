@@ -2,6 +2,7 @@ using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Constants;
+using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -56,8 +57,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     appt.EndAt = appt.StartAt.Add(duration);
                 }
 
+                // Check doctor status before proceeding
                 if (request.ToDoctorId.HasValue)
                 {
+                    var doctorActive = await _context.Doctors.AnyAsync(d => d.DoctorID == request.ToDoctorId.Value && d.User.UserStatusId != (int)UserStatusEnum.Revoked, cancellationToken);
+                    if (!doctorActive)
+                    {
+                        return new RescheduleAppointmentResponseModel { Success = false, Message = "Doctor is not active or has been revoked." };
+                    }
+
                     appt.DoctorId = request.ToDoctorId.Value;
                 }
 

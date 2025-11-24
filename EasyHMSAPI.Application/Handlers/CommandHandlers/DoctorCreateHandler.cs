@@ -1,12 +1,11 @@
-using EasyHMSAPI.Application.RequestModels.CommandRequestModel;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
-using System.Threading;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
@@ -26,7 +25,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             try
             {
                 var userWithHospital = await _context.Users
-                    .Where(u => u.UserID == request.UserId)
+                    .Where(u => u.UserID == request.UserId && u.UserStatusId != (int)UserStatusEnum.Revoked)
                     .Select(u => new
                     {
                         UserExists = true,

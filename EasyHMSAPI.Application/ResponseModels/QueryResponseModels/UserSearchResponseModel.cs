@@ -8,7 +8,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public Guid UserId { get; set; }
         public string MobileNumber { get; set; } = null!;
         public string? Email { get; set; }
-        public bool IsActive { get; set; }
+        public int UserStatusId { get; set; }
         public DateTime CreatedAt { get; set; }
         public UserAuthInfo? UserAuth { get; set; }
         public UserProfileInfo? UserProfile { get; set; }
