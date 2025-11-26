@@ -7,6 +7,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     public class DoctorTimeOffCreateRequestModel : MediatR.IRequest<DoctorTimeOffCreateResponseModel>
     {
         public Guid DoctorId { get; set; }
+        public Guid HospitalId { get; set; } // Added hospitalId
         public DateTime FromDate { get; set; }
         public DateTime ToDate { get; set; }
         public string? Reason { get; set; }

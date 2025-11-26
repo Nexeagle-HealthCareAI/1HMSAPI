@@ -16,7 +16,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
         public async Task<UpdateDoctorPreferenceSettingResponseModel> Handle(UpdateDoctorPreferenceSettingRequestModel request, CancellationToken cancellationToken)
         {
-            var preference = await _context.DoctorSectionPreferences.FirstOrDefaultAsync(p => p.DoctorId == request.DoctorId, cancellationToken);
+            var preference = await _context.DoctorSectionPreferences.FirstOrDefaultAsync(p => p.DoctorId == request.DoctorId && p.HospitalId == request.HospitalId, cancellationToken);
             if (preference == null)
             {
                 return new UpdateDoctorPreferenceSettingResponseModel

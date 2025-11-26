@@ -90,8 +90,30 @@ namespace EasyHMSAPI.Domain.Context
                 .HasForeignKey(lp => lp.MasterLookupId);
 
             modelBuilder.Entity<Doctor>().ToTable("Doctors");
+            modelBuilder.Entity<Doctor>().HasKey(e => e.DoctorID);
+            modelBuilder.Entity<Doctor>().Property(d => d.ProfileCompletionPercent).HasPrecision(5,2);
+            modelBuilder.Entity<Doctor>()
+ .HasMany(d => d.DoctorDepartments)
+ .WithOne(dd => dd.Doctor)
+ .HasForeignKey(dd => dd.DoctorID);
+modelBuilder.Entity<Doctor>()
+ .HasMany(d => d.DoctorSpecializations)
+ .WithOne(ds => ds.Doctor)
+ .HasForeignKey(ds => ds.DoctorID);
             modelBuilder.Entity<DoctorDepartment>().ToTable("DoctorDepartments");
+            modelBuilder.Entity<DoctorDepartment>().HasKey(e => e.DoctorDepartmentID);
+            modelBuilder.Entity<DoctorDepartment>()
+ .HasOne(dd => dd.Department)
+ .WithMany(d => d.DoctorDepartments)
+ .HasForeignKey(dd => dd.DepartmentID);
+modelBuilder.Entity<DoctorDepartment>().Property(dd => dd.HospitalId).IsRequired(false);
             modelBuilder.Entity<DoctorSpecialization>().ToTable("DoctorSpecializations");
+            modelBuilder.Entity<DoctorSpecialization>().HasKey(e => e.DoctorSpecializationID);
+            modelBuilder.Entity<DoctorSpecialization>()
+ .HasOne(ds => ds.Specialization)
+ .WithMany(s => s.DoctorSpecializations)
+ .HasForeignKey(ds => ds.SpecializationID);
+modelBuilder.Entity<DoctorSpecialization>().Property(ds => ds.HospitalId).IsRequired(false);
             modelBuilder.Entity<PrescriptionHeaderFooter>().ToTable("PrescriptionHeaderFooter");
             modelBuilder.Entity<UserInvitation>().ToTable("UserInvitations");
             modelBuilder.Entity<DoctorShiftTemplate>().ToTable("DoctorShiftTemplates");
@@ -103,12 +125,6 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(u => u.ProfileCompletionPercentage)
                       .HasColumnName("ProfileCompletionPercent")
                       .HasDefaultValue(0);
-            });
-
-            modelBuilder.Entity<Doctor>(entity =>
-            {
-
-                entity.Property(d => d.ProfileCompletionPercent).HasPrecision(5, 2);
             });
 
             modelBuilder.Entity<User>().HasKey(e => e.UserID);
@@ -145,10 +161,6 @@ namespace EasyHMSAPI.Domain.Context
             modelBuilder.Entity<HospitalDepartmentMapping>().HasKey(e => e.MappingID);
             modelBuilder.Entity<Specialization>().HasKey(e => e.SpecializationID);
 
-            modelBuilder.Entity<Doctor>().HasKey(e => e.DoctorID);
-
-            modelBuilder.Entity<DoctorDepartment>().HasKey(e => e.DoctorDepartmentID);
-            modelBuilder.Entity<DoctorSpecialization>().HasKey(e => e.DoctorSpecializationID);
 
             modelBuilder.Entity<PrescriptionHeaderFooter>().HasKey(e => e.PrescriptionTemplateID);
             modelBuilder.Entity<DoctorShiftTemplate>().HasKey(e => e.TemplateID);

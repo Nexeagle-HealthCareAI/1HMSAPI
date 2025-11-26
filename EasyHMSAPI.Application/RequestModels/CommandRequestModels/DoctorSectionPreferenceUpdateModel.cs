@@ -6,6 +6,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     [ExcludeFromCodeCoverage]
     public class DoctorSectionPreferenceUpdateModel
     {
+        public Guid DoctorId { get; set; } // Added doctorId
+        public Guid HospitalId { get; set; } // Added hospitalId
         public bool? Vitals { get; set; }
         public bool? ChiefComplaint { get; set; }
         public bool? History { get; set; }

@@ -9,6 +9,7 @@ namespace EasyHMSAPI.Domain.Entities
         [Key]
         public Guid OverrideID { get; set; }
         public Guid DoctorID { get; set; }
+        public Guid HospitalId { get; set; } // Added hospitalId
         [MaxLength(50)]
         public string? ShiftName { get; set; }
         public TimeSpan StartTime { get; set; }

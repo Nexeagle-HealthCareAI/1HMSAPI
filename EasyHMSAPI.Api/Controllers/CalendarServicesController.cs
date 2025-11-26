@@ -25,14 +25,18 @@ namespace EasyHMSAPI.Api.Controllers
 
         [HttpGet("doctor/config")]
         [Authorize]
-        public async Task<ActionResult<DoctorShiftConfigResponseModel>> GetDoctorShiftConfig([FromQuery] Guid doctorId, [FromQuery] DateTime? startDate,[FromQuery] int? daysCount)
+        public async Task<ActionResult<DoctorShiftConfigResponseModel>> GetDoctorShiftConfig([FromQuery] Guid doctorId, [FromQuery] Guid hospitalId, [FromQuery] DateTime? startDate,[FromQuery] int? daysCount)
         {
-            _logger.LogInformation("GetDoctorShiftConfig started at {Time} for doctorId: {DoctorId}", DateTime.UtcNow, doctorId);
+            _logger.LogInformation("GetDoctorShiftConfig started at {Time} for doctorId: {DoctorId}, hospitalId: {HospitalId}", DateTime.UtcNow, doctorId, hospitalId);
             try
             {
                 if (doctorId == Guid.Empty)
                 {
                     return BadRequest(new { Message = "doctorId is required" });
+                }
+                if (hospitalId == Guid.Empty)
+                {
+                    return BadRequest(new { Message = "hospitalId is required" });
                 }
                 if (!startDate.HasValue)
                 {
@@ -46,18 +50,19 @@ namespace EasyHMSAPI.Api.Controllers
                 DoctorShiftConfigRequestModel request = new()
                 {
                     DoctorId = doctorId,
+                    HospitalId = hospitalId,
                     StartDate = startDate.Value.Date,
                     DaysCount = daysCount
                 };
 
                 var response = await _mediator.Send(request);
-                _logger.LogInformation("GetDoctorShiftConfig ended for doctorId: {DoctorId}", doctorId);
+                _logger.LogInformation("GetDoctorShiftConfig ended for doctorId: {DoctorId}, hospitalId: {HospitalId}", doctorId, hospitalId);
 
                 return Ok(response);
             }
             catch (Exception ex)
             {
-                _logger.LogError("Error in GetDoctorShiftConfig for doctorId: {DoctorId}. Error: {Error}", doctorId, ex);
+                _logger.LogError("Error in GetDoctorShiftConfig for doctorId: {DoctorId}, hospitalId: {HospitalId}. Error: {Error}", doctorId, hospitalId, ex);
                 return StatusCode(500, new { Message = "An error occurred while processing the request.", Details = ex.Message });
             }
         }
@@ -112,11 +117,12 @@ namespace EasyHMSAPI.Api.Controllers
 
         [HttpGet("doctor/timeoff")]
         [Authorize]
-        public async Task<ActionResult<DoctorTimeOffListResponseModel>> GetDoctorTimeOff([FromQuery] Guid doctorId)
+        public async Task<ActionResult<DoctorTimeOffListResponseModel>> GetDoctorTimeOff([FromQuery] Guid doctorId, [FromQuery] Guid hospitalId)
         {
-            _logger.LogInformation("GetDoctorTimeOff called at {Time} for doctorId: {DoctorId}", DateTime.UtcNow, doctorId);
+            _logger.LogInformation("GetDoctorTimeOff called at {Time} for doctorId: {DoctorId}, hospitalId: {HospitalId}", DateTime.UtcNow, doctorId, hospitalId);
             if (doctorId == Guid.Empty) return BadRequest(new { Message = "doctorId is required" });
-            var request = new DoctorTimeOffListRequestModel { DoctorId = doctorId };
+            if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required" });
+            var request = new DoctorTimeOffListRequestModel { DoctorId = doctorId, HospitalId = hospitalId };
             var response = await _mediator.Send(request);
 
             return Ok(response);
@@ -137,12 +143,13 @@ namespace EasyHMSAPI.Api.Controllers
 
         [HttpGet("doctor/slots")]
         [Authorize]
-        public async Task<ActionResult<DoctorSlotsResponseModel>> GetDoctorSlots([FromQuery] Guid doctorId, [FromQuery] DateTime slotDate)
+        public async Task<ActionResult<DoctorSlotsResponseModel>> GetDoctorSlots([FromQuery] Guid doctorId, [FromQuery] Guid hospitalId, [FromQuery] DateTime slotDate)
         {
-            _logger.LogInformation("GetDoctorSlots called at {Time} for doctorId: {DoctorId} on date: {SlotDate}", DateTime.UtcNow, doctorId, slotDate);
+            _logger.LogInformation("GetDoctorSlots called at {Time} for doctorId: {DoctorId}, hospitalId: {HospitalId} on date: {SlotDate}", DateTime.UtcNow, doctorId, hospitalId, slotDate);
             if (doctorId == Guid.Empty) return BadRequest(new { Message = "doctorId is required" });
+            if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required" });
 
-            var request = new DoctorSlotsRequestModel { DoctorId = doctorId, SlotDate = slotDate };
+            var request = new DoctorSlotsRequestModel { DoctorId = doctorId, HospitalId = hospitalId, SlotDate = slotDate };
             var response = await _mediator.Send(request);
 
             return Ok(response);

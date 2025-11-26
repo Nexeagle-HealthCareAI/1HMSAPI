@@ -85,7 +85,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     RegistrationYear = request.RegistrationYear,
                     Bio = request.Bio,
                     PrimaryDepartmentID = primaryDepartmentId,
-                    CreatedAt = createdAt
+                    CreatedAt = createdAt,
+                    // Set hospitalId if provided
+                    HospitalId = request.HospitalId ?? userWithHospital.HospitalId
                 };
                 _context.Doctors.Add(doctor);
 
@@ -105,7 +107,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             DoctorDepartmentID = Guid.NewGuid(),
                             DoctorID = doctorId,
                             DepartmentID = departmentId.Value,
-                            AssignedAt = createdAt
+                            AssignedAt = createdAt,
+                            // Set hospitalId if provided
+                            HospitalId = request.HospitalId ?? userWithHospital.HospitalId
                         };
                         _context.DoctorDepartments.Add(doctorDepartment);
                         departmentIdForSpecializations = departmentId;
@@ -184,7 +188,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 DoctorSpecializationID = Guid.NewGuid(),
                                 DoctorID = doctorId,
                                 SpecializationID = specialization.SpecializationID,
-                                AssignedAt = createdAt
+                                AssignedAt = createdAt,
+                                // Set hospitalId if provided
+                                HospitalId = request.HospitalId ?? userWithHospital.HospitalId
                             };
                             _context.DoctorSpecializations.Add(ds);
                         }
@@ -194,7 +200,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 doctor.ProfileCompletionPercent = CalculateProfileCompletion(doctor, hasDepartment: departmentIdForSpecializations != null, hasSpecializations: request.Specializations != null && request.Specializations.Count > 0);
 
                 SaveDefaultPrescriptionSettings(doctorId, createdAt);
-                SaveDefaultDoctorSectionPreference(request.HospitalId ?? Guid.Empty, doctorId);
+                SaveDefaultDoctorSectionPreference(request.HospitalId ?? userWithHospital.HospitalId ?? Guid.Empty, doctorId);
 
 
                 if (errors.Count > 0)

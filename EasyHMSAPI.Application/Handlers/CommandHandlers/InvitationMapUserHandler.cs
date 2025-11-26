@@ -42,6 +42,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     resp.CreatedHospitalUserLink = true;
                 }
 
+                // Update UserRoles: set HospitalID in Role if not set
+                var userRole = await _context.UserRoles
+                    .Include(ur => ur.Role)
+                    .FirstOrDefaultAsync(ur => ur.UserID == request.UserId, cancellationToken);
+                if (userRole != null && userRole.Role != null)
+                {
+                    if (userRole.Role.HospitalID == null || userRole.Role.HospitalID == Guid.Empty)
+                    {
+                        userRole.Role.HospitalID = invitation.HospitalID;
+                    }
+                }
+
                 invitation.Status = "Accepted";
                 invitation.AcceptedAt = DateTime.UtcNow;
                 //_context.UserInvitations.Update(invitation);

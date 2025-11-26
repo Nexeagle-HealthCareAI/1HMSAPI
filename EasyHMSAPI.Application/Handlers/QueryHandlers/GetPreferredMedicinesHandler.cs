@@ -18,7 +18,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
         {
             var list = await _dbContext.DoctorPreferredMedicines
                 .AsNoTracking()
-                .Where(d => d.DoctorId == request.DoctorId && d.IsActive)
+                .Where(d => d.DoctorId == request.DoctorId && d.HospitalId == request.HospitalId && d.IsActive)
                 .Select(d => new GetPreferredMedicineResponseModel
                 {
                     PrefferedId = d.PreferrredId,

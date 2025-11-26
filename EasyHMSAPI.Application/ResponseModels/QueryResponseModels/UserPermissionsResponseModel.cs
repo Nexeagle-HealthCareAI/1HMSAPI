@@ -20,6 +20,9 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
 
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<Roles>? AllRoles { get; set; }
+
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Guid? HospitalId { get; set; } // Added hospitalId to response
     }
 
     [ExcludeFromCodeCoverage]

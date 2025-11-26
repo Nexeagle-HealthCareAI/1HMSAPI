@@ -50,6 +50,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
                 var timeOff = await _context.DoctorTimeOffs
                     .Where(to => to.DoctorID == request.DoctorId &&
+                               to.HospitalId == request.HospitalId &&
                                request.SlotDate.Date >= to.FromDate.Date &&
                                request.SlotDate.Date <= to.ToDate.Date)
                     .OrderByDescending(to => to.CreatedAt)
@@ -67,6 +68,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 
                 var overrideShifts = await _context.DoctorShiftOverrides
                     .Where(o => o.DoctorID == request.DoctorId &&
+                              o.HospitalId == request.HospitalId &&
                               o.StartDate <= requestDate && 
                               (!o.EndDate.HasValue || o.EndDate >= requestDate))
                     .OrderBy(o => o.StartTime)
@@ -91,7 +93,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 {
                     response.ShiftInfo[0].DataSource = AppConstants.ShiftDataSource_Default;
                     response.ShiftInfo[0].ShiftDayDetails = await _context.DoctorShiftTemplates
-                        .Where(t => t.IsActive)
+                        .Where(t => t.IsActive && t.HospitalId == request.HospitalId)
                         .OrderBy(t => t.StartTime)
                         .Select(t => new ShiftDayDetailsModel
                         {

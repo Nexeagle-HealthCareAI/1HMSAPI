@@ -7,6 +7,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     public class DoctorOverrideCreateRequestModel : MediatR.IRequest<DoctorOverrideCreateResponseModel>
     {
         public Guid DoctorId { get; set; }
+        public Guid HospitalId { get; set; } // Added hospitalId
         public DateTime OverrideDate { get; set; }
         public DateTime StartDate { get; set; }
         public DateTime EndDate { get; set; }

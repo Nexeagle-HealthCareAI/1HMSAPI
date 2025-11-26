@@ -41,12 +41,14 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
             var doctorOverrideShifts = await _context.DoctorShiftOverrides
                 .Where(x => x.DoctorID == request.DoctorId &&
+                            x.HospitalId == request.HospitalId && // filter by hospitalId
                             x.StartDate.HasValue && x.EndDate.HasValue &&
                             DateOnly.FromDateTime(x.StartDate.Value) <= response.EndDate &&
                             DateOnly.FromDateTime(x.EndDate.Value) >= response.StartDate)
                 .ToListAsync(cancellationToken);
 
             var doctorDefaultShifts = await _context.DoctorShiftTemplates
+                .Where(t => t.IsActive && t.TemplateID != Guid.Empty && t.HospitalId == request.HospitalId)
                 .AsNoTracking()
                 .ToListAsync(cancellationToken);
 

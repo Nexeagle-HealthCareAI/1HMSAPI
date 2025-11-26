@@ -10,6 +10,7 @@ namespace EasyHMSAPI.Domain.Entities
         [Key]
         public Guid TimeOffID { get; set; }
         public Guid DoctorID { get; set; }
+        public Guid HospitalId { get; set; } // Added hospitalId
         public DateTime FromDate { get; set; }
         public DateTime ToDate { get; set; }
         public string? Reason { get; set; }
