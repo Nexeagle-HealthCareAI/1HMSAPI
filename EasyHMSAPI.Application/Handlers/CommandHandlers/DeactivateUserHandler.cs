@@ -1,6 +1,8 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,8 +19,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         public async Task<DeactivateUserResponseModel> Handle(DeactivateUserRequestModel request, CancellationToken cancellationToken)
         {
             var resp = new DeactivateUserResponseModel { UserId = request.UserId, HospitalId = request.HospitalId };
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserID == request.UserId && u.UserStatusId != (int)UserStatusEnum.Revoked, cancellationToken);
+            var currentDateTime = DateTime.Now;
 
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserID == request.UserId, cancellationToken);
+
             if (user == null)
             {
                 resp.Success = false;
@@ -28,20 +32,34 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
             try
             {
-                user.IsActive = false;
-                _context.Users.Update(user);
+                user.UserStatusId = (int)UserStatusEnum.Revoked;
 
-                var auth = await _context.UserAuths.FirstOrDefaultAsync(a => a.UserID == request.UserId, cancellationToken);
-                if (auth != null)
+                var userAuth = await _context.UserAuths.FirstOrDefaultAsync(a => a.UserID == user.UserID, cancellationToken);
+                if (userAuth != null)
                 {
-                    auth.IsLocked = true;
-                    _context.UserAuths.Update(auth);
+                    userAuth.IsLocked = true;
+                    userAuth.UserStatusId = (int)UserStatusEnum.Revoked;
                 }
+
+                var userProfile = await _context.UserProfiles.FirstOrDefaultAsync(up => up.UserID == user.UserID, cancellationToken);
+                if (userProfile != null)
+                {
+                    userProfile.UserStatusId = (int)UserStatusEnum.Revoked;
+                }
+
+                var userHistory = new UserHistory
+                {
+                    UserId = user.UserID,
+                    UserStatusId = (int)UserStatusEnum.Revoked,
+                    UpdatedBy = request.PerformedByUserId,
+                    UpdatedDate = currentDateTime
+                };
+                _context.UserHistories.Add(userHistory);
 
                 await _context.SaveChangesAsync(cancellationToken);
 
                 resp.Success = true;
-                resp.Message = "User deactivated and access removed.";
+                resp.Message = "User access revoked";
                 return resp;
             }
             catch (Exception ex)

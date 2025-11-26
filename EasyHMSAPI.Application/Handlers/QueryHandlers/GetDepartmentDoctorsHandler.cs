@@ -1,5 +1,6 @@
 ﻿using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -22,7 +23,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     dd => dd.DoctorID,
                     d => d.DoctorID,
                     (dd, d) => d)
-                .Join(_context.Users,
+                .Join(_context.Users.Where(u => u.UserStatusId != (int)UserStatusEnum.Revoked),
                     d => d.UserID,
                     u => u.UserID,
                     (d, u) => new { d.DoctorID, d.UserID, d.LicenseNumber, d.Qualification })

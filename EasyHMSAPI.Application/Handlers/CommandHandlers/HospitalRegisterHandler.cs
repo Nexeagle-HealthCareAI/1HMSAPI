@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModel;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
@@ -18,8 +19,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         public async Task<HospitalRegisterResponseModel> Handle(HospitalRegisterRequestModel request, CancellationToken cancellationToken)
         {
             var user = await _context.Users
-                .Where(u => u.UserID == request.UserId)
+                .Where(u => u.UserID == request.UserId && u.UserStatusId != (int)UserStatusEnum.Revoked)
                 .FirstOrDefaultAsync(cancellationToken);
+
             if (user == null)
             {
                 return new HospitalRegisterResponseModel

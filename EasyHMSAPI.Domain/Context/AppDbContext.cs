@@ -42,6 +42,8 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<PrescriptionAsset> PrescriptionAssets { get; set; }
         public DbSet<PrescriptionSetting> PrescriptionSettings { get; set; }
         public DbSet<DoctorSectionPreference> DoctorSectionPreferences { get; set; }
+        public DbSet<UserStatus> UserStatuses { get; set; }
+        public DbSet<UserHistory> UserHistories { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {   
@@ -110,10 +112,26 @@ namespace EasyHMSAPI.Domain.Context
             });
 
             modelBuilder.Entity<User>().HasKey(e => e.UserID);
+            modelBuilder.Entity<User>().Property(u => u.UserStatusId).IsRequired();
+            modelBuilder.Entity<User>()
+ .HasOne(u => u.UserStatus)
+ .WithMany()
+ .HasForeignKey(u => u.UserStatusId);
+
             modelBuilder.Entity<UserAuth>().HasKey(e => e.UserAuthID);
+            modelBuilder.Entity<UserAuth>().Property(ua => ua.UserStatusId).IsRequired();
+            modelBuilder.Entity<UserAuth>()
+ .HasOne(ua => ua.UserStatus)
+ .WithMany()
+ .HasForeignKey(ua => ua.UserStatusId);
+
             modelBuilder.Entity<UserProfile>().HasKey(e => e.UserProfileID);
-            modelBuilder.Entity<UserInvitation>().HasKey(e => e.InvitationID);
-            
+            modelBuilder.Entity<UserProfile>().Property(up => up.UserStatusId).IsRequired();
+            modelBuilder.Entity<UserProfile>()
+ .HasOne(up => up.UserStatus)
+ .WithMany()
+ .HasForeignKey(up => up.UserStatusId);
+
             modelBuilder.Entity<Role>().HasKey(e => e.RoleID);
             modelBuilder.Entity<RolePermission>().HasKey(e => new { e.RoleID, e.PermissionKey });
             modelBuilder.Entity<UserRole>().HasKey(e => new { e.UserID, e.RoleID });
@@ -318,6 +336,21 @@ namespace EasyHMSAPI.Domain.Context
             modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.UpdatedAt).HasColumnType("datetime2").IsRequired(false);
             modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.UpdatedBy).HasMaxLength(100).IsRequired(false);
             modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.RowVersion).IsRowVersion();
+
+            modelBuilder.Entity<UserStatus>().ToTable("UserStatus");
+            modelBuilder.Entity<UserStatus>().HasKey(us => us.UserStatusId);
+            modelBuilder.Entity<UserStatus>().Property(us => us.StatusName).HasMaxLength(50).IsRequired();
+
+            modelBuilder.Entity<UserHistory>().ToTable("UserHistory");
+            modelBuilder.Entity<UserHistory>().HasKey(uh => new { uh.UserId, uh.UpdatedDate });
+            modelBuilder.Entity<UserHistory>().Property(uh => uh.UserStatusId).IsRequired();
+            modelBuilder.Entity<UserHistory>().Property(uh => uh.UpdatedBy).IsRequired();
+            modelBuilder.Entity<UserHistory>().Property(uh => uh.UpdatedDate).HasColumnType("datetime2(3)").IsRequired();
+            modelBuilder.Entity<UserHistory>()
+                .HasOne(uh => uh.UserStatus)
+                .WithMany(us => us.UserHistories)
+                .HasForeignKey(uh => uh.UserStatusId);
+
             base.OnModelCreating(modelBuilder);
         }
     }

@@ -1,6 +1,7 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
+using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -36,19 +37,21 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                     if (!request.IsLoginWithOtp)
                     {
-                        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.EmailOrPhone, cancellationToken);
-                        user ??= await _context.Users.FirstOrDefaultAsync(u => u.MobileNumber == request.EmailOrPhone, cancellationToken);
+                        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.EmailOrPhone && u.UserStatusId != (int)UserStatusEnum.Revoked, cancellationToken);
+                        user ??= await _context.Users.FirstOrDefaultAsync(u => u.MobileNumber == request.EmailOrPhone && u.UserStatusId != (int)UserStatusEnum.Revoked, cancellationToken);
+
+
                         if (user != null)
                         {
                             var userAuth = await _context.UserAuths.FirstOrDefaultAsync(x => x.UserID == user.UserID, cancellationToken);
                             if(userAuth != null)
                             {
-                                if (!user.IsActive || userAuth.IsLocked)
+                                if (user.UserStatusId != (int)UserStatusEnum.Active || userAuth.IsLocked)
                                 {
                                     return new UserLoginResponseModel
                                     {
                                         Success = false,
-                                        Message = "User account is deactivated",
+                                        Message = "User account is not active",
                                         AccessToken = accessToken
                                     };
                                 }
@@ -129,12 +132,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             var userAuth = await _context.UserAuths.FirstOrDefaultAsync(x => x.UserID == user.UserID, cancellationToken);
                             if (userAuth != null)
                             {
-                                if (!user.IsActive || userAuth.IsLocked)
+                                if (user.UserStatusId != (int)UserStatusEnum.Active  || userAuth.IsLocked)
                                 {
                                     return new UserLoginResponseModel
                                     {
                                         Success = false,
-                                        Message = !user.IsActive ? "User is deactivated" : "Account is locked",
+                                        Message = userAuth.IsLocked ? "Account is locked" : "User account is not active",
                                         AccessToken = accessToken
                                     };
                                 }

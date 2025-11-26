@@ -1,6 +1,7 @@
 ﻿using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
+using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -23,7 +24,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
         public async Task<GetProfilePictureResponseModel> Handle(GetProfilePictureRequestModel request, CancellationToken cancellationToken)
         {
-            var userExists = await _context.Users.Where(x => x.UserID == request.UserId).Select(x => x.UserID).FirstOrDefaultAsync(cancellationToken);
+            var userExists = await _context.Users.Where(x => x.UserID == request.UserId && x.UserStatusId != (int)UserStatusEnum.Revoked).Select(x => x.UserID).FirstOrDefaultAsync(cancellationToken);
             GetProfilePictureResponseModel response = new();
 
             if (userExists == Guid.Empty)

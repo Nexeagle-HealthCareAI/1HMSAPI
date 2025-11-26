@@ -2,6 +2,7 @@ using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
+using EasyHMSAPI.Data.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,12 +21,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             var resp = new DoctorTimeOffCreateResponseModel();
             try
             {
-                var doctorExists = await _context.Doctors.AnyAsync(d => d.DoctorID == request.DoctorId, cancellationToken);
-                if (!doctorExists)
+                var doctorWithUser = await (from d in _context.Doctors
+                                             join u in _context.Users on d.UserID equals u.UserID
+                                             where d.DoctorID == request.DoctorId && u.UserStatusId != (int)UserStatusEnum.Revoked
+                                             select new { d.DoctorID, u.UserID }).FirstOrDefaultAsync(cancellationToken);
+                if (doctorWithUser == null)
                 {
                     resp.Success = false;
-                    resp.Message = "Doctor not found";
-                    resp.Errors.Add($"Doctor {request.DoctorId} does not exist");
+                    resp.Message = "Doctor not found or user is revoked";
+                    resp.Errors.Add($"Doctor {request.DoctorId} does not exist or user is revoked");
                     return resp;
                 }
 

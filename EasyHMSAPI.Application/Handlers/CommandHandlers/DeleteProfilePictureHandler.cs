@@ -1,6 +1,7 @@
 ﻿using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
+using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -23,7 +24,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
         public async Task<DeleteProfilePictureResponseModel> Handle(DeleteProfilePictureRequestModel request, CancellationToken cancellationToken)
         {
-            var userExists = await _context.Users.Where(x => x.UserID == request.UserId).Select(x => x.UserID).FirstOrDefaultAsync(cancellationToken);
+            var userExists = await _context.Users.Where(x => x.UserID == request.UserId && x.UserStatusId != (int)UserStatusEnum.Revoked).Select(x => x.UserID).FirstOrDefaultAsync(cancellationToken);
             DeleteProfilePictureResponseModel response = new();
 
             if(userExists == Guid.Empty)

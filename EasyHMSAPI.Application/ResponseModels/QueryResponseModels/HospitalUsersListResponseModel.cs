@@ -18,7 +18,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? Email { get; set; }
         public string? EmployeeID { get; set; }
         public bool IsPrimary { get; set; }
-        public bool IsActive { get; set; }
+        public int UsersStatusId { get; set; }
         public List<Roles>? Roles { get; set; }
         public List<string>? PermissionKeys { get; set; }
     }

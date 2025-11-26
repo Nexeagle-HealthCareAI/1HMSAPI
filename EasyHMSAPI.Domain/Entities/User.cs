@@ -10,8 +10,9 @@ namespace EasyHMSAPI.Domain.Entities
         public Guid UserID { get; set; }
         public string MobileNumber { get; set; } = null!;
         public string? Email { get; set; }
-        public bool IsActive { get; set; } = true;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public int UserStatusId { get; set; }
+        public UserStatus? UserStatus { get; set; }
         public ICollection<UserAuth> UserAuths { get; set; } = new List<UserAuth>();
         public ICollection<UserProfile> UserProfiles { get; set; } = new List<UserProfile>();
         public ICollection<HospitalUser> HospitalUsers { get; set; } = new List<HospitalUser>();

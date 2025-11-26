@@ -1,5 +1,6 @@
 ﻿using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -23,12 +24,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             SetOrResetPasswordResponseModel response = new();
 
             var user = await _context.Users
-                .Where(x => x.UserID == request.UserId)
+                .Where(x => x.UserID == request.UserId && x.UserStatusId != (int)UserStatusEnum.Revoked)
                 .FirstOrDefaultAsync(cancellationToken);
             if (user != null) 
             {
                 var userAuth = await _context.UserAuths
-                    .Where(x => x.UserID == request.UserId)
+                    .Where(x => x.UserID == user.UserID)
                     .FirstOrDefaultAsync(cancellationToken);
 
                 if (userAuth != null)

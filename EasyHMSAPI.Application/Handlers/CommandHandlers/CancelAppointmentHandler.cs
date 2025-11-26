@@ -2,6 +2,7 @@ using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Constants;
+using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -29,8 +30,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (appt == null)
                     return new CancelAppointmentResponseModel { Success = false, Message = "Appointment not found." };
 
-                appt.CurrentStatusCode = AppConstants.AppointmentStatus_Cancelled;
-                appt.LastStatusCodeAt = DateTime.UtcNow;
+                // Check doctor status before proceeding
+                if (appt != null)
+                {
+                    var doctorActive = await _context.Doctors.AnyAsync(d => d.DoctorID == appt.DoctorId && d.User.UserStatusId != (int)UserStatusEnum.Revoked, cancellationToken);
+                    if (!doctorActive)
+                    {
+                        return new CancelAppointmentResponseModel { Success = false, Message = "Doctor is not active or has been revoked." };
+                    }
+
+                    appt.CurrentStatusCode = AppConstants.AppointmentStatus_Cancelled;
+                    appt.LastStatusCodeAt = DateTime.UtcNow;
+                }
 
                 var history = string.IsNullOrEmpty(appt.StatusHistoryJson)
                     ? new List<object>()

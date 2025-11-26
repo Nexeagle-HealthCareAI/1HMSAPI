@@ -1,6 +1,7 @@
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Data.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
@@ -19,41 +20,42 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
         public async Task<DoctorGetResponseModel?> Handle(DoctorGetRequestModel request, CancellationToken cancellationToken)
         {
 
-            var temp = await _context.Doctors
-                .Where(d => d.UserID == request.UserId)
-                .Select(d => new
-                {
-                    DoctorId = d.DoctorID,
-                    UserId = d.UserID,
-                    d.LicenseNumber,
-                    Qualifications = d.Qualification,
-                    d.ExperienceYears,
-                    d.MedicalCouncil,
-                    d.RegistrationYear,
-                    d.Bio,
-                    d.PrimaryDepartmentID,
-                    PrimaryDepartmentName = d.PrimaryDepartment != null ? d.PrimaryDepartment.Name : null,
-                    d.CreatedAt,
-                    ProfileCompletionPercentage = d.ProfileCompletionPercent ?? 0,
+            var temp = await (from d in _context.Doctors
+                              join u in _context.Users on d.UserID equals u.UserID
+                              where d.UserID == request.UserId && u.UserStatusId != (int)UserStatusEnum.Revoked
+                              select new
+                              {
+                                  DoctorId = d.DoctorID,
+                                  UserId = d.UserID,
+                                  d.LicenseNumber,
+                                  Qualifications = d.Qualification,
+                                  d.ExperienceYears,
+                                  d.MedicalCouncil,
+                                  d.RegistrationYear,
+                                  d.Bio,
+                                  d.PrimaryDepartmentID,
+                                  PrimaryDepartmentName = d.PrimaryDepartment != null ? d.PrimaryDepartment.Name : null,
+                                  d.CreatedAt,
+                                  ProfileCompletionPercentage = d.ProfileCompletionPercent ?? 0,
 
-                    DoctorDepartments = d.DoctorDepartments.Select(dd => new
-                    {
-                        DoctorDepartmentId = dd.DoctorDepartmentID,
-                        DepartmentId = dd.DepartmentID,
-                        DepartmentName = dd.Department.Name,
-                        DepartmentDescription = dd.Department.Description,
-                        AssignedAt = dd.AssignedAt
-                    }).ToList(),
+                                  DoctorDepartments = d.DoctorDepartments.Select(dd => new
+                                  {
+                                      DoctorDepartmentId = dd.DoctorDepartmentID,
+                                      DepartmentId = dd.DepartmentID,
+                                      DepartmentName = dd.Department.Name,
+                                      DepartmentDescription = dd.Department.Description,
+                                      AssignedAt = dd.AssignedAt
+                                  }).ToList(),
 
-                    DoctorSpecializations = d.DoctorSpecializations.Select(ds => new DoctorSpecializationInfo
-                    {
-                        DoctorSpecializationId = ds.DoctorSpecializationID,
-                        SpecializationId = ds.SpecializationID,
-                        SpecializationName = ds.Specialization.Name,
-                        SpecializationDescription = ds.Specialization.Description,
-                        AssignedAt = ds.AssignedAt
-                    }).ToList()
-                })
+                                  DoctorSpecializations = d.DoctorSpecializations.Select(ds => new DoctorSpecializationInfo
+                                  {
+                                      DoctorSpecializationId = ds.DoctorSpecializationID,
+                                      SpecializationId = ds.SpecializationID,
+                                      SpecializationName = ds.Specialization.Name,
+                                      SpecializationDescription = ds.Specialization.Description,
+                                      AssignedAt = ds.AssignedAt
+                                  }).ToList()
+                              })
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (temp == null) return null;

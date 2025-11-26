@@ -1,15 +1,16 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services.Interfaces;
+using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using System;
-using System.Threading;
-using System.Threading.Tasks;
-using EasyHMSAPI.Application.Services.Interfaces;
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.Extensions.Configuration;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
@@ -39,7 +40,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 return response;
             }
 
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.MobileNumber == request.MobileNumber, cancellationToken);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.MobileNumber == request.MobileNumber && u.UserStatusId != (int)UserStatusEnum.Revoked, cancellationToken);
             if (user == null)
             {
                 response.Success = false;

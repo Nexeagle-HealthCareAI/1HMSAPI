@@ -2,6 +2,7 @@ using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Constants;
+using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
@@ -25,6 +26,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         {
             try
             {
+                // Check doctor status before proceeding
+                var doctorActive = await _context.Doctors.AnyAsync(d => d.DoctorID == request.DoctorId && d.User.UserStatusId != (int)UserStatusEnum.Revoked, cancellationToken);
+                if (!doctorActive)
+                {
+                    throw new Exception("Doctor is not active or has been revoked.");
+                }
+
                 var patient = await AddOrUpdatePatient(request, cancellationToken);
 
                 // Set status to 'Future' if appointment date is in the future
