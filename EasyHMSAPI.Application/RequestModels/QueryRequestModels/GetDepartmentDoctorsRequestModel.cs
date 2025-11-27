@@ -8,5 +8,6 @@ namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
     public class GetDepartmentDoctorsRequestModel : IRequest<GetDepartmentDoctorsResponseModel>
     {
         public Guid DepartmentId { get; set; }
+        public Guid HospitalId { get; set; } // Added hospitalId
     }
 }

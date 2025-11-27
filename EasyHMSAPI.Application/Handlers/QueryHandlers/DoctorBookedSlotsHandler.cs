@@ -20,7 +20,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             var bookedSlots = await (from a in _context.Appointments
                                      join d in _context.Doctors on a.DoctorId equals d.DoctorID
                                      join u in _context.Users on d.UserID equals u.UserID
-                                     where a.DoctorId == request.DoctorId && a.ApptDate.Date == request.Date.Date && u.UserStatusId != (int)UserStatusEnum.Revoked
+                                     where a.DoctorId == request.DoctorId && a.HospitalId == request.HospitalId && a.ApptDate.Date == request.Date.Date && u.UserStatusId != (int)UserStatusEnum.Revoked
                                      select a.StartAt.TimeOfDay)
                                      .ToListAsync(cancellationToken);
 

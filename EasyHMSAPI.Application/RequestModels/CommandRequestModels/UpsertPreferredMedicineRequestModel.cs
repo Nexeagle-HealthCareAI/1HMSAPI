@@ -8,6 +8,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     public class UpsertPreferredMedicineRequestModel : IRequest<UpsertPreferredMedicineResponseModel>
     {
         public Guid DoctorId { get; set; }
+        public Guid HospitalId { get; set; } // Added hospitalId
         public PreferredMedicineDataModel Medicine { get; set; } = null!;
     }
 

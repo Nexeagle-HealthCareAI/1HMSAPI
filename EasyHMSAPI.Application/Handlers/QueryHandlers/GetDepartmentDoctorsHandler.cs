@@ -18,7 +18,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
         public async Task<GetDepartmentDoctorsResponseModel> Handle(GetDepartmentDoctorsRequestModel request, CancellationToken cancellationToken)
         {
             var doctorsQuery = _context.DoctorDepartments
-                .Where(dd => dd.DepartmentID == request.DepartmentId)
+                .Where(dd => dd.DepartmentID == request.DepartmentId && dd.HospitalId == request.HospitalId)
                 .Join(_context.Doctors,
                     dd => dd.DoctorID,
                     d => d.DoctorID,

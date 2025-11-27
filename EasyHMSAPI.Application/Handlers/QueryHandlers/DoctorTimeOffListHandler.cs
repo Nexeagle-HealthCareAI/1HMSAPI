@@ -21,7 +21,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
             var items = await _context.DoctorTimeOffs
                 .AsNoTracking()
-                .Where(t => t.DoctorID == request.DoctorId)
+                .Where(t => t.DoctorID == request.DoctorId && t.HospitalId == request.HospitalId)
                 .OrderByDescending(t => t.FromDate)
                 .ToListAsync(cancellationToken);
 

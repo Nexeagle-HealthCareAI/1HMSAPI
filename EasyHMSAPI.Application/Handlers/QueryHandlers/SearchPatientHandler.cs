@@ -43,23 +43,20 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     break;
                 case "appointmentid":
                     var apptId = Guid.TryParse(request.Q, out var guid) ? guid : Guid.Empty;
-                    query = query.Where(p => _context.Appointments.Any(a => a.ApptId == apptId && a.PatientId == p.PatientId));
+                    query = query.Where(p => _context.Appointments.Any(a => a.ApptId == apptId && a.PatientId == p.PatientId && a.HospitalId == request.HospitalId));
                     break;
                 default:
                     throw new ArgumentException("Invalid search type. Must be one of: patientId, name, contact, appointmentId");
             }
-
-            if (request.Scope?.ToLower() == "local" && HttpContextHelper.HospitalId != null)
-            {
-                query = query.Where(p => p.HospitalId == HttpContextHelper.HospitalId);
-            }
+            // Always filter by hospitalId
+            query = query.Where(p => p.HospitalId == request.HospitalId);
 
             var patients = await query.ToListAsync(cancellationToken);
             foreach (var p in patients)
             {
                 var lastReg = p;
                 var upcomingAppt = await _context.Appointments
-                    .Where(a => a.PatientId == p.PatientId && a.ApptDate >= today)
+                    .Where(a => a.PatientId == p.PatientId && a.HospitalId == request.HospitalId && a.ApptDate >= today)
                     .OrderBy(a => a.ApptDate)
                     .FirstOrDefaultAsync(cancellationToken);
                 string? tokenNo = null;

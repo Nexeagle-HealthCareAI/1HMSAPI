@@ -37,15 +37,17 @@ namespace EasyHMSAPI.Api.Controllers
 
         [HttpGet("department-doctor")]
         [Authorize]
-        public async Task<IActionResult> GetDepartmentDoctors([FromQuery] Guid departmentId)
+        public async Task<IActionResult> GetDepartmentDoctors([FromQuery] Guid departmentId, [FromQuery] Guid hospitalId)
         {
-            _logger.LogInformation("GetDepartmentDoctors started at {Time} for departmentId: {DepartmentId}", DateTime.UtcNow, departmentId);
+            _logger.LogInformation("GetDepartmentDoctors started at {Time} for departmentId: {DepartmentId}, hospitalId: {HospitalId}", DateTime.UtcNow, departmentId, hospitalId);
             if (departmentId == Guid.Empty)
                 return BadRequest(new { Message = "departmentId is required." });
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
 
-            var request = new GetDepartmentDoctorsRequestModel { DepartmentId = departmentId };
+            var request = new GetDepartmentDoctorsRequestModel { DepartmentId = departmentId, HospitalId = hospitalId };
             var response = await _mediator.Send(request);
-            _logger.LogInformation("GetDepartmentDoctors ended for departmentId: {DepartmentId}", departmentId);
+            _logger.LogInformation("GetDepartmentDoctors ended for departmentId: {DepartmentId}, hospitalId: {HospitalId}", departmentId, hospitalId);
 
             return Ok(response);
         }
@@ -89,11 +91,13 @@ namespace EasyHMSAPI.Api.Controllers
 
         [HttpGet("patient-details/search")]
         [Authorize]
-        public async Task<IActionResult> SearchPatient([FromQuery] string by, [FromQuery] string q, [FromQuery] string scope = "local")
+        public async Task<IActionResult> SearchPatient([FromQuery] string by, [FromQuery] string q, [FromQuery] Guid hospitalId, [FromQuery] string scope = "local")
         {
-            _logger.LogInformation("SearchPatient started at {Time} with parameters - by: {By}, q: {Q}, scope: {Scope}", DateTime.UtcNow, by, q, scope);
+            _logger.LogInformation("SearchPatient started at {Time} with parameters - by: {By}, q: {Q}, hospitalId: {HospitalId}, scope: {Scope}", DateTime.UtcNow, by, q, hospitalId, scope);
             if (string.IsNullOrWhiteSpace(by) || string.IsNullOrWhiteSpace(q))
                 return BadRequest(new { Message = "Search type (by) and query (q) parameters are required." });
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
 
             try
             {
@@ -101,17 +105,18 @@ namespace EasyHMSAPI.Api.Controllers
                 {
                     By = by.ToLower(),
                     Q = q,
-                    Scope = scope
+                    Scope = scope,
+                    HospitalId = hospitalId
                 };
 
                 var response = await _mediator.Send(request);
-                _logger.LogInformation("SearchPatient ended successfully for query: {Q}", q);
+                _logger.LogInformation("SearchPatient ended successfully for query: {Q}, hospitalId: {HospitalId}", q, hospitalId);
 
                 return Ok(response);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error in SearchPatient for query: {Q}", q);
+                _logger.LogError(ex, "Error in SearchPatient for query: {Q}, hospitalId: {HospitalId}", q, hospitalId);
                 return StatusCode(500, new { ex.Message });
             }
         }
@@ -268,21 +273,24 @@ namespace EasyHMSAPI.Api.Controllers
 
         [HttpGet("patient-booked-slots")]
         [Authorize]
-        public async Task<IActionResult> GetPatientBookedSlots([FromQuery] Guid doctorId, [FromQuery] DateTime date)
+        public async Task<IActionResult> GetPatientBookedSlots([FromQuery] Guid doctorId, [FromQuery] Guid hospitalId, [FromQuery] DateTime date)
         {
-            _logger.LogInformation("GetPatientBookedSlots started at {Time} for doctorId: {DoctorId}, date: {Date}", DateTime.UtcNow, doctorId, date);
+            _logger.LogInformation("GetPatientBookedSlots started at {Time} for doctorId: {DoctorId}, hospitalId: {HospitalId}, date: {Date}", DateTime.UtcNow, doctorId, hospitalId, date);
             if (doctorId == Guid.Empty)
                 return BadRequest(new { Message = "doctorId is required." });
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
             if (date == default)
                 return BadRequest(new { Message = "date is required." });
 
             var request = new DoctorBookedSlotsRequestModel
             {
                 DoctorId = doctorId,
+                HospitalId = hospitalId,
                 Date = date
             };
             var response = await _mediator.Send(request);
-            _logger.LogInformation("GetPatientBookedSlots ended for doctorId: {DoctorId}", doctorId);
+            _logger.LogInformation("GetPatientBookedSlots ended for doctorId: {DoctorId}, hospitalId: {HospitalId}", doctorId, hospitalId);
 
             return Ok(response);
         }

@@ -66,32 +66,35 @@ namespace EasyHMSAPI.Api.Controllers
             return Ok(result);
         }
 
-        [HttpGet("configuration/preference-setting/doctorId={doctorId}")]
+        [HttpGet("configuration/preference-setting/doctorId={doctorId}&hospitalId={hospitalId}")]
         [Authorize]
-        public async Task<IActionResult> GetDoctorPreferenceSetting(Guid doctorId)
+        public async Task<IActionResult> GetDoctorPreferenceSetting(Guid doctorId, Guid hospitalId)
         {
-            _logger.LogInformation("GetDoctorPreferenceSetting started at {Time} for doctorId: {DoctorId}", DateTime.UtcNow, doctorId);
-            var result = await _mediator.Send(new GetDoctorPreferenceSettingRequestModel { DoctorId = doctorId });
+            _logger.LogInformation("GetDoctorPreferenceSetting started at {Time} for doctorId: {DoctorId}, hospitalId: {HospitalId}", DateTime.UtcNow, doctorId, hospitalId);
+            var result = await _mediator.Send(new GetDoctorPreferenceSettingRequestModel { DoctorId = doctorId, HospitalId = hospitalId });
             
-            _logger.LogInformation("GetDoctorPreferenceSetting ended for doctorId: {DoctorId}", doctorId);
+            _logger.LogInformation("GetDoctorPreferenceSetting ended for doctorId: {DoctorId}, hospitalId: {HospitalId}", doctorId, hospitalId);
 
             return Ok(result);
         }
 
-        [HttpPut("configuration/update-preference-setting/doctorId={doctorId}")]
+        [HttpPut("configuration/update-preference-setting/doctorId={doctorId}&hospitalId={hospitalId}")]
         [Authorize]
-        public async Task<IActionResult> UpdateDoctorPreferenceSetting(Guid doctorId, [FromBody] DoctorSectionPreferenceUpdateModel model)
+        public async Task<IActionResult> UpdateDoctorPreferenceSetting(Guid doctorId, Guid hospitalId, [FromBody] DoctorSectionPreferenceUpdateModel model)
         {
-            _logger.LogInformation("UpdateDoctorPreferenceSetting started at {Time} for doctorId: {DoctorId}", DateTime.UtcNow, doctorId);
+            _logger.LogInformation("UpdateDoctorPreferenceSetting started at {Time} for doctorId: {DoctorId}, hospitalId: {HospitalId}", DateTime.UtcNow, doctorId, hospitalId);
             if (model == null)
                 return BadRequest("Invalid request body.");
+            model.DoctorId = doctorId;
+            model.HospitalId = hospitalId;
             var request = new UpdateDoctorPreferenceSettingRequestModel
             {
                 DoctorId = doctorId,
+                HospitalId = hospitalId,
                 Preference = model
             };
             var result = await _mediator.Send(request);
-            _logger.LogInformation("UpdateDoctorPreferenceSetting ended for doctorId: {DoctorId}", doctorId);
+            _logger.LogInformation("UpdateDoctorPreferenceSetting ended for doctorId: {DoctorId}, hospitalId: {HospitalId}", doctorId, hospitalId);
 
             return Ok(result);
         }
@@ -166,39 +169,41 @@ namespace EasyHMSAPI.Api.Controllers
             return Ok(result);
         }
 
-        [HttpPut("configuration/personalized-medicine/doctorId={doctorId}")]
+        [HttpPut("configuration/personalized-medicine/doctorId={doctorId}&hospitalId={hospitalId}")]
         [Authorize]
-        public async Task<IActionResult> UpsertPreferredMedicine(Guid doctorId, [FromBody] PreferredMedicineDataModel model)
+        public async Task<IActionResult> UpsertPreferredMedicine(Guid doctorId, Guid hospitalId, [FromBody] PreferredMedicineDataModel model)
         {
-            _logger.LogInformation("UpsertPreferredMedicine started at {Time} for doctorId: {DoctorId}", DateTime.UtcNow, doctorId);
-            if (model == null || doctorId == Guid.Empty)
+            _logger.LogInformation("UpsertPreferredMedicine started at {Time} for doctorId: {DoctorId}, hospitalId: {HospitalId}", DateTime.UtcNow, doctorId, hospitalId);
+            if (model == null || doctorId == Guid.Empty || hospitalId == Guid.Empty)
                 return BadRequest(new { Message = "Invalid request parameters." });
 
             var request = new UpsertPreferredMedicineRequestModel
             {
                 DoctorId = doctorId,
+                HospitalId = hospitalId,
                 Medicine = model
             };
             var result = await _mediator.Send(request);
-            _logger.LogInformation("UpsertPreferredMedicine ended for doctorId: {DoctorId}", doctorId);
+            _logger.LogInformation("UpsertPreferredMedicine ended for doctorId: {DoctorId}, hospitalId: {HospitalId}", doctorId, hospitalId);
 
             return Ok(result);
         }
 
-        [HttpGet("configuration/personalized-medicine/doctorId={doctorId}")]
+        [HttpGet("configuration/personalized-medicine/doctorId={doctorId}&hospitalId={hospitalId}")]
         [Authorize]
-        public async Task<IActionResult> GetPreferredMedicines(Guid doctorId)
+        public async Task<IActionResult> GetPreferredMedicines(Guid doctorId, Guid hospitalId)
         {
-            _logger.LogInformation("GetPreferredMedicines started at {Time} for doctorId: {DoctorId}", DateTime.UtcNow, doctorId);
-            if (doctorId == Guid.Empty)
-                return BadRequest(new { Message = "Invalid doctorId." });
+            _logger.LogInformation("GetPreferredMedicines started at {Time} for doctorId: {DoctorId}, hospitalId: {HospitalId}", DateTime.UtcNow, doctorId, hospitalId);
+            if (doctorId == Guid.Empty || hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "Invalid doctorId or hospitalId." });
 
             var request = new GetPreferredMedicinesRequestModel
             {
-                DoctorId = doctorId
+                DoctorId = doctorId,
+                HospitalId = hospitalId
             };
             var result = await _mediator.Send(request);
-            _logger.LogInformation("GetPreferredMedicines ended for doctorId: {DoctorId}", doctorId);
+            _logger.LogInformation("GetPreferredMedicines ended for doctorId: {DoctorId}, hospitalId: {HospitalId}", doctorId, hospitalId);
 
             return Ok(result);
         }

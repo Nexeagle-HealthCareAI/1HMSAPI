@@ -46,6 +46,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 {
                     TimeOffID = Guid.NewGuid(),
                     DoctorID = request.DoctorId,
+                    HospitalId = request.HospitalId, // Set hospitalId
                     FromDate = from,
                     ToDate = to,
                     Reason = request.Reason,

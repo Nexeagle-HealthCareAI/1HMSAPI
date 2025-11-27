@@ -18,7 +18,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         public async Task<UpsertPreferredMedicineResponseModel> Handle(UpsertPreferredMedicineRequestModel request, CancellationToken cancellationToken)
         {
             var existing = await _dbContext.DoctorPreferredMedicines
-                .FirstOrDefaultAsync(dpm => dpm.DoctorId == request.DoctorId && dpm.MedicineId == request.Medicine.MedicineId, cancellationToken);
+                .FirstOrDefaultAsync(dpm => dpm.DoctorId == request.DoctorId && dpm.HospitalId == request.HospitalId && dpm.MedicineId == request.Medicine.MedicineId, cancellationToken);
 
             if (existing != null)
             {
@@ -32,6 +32,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 existing.Indication = request.Medicine.Indication;
                 existing.Notes = request.Medicine.Notes;
                 existing.UpdatedAt = DateTime.UtcNow;
+                // Update hospitalId
+                existing.HospitalId = request.HospitalId;
 
                 _dbContext.DoctorPreferredMedicines.Update(existing);
                 await _dbContext.SaveChangesAsync(cancellationToken);
@@ -51,6 +53,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 Notes = request.Medicine.Notes,
                 MedicineId = request.Medicine.MedicineId,
                 DoctorId = request.DoctorId,
+                HospitalId = request.HospitalId,
                 CreatedAt = DateTime.UtcNow,
                 IsActive = true
             };

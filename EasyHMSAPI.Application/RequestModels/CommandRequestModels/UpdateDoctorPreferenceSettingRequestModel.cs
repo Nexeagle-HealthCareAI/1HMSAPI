@@ -8,6 +8,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     public class UpdateDoctorPreferenceSettingRequestModel : IRequest<UpdateDoctorPreferenceSettingResponseModel>
     {
         public Guid DoctorId { get; set; }
+        public Guid HospitalId { get; set; } // Added hospitalId
         public DoctorSectionPreferenceUpdateModel? Preference { get; set; }
     }
 }

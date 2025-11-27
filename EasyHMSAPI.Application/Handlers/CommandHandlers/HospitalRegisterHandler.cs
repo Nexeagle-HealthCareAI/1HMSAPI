@@ -89,6 +89,22 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 };
                 _context.HospitalProfileStatuses.Add(hospitalProfileStatus);
 
+                // --- Add/Update UserRoles with hospitalId ---
+                // Find the user's current role (if any)
+                var userRole = await _context.UserRoles
+                    .Include(ur => ur.Role)
+                    .FirstOrDefaultAsync(ur => ur.UserID == request.UserId, cancellationToken);
+                if (userRole != null && userRole.Role != null)
+                {
+                    // If the role is not already associated with a hospital, associate it
+                    if (userRole.Role.HospitalID == null || userRole.Role.HospitalID == Guid.Empty)
+                    {
+                        userRole.Role.HospitalID = hospitalId;
+                    }
+                }
+                // If no user role exists, you may want to assign a default role here (optional)
+                // --- End UserRoles update ---
+
                 await _context.SaveChangesAsync(cancellationToken);
 
                 return new HospitalRegisterResponseModel
@@ -101,4 +117,4 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
         }
     }
-} 
+}

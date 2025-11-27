@@ -18,6 +18,7 @@ namespace EasyHMSAPI.Domain.Entities
         public int? ProfileCompletionPercent { get; set; }
         public string? ObjectURL { get; set; }
         public Guid? PrimaryDepartmentID { get; set; }
+        public Guid? HospitalId { get; set; } // Added hospitalId
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public User User { get; set; } = null!;
         public Department? PrimaryDepartment { get; set; }

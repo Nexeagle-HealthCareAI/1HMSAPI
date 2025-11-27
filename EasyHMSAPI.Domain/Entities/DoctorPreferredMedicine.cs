@@ -9,6 +9,7 @@ namespace EasyHMSAPI.Domain.Entities
         [Key]
         public long PreferrredId { get; set; }
         public Guid DoctorId { get; set; }
+        public Guid HospitalId { get; set; } // Added hospitalId
         public string? BrandName { get; set; }
         public string GenericName { get; set; } = string.Empty;
         public string? Form { get; set; }

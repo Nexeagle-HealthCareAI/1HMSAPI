@@ -10,5 +10,6 @@ namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
         public string? By { get; set; }
         public string? Q { get; set; }
         public string Scope { get; set; } = "local";
+        public Guid HospitalId { get; set; } // Added hospitalId
     }
 }

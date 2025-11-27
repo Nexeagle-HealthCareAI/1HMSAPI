@@ -47,7 +47,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 var overrideRecords = await _context.DoctorShiftOverrides
                     .Where(x => x.DoctorID == request.DoctorId &&
-                        x.EndDate == endDateTime.Date && x.StartDate == startDateTime.Date)
+                        x.EndDate == endDateTime.Date && x.StartDate == startDateTime.Date &&
+                        x.HospitalId == request.HospitalId)
                     .ToListAsync(cancellationToken);
                 
                 if(overrideRecords.Count > 0)
@@ -66,6 +67,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 existing.StartDate = startDateTime;
                                 existing.EndDate = endDateTime;
                                 existing.OverrideDate = request.OverrideDate;
+                                // Update hospitalId
+                                existing.HospitalId = request.HospitalId;
                                 updated++;
                             }
                             else
@@ -74,6 +77,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 {
                                     OverrideID = Guid.NewGuid(),
                                     DoctorID = request.DoctorId,
+                                    HospitalId = request.HospitalId,
                                     ShiftName = item.ShiftName,
                                     StartTime = TimeSpan.Parse(item.StartTime ?? string.Empty),
                                     EndTime = TimeSpan.Parse(item.EndTime ?? string.Empty),
@@ -103,6 +107,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             {
                                 OverrideID = Guid.NewGuid(),
                                 DoctorID = request.DoctorId,
+                                HospitalId = request.HospitalId,
                                 ShiftName = item.ShiftName,
                                 StartTime = TimeSpan.Parse(item.StartTime ?? string.Empty),
                                 EndTime = TimeSpan.Parse(item.EndTime ?? string.Empty),

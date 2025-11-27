@@ -10,8 +10,9 @@ namespace EasyHMSAPI.Domain.Entities
         public Guid DoctorSpecializationID { get; set; }
         public Guid DoctorID { get; set; }
         public Guid SpecializationID { get; set; }
-        public DateTime AssignedAt { get; set; } = DateTime.UtcNow;
+        public Guid? HospitalId { get; set; } // Added hospitalId
+        public DateTime AssignedAt { get; set; } = DateTime.UtcNow; // Added AssignedAt
         public Doctor Doctor { get; set; } = null!;
         public Specialization Specialization { get; set; } = null!;
     }
-} 
+}

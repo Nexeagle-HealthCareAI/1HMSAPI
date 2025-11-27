@@ -28,11 +28,18 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
                 var userRole = await _context.UserRoles
                     .Include(ur => ur.Role)
-                        .ThenInclude(r => r.RolePermissions)
+                    .ThenInclude(r => r.RolePermissions)
                     .FirstOrDefaultAsync(ur => ur.UserID == request.UserId, cancellationToken);
 
                 if (userRole == null || userRole.Role == null)
                     return null;
+
+                // Fetch default hospitalId for the user (IsPrimary = true, else first hospital)
+                var hospitalUser = await _context.HospitalUsers
+                    .Where(hu => hu.UserID == request.UserId)
+                    .OrderByDescending(hu => hu.IsPrimary) // IsPrimary first
+                    .ThenBy(hu => hu.CreatedAt)
+                    .FirstOrDefaultAsync(cancellationToken);
 
                 var response = new UserPermissionsResponseModel
                 {
@@ -42,7 +49,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     PermissionKeys = userRole.Role.RolePermissions
                         .Select(rp => rp.PermissionKey)
                         .ToList(),
-                    AllRoles = null
+                    AllRoles = null,
+                    HospitalId = hospitalUser?.HospitalID // Set default hospitalId if found
                 };
 
                 return response;
@@ -63,7 +71,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     RoleName = null,
                     Description = null,
                     PermissionKeys = null,
-                    AllRoles = roles
+                    AllRoles = roles,
+                    HospitalId = null
                 };
 
                 return response;
