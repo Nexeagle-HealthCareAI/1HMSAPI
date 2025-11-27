@@ -39,9 +39,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             try
             {
                 var doctorExists = await (from d in _context.Doctors
- join u in _context.Users on d.UserID equals u.UserID
- where d.DoctorID == request.DoctorId && u.UserStatusId != (int)UserStatusEnum.Revoked
- select d.DoctorID).AnyAsync(cancellationToken);
+                     join u in _context.Users on d.UserID equals u.UserID
+                     where d.DoctorID == request.DoctorId && u.UserStatusId != (int)UserStatusEnum.Revoked
+                     select d.DoctorID).AnyAsync(cancellationToken);
 
                 if (!doctorExists)
                 {
@@ -93,7 +93,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 {
                     response.ShiftInfo[0].DataSource = AppConstants.ShiftDataSource_Default;
                     response.ShiftInfo[0].ShiftDayDetails = await _context.DoctorShiftTemplates
-                        .Where(t => t.IsActive && t.HospitalId == request.HospitalId)
+                        .Where(t => t.IsActive)
                         .OrderBy(t => t.StartTime)
                         .Select(t => new ShiftDayDetailsModel
                         {
