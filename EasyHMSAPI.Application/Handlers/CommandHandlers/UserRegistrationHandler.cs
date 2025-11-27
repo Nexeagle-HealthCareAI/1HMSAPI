@@ -45,6 +45,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     {
                         response = await CreateNewUser(request, cancellationToken);
                     }
+                    else if (existingUser.UserStatusId == (int)UserStatusEnum.Inactive)
+                    {
+                        response.Success = true;
+                        response.Message = "User already registered but pending otp verification.";
+                    }
                     else
                     {
                         response.Success = false;
