@@ -48,7 +48,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .ToListAsync(cancellationToken);
 
             var doctorDefaultShifts = await _context.DoctorShiftTemplates
-                .Where(t => t.IsActive && t.TemplateID != Guid.Empty && t.HospitalId == request.HospitalId)
+                .Where(t => t.IsActive && t.TemplateID != Guid.Empty)
                 .AsNoTracking()
                 .ToListAsync(cancellationToken);
 
