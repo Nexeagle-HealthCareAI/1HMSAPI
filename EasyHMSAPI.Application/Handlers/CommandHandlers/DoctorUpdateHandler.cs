@@ -156,6 +156,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         var doctorDepartment = new DoctorDepartment
                         {
                             DoctorDepartmentID = Guid.NewGuid(),
+                            HospitalId= userWithHospital.HospitalId,
                             DoctorID = doctorId,
                             DepartmentID = departmentId,
                             AssignedAt = updateTime
@@ -247,6 +248,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 {
                                     DoctorSpecializationID = Guid.NewGuid(),
                                     DoctorID = doctorId,
+                                    HospitalId=userWithHospital.HospitalId,
                                     SpecializationID = specialization.SpecializationID,
                                     AssignedAt = updateTime
                                 };
