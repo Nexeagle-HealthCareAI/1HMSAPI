@@ -3,6 +3,7 @@ using System.Text;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
+using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
@@ -36,6 +37,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 {
                     Success = false,
                     Message = !hospitalExists ? "Hospital not found." : "Role not found."
+                };
+            }
+
+            var existingUser = await _context.Users
+                .Where(x => (x.MobileNumber == request.Mobile || x.Email == request.Email) && x.UserStatusId != (int)UserStatusEnum.Revoked)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (existingUser != null)
+            {
+                return new InvitationCreateResponseModel
+                {
+                    Success = false,
+                    Message = "A user with the provided mobile number or email already exists."
                 };
             }
 
