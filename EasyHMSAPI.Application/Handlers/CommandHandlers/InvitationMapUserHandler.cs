@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -29,14 +30,21 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             try
             {
                 var existing = await _context.HospitalUsers.FirstOrDefaultAsync(hu => hu.HospitalID == invitation.HospitalID && hu.UserID == request.UserId, cancellationToken);
+
                 if (existing == null)
                 {
+                    var userEmpId = await _context.UserProfiles
+                        .Where(u => u.UserID == request.UserId && u.UserStatusId != (int)UserStatusEnum.Revoked)
+                        .Select(u => u.EmployeeID)
+                        .FirstOrDefaultAsync(cancellationToken);
+
                     await _context.HospitalUsers.AddAsync(new Domain.Entities.HospitalUser
                     {
                         HospitalUserID = Guid.NewGuid(),
                         HospitalID = invitation.HospitalID,
                         UserID = request.UserId,
                         IsPrimary = false,
+                        EmployeeID = userEmpId,
                         CreatedAt = DateTime.UtcNow
                     }, cancellationToken);
                     resp.CreatedHospitalUserLink = true;
