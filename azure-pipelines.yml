@@ -16,6 +16,14 @@ pr:
       - 'release-*'
       - 'feature/*'
 
+parameters:
+- name: deployProd
+  type: boolean
+  default: false     # set true at run time to allow PROD
+- name: prodReleaseDateUtc
+  type: string
+  default: ''        # e.g. "2025-12-05 10:30:00" (UTC)
+
 pool:
   vmImage: 'ubuntu-latest'
 
@@ -32,6 +40,10 @@ variables:
   # QA App Service
   qaAppName: 'easyHMSAPISevices'
   qaResourceGroup: 'website-qa-rg'
+
+   # PROD App Service
+  prodAppName: 'easyHMSAPISevicesProd'              
+  prodResourceGroup: 'website-prod-rg'
 
 # ================================================================
 #  STAGE 1 — Build Artifacts (Runs for both release-* & feature/*)
@@ -133,4 +145,64 @@ stages:
               azureSubscription: 'svc-conn-nexeagle-qa'
               appType: 'webAppLinux'
               appName: '$(qaAppName)'
+              package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
+# ================================================================
+#  STAGE 4 — Deploy PROD (release-* + date gate + approvals)
+# ================================================================
+- stage: Deploy_Prod
+  displayName: Deploy to App Service (PROD)
+  dependsOn: Deploy_QA
+  condition: >
+    and(
+      succeeded(),
+      startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'),
+      eq('${{ parameters.deployProd }}', 'true')
+    )
+  jobs:
+  - deployment: DeployProd
+    environment: 'prod'    # Create an Environment 'prod' and add Approvals & Checks
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: current
+            artifact: $(artifactName)
+
+          # --- Gate: Enforce a specific UTC release date/time ---
+          - bash: |
+              set -euo pipefail
+              REL='${{ parameters.prodReleaseDateUtc }}'
+              if [ -z "$REL" ]; then
+                echo "Parameter prodReleaseDateUtc is required for PROD."; exit 1
+              fi
+              now=$(date -u +%s)
+              rel=$(date -u -d "$REL" +%s || true)
+              if [ -z "$rel" ]; then
+                echo "Invalid prodReleaseDateUtc format: $REL"
+                echo "Use e.g. '2025-12-05 10:30:00' (UTC)"; exit 1
+              fi
+              if [ $now -lt $rel ]; then
+                echo "Release blocked until $REL UTC"; exit 2
+              fi
+              echo "Release date gate passed (now >= $REL UTC)."
+            displayName: 'Gate: PROD release date (UTC)'
+
+          # --- Optional inline approval in addition to environment approvals ---
+          - task: ManualValidation@0
+            displayName: 'Manual Approval: Confirm PROD deploy'
+            timeoutInMinutes: 1440
+            inputs:
+              notifyUsers: ''   # optionally add emails
+              instructions: |
+                Please confirm PROD deployment for commit $(Build.SourceVersion).
+                Branch: $(Build.SourceBranch)
+                Artifact: $(artifactName)
+              onTimeout: 'reject'
+
+          - task: AzureWebApp@1
+            displayName: 'Deploy ZIP to PROD App Service'
+            inputs:
+              azureSubscription: 'svc-conn-nexeagle-prod'   # <— CHANGE
+              appType: 'webAppLinux'
+              appName: '$(prodAppName)'
               package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
