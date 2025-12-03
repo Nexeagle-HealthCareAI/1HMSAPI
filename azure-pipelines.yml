@@ -1,8 +1,18 @@
 # ============================================
 #   Build & Deploy EasyHMS API (.NET 8)
-#   Dev deploy: release-* AND feature/*
-#   QA deploy: release-* only (recommended)
+#   Dev: release-* AND feature/*
+#   QA : release-* only
+#   PROD: release-* + date gate + server-side manual approval
 # ============================================
+
+# -------- Parameters (for PROD gating) --------
+parameters:
+- name: deployProd
+  type: boolean
+  default: false
+- name: prodReleaseDateUtc
+  type: string
+  default: ''   # e.g. "2025-12-05 10:30:00" (UTC)
 
 trigger:
   branches:
@@ -15,14 +25,6 @@ pr:
     include:
       - 'release-*'
       - 'feature/*'
-
-parameters:
-- name: deployProd
-  type: boolean
-  default: false     # set true at run time to allow PROD
-- name: prodReleaseDateUtc
-  type: string
-  default: ''        # e.g. "2025-12-05 10:30:00" (UTC)
 
 pool:
   vmImage: 'ubuntu-latest'
@@ -41,14 +43,14 @@ variables:
   qaAppName: 'easyHMSAPISevices'
   qaResourceGroup: 'website-qa-rg'
 
-   # PROD App Service
-  prodAppName: 'easyHMSAPISevicesProd'              
-  prodResourceGroup: 'website-prod-rg'
+  # PROD App Service
+  prodAppName: 'easyHMSAPI-prod'       # <— CHANGE
+  prodResourceGroup: 'website-prod-rg' # <— CHANGE
 
-# ================================================================
-#  STAGE 1 — Build Artifacts (Runs for both release-* & feature/*)
-# ================================================================
 stages:
+# ================================================================
+#  STAGE 1 — Build (release-* & feature/*)
+# ================================================================
 - stage: Build
   displayName: Build & Package API
   jobs:
@@ -56,14 +58,11 @@ stages:
     steps:
     - task: UseDotNet@2
       displayName: 'Use .NET 8 SDK'
-      inputs:
-        version: '8.x'
+      inputs: { version: '8.x' }
 
     - task: DotNetCoreCLI@2
       displayName: 'Restore'
-      inputs:
-        command: 'restore'
-        projects: '$(apiProject)'
+      inputs: { command: 'restore', projects: '$(apiProject)' }
 
     - task: DotNetCoreCLI@2
       displayName: 'Build'
@@ -85,8 +84,7 @@ stages:
       artifact: $(artifactName)
 
 # ================================================================
-#  STAGE 2 — Deploy DEV
-#  Runs for release-* AND feature/*
+#  STAGE 2 — Deploy DEV (release-* & feature/*)
 # ================================================================
 - stage: Deploy_Dev
   displayName: Deploy to App Service (Dev)
@@ -112,14 +110,13 @@ stages:
           - task: AzureWebApp@1
             displayName: 'Deploy ZIP to Dev App Service'
             inputs:
-              azureSubscription: 'svc-conn-nexeagle-dev'
+              azureSubscription: 'svc-conn-nexeagle-dev'   # <— CHANGE
               appType: 'webAppLinux'
               appName: '$(devAppName)'
               package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
 
 # ================================================================
-#  STAGE 3 — Deploy QA
-#  (Recommended: Only for release-*; feature/* should not go to QA)
+#  STAGE 3 — Deploy QA (release-* only)
 # ================================================================
 - stage: Deploy_QA
   displayName: Deploy to App Service (QA)
@@ -142,15 +139,17 @@ stages:
           - task: AzureWebApp@1
             displayName: 'Deploy ZIP to QA App Service'
             inputs:
-              azureSubscription: 'svc-conn-nexeagle-qa'
+              azureSubscription: 'svc-conn-nexeagle-qa'    # <— CHANGE
               appType: 'webAppLinux'
               appName: '$(qaAppName)'
               package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
+
 # ================================================================
-#  STAGE 4 — Deploy PROD (release-* + date gate + approvals)
+#  STAGE 4 — PROD GATE (server-side ManualValidation)
+#  Runs only for release-* and when deployProd=true
 # ================================================================
-- stage: Deploy_Prod
-  displayName: Deploy to App Service (PROD)
+- stage: Prod_Gate
+  displayName: PROD Gate (Manual Approval)
   dependsOn: Deploy_QA
   condition: >
     and(
@@ -159,8 +158,31 @@ stages:
       eq('${{ parameters.deployProd }}', 'true')
     )
   jobs:
+  - job: WaitProdApproval
+    displayName: 'Manual approval for PROD'
+    pool: server          # <<< ManualValidation requires a server (agentless) job
+    timeoutInMinutes: 1440
+    steps:
+    - task: ManualValidation@0
+      displayName: 'Approve PROD deployment'
+      inputs:
+        notifyUsers: ''    # optionally comma-sep AAD emails
+        instructions: |
+          Please confirm PROD deployment for commit $(Build.SourceVersion).
+          Branch: $(Build.SourceBranch)
+          Artifact: $(artifactName)
+        onTimeout: 'reject'
+
+# ================================================================
+#  STAGE 5 — Deploy PROD (date gate + environment approvals)
+# ================================================================
+- stage: Deploy_Prod
+  displayName: Deploy to App Service (PROD)
+  dependsOn: Prod_Gate
+  condition: succeeded()
+  jobs:
   - deployment: DeployProd
-    environment: 'prod'    # Create an Environment 'prod' and add Approvals & Checks
+    environment: 'prod'    # configure Approvals & Checks in Environments
     strategy:
       runOnce:
         deploy:
@@ -168,7 +190,7 @@ stages:
           - download: current
             artifact: $(artifactName)
 
-          # --- Gate: Enforce a specific UTC release date/time ---
+          # Date gate (UTC) — runs on agent here
           - bash: |
               set -euo pipefail
               REL='${{ parameters.prodReleaseDateUtc }}'
@@ -186,18 +208,6 @@ stages:
               fi
               echo "Release date gate passed (now >= $REL UTC)."
             displayName: 'Gate: PROD release date (UTC)'
-
-          # --- Optional inline approval in addition to environment approvals ---
-          - task: ManualValidation@0
-            displayName: 'Manual Approval: Confirm PROD deploy'
-            timeoutInMinutes: 1440
-            inputs:
-              notifyUsers: ''   # optionally add emails
-              instructions: |
-                Please confirm PROD deployment for commit $(Build.SourceVersion).
-                Branch: $(Build.SourceBranch)
-                Artifact: $(artifactName)
-              onTimeout: 'reject'
 
           - task: AzureWebApp@1
             displayName: 'Deploy ZIP to PROD App Service'
