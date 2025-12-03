@@ -1,7 +1,8 @@
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
-using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Data.Enums;
+using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,7 +21,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             var bookedSlots = await (from a in _context.Appointments
                                      join d in _context.Doctors on a.DoctorId equals d.DoctorID
                                      join u in _context.Users on d.UserID equals u.UserID
-                                     where a.DoctorId == request.DoctorId && a.HospitalId == request.HospitalId && a.ApptDate.Date == request.Date.Date && u.UserStatusId != (int)UserStatusEnum.Revoked
+                                     where a.DoctorId == request.DoctorId && a.HospitalId == request.HospitalId && a.ApptDate.Date == request.Date.Date && u.UserStatusId != (int)UserStatusEnum.Revoked && a.CurrentStatusCode != AppConstants.AppointmentStatus_Cancelled
                                      select a.StartAt.TimeOfDay)
                                      .ToListAsync(cancellationToken);
 
