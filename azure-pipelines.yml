@@ -212,7 +212,7 @@ stages:
           - task: AzureWebApp@1
             displayName: 'Deploy ZIP to PROD App Service'
             inputs:
-              azureSubscription: 'svc-conn-nexeagle-prod'   # <— CHANGE
+              azureSubscription: 'svc-conn-nexeagle-dev'   # <— CHANGE
               appType: 'webAppLinux'
               appName: '$(prodAppName)'
               package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
