@@ -2,6 +2,7 @@ using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,19 +18,25 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
         public async Task<InvitationMapUserResponseModel> Handle(InvitationMapUserRequestModel request, CancellationToken cancellationToken)
         {
-            var resp = new InvitationMapUserResponseModel { InvitationId = request.InvitationId, UserId = request.UserId };
-
-            var invitation = await _context.UserInvitations.FirstOrDefaultAsync(i => i.InvitationID == request.InvitationId, cancellationToken);
-            if (invitation == null)
-            {
-                resp.Success = false;
-                resp.Message = "Invitation not found";
-                return resp;
-            }
+            var resp = new InvitationMapUserResponseModel 
+            { 
+                InvitationId = request.InvitationId, 
+                UserId = request.UserId 
+            };
 
             try
             {
-                var existing = await _context.HospitalUsers.FirstOrDefaultAsync(hu => hu.HospitalID == invitation.HospitalID && hu.UserID == request.UserId, cancellationToken);
+                var invitation = await _context.UserInvitations
+                    .FirstOrDefaultAsync(i => i.InvitationID == request.InvitationId, cancellationToken);
+                if (invitation == null)
+                {
+                    resp.Success = false;
+                    resp.Message = "Invitation not found";
+                    return resp;
+                }
+
+                var existing = await _context.HospitalUsers
+                    .FirstOrDefaultAsync(hu => hu.HospitalID == invitation.HospitalID && hu.UserID == request.UserId, cancellationToken);
 
                 if (existing == null)
                 {
@@ -38,19 +45,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         .Select(u => u.EmployeeID)
                         .FirstOrDefaultAsync(cancellationToken);
 
-                    await _context.HospitalUsers.AddAsync(new Domain.Entities.HospitalUser
+                    await _context.HospitalUsers.AddAsync(new HospitalUser
                     {
                         HospitalUserID = Guid.NewGuid(),
                         HospitalID = invitation.HospitalID,
                         UserID = request.UserId,
                         IsPrimary = false,
-                        EmployeeID = userEmpId,
+                        EmployeeID = userEmpId ?? string.Empty,
                         CreatedAt = DateTime.UtcNow
                     }, cancellationToken);
                     resp.CreatedHospitalUserLink = true;
                 }
 
-                // Update UserRoles: set HospitalID in Role if not set
                 var userRole = await _context.UserRoles
                     .Include(ur => ur.Role)
                     .FirstOrDefaultAsync(ur => ur.UserID == request.UserId, cancellationToken);
@@ -64,7 +70,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 invitation.Status = "Accepted";
                 invitation.AcceptedAt = DateTime.UtcNow;
-                //_context.UserInvitations.Update(invitation);
 
                 await _context.SaveChangesAsync(cancellationToken);
 
