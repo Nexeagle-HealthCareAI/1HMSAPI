@@ -1,19 +1,15 @@
 # ============================================
-#   Build & Deploy EasyHMS API (.NET 8)
-#   Dev:  release-* AND feature/*
-#   QA :  release-* only
-#   PROD: release-* + server-side manual approval (optional) + optional UTC date gate
+# EasyHMS API (.NET 8) CI/CD
+# - Build: release-* & feature/*
+# - Dev:   release-* & feature/*
+# - QA:    release-* only
+# - Prod:  release-* only (no time gate; approvals via Environment)
 # ============================================
 
-# -------- Parameters (control PROD) --------
 parameters:
 - name: deployProd
   type: boolean
-  default: false                # set TRUE at run time to enable PROD stage
-
-- name: prodReleaseDateUtc
-  type: string
-  default: ''                   # e.g. "2025-12-05 10:30:00" (UTC). Leave blank to skip time gate.
+  default: false   # enable at run time if you want to deploy to PROD
 
 trigger:
   branches:
@@ -30,28 +26,29 @@ pr:
 pool:
   vmImage: 'ubuntu-latest'
 
-# ==== EDIT THESE VALUES ====
+# ===== EDIT THESE VALUES =====
 variables:
   apiProject: 'EasyHMSAPI.Api/EasyHMSAPI.Api.csproj'
   publishDir: '$(Build.ArtifactStagingDirectory)/publish'
   artifactName: 'api-drop'
 
-  # Dev App Service
+  # Dev
   devAppName: 'easyHMSAPIServices'
-  devSubscription: 'svc-conn-nexeagle-dev'     # Service connection name
+  devResourceGroup: 'website-dev-rg'
+  devServiceConnection: 'svc-conn-nexeagle-dev'
 
-  # QA App Service
+  # QA
   qaAppName: 'easyHMSAPISevices'
-  qaSubscription: 'svc-conn-nexeagle-qa'       # Service connection name
+  qaResourceGroup: 'website-qa-rg'
+  qaServiceConnection: 'svc-conn-nexeagle-qa'
 
-  # PROD App Service
-  prodAppName: 'easyHMSAPISevicesProd'         # CHANGE as needed
-  prodSubscription: 'svc-conn-nexeagle-prod'   # Service connection name
+  # PROD (optional)
+  prodAppName: 'easyHMSAPISevicesProd'
+  prodResourceGroup: 'website-prod-rg'
+  prodServiceConnection: 'svc-conn-nexeagle-prod'
 
 stages:
-# ================================================================
-#  STAGE 1 — Build artifact (release-* & feature/*)
-# ================================================================
+# ===================== Build =====================
 - stage: Build
   displayName: Build & Package API
   jobs:
@@ -87,9 +84,7 @@ stages:
     - publish: $(publishDir)
       artifact: $(artifactName)
 
-# ================================================================
-#  STAGE 2 — Deploy DEV (release-* & feature/*)
-# ================================================================
+# ===================== Deploy Dev =====================
 - stage: Deploy_Dev
   displayName: Deploy to App Service (Dev)
   dependsOn: Build
@@ -97,8 +92,8 @@ stages:
     and(
       succeeded(),
       or(
-        startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'),
-        startsWith(variables['Build.SourceBranch'], 'refs/heads/feature/')
+        startsWith(variables['Build.SourceBranch'],'refs/heads/release-'),
+        startsWith(variables['Build.SourceBranch'],'refs/heads/feature/')
       )
     )
   jobs:
@@ -111,49 +106,58 @@ stages:
           - download: current
             artifact: $(artifactName)
 
-          # Robust detector: use zip if present, else publish folder
+          # Resolve the published zip to $(PKG)
           - bash: |
               set -euo pipefail
-              ROOT="$(Pipeline.Workspace)/$(artifactName)"
-              echo "Artifact root: $ROOT"
-              echo "Listing artifact contents:"
-              find "$ROOT" -maxdepth 3 -printf '%y %p\n' || true
-
-              ZIP=$(find "$ROOT" -type f -name '*.zip' | head -n1 || true)
-              if [ -n "$ZIP" ]; then
-                echo "Using ZIP package: $ZIP"
-                echo "##vso[task.setvariable variable=PkgPath]$ZIP"
-                exit 0
+              PKG=$(ls -1 "$(Pipeline.Workspace)/$(artifactName)"/**/*.zip | head -n1 || true)
+              if [ -z "$PKG" ]; then
+                echo "No publish zip found"; exit 1
               fi
+              echo "##vso[task.setvariable variable=PKG]$PKG"
+              echo "Package: $PKG"
+            displayName: 'Detect package zip (DEV)'
 
-              PUBLISH_DIR=$(find "$ROOT" -type f -name '*.deps.json' -printf '%h\n' | sort -u | head -n1 || true)
-              if [ -z "$PUBLISH_DIR" ]; then
-                echo "No .zip and no publish folder (with *.deps.json) found under $ROOT"
-                exit 1
-              fi
+          # Make sure the site is running (avoids Kudu 403 "Site Disabled")
+          - task: AzureCLI@2
+            displayName: 'Ensure Dev App is Running'
+            inputs:
+              azureSubscription: '$(devServiceConnection)'
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+                RG='$(devResourceGroup)'
+                APP='$(devAppName)'
 
-              echo "Using publish folder: $PUBLISH_DIR"
-              echo "##vso[task.setvariable variable=PkgPath]$PUBLISH_DIR"
-            displayName: 'Detect package (zip or folder)'
+                state=$(az webapp show -g "$RG" -n "$APP" --query state -o tsv || echo "")
+                echo "Current state: ${state:-Unknown}"
+                if [ "$state" != "Running" ]; then
+                  echo "Starting app..."
+                  az webapp start -g "$RG" -n "$APP"
+                fi
+
+                # Optional: clear stale run-from-package setting if previously used
+                # az webapp config appsettings delete -g "$RG" -n "$APP" --setting-names WEBSITE_RUN_FROM_PACKAGE || true
+
+                # Show SCM access default (should be Allow unless you've locked it down)
+                az webapp config show -g "$RG" -n "$APP" --query 'scmIpSecurityRestrictionsDefaultAction' -o tsv || true
 
           - task: AzureWebApp@1
             displayName: 'Deploy to Dev App Service'
             inputs:
-              azureSubscription: '$(devSubscription)'
+              azureSubscription: '$(devServiceConnection)'
               appType: 'webAppLinux'
               appName: '$(devAppName)'
-              package: '$(PkgPath)'
+              package: '$(PKG)'
 
-# ================================================================
-#  STAGE 3 — Deploy QA (release-* only)
-# ================================================================
+# ===================== Deploy QA =====================
 - stage: Deploy_QA
   displayName: Deploy to App Service (QA)
   dependsOn: Deploy_Dev
   condition: >
     and(
       succeeded(),
-      startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')
+      startsWith(variables['Build.SourceBranch'],'refs/heads/release-')
     )
   jobs:
   - deployment: DeployQA
@@ -167,134 +171,92 @@ stages:
 
           - bash: |
               set -euo pipefail
-              ROOT="$(Pipeline.Workspace)/$(artifactName)"
-              echo "Artifact root: $ROOT"
-              echo "Listing artifact contents:"
-              find "$ROOT" -maxdepth 3 -printf '%y %p\n' || true
-
-              ZIP=$(find "$ROOT" -type f -name '*.zip' | head -n1 || true)
-              if [ -n "$ZIP" ]; then
-                echo "Using ZIP package: $ZIP"
-                echo "##vso[task.setvariable variable=PkgPath]$ZIP"
-                exit 0
+              PKG=$(ls -1 "$(Pipeline.Workspace)/$(artifactName)"/**/*.zip | head -n1 || true)
+              if [ -z "$PKG" ]; then
+                echo "No publish zip found"; exit 1
               fi
+              echo "##vso[task.setvariable variable=PKG]$PKG"
+              echo "Package: $PKG"
+            displayName: 'Detect package zip (QA)'
 
-              PUBLISH_DIR=$(find "$ROOT" -type f -name '*.deps.json' -printf '%h\n' | sort -u | head -n1 || true)
-              if [ -z "$PUBLISH_DIR" ]; then
-                echo "No .zip and no publish folder (with *.deps.json) found under $ROOT"
-                exit 1
-              fi
-
-              echo "Using publish folder: $PUBLISH_DIR"
-              echo "##vso[task.setvariable variable=PkgPath]$PUBLISH_DIR"
-            displayName: 'Detect package (zip or folder)'
+          - task: AzureCLI@2
+            displayName: 'Ensure QA App is Running'
+            inputs:
+              azureSubscription: '$(qaServiceConnection)'
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+                RG='$(qaResourceGroup)'
+                APP='$(qaAppName)'
+                state=$(az webapp show -g "$RG" -n "$APP" --query state -o tsv || echo "")
+                echo "Current state: ${state:-Unknown}"
+                if [ "$state" != "Running" ]; then
+                  echo "Starting app..."
+                  az webapp start -g "$RG" -n "$APP"
+                fi
 
           - task: AzureWebApp@1
             displayName: 'Deploy to QA App Service'
             inputs:
-              azureSubscription: '$(qaSubscription)'
+              azureSubscription: '$(qaServiceConnection)'
               appType: 'webAppLinux'
               appName: '$(qaAppName)'
-              package: '$(PkgPath)'
+              package: '$(PKG)'
 
-# ================================================================
-#  STAGE 4 — PROD GATE (server-side ManualValidation)
-#  Runs only for release-* and when deployProd=true
-# ================================================================
-- stage: Prod_Gate
-  displayName: PROD Gate (Manual Approval)
+# ===================== Deploy Prod (optional) =====================
+- stage: Deploy_Prod
+  displayName: Deploy to App Service (PROD)
   dependsOn: Deploy_QA
   condition: >
     and(
       succeeded(),
-      startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'),
-      eq('${{ parameters.deployProd }}', 'true')
+      startsWith(variables['Build.SourceBranch'],'refs/heads/release-'),
+      eq('${{ parameters.deployProd }}','true')
     )
   jobs:
-  - job: WaitProdApproval
-    displayName: 'Manual approval for PROD'
-    pool: server                  # ManualValidation requires agentless job
-    timeoutInMinutes: 4320        # up to 3 days
-    steps:
-    - task: ManualValidation@0
-      displayName: 'Approve PROD deployment'
-      inputs:
-        notifyUsers: ''           # optionally comma-separated AAD emails
-        instructions: |
-          Please confirm PROD deployment.
-          Branch: $(Build.SourceBranch)
-          Commit: $(Build.SourceVersion)
-          Artifact: $(artifactName)
-        onTimeout: 'reject'
-
-# ================================================================
-#  STAGE 5 — Deploy PROD (optional UTC date gate)
-#  Uses the SAME artifact built & used for QA (no rebuild)
-# ================================================================
-- stage: Deploy_Prod
-  displayName: Deploy to App Service (PROD)
-  dependsOn: Prod_Gate
-  condition: succeeded()
-  jobs:
   - deployment: DeployProd
-    environment: 'prod'          # configure approvals in Environments if desired
+    # Use Environment 'prod' to require approvals (Project Settings → Pipelines → Environments)
+    environment: 'prod'
     strategy:
       runOnce:
         deploy:
           steps:
+          # IMPORTANT: this downloads the SAME artifact built earlier (same run → same zip)
           - download: current
             artifact: $(artifactName)
 
-          # Optional UTC date gate before deploy
           - bash: |
               set -euo pipefail
-              REL='${{ parameters.prodReleaseDateUtc }}'
-              if [ -z "$REL" ]; then
-                echo "No prodReleaseDateUtc provided; continuing without time gate."
-                exit 0
+              PKG=$(ls -1 "$(Pipeline.Workspace)/$(artifactName)"/**/*.zip | head -n1 || true)
+              if [ -z "$PKG" ]; then
+                echo "No publish zip found"; exit 1
               fi
-              now=$(date -u +%s)
-              rel=$(date -u -d "$REL" +%s || true)
-              if [ -z "$rel" ]; then
-                echo "Invalid prodReleaseDateUtc format: $REL"
-                echo "Use e.g. '2025-12-05 10:30:00' (UTC)"
-                exit 1
-              fi
-              if [ $now -lt $rel ]; then
-                echo "Release blocked until $REL UTC"
-                exit 2
-              fi
-              echo "Release date gate passed (now >= $REL UTC)."
-            displayName: 'Gate: PROD release date (UTC)'
+              echo "##vso[task.setvariable variable=PKG]$PKG"
+              echo "Package: $PKG"
+            displayName: 'Detect package zip (PROD)'
 
-          - bash: |
-              set -euo pipefail
-              ROOT="$(Pipeline.Workspace)/$(artifactName)"
-              echo "Artifact root: $ROOT"
-              echo "Listing artifact contents:"
-              find "$ROOT" -maxdepth 3 -printf '%y %p\n' || true
-
-              ZIP=$(find "$ROOT" -type f -name '*.zip' | head -n1 || true)
-              if [ -n "$ZIP" ]; then
-                echo "Using ZIP package: $ZIP"
-                echo "##vso[task.setvariable variable=PkgPath]$ZIP"
-                exit 0
-              fi
-
-              PUBLISH_DIR=$(find "$ROOT" -type f -name '*.deps.json' -printf '%h\n' | sort -u | head -n1 || true)
-              if [ -z "$PUBLISH_DIR" ]; then
-                echo "No .zip and no publish folder (with *.deps.json) found under $ROOT"
-                exit 1
-              fi
-
-              echo "Using publish folder: $PUBLISH_DIR"
-              echo "##vso[task.setvariable variable=PkgPath]$PUBLISH_DIR"
-            displayName: 'Detect package (zip or folder)'
+          - task: AzureCLI@2
+            displayName: 'Ensure PROD App is Running'
+            inputs:
+              azureSubscription: '$(prodServiceConnection)'
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+                RG='$(prodResourceGroup)'
+                APP='$(prodAppName)'
+                state=$(az webapp show -g "$RG" -n "$APP" --query state -o tsv || echo "")
+                echo "Current state: ${state:-Unknown}"
+                if [ "$state" != "Running" ]; then
+                  echo "Starting app..."
+                  az webapp start -g "$RG" -n "$APP"
+                fi
 
           - task: AzureWebApp@1
             displayName: 'Deploy to PROD App Service'
             inputs:
-              azureSubscription: '$(prodSubscription)'
+              azureSubscription: '$(prodServiceConnection)'
               appType: 'webAppLinux'
               appName: '$(prodAppName)'
-              package: '$(PkgPath)'
+              package: '$(PKG)'
