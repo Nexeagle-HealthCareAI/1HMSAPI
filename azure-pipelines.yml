@@ -1,8 +1,19 @@
 # ============================================
 #   Build & Deploy EasyHMS API (.NET 8)
-#   Dev deploy: release-* AND feature/*
-#   QA deploy: release-* only (recommended)
+#   Dev:  release-* AND feature/*
+#   QA :  release-* only
+#   PROD: release-* + server-side manual approval (optional) + optional UTC date gate
 # ============================================
+
+# -------- Parameters (control PROD) --------
+parameters:
+- name: deployProd
+  type: boolean
+  default: false                # set TRUE at run time to enable PROD stage
+
+- name: prodReleaseDateUtc
+  type: string
+  default: ''                   # e.g. "2025-12-05 10:30:00" (UTC). Leave blank to skip time gate.
 
 trigger:
   branches:
@@ -27,16 +38,20 @@ variables:
 
   # Dev App Service
   devAppName: 'easyHMSAPIServices'
-  devResourceGroup: 'website-dev-rg'
+  devSubscription: 'svc-conn-nexeagle-dev'     # Service connection name
 
   # QA App Service
   qaAppName: 'easyHMSAPISevices'
-  qaResourceGroup: 'website-qa-rg'
+  qaSubscription: 'svc-conn-nexeagle-qa'       # Service connection name
 
-# ================================================================
-#  STAGE 1 — Build Artifacts (Runs for both release-* & feature/*)
-# ================================================================
+  # PROD App Service
+  prodAppName: 'easyHMSAPISevicesProd'         # CHANGE as needed
+  prodSubscription: 'svc-conn-nexeagle-prod'   # Service connection name
+
 stages:
+# ================================================================
+#  STAGE 1 — Build artifact (release-* & feature/*)
+# ================================================================
 - stage: Build
   displayName: Build & Package API
   jobs:
@@ -73,8 +88,7 @@ stages:
       artifact: $(artifactName)
 
 # ================================================================
-#  STAGE 2 — Deploy DEV
-#  Runs for release-* AND feature/*
+#  STAGE 2 — Deploy DEV (release-* & feature/*)
 # ================================================================
 - stage: Deploy_Dev
   displayName: Deploy to App Service (Dev)
@@ -97,17 +111,41 @@ stages:
           - download: current
             artifact: $(artifactName)
 
+          # Robust detector: use zip if present, else publish folder
+          - bash: |
+              set -euo pipefail
+              ROOT="$(Pipeline.Workspace)/$(artifactName)"
+              echo "Artifact root: $ROOT"
+              echo "Listing artifact contents:"
+              find "$ROOT" -maxdepth 3 -printf '%y %p\n' || true
+
+              ZIP=$(find "$ROOT" -type f -name '*.zip' | head -n1 || true)
+              if [ -n "$ZIP" ]; then
+                echo "Using ZIP package: $ZIP"
+                echo "##vso[task.setvariable variable=PkgPath]$ZIP"
+                exit 0
+              fi
+
+              PUBLISH_DIR=$(find "$ROOT" -type f -name '*.deps.json' -printf '%h\n' | sort -u | head -n1 || true)
+              if [ -z "$PUBLISH_DIR" ]; then
+                echo "No .zip and no publish folder (with *.deps.json) found under $ROOT"
+                exit 1
+              fi
+
+              echo "Using publish folder: $PUBLISH_DIR"
+              echo "##vso[task.setvariable variable=PkgPath]$PUBLISH_DIR"
+            displayName: 'Detect package (zip or folder)'
+
           - task: AzureWebApp@1
-            displayName: 'Deploy ZIP to Dev App Service'
+            displayName: 'Deploy to Dev App Service'
             inputs:
-              azureSubscription: 'svc-conn-nexeagle-dev'
+              azureSubscription: '$(devSubscription)'
               appType: 'webAppLinux'
               appName: '$(devAppName)'
-              package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
+              package: '$(PkgPath)'
 
 # ================================================================
-#  STAGE 3 — Deploy QA
-#  (Recommended: Only for release-*; feature/* should not go to QA)
+#  STAGE 3 — Deploy QA (release-* only)
 # ================================================================
 - stage: Deploy_QA
   displayName: Deploy to App Service (QA)
@@ -127,10 +165,136 @@ stages:
           - download: current
             artifact: $(artifactName)
 
+          - bash: |
+              set -euo pipefail
+              ROOT="$(Pipeline.Workspace)/$(artifactName)"
+              echo "Artifact root: $ROOT"
+              echo "Listing artifact contents:"
+              find "$ROOT" -maxdepth 3 -printf '%y %p\n' || true
+
+              ZIP=$(find "$ROOT" -type f -name '*.zip' | head -n1 || true)
+              if [ -n "$ZIP" ]; then
+                echo "Using ZIP package: $ZIP"
+                echo "##vso[task.setvariable variable=PkgPath]$ZIP"
+                exit 0
+              fi
+
+              PUBLISH_DIR=$(find "$ROOT" -type f -name '*.deps.json' -printf '%h\n' | sort -u | head -n1 || true)
+              if [ -z "$PUBLISH_DIR" ]; then
+                echo "No .zip and no publish folder (with *.deps.json) found under $ROOT"
+                exit 1
+              fi
+
+              echo "Using publish folder: $PUBLISH_DIR"
+              echo "##vso[task.setvariable variable=PkgPath]$PUBLISH_DIR"
+            displayName: 'Detect package (zip or folder)'
+
           - task: AzureWebApp@1
-            displayName: 'Deploy ZIP to QA App Service'
+            displayName: 'Deploy to QA App Service'
             inputs:
-              azureSubscription: 'svc-conn-nexeagle-qa'
+              azureSubscription: '$(qaSubscription)'
               appType: 'webAppLinux'
               appName: '$(qaAppName)'
-              package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
+              package: '$(PkgPath)'
+
+# ================================================================
+#  STAGE 4 — PROD GATE (server-side ManualValidation)
+#  Runs only for release-* and when deployProd=true
+# ================================================================
+- stage: Prod_Gate
+  displayName: PROD Gate (Manual Approval)
+  dependsOn: Deploy_QA
+  condition: >
+    and(
+      succeeded(),
+      startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'),
+      eq('${{ parameters.deployProd }}', 'true')
+    )
+  jobs:
+  - job: WaitProdApproval
+    displayName: 'Manual approval for PROD'
+    pool: server                  # ManualValidation requires agentless job
+    timeoutInMinutes: 4320        # up to 3 days
+    steps:
+    - task: ManualValidation@0
+      displayName: 'Approve PROD deployment'
+      inputs:
+        notifyUsers: ''           # optionally comma-separated AAD emails
+        instructions: |
+          Please confirm PROD deployment.
+          Branch: $(Build.SourceBranch)
+          Commit: $(Build.SourceVersion)
+          Artifact: $(artifactName)
+        onTimeout: 'reject'
+
+# ================================================================
+#  STAGE 5 — Deploy PROD (optional UTC date gate)
+#  Uses the SAME artifact built & used for QA (no rebuild)
+# ================================================================
+- stage: Deploy_Prod
+  displayName: Deploy to App Service (PROD)
+  dependsOn: Prod_Gate
+  condition: succeeded()
+  jobs:
+  - deployment: DeployProd
+    environment: 'prod'          # configure approvals in Environments if desired
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: current
+            artifact: $(artifactName)
+
+          # Optional UTC date gate before deploy
+          - bash: |
+              set -euo pipefail
+              REL='${{ parameters.prodReleaseDateUtc }}'
+              if [ -z "$REL" ]; then
+                echo "No prodReleaseDateUtc provided; continuing without time gate."
+                exit 0
+              fi
+              now=$(date -u +%s)
+              rel=$(date -u -d "$REL" +%s || true)
+              if [ -z "$rel" ]; then
+                echo "Invalid prodReleaseDateUtc format: $REL"
+                echo "Use e.g. '2025-12-05 10:30:00' (UTC)"
+                exit 1
+              fi
+              if [ $now -lt $rel ]; then
+                echo "Release blocked until $REL UTC"
+                exit 2
+              fi
+              echo "Release date gate passed (now >= $REL UTC)."
+            displayName: 'Gate: PROD release date (UTC)'
+
+          - bash: |
+              set -euo pipefail
+              ROOT="$(Pipeline.Workspace)/$(artifactName)"
+              echo "Artifact root: $ROOT"
+              echo "Listing artifact contents:"
+              find "$ROOT" -maxdepth 3 -printf '%y %p\n' || true
+
+              ZIP=$(find "$ROOT" -type f -name '*.zip' | head -n1 || true)
+              if [ -n "$ZIP" ]; then
+                echo "Using ZIP package: $ZIP"
+                echo "##vso[task.setvariable variable=PkgPath]$ZIP"
+                exit 0
+              fi
+
+              PUBLISH_DIR=$(find "$ROOT" -type f -name '*.deps.json' -printf '%h\n' | sort -u | head -n1 || true)
+              if [ -z "$PUBLISH_DIR" ]; then
+                echo "No .zip and no publish folder (with *.deps.json) found under $ROOT"
+                exit 1
+              fi
+
+              echo "Using publish folder: $PUBLISH_DIR"
+              echo "##vso[task.setvariable variable=PkgPath]$PUBLISH_DIR"
+            displayName: 'Detect package (zip or folder)'
+
+          - task: AzureWebApp@1
+            displayName: 'Deploy to PROD App Service'
+            inputs:
+              azureSubscription: '$(prodSubscription)'
+              appType: 'webAppLinux'
+              appName: '$(prodAppName)'
+              package: '$(PkgPath)'
