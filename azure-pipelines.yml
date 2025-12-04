@@ -44,7 +44,7 @@ variables:
   qaResourceGroup: 'website-qa-rg'
 
   # PROD App Service
-  prodAppName: 'easyHMSAPI-prod'       # <— CHANGE
+  prodAppName: 'easyHMSAPISevicesProd'       # <— CHANGE
   prodResourceGroup: 'website-prod-rg' # <— CHANGE
 
 stages:
