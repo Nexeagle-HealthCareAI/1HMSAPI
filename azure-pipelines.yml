@@ -3,13 +3,13 @@
 # - Build: release-* & feature/*
 # - Dev:   release-* & feature/*
 # - QA:    release-* only
-# - Prod:  release-* only (no time gate; approvals via Environment)
+# - PROD:  release-* only, Environment approval required
 # ============================================
 
 parameters:
 - name: deployProd
   type: boolean
-  default: false   # enable at run time if you want to deploy to PROD
+  default: false   # set true at run time to enable PROD stage
 
 trigger:
   branches:
@@ -30,6 +30,7 @@ pool:
 variables:
   apiProject: 'EasyHMSAPI.Api/EasyHMSAPI.Api.csproj'
   publishDir: '$(Build.ArtifactStagingDirectory)/publish'
+  packageDir: '$(Build.ArtifactStagingDirectory)/package'
   artifactName: 'api-drop'
 
   # Dev
@@ -42,7 +43,7 @@ variables:
   qaResourceGroup: 'website-qa-rg'
   qaServiceConnection: 'svc-conn-nexeagle-qa'
 
-  # PROD (optional)
+  # PROD  <<< EDIT THESE
   prodAppName: 'easyHMSAPISevicesProd'
   prodResourceGroup: 'website-prod-rg'
   prodServiceConnection: 'svc-conn-nexeagle-prod'
@@ -73,15 +74,25 @@ stages:
         arguments: '--configuration Release --no-restore'
 
     - task: DotNetCoreCLI@2
-      displayName: 'Publish (zip)'
+      displayName: 'Publish (folder)'
       inputs:
         command: 'publish'
         projects: '$(apiProject)'
         arguments: '--configuration Release --no-restore --output $(publishDir)'
         publishWebProjects: false
-        zipAfterPublish: true
+        zipAfterPublish: false
 
-    - publish: $(publishDir)
+    # Create deterministic zip: site.zip
+    - task: ArchiveFiles@2
+      displayName: 'Archive publish → site.zip'
+      inputs:
+        rootFolderOrFile: '$(publishDir)'
+        includeRootFolder: false
+        archiveType: 'zip'
+        archiveFile: '$(packageDir)/site.zip'
+        replaceExistingArchive: true
+
+    - publish: '$(packageDir)'
       artifact: $(artifactName)
 
 # ===================== Deploy Dev =====================
@@ -106,18 +117,7 @@ stages:
           - download: current
             artifact: $(artifactName)
 
-          # Resolve the published zip to $(PKG)
-          - bash: |
-              set -euo pipefail
-              PKG=$(ls -1 "$(Pipeline.Workspace)/$(artifactName)"/**/*.zip | head -n1 || true)
-              if [ -z "$PKG" ]; then
-                echo "No publish zip found"; exit 1
-              fi
-              echo "##vso[task.setvariable variable=PKG]$PKG"
-              echo "Package: $PKG"
-            displayName: 'Detect package zip (DEV)'
-
-          # Make sure the site is running (avoids Kudu 403 "Site Disabled")
+          # Ensure app is running (avoid Kudu 403 Site Disabled)
           - task: AzureCLI@2
             displayName: 'Ensure Dev App is Running'
             inputs:
@@ -128,7 +128,6 @@ stages:
                 set -euo pipefail
                 RG='$(devResourceGroup)'
                 APP='$(devAppName)'
-
                 state=$(az webapp show -g "$RG" -n "$APP" --query state -o tsv || echo "")
                 echo "Current state: ${state:-Unknown}"
                 if [ "$state" != "Running" ]; then
@@ -136,19 +135,13 @@ stages:
                   az webapp start -g "$RG" -n "$APP"
                 fi
 
-                # Optional: clear stale run-from-package setting if previously used
-                # az webapp config appsettings delete -g "$RG" -n "$APP" --setting-names WEBSITE_RUN_FROM_PACKAGE || true
-
-                # Show SCM access default (should be Allow unless you've locked it down)
-                az webapp config show -g "$RG" -n "$APP" --query 'scmIpSecurityRestrictionsDefaultAction' -o tsv || true
-
           - task: AzureWebApp@1
             displayName: 'Deploy to Dev App Service'
             inputs:
               azureSubscription: '$(devServiceConnection)'
               appType: 'webAppLinux'
               appName: '$(devAppName)'
-              package: '$(PKG)'
+              package: '$(Pipeline.Workspace)/$(artifactName)/site.zip'
 
 # ===================== Deploy QA =====================
 - stage: Deploy_QA
@@ -168,16 +161,6 @@ stages:
           steps:
           - download: current
             artifact: $(artifactName)
-
-          - bash: |
-              set -euo pipefail
-              PKG=$(ls -1 "$(Pipeline.Workspace)/$(artifactName)"/**/*.zip | head -n1 || true)
-              if [ -z "$PKG" ]; then
-                echo "No publish zip found"; exit 1
-              fi
-              echo "##vso[task.setvariable variable=PKG]$PKG"
-              echo "Package: $PKG"
-            displayName: 'Detect package zip (QA)'
 
           - task: AzureCLI@2
             displayName: 'Ensure QA App is Running'
@@ -202,11 +185,11 @@ stages:
               azureSubscription: '$(qaServiceConnection)'
               appType: 'webAppLinux'
               appName: '$(qaAppName)'
-              package: '$(PKG)'
+              package: '$(Pipeline.Workspace)/$(artifactName)/site.zip'
 
-# ===================== Deploy Prod (optional) =====================
+# ===================== Deploy PROD =====================
 - stage: Deploy_Prod
-  displayName: Deploy to App Service (PROD)
+  displayName: Deploy to App Service (PROD) — Environment Approval
   dependsOn: Deploy_QA
   condition: >
     and(
@@ -216,25 +199,14 @@ stages:
     )
   jobs:
   - deployment: DeployProd
-    # Use Environment 'prod' to require approvals (Project Settings → Pipelines → Environments)
+    # Configure approvals in Pipelines → Environments → prod → Approvals and checks
     environment: 'prod'
     strategy:
       runOnce:
         deploy:
           steps:
-          # IMPORTANT: this downloads the SAME artifact built earlier (same run → same zip)
           - download: current
             artifact: $(artifactName)
-
-          - bash: |
-              set -euo pipefail
-              PKG=$(ls -1 "$(Pipeline.Workspace)/$(artifactName)"/**/*.zip | head -n1 || true)
-              if [ -z "$PKG" ]; then
-                echo "No publish zip found"; exit 1
-              fi
-              echo "##vso[task.setvariable variable=PKG]$PKG"
-              echo "Package: $PKG"
-            displayName: 'Detect package zip (PROD)'
 
           - task: AzureCLI@2
             displayName: 'Ensure PROD App is Running'
@@ -259,4 +231,4 @@ stages:
               azureSubscription: '$(prodServiceConnection)'
               appType: 'webAppLinux'
               appName: '$(prodAppName)'
-              package: '$(PKG)'
+              package: '$(Pipeline.Workspace)/$(artifactName)/site.zip'
