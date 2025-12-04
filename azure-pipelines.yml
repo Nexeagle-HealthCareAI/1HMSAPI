@@ -8,7 +8,7 @@ parameters:
 - name: deployProd
   type: boolean
   default: false     # set true at run time to enable PROD stage
-  
+
 trigger:
   branches:
     include:
@@ -37,13 +37,11 @@ variables:
   # QA App Service
   qaAppName: 'easyHMSAPISevices'
   qaResourceGroup: 'website-qa-rg'
-  
-  
-  # ======== PROD (add your values) ========
-  prodAppName: 'easyHMSAPISevicesProd'          # <— CHANGE to your PROD app name
-  prodResourceGroup: 'website-prod-rg'           # <— CHANGE to your PROD RG
-  prodServiceConnection: 'svc-conn-nexeagle-prod' # <— CHANGE to your PROD service connection
 
+  # ======== PROD (add your values) ========
+  prodAppName: 'easyHMSAPISevicesProd'           # <— CHANGE to your PROD app name
+  prodResourceGroup: 'website-prod-rg'            # <— CHANGE to your PROD RG
+  prodServiceConnection: 'svc-conn-nexeagle-prod' # <— CHANGE to your PROD service connection
 
 # ================================================================
 #  STAGE 1 — Build Artifacts (Runs for both release-* & feature/*)
@@ -146,7 +144,6 @@ stages:
               appType: 'webAppLinux'
               appName: '$(qaAppName)'
               package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
-			  
 
 # ================================================================
 #  STAGE 4 — Deploy PROD (release-* + env approval, no time gate)
@@ -158,8 +155,8 @@ stages:
   condition: >
     and(
       succeeded(),
-      startsWith(variables['Build.SourceBranch'],'refs/heads/release-'),
-      eq('${{ parameters.deployProd }}','true')
+      startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'),
+      eq('${{ parameters.deployProd }}', 'true')
     )
   jobs:
   - deployment: DeployProd
