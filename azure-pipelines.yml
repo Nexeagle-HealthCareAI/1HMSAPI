@@ -1,15 +1,8 @@
 # ============================================
-# EasyHMS API (.NET 8) CI/CD
-# - Build: release-* & feature/*
-# - Dev:   release-* & feature/*
-# - QA:    release-* only
-# - PROD:  release-* only, Environment approval required
+#   Build & Deploy EasyHMS API (.NET 8)
+#   Dev deploy: release-* AND feature/*
+#   QA deploy: release-* only (recommended)
 # ============================================
-
-parameters:
-- name: deployProd
-  type: boolean
-  default: false   # set true at run time to enable PROD stage
 
 trigger:
   branches:
@@ -26,30 +19,24 @@ pr:
 pool:
   vmImage: 'ubuntu-latest'
 
-# ===== EDIT THESE VALUES =====
+# ==== EDIT THESE VALUES ====
 variables:
   apiProject: 'EasyHMSAPI.Api/EasyHMSAPI.Api.csproj'
   publishDir: '$(Build.ArtifactStagingDirectory)/publish'
-  packageDir: '$(Build.ArtifactStagingDirectory)/package'
   artifactName: 'api-drop'
 
-  # Dev
+  # Dev App Service
   devAppName: 'easyHMSAPIServices'
   devResourceGroup: 'website-dev-rg'
-  devServiceConnection: 'svc-conn-nexeagle-dev'
 
-  # QA
+  # QA App Service
   qaAppName: 'easyHMSAPISevices'
   qaResourceGroup: 'website-qa-rg'
-  qaServiceConnection: 'svc-conn-nexeagle-qa'
 
-  # PROD  <<< EDIT THESE
-  prodAppName: 'easyHMSAPISevicesProd'
-  prodResourceGroup: 'website-prod-rg'
-  prodServiceConnection: 'svc-conn-nexeagle-prod'
-
+# ================================================================
+#  STAGE 1 — Build Artifacts (Runs for both release-* & feature/*)
+# ================================================================
 stages:
-# ===================== Build =====================
 - stage: Build
   displayName: Build & Package API
   jobs:
@@ -74,28 +61,21 @@ stages:
         arguments: '--configuration Release --no-restore'
 
     - task: DotNetCoreCLI@2
-      displayName: 'Publish (folder)'
+      displayName: 'Publish (zip)'
       inputs:
         command: 'publish'
         projects: '$(apiProject)'
         arguments: '--configuration Release --no-restore --output $(publishDir)'
         publishWebProjects: false
-        zipAfterPublish: false
+        zipAfterPublish: true
 
-    # Create deterministic zip: site.zip
-    - task: ArchiveFiles@2
-      displayName: 'Archive publish → site.zip'
-      inputs:
-        rootFolderOrFile: '$(publishDir)'
-        includeRootFolder: false
-        archiveType: 'zip'
-        archiveFile: '$(packageDir)/site.zip'
-        replaceExistingArchive: true
-
-    - publish: '$(packageDir)'
+    - publish: $(publishDir)
       artifact: $(artifactName)
 
-# ===================== Deploy Dev =====================
+# ================================================================
+#  STAGE 2 — Deploy DEV
+#  Runs for release-* AND feature/*
+# ================================================================
 - stage: Deploy_Dev
   displayName: Deploy to App Service (Dev)
   dependsOn: Build
@@ -103,8 +83,8 @@ stages:
     and(
       succeeded(),
       or(
-        startsWith(variables['Build.SourceBranch'],'refs/heads/release-'),
-        startsWith(variables['Build.SourceBranch'],'refs/heads/feature/')
+        startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'),
+        startsWith(variables['Build.SourceBranch'], 'refs/heads/feature/')
       )
     )
   jobs:
@@ -117,40 +97,25 @@ stages:
           - download: current
             artifact: $(artifactName)
 
-          # Ensure app is running (avoid Kudu 403 Site Disabled)
-          - task: AzureCLI@2
-            displayName: 'Ensure Dev App is Running'
-            inputs:
-              azureSubscription: '$(devServiceConnection)'
-              scriptType: bash
-              scriptLocation: inlineScript
-              inlineScript: |
-                set -euo pipefail
-                RG='$(devResourceGroup)'
-                APP='$(devAppName)'
-                state=$(az webapp show -g "$RG" -n "$APP" --query state -o tsv || echo "")
-                echo "Current state: ${state:-Unknown}"
-                if [ "$state" != "Running" ]; then
-                  echo "Starting app..."
-                  az webapp start -g "$RG" -n "$APP"
-                fi
-
           - task: AzureWebApp@1
-            displayName: 'Deploy to Dev App Service'
+            displayName: 'Deploy ZIP to Dev App Service'
             inputs:
-              azureSubscription: '$(devServiceConnection)'
+              azureSubscription: 'svc-conn-nexeagle-dev'
               appType: 'webAppLinux'
               appName: '$(devAppName)'
-              package: '$(Pipeline.Workspace)/$(artifactName)/site.zip'
+              package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
 
-# ===================== Deploy QA =====================
+# ================================================================
+#  STAGE 3 — Deploy QA
+#  (Recommended: Only for release-*; feature/* should not go to QA)
+# ================================================================
 - stage: Deploy_QA
   displayName: Deploy to App Service (QA)
   dependsOn: Deploy_Dev
   condition: >
     and(
       succeeded(),
-      startsWith(variables['Build.SourceBranch'],'refs/heads/release-')
+      startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')
     )
   jobs:
   - deployment: DeployQA
@@ -162,73 +127,10 @@ stages:
           - download: current
             artifact: $(artifactName)
 
-          - task: AzureCLI@2
-            displayName: 'Ensure QA App is Running'
-            inputs:
-              azureSubscription: '$(qaServiceConnection)'
-              scriptType: bash
-              scriptLocation: inlineScript
-              inlineScript: |
-                set -euo pipefail
-                RG='$(qaResourceGroup)'
-                APP='$(qaAppName)'
-                state=$(az webapp show -g "$RG" -n "$APP" --query state -o tsv || echo "")
-                echo "Current state: ${state:-Unknown}"
-                if [ "$state" != "Running" ]; then
-                  echo "Starting app..."
-                  az webapp start -g "$RG" -n "$APP"
-                fi
-
           - task: AzureWebApp@1
-            displayName: 'Deploy to QA App Service'
+            displayName: 'Deploy ZIP to QA App Service'
             inputs:
-              azureSubscription: '$(qaServiceConnection)'
+              azureSubscription: 'svc-conn-nexeagle-qa'
               appType: 'webAppLinux'
               appName: '$(qaAppName)'
-              package: '$(Pipeline.Workspace)/$(artifactName)/site.zip'
-
-# ===================== Deploy PROD =====================
-- stage: Deploy_Prod
-  displayName: Deploy to App Service (PROD) — Environment Approval
-  dependsOn: Deploy_QA
-  condition: >
-    and(
-      succeeded(),
-      startsWith(variables['Build.SourceBranch'],'refs/heads/release-'),
-      eq('${{ parameters.deployProd }}','true')
-    )
-  jobs:
-  - deployment: DeployProd
-    # Configure approvals in Pipelines → Environments → prod → Approvals and checks
-    environment: 'prod'
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - download: current
-            artifact: $(artifactName)
-
-          - task: AzureCLI@2
-            displayName: 'Ensure PROD App is Running'
-            inputs:
-              azureSubscription: '$(prodServiceConnection)'
-              scriptType: bash
-              scriptLocation: inlineScript
-              inlineScript: |
-                set -euo pipefail
-                RG='$(prodResourceGroup)'
-                APP='$(prodAppName)'
-                state=$(az webapp show -g "$RG" -n "$APP" --query state -o tsv || echo "")
-                echo "Current state: ${state:-Unknown}"
-                if [ "$state" != "Running" ]; then
-                  echo "Starting app..."
-                  az webapp start -g "$RG" -n "$APP"
-                fi
-
-          - task: AzureWebApp@1
-            displayName: 'Deploy to PROD App Service'
-            inputs:
-              azureSubscription: '$(prodServiceConnection)'
-              appType: 'webAppLinux'
-              appName: '$(prodAppName)'
-              package: '$(Pipeline.Workspace)/$(artifactName)/site.zip'
+              package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
