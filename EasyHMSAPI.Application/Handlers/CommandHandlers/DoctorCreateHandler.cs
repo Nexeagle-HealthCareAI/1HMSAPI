@@ -5,7 +5,6 @@ using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using System.Text.Json;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
@@ -86,7 +85,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     Bio = request.Bio,
                     PrimaryDepartmentID = primaryDepartmentId,
                     CreatedAt = createdAt,
-                    // Set hospitalId if provided
                     HospitalId = request.HospitalId ?? userWithHospital.HospitalId
                 };
                 _context.Doctors.Add(doctor);
@@ -108,7 +106,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             DoctorID = doctorId,
                             DepartmentID = departmentId.Value,
                             AssignedAt = createdAt,
-                            // Set hospitalId if provided
                             HospitalId = request.HospitalId ?? userWithHospital.HospitalId
                         };
                         _context.DoctorDepartments.Add(doctorDepartment);
@@ -199,7 +196,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 doctor.ProfileCompletionPercent = CalculateProfileCompletion(doctor, hasDepartment: departmentIdForSpecializations != null, hasSpecializations: request.Specializations != null && request.Specializations.Count > 0);
 
-                //SaveDefaultPrescriptionSettings(doctorId, createdAt);
+                SaveDefaultPrescriptionSettings(doctorId, request.HospitalId, request.UserId, createdAt);
                 SaveDefaultDoctorSectionPreference(request.HospitalId ?? userWithHospital.HospitalId ?? Guid.Empty, doctorId);
 
 
@@ -268,84 +265,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             return string.Join(", ", parts);
         }
 
-        private void SaveDefaultPrescriptionSettings(Guid doctorId, DateTime createdAt)
+        private void SaveDefaultPrescriptionSettings(Guid doctorId, Guid? hospitalId, Guid userId, DateTime createdAt)
         {
-            var defaultSettings = new PrescriptionSettingsDataModel
-            {
-                PageLayout = new PageLayoutDataModel
-                {
-                    Orientation = "portrait",
-                    Margin = new MarginDataModel
-                    {
-                        Top = 15,
-                        Right = 15,
-                        Bottom = 15,
-                        Left = 15
-                    }
-                },
-                UseLetterhead = true,
-                LetterheadSettings = new LetterheadSettingsDataModel { HeaderHeight = 30, FooterHeight = 20 },
-                UseHeaderSettings = false,
-                HeaderSettings = new HeaderSettingsDataModel
-                {
-                    Height = 0,
-                    Width = 0,
-                    ShowImage = false,
-                    ShowOnAllPages = false
-                },
-                UseFooterSettings = false,
-                FooterSettings = new FooterSettingsDataModel
-                {
-                    Height = 0,
-                    Width = 0,
-                    ShowImage = false,
-                    ShowOnAllPages = false
-                },
-                UseDoctorSetting = false,
-                DoctorSetting = new DoctorSettingDataModel
-                {
-                    ShowSignature = false,
-                    SignatureHeight = 0,
-                    SignatureWidth = 0,
-                    DoctorName = string.Empty
-                }
-            };
-            var settingsEntity = new PrescriptionSetting
+            PrescriptionSetting newSettings = new PrescriptionSetting
             {
                 PrescriptionSettingId = Guid.NewGuid(),
+                HospitalId = doctorId,
                 DoctorId = doctorId,
-                PageLayoutJson = JsonSerializer.Serialize(defaultSettings.PageLayout),
-                LetterheadSettingsJson = JsonSerializer.Serialize(new
-                {
-                    defaultSettings.UseLetterhead,
-                    defaultSettings.LetterheadSettings.HeaderHeight,
-                    defaultSettings.LetterheadSettings.FooterHeight
-                }),
-                HeaderSettingsJson = JsonSerializer.Serialize(new
-                {
-                    defaultSettings.UseHeaderSettings,
-                    defaultSettings.HeaderSettings.Height,
-                    defaultSettings.HeaderSettings.Width,
-                    defaultSettings.HeaderSettings.ShowImage,
-                    defaultSettings.HeaderSettings.ShowOnAllPages
-                }),
-                FooterSettingsJson = JsonSerializer.Serialize(new
-                {
-                    defaultSettings.UseFooterSettings,
-                    defaultSettings.FooterSettings.Height,
-                    defaultSettings.FooterSettings.Width,
-                    defaultSettings.FooterSettings.ShowImage,
-                    defaultSettings.FooterSettings.ShowOnAllPages,
-                    defaultSettings.DoctorSetting.ShowSignature,
-                    defaultSettings.DoctorSetting.SignatureHeight,
-                    defaultSettings.DoctorSetting.SignatureWidth,
-                    defaultSettings.DoctorSetting.DoctorName
-                }),
-                CreatedAtUtc = createdAt,
-                UpdatedAtUtc = createdAt
+                CreatedAt = createdAt,
+                UpdatedAt = createdAt,
+                CreatedByUserId = userId
             };
-
-            _context.PrescriptionSettings.Add(settingsEntity);
+            _context.PrescriptionSettings.Add(newSettings);
         }
 
         private void SaveDefaultDoctorSectionPreference(Guid hospitalId, Guid doctorId)

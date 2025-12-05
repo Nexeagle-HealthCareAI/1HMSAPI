@@ -8,13 +8,26 @@ namespace EasyHMSAPI.Domain.Entities
     {
         [Key]
         public Guid PrescriptionSettingId { get; set; }
+        public Guid HospitalId { get; set; }
         public Guid DoctorId { get; set; }
-        public string? PageLayoutJson { get; set; }
-        public string? LetterheadSettingsJson { get; set; }
-        public string? HeaderSettingsJson { get; set; }
-        public string? FooterSettingsJson { get; set; }
-        public DateTime CreatedAtUtc { get; set; }
-        public DateTime UpdatedAtUtc { get; set; }
+        public int? HeaderHeight { get; set; }
+        public int? FooterHeight { get; set; }
+        public int? ContentLeftMargin { get; set; }
+        public int? ContentRightMargin { get; set; }
+        public bool? OverFlowPage { get; set; }
+        [MaxLength(100)]
+        public string? FontFamily { get; set; }
+        public int? FontSize { get; set; }
+        [MaxLength(50)]
+        public string? FontWeight { get; set; }
+        [MaxLength(50)]
+        public string? TextColour { get; set; }
+        [MaxLength(2048)]
+        public string? URI { get; set; }
+        public Guid? CreatedByUserId { get; set; }
+        
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
         [Timestamp]
         public byte[] RowVersion { get; set; } = null!;
     }

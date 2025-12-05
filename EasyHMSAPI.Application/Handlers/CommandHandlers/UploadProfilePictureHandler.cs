@@ -34,7 +34,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
             else
             {
-                var url = await _blobService.UploadAsync(request.UserId, request.File, _containerName, cancellationToken);
+                var url = await _blobService.UploadAsync(request.UserId.ToString(), request.File, _containerName, cancellationToken);
 
                 if(!string.IsNullOrEmpty(url))
                 {
