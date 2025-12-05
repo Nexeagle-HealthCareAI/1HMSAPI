@@ -1,6 +1,7 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Diagnostics.CodeAnalysis;
 
@@ -20,7 +21,7 @@ namespace EasyHMSAPI.Api.Controllers
             _logger = logger;
         }
 
-        //[Authorize]
+        [Authorize]
         [HttpGet]
         public async Task<IActionResult> GetPrescriptionSettings(Guid doctorId, Guid hospitalId)
         {
@@ -46,7 +47,7 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
-        //[Authorize]
+        [Authorize]
         [HttpPut]
         public async Task<IActionResult> UpdatePrescriptionSettings(UpdatePrescriptionSettingsRequestModel request)
         {
@@ -66,7 +67,7 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
-        //[Authorize]
+        [Authorize]
         [HttpPost("upload-template")]
         public async Task<IActionResult> UploadAsset([FromForm] UploadPrescriptionTemplateRequestModel request)
         {
