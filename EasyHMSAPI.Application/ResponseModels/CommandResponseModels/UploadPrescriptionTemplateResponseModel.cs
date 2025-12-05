@@ -3,10 +3,10 @@ using System.Diagnostics.CodeAnalysis;
 namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
 {
     [ExcludeFromCodeCoverage]
-    public class UploadAssetResponseModel
+    public class UploadPrescriptionTemplateResponseModel
     {
         public bool Success { get; set; }
-        public string? AssestUrl { get; set; }
+        public string? Url { get; set; }
         public string? Message { get; set; }
     }
 }

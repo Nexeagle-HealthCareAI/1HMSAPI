@@ -1,74 +1,91 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using System.Text.Json;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
     public class UpdatePrescriptionSettingsHandler : IRequestHandler<UpdatePrescriptionSettingsRequestModel, UpdatePrescriptionSettingsResponseModel>
     {
-        private readonly AppDbContext _dbContext;
+        private readonly AppDbContext _context;
         public UpdatePrescriptionSettingsHandler(AppDbContext dbContext)
         {
-            _dbContext = dbContext;
+            _context = dbContext;
         }
 
         public async Task<UpdatePrescriptionSettingsResponseModel> Handle(UpdatePrescriptionSettingsRequestModel request, CancellationToken cancellationToken)
         {
-            var existingSettings = await _dbContext.PrescriptionSettings
-                .FirstOrDefaultAsync(x => x.DoctorId == request.DoctorId, cancellationToken);
             UpdatePrescriptionSettingsResponseModel response = new();
-            
-            if(existingSettings != null)
+            try
             {
-                var pageLayoutJson = JsonSerializer.Serialize(request.Settings.PageLayout);
-                var letterheadSettingsJson = JsonSerializer.Serialize(new
+                var existingSettings = await _context.PrescriptionSettings
+               .FirstOrDefaultAsync(x => x.HospitalId == request.HospitalId && x.DoctorId == request.DoctorId, cancellationToken);
+                var currentDateTime = DateTime.UtcNow;
+                var newPrescriptionSettingId = Guid.NewGuid();
+               
+                if (existingSettings == null)
                 {
-                    request?.Settings.UseLetterhead,
-                    request?.Settings?.LetterheadSettings?.HeaderHeight,
-                    request?.Settings?.LetterheadSettings?.FooterHeight
-                });
-                var headerSettingsJson = JsonSerializer.Serialize(new
+                    PrescriptionSetting newSettings = new PrescriptionSetting
+                    {
+                        PrescriptionSettingId = newPrescriptionSettingId,
+                        HospitalId = request.HospitalId,
+                        DoctorId = request.DoctorId,
+                        HeaderHeight = request.HeaderHeight,
+                        FooterHeight = request.FooterHeight,
+                        ContentLeftMargin = request.ContentLeftMargin,
+                        ContentRightMargin = request.ContentRightMargin,
+                        OverFlowPage = request.OverFlowPage,
+                        FontFamily = request.FontFamily,
+                        FontSize = request.FontSize,
+                        FontWeight = request.FontWeight,
+                        TextColour = request.TextColour,
+                        CreatedAt = currentDateTime,
+                        UpdatedAt = currentDateTime,
+                        CreatedByUserId = request.LoggedInUserId
+                    };
+                    _context.PrescriptionSettings.Add(newSettings);
+
+                    response.PrescriptionSettingId = newPrescriptionSettingId;
+                    response.Success = true;
+                    response.Message = "Prescription settings created successfully.";
+                }
+                else
                 {
-                    request?.Settings.UseHeaderSettings,
-                    request?.Settings?.HeaderSettings?.Height,
-                    request?.Settings?.HeaderSettings?.Width,
-                    request?.Settings?.HeaderSettings?.ShowImage,
-                    request?.Settings?.HeaderSettings?.ShowOnAllPages
-                });
-                var footerSettingsJson = JsonSerializer.Serialize(new
-                {
-                    request?.Settings.UseFooterSettings,
-                    request?.Settings?.FooterSettings?.Height,
-                    request?.Settings?.FooterSettings?.Width,
-                    request?.Settings?.FooterSettings?.ShowImage,
-                    request?.Settings?.FooterSettings?.ShowOnAllPages,
-                    request?.Settings.UseDoctorSetting,
-                    request?.Settings?.DoctorSetting?.ShowSignature,
-                    request?.Settings?.DoctorSetting?.SignatureHeight,
-                    request?.Settings?.DoctorSetting?.SignatureWidth,
-                    request?.Settings?.DoctorSetting?.DoctorName
-                });
+                    if (request.HeaderHeight.HasValue)
+                        existingSettings.HeaderHeight = request.HeaderHeight.Value;
+                    if (request.FooterHeight.HasValue)
+                        existingSettings.FooterHeight = request.FooterHeight.Value;
+                    if (request.ContentLeftMargin.HasValue)
+                        existingSettings.ContentLeftMargin = request.ContentLeftMargin.Value;
+                    if (request.ContentRightMargin.HasValue)
+                        existingSettings.ContentRightMargin = request.ContentRightMargin.Value;
+                    if (request.OverFlowPage.HasValue)
+                        existingSettings.OverFlowPage = request.OverFlowPage.Value;
+                    if (!string.IsNullOrEmpty(request.FontFamily))
+                        existingSettings.FontFamily = request.FontFamily;
+                    if (request.FontSize.HasValue)
+                        existingSettings.FontSize = request.FontSize.Value;
+                    if (!string.IsNullOrEmpty(request.FontWeight))
+                        existingSettings.FontWeight = request.FontWeight;
+                    if (!string.IsNullOrEmpty(request.TextColour))
+                        existingSettings.TextColour = request.TextColour;
+                    existingSettings.UpdatedAt = currentDateTime;
 
-                existingSettings.PageLayoutJson = pageLayoutJson;
-                existingSettings.LetterheadSettingsJson = letterheadSettingsJson;
-                existingSettings.HeaderSettingsJson = headerSettingsJson;
-                existingSettings.FooterSettingsJson = footerSettingsJson;
-                existingSettings.UpdatedAtUtc = DateTime.UtcNow;
+                    response.PrescriptionSettingId = existingSettings.PrescriptionSettingId;
+                    response.Success = true;
+                    response.Message = "Prescription settings updated successfully.";
+                }
 
-                await _dbContext.SaveChangesAsync(cancellationToken);
-
-                response.Success = true;
-                response.Message = "Settings updated successfully";
+                await _context.SaveChangesAsync(cancellationToken);
             }
-            else
+            catch(Exception ex)
             {
                 response.Success = false;
-                response.Message = "No existing settings found for the doctor.";
+                response.Message = $"An error occurred while updating prescription settings: {ex.Message}";
             }
-            
+
             return response;
         }
     }

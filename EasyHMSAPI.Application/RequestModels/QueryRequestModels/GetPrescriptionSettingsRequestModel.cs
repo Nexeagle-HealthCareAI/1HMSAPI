@@ -8,5 +8,6 @@ namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
     public class GetPrescriptionSettingsRequestModel : IRequest<GetPrescriptionSettingsResponseModel>
     {
         public Guid DoctorId { get; set; }
+        public Guid HospitalId { get; set; }
     }
 }

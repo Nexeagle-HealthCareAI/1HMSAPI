@@ -28,7 +28,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
             _prescriptionsContainer = configuration["BlobStorage:PrescriptionAssetsContainer"] ?? string.Empty;
         }
 
-        public async Task<string> UploadAsync(Guid entityId, IFormFile? file, string containerName, CancellationToken cancellationToken)
+        public async Task<string> UploadAsync(string entityId, IFormFile? file, string containerName, CancellationToken cancellationToken)
         {
             if (file == null || file.Length == 0)
                 throw new ArgumentException("File is empty or missing");

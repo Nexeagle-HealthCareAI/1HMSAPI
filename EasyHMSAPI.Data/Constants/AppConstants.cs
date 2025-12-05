@@ -18,10 +18,6 @@ namespace EasyHMSAPI.Data.Constants
 
         public static readonly string TokenStrategy_Sequential = "SEQUENTIAL";
 
-        public static readonly string AssetType_HeaderImage = "header_image";
-        public static readonly string AssetType_FooterImage = "footer_image";
-        public static readonly string AssetType_SignatureImage = "signature_image";
-
         public static readonly List<string> LookupTypes =
         [
             "CHIEF_COMPLAINT",
@@ -41,8 +37,5 @@ namespace EasyHMSAPI.Data.Constants
             "FOLLOW_UP",
             "ATTACHMENT"
         ];
-
-
-
     }
 }

@@ -39,7 +39,6 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<DoctorQueue> DoctorQueues { get; set; }
         public DbSet<PatientRegistration> PatientRegistrations { get; set; }
         public DbSet<StatusMaster> StatusMasters { get; set; }
-        public DbSet<PrescriptionAsset> PrescriptionAssets { get; set; }
         public DbSet<PrescriptionSetting> PrescriptionSettings { get; set; }
         public DbSet<DoctorSectionPreference> DoctorSectionPreferences { get; set; }
         public DbSet<UserStatus> UserStatuses { get; set; }
@@ -93,27 +92,27 @@ namespace EasyHMSAPI.Domain.Context
             modelBuilder.Entity<Doctor>().HasKey(e => e.DoctorID);
             modelBuilder.Entity<Doctor>().Property(d => d.ProfileCompletionPercent).HasPrecision(5,2);
             modelBuilder.Entity<Doctor>()
- .HasMany(d => d.DoctorDepartments)
- .WithOne(dd => dd.Doctor)
- .HasForeignKey(dd => dd.DoctorID);
-modelBuilder.Entity<Doctor>()
- .HasMany(d => d.DoctorSpecializations)
- .WithOne(ds => ds.Doctor)
- .HasForeignKey(ds => ds.DoctorID);
+                 .HasMany(d => d.DoctorDepartments)
+                 .WithOne(dd => dd.Doctor)
+                 .HasForeignKey(dd => dd.DoctorID);
+           modelBuilder.Entity<Doctor>()
+                 .HasMany(d => d.DoctorSpecializations)
+                 .WithOne(ds => ds.Doctor)
+                 .HasForeignKey(ds => ds.DoctorID);
             modelBuilder.Entity<DoctorDepartment>().ToTable("DoctorDepartments");
             modelBuilder.Entity<DoctorDepartment>().HasKey(e => e.DoctorDepartmentID);
             modelBuilder.Entity<DoctorDepartment>()
- .HasOne(dd => dd.Department)
- .WithMany(d => d.DoctorDepartments)
- .HasForeignKey(dd => dd.DepartmentID);
-modelBuilder.Entity<DoctorDepartment>().Property(dd => dd.HospitalId).IsRequired(false);
+                 .HasOne(dd => dd.Department)
+                 .WithMany(d => d.DoctorDepartments)
+                 .HasForeignKey(dd => dd.DepartmentID);
+            modelBuilder.Entity<DoctorDepartment>().Property(dd => dd.HospitalId).IsRequired(false);
             modelBuilder.Entity<DoctorSpecialization>().ToTable("DoctorSpecializations");
             modelBuilder.Entity<DoctorSpecialization>().HasKey(e => e.DoctorSpecializationID);
             modelBuilder.Entity<DoctorSpecialization>()
- .HasOne(ds => ds.Specialization)
- .WithMany(s => s.DoctorSpecializations)
- .HasForeignKey(ds => ds.SpecializationID);
-modelBuilder.Entity<DoctorSpecialization>().Property(ds => ds.HospitalId).IsRequired(false);
+                 .HasOne(ds => ds.Specialization)
+                 .WithMany(s => s.DoctorSpecializations)
+                 .HasForeignKey(ds => ds.SpecializationID);
+            modelBuilder.Entity<DoctorSpecialization>().Property(ds => ds.HospitalId).IsRequired(false);
             modelBuilder.Entity<PrescriptionHeaderFooter>().ToTable("PrescriptionHeaderFooter");
             modelBuilder.Entity<UserInvitation>().ToTable("UserInvitations");
             modelBuilder.Entity<DoctorShiftTemplate>().ToTable("DoctorShiftTemplates");
@@ -130,23 +129,23 @@ modelBuilder.Entity<DoctorSpecialization>().Property(ds => ds.HospitalId).IsRequ
             modelBuilder.Entity<User>().HasKey(e => e.UserID);
             modelBuilder.Entity<User>().Property(u => u.UserStatusId).IsRequired();
             modelBuilder.Entity<User>()
- .HasOne(u => u.UserStatus)
- .WithMany()
- .HasForeignKey(u => u.UserStatusId);
+                 .HasOne(u => u.UserStatus)
+                 .WithMany()
+                 .HasForeignKey(u => u.UserStatusId);
 
             modelBuilder.Entity<UserAuth>().HasKey(e => e.UserAuthID);
             modelBuilder.Entity<UserAuth>().Property(ua => ua.UserStatusId).IsRequired();
             modelBuilder.Entity<UserAuth>()
- .HasOne(ua => ua.UserStatus)
- .WithMany()
- .HasForeignKey(ua => ua.UserStatusId);
+                 .HasOne(ua => ua.UserStatus)
+                 .WithMany()
+                 .HasForeignKey(ua => ua.UserStatusId);
 
             modelBuilder.Entity<UserProfile>().HasKey(e => e.UserProfileID);
             modelBuilder.Entity<UserProfile>().Property(up => up.UserStatusId).IsRequired();
             modelBuilder.Entity<UserProfile>()
- .HasOne(up => up.UserStatus)
- .WithMany()
- .HasForeignKey(up => up.UserStatusId);
+                 .HasOne(up => up.UserStatus)
+                 .WithMany()
+                 .HasForeignKey(up => up.UserStatusId);
 
             modelBuilder.Entity<Role>().HasKey(e => e.RoleID);
             modelBuilder.Entity<RolePermission>().HasKey(e => new { e.RoleID, e.PermissionKey });
@@ -166,7 +165,6 @@ modelBuilder.Entity<DoctorSpecialization>().Property(ds => ds.HospitalId).IsRequ
             modelBuilder.Entity<DoctorShiftTemplate>().HasKey(e => e.TemplateID);
             modelBuilder.Entity<DoctorShiftOverride>().HasKey(e => e.OverrideID);
             modelBuilder.Entity<DoctorTimeOff>().HasKey(e => e.TimeOffID);
-            modelBuilder.Entity<PrescriptionAsset>().HasKey(e => e.PrescriptionAssetId);
             modelBuilder.Entity<PrescriptionSetting>().HasKey(e => e.PrescriptionSettingId);
 
 

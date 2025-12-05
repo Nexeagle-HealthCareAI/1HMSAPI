@@ -1,0 +1,89 @@
+using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
+using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
+using MediatR;
+using Microsoft.AspNetCore.Mvc;
+using System.Diagnostics.CodeAnalysis;
+
+namespace EasyHMSAPI.Api.Controllers
+{
+    [ExcludeFromCodeCoverage]
+    [ApiController]
+    [Route("prescription-settings")]
+    public class PrescriptionSettingsController : ControllerBase
+    {
+        private readonly IMediator _mediator;
+        private readonly ILogger<PrescriptionSettingsController> _logger;
+
+        public PrescriptionSettingsController(IMediator mediator, ILogger<PrescriptionSettingsController> logger)
+        {
+            _mediator = mediator;
+            _logger = logger;
+        }
+
+        //[Authorize]
+        [HttpGet]
+        public async Task<IActionResult> GetPrescriptionSettings(Guid doctorId, Guid hospitalId)
+        {
+            _logger.LogInformation("GetPrescriptionSettings started at {Time} for doctorId: {DoctorId} & hospitalId: {HospitalId}", DateTime.UtcNow, doctorId, hospitalId);
+            try
+            {
+                GetPrescriptionSettingsRequestModel request = new()
+                {
+                    DoctorId = doctorId,
+                    HospitalId = hospitalId
+                };
+
+                var result = await _mediator.Send(request);
+                _logger.LogInformation("GetPrescriptionSettings ended for doctorId: {DoctorId} & hospitalId: {HospitalId}", doctorId, hospitalId);
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetPrescriptionSettings for doctorId: {DoctorId} & hospitalId: {HospitalId}", doctorId, hospitalId);
+
+                return StatusCode(500, new { Message = "An error occurred while retrieving prescription settings", Error = ex.Message });
+            }
+        }
+
+        //[Authorize]
+        [HttpPut]
+        public async Task<IActionResult> UpdatePrescriptionSettings(UpdatePrescriptionSettingsRequestModel request)
+        {
+            _logger.LogInformation("UpdatePrescriptionSettings started at {Time} for doctorId: {DoctorId} & hospitalId: {HospitalId}", DateTime.UtcNow, request.DoctorId, request.HospitalId);
+            try
+            {
+                var result = await _mediator.Send(request);
+                _logger.LogInformation("UpdatePrescriptionSettings ended for doctorId: {DoctorId} & hospitalId: {HospitalId}", request.DoctorId, request.HospitalId);
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in UpdatePrescriptionSettings for doctorId: {DoctorId} & hospitalId: {HospitalId}", request.DoctorId, request.HospitalId);
+
+                return StatusCode(500, new { Message = "An error occurred while updating prescription settings", Error = ex.Message });
+            }
+        }
+
+        //[Authorize]
+        [HttpPost("upload-template")]
+        public async Task<IActionResult> UploadAsset([FromForm] UploadPrescriptionTemplateRequestModel request)
+        {
+            _logger.LogInformation("UploadAsset started at {Time} for doctorId: {DoctorId} & hospitalId: {HospitalId}", DateTime.UtcNow, request.DoctorId, request.HospitalId);
+            try
+            {
+                var result = await _mediator.Send(request);
+                _logger.LogInformation("UploadAsset ended for doctorId: {DoctorId} & hospitalId: {HospitalId}", request.DoctorId, request.HospitalId);
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in UploadAsset for doctorId: {DoctorId} & hospitalId: {HospitalId}", request.DoctorId, request.HospitalId);
+
+                return StatusCode(500, new { Message = "An error occurred while uploading asset", Error = ex.Message });
+            }
+        }
+    }
+}
