@@ -209,7 +209,7 @@ namespace EasyHMSAPI.Api.Controllers
         }
 
         [HttpPost("generate-prescription-details")]
-        //[Authorize]
+        [Authorize]
         public async Task<IActionResult> GeneratePrescription([FromBody] GeneratePrescriptionRequestModel request)
         {
             _logger.LogInformation("GeneratePrescription started at {Time} for appointmentId: {AppointmentId}, patientId: {PatientId}, hospitalId: {HospitalId}, doctorId: {DoctorId}", DateTime.UtcNow, request.AppointmentId, request.PatientId, request.HospitalId, request.DoctorId);
