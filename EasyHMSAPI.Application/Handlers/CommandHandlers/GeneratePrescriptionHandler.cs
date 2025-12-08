@@ -66,10 +66,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     {
                         PatientId = patientRegistration.PatientId,
                         Name = patientRegistration.FullName,
+                        Mobile = patientRegistration.Mobile,
                         Age = patientRegistration.AgeYears ?? 0,
                         Sex = patientRegistration.Sex,
                         Address = patientRegistration.AddressLine,
-                        Contact = patientRegistration.Mobile
+                        City = patientRegistration.City,
+                        State = patientRegistration.State,
+                        Country = patientRegistration.Country,
+                        Pincode = patientRegistration.Pincode,
+                        InsuranceId = patientRegistration.InsuranceId
                     });
                 }
 

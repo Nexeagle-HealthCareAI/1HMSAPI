@@ -28,6 +28,11 @@ namespace EasyHMSAPI.Api.Controllers
             _logger.LogInformation("GetPrescriptionSettings started at {Time} for doctorId: {DoctorId} & hospitalId: {HospitalId}", DateTime.UtcNow, doctorId, hospitalId);
             try
             {
+                if (doctorId == Guid.Empty || hospitalId == Guid.Empty)
+                {
+                    return BadRequest(new { Message = "DoctorId and HospitalId are required and cannot be empty." });
+                }
+
                 GetPrescriptionSettingsRequestModel request = new()
                 {
                     DoctorId = doctorId,
