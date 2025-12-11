@@ -27,9 +27,53 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
             try
             {
-                var prescriptionSettings = await _context.PrescriptionSettings
+                var existingDoctor = await _context.Doctors
                     .AsNoTracking()
-                    .FirstOrDefaultAsync(ps => ps.DoctorId == request.DoctorId && ps.HospitalId == request.HospitalId, cancellationToken);
+                    .FirstOrDefaultAsync(d => d.DoctorID == request.DoctorId, cancellationToken);
+                if (existingDoctor == null)
+                {
+                    response.Success = false;
+                    response.Message = "Invalid doctor Id";
+
+                    return response;
+                }
+
+                var existingHospital = await _context.Hospitals
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(h => h.HospitalID == request.HospitalId, cancellationToken);
+                if (existingHospital == null)
+                {
+                    response.Success = false;
+                    response.Message = "Invalid hospital Id";
+
+                    return response;
+                }
+
+                var existingPatient = await _context.PatientRegistrations
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(p => p.PatientId == request.PatientId && p.HospitalId == request.HospitalId, cancellationToken);
+                if (existingPatient == null)
+                {
+                    response.Success = false;
+                    response.Message = "Invalid patient Id";
+
+                    return response;
+                }
+
+                var existingAppointment = await _context.Appointments
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(a => a.ApptId == request.AppointmentId && a.HospitalId == request.HospitalId && a.DoctorId == request.DoctorId, cancellationToken);
+                if (existingAppointment == null)
+                {
+                    response.Success = false;
+                    response.Message = "Invalid appointment Id or appointment Id, hospital Id, doctor Id combination does not exists";
+
+                    return response;
+                }
+
+                var prescriptionSettings = await _context.PrescriptionSettings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(ps => ps.DoctorId == request.DoctorId && ps.HospitalId == request.HospitalId, cancellationToken);
 
                 var templateModel = new PrescriptionTemplateModel();
                 if (prescriptionSettings != null)
@@ -117,10 +161,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 };
 
                 response.Success = true;
+                response.Message = "Prescription details generated successfully.";
             }
-            catch
+            catch(Exception ex)
             {
                 response.Success = false;
+                response.Message = "An error occurred while generating the prescription." + ex.Message;
                 response.Data = new GeneratePrescriptionDataModel();
             }
 

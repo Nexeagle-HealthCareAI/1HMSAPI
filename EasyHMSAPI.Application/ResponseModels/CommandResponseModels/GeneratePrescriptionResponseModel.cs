@@ -6,6 +6,7 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
     public class GeneratePrescriptionResponseModel
     {
         public bool Success { get; set; }
+        public string? Message { get; set; }
         public Guid AppointmentId { get; set; }
         public GeneratePrescriptionDataModel? Data { get; set; }
     }

@@ -20,6 +20,28 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             UpdatePrescriptionSettingsResponseModel response = new();
             try
             {
+                var existingDoctor = await _context.Doctors
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(d => d.DoctorID == request.DoctorId, cancellationToken);
+                if (existingDoctor == null)
+                {
+                    response.Success = false;
+                    response.Message = "Invalid doctor Id";
+
+                    return response;
+                }
+
+                var existingHospital = await _context.Hospitals
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(h => h.HospitalID == request.HospitalId, cancellationToken);
+                if (existingHospital == null)
+                {
+                    response.Success = false;
+                    response.Message = "Invalid hospital Id";
+
+                    return response;
+                }
+
                 var existingSettings = await _context.PrescriptionSettings
                     .FirstOrDefaultAsync(x => x.HospitalId == request.HospitalId && x.DoctorId == request.DoctorId, cancellationToken);
                 var currentDateTime = DateTime.UtcNow;

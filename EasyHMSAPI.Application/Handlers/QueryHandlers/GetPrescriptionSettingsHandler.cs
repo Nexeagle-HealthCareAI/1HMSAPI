@@ -19,9 +19,30 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             GetPrescriptionSettingsResponseModel response = new();
             try
             {
-                var prescriptionSettings = await _context.PrescriptionSettings
+                var existingDoctor = await _context.Doctors
                     .AsNoTracking()
-                    .FirstOrDefaultAsync(ps => ps.DoctorId == request.DoctorId && ps.HospitalId == request.HospitalId, cancellationToken);
+                    .FirstOrDefaultAsync(d => d.DoctorID == request.DoctorId, cancellationToken);
+                if (existingDoctor == null)
+                {
+                    response.Success = false;
+                    response.Message = "Invalid doctor Id";
+
+                    return response;
+                }
+
+                var existingHospital = await _context.Hospitals
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(h => h.HospitalID == request.HospitalId, cancellationToken);
+                if (existingHospital == null)
+                {
+                    response.Success = false;
+                    response.Message = "Invalid hospital Id";
+                    return response;
+                }
+
+                var prescriptionSettings = await _context.PrescriptionSettings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(ps => ps.DoctorId == request.DoctorId && ps.HospitalId == request.HospitalId, cancellationToken);
 
                 if (prescriptionSettings != null)
                 {
