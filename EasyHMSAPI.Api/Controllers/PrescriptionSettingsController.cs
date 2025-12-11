@@ -59,6 +59,11 @@ namespace EasyHMSAPI.Api.Controllers
             _logger.LogInformation("UpdatePrescriptionSettings started at {Time} for doctorId: {DoctorId} & hospitalId: {HospitalId}", DateTime.UtcNow, request.DoctorId, request.HospitalId);
             try
             {
+                if(request.DoctorId == Guid.Empty || request.HospitalId == Guid.Empty)
+                {
+                    return BadRequest(new { Message = "DoctorId and HospitalId are required and cannot be empty." });
+                }
+
                 var result = await _mediator.Send(request);
                 _logger.LogInformation("UpdatePrescriptionSettings ended for doctorId: {DoctorId} & hospitalId: {HospitalId}", request.DoctorId, request.HospitalId);
 
@@ -79,6 +84,11 @@ namespace EasyHMSAPI.Api.Controllers
             _logger.LogInformation("UploadAsset started at {Time} for doctorId: {DoctorId} & hospitalId: {HospitalId}", DateTime.UtcNow, request.DoctorId, request.HospitalId);
             try
             {
+                if(request.DoctorId == Guid.Empty || request.HospitalId == Guid.Empty)
+                {
+                    return BadRequest(new { Message = "DoctorId and HospitalId are required and cannot be empty." });
+                }
+
                 var result = await _mediator.Send(request);
                 _logger.LogInformation("UploadAsset ended for doctorId: {DoctorId} & hospitalId: {HospitalId}", request.DoctorId, request.HospitalId);
 
