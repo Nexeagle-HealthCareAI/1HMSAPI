@@ -15,7 +15,6 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public Guid DoctorId { get; set; }
         [Required]
         public Guid HospitalId { get; set; }
-        [Required]
         public Guid LoggedInUserId { get; set; }
     }
 }
