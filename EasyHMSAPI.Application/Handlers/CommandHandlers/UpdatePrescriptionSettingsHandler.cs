@@ -21,7 +21,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             try
             {
                 var existingSettings = await _context.PrescriptionSettings
-               .FirstOrDefaultAsync(x => x.HospitalId == request.HospitalId && x.DoctorId == request.DoctorId, cancellationToken);
+                    .FirstOrDefaultAsync(x => x.HospitalId == request.HospitalId && x.DoctorId == request.DoctorId, cancellationToken);
                 var currentDateTime = DateTime.UtcNow;
                 var newPrescriptionSettingId = Guid.NewGuid();
                
