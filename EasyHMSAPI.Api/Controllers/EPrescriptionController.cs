@@ -215,8 +215,10 @@ namespace EasyHMSAPI.Api.Controllers
             _logger.LogInformation("GeneratePrescription started at {Time} for appointmentId: {AppointmentId}, patientId: {PatientId}, hospitalId: {HospitalId}, doctorId: {DoctorId}", DateTime.UtcNow, request.AppointmentId, request.PatientId, request.HospitalId, request.DoctorId);
 
             if (request == null || request.AppointmentId == Guid.Empty || string.IsNullOrEmpty(request.PatientId) || request.HospitalId == Guid.Empty || request.DoctorId == Guid.Empty)
+            {
                 return BadRequest(new { Message = "Invalid request parameters." });
-
+            }
+            
             var result = await _mediator.Send(request);
 
             _logger.LogInformation("GeneratePrescription ended for appointmentId: {AppointmentId}, patientId: {PatientId}", request.AppointmentId, request.PatientId);

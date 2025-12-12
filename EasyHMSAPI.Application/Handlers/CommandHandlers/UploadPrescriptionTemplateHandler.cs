@@ -27,6 +27,28 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             UploadPrescriptionTemplateResponseModel result = new();
             try
             {
+                var existingDoctor = await _context.Doctors
+                   .AsNoTracking()
+                   .FirstOrDefaultAsync(d => d.DoctorID == request.DoctorId, cancellationToken);
+                if (existingDoctor == null)
+                {
+                    result.Success = false;
+                    result.Message = "Invalid doctor Id";
+
+                    return result;
+                }
+
+                var existingHospital = await _context.Hospitals
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(h => h.HospitalID == request.HospitalId, cancellationToken);
+                if (existingHospital == null)
+                {
+                    result.Success = false;
+                    result.Message = "Invalid hospital Id";
+
+                    return result;
+                }
+
                 var prescriptionSettings = await _context.PrescriptionSettings
                 .Where(x => x.DoctorId == request.DoctorId && x.HospitalId == request.HospitalId)
                 .FirstOrDefaultAsync(cancellationToken);

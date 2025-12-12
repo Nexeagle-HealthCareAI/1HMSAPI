@@ -64,6 +64,17 @@ namespace EasyHMSAPI.Api.Controllers
                     return BadRequest(new { Message = "DoctorId and HospitalId are required and cannot be empty." });
                 }
 
+                var userIdClaim = User.FindFirst("userId")?.Value;
+                if (Guid.TryParse(userIdClaim, out var userId))
+                {
+                    request.LoggedInUserId = userId;
+
+                    if(request.LoggedInUserId == Guid.Empty)
+                    {
+                        return BadRequest(new { Message = "LoggedInUserId is required and cannot be empty." });
+                    }
+                }
+
                 var result = await _mediator.Send(request);
                 _logger.LogInformation("UpdatePrescriptionSettings ended for doctorId: {DoctorId} & hospitalId: {HospitalId}", request.DoctorId, request.HospitalId);
 
@@ -79,14 +90,26 @@ namespace EasyHMSAPI.Api.Controllers
 
         [Authorize]
         [HttpPost("upload-template")]
-        public async Task<IActionResult> UploadAsset([FromForm] UploadPrescriptionTemplateRequestModel request)
+        public async Task<IActionResult> UploadPrescriptionTemplate([FromForm] UploadPrescriptionTemplateRequestModel request)
         {
             _logger.LogInformation("UploadAsset started at {Time} for doctorId: {DoctorId} & hospitalId: {HospitalId}", DateTime.UtcNow, request.DoctorId, request.HospitalId);
             try
             {
-                if(request.DoctorId == Guid.Empty || request.HospitalId == Guid.Empty)
+                if (request.DoctorId == Guid.Empty || request.HospitalId == Guid.Empty)
                 {
                     return BadRequest(new { Message = "DoctorId and HospitalId are required and cannot be empty." });
+                }
+
+                var userIdClaim = User.FindFirst("userId")?.Value;
+                Guid loggedInUserId = Guid.Empty;
+                if (Guid.TryParse(userIdClaim, out var userId))
+                {
+                    request.LoggedInUserId = userId;
+
+                    if (request.LoggedInUserId == Guid.Empty)
+                    {
+                        return BadRequest(new { Message = "LoggedInUserId is required and cannot be empty." });
+                    }
                 }
 
                 var result = await _mediator.Send(request);
@@ -97,7 +120,6 @@ namespace EasyHMSAPI.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in UploadAsset for doctorId: {DoctorId} & hospitalId: {HospitalId}", request.DoctorId, request.HospitalId);
-
                 return StatusCode(500, new { Message = "An error occurred while uploading asset", Error = ex.Message });
             }
         }
