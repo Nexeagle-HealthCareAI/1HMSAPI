@@ -16,6 +16,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
         public async Task<List<GetPreferredMedicineResponseModel>> Handle(GetPreferredMedicinesRequestModel request, CancellationToken cancellationToken)
         {
+            var existingDoctor = await _dbContext.Doctors
+              .Where(x => x.DoctorID == request.DoctorId)
+              .FirstOrDefaultAsync(cancellationToken) ?? throw new Exception("Doctor not found.");
+            var existingHospital = await _dbContext.Hospitals
+                .Where(x => x.HospitalID == request.HospitalId)
+                .FirstOrDefaultAsync(cancellationToken) ?? throw new Exception("Hospital not found.");
+
             var list = await _dbContext.DoctorPreferredMedicines
                 .AsNoTracking()
                 .Where(d => d.DoctorId == request.DoctorId && d.HospitalId == request.HospitalId && d.IsActive)

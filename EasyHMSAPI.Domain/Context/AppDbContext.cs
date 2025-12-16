@@ -102,6 +102,16 @@ namespace EasyHMSAPI.Domain.Context
                 .WithMany(lm => lm.LookupPersonals)
                 .HasForeignKey(lp => lp.MasterLookupId);
 
+            // Configure LookupPersonal computed and generated columns
+            modelBuilder.Entity<LookupPersonal>()
+                .Property(lp => lp.NameLower)
+                .HasComputedColumnSql(null)
+                .ValueGeneratedOnAddOrUpdate();
+
+            modelBuilder.Entity<LookupPersonal>()
+                .Property(lp => lp.RowVersion)
+                .IsRowVersion();
+
             modelBuilder.Entity<Doctor>().ToTable("Doctors");
             modelBuilder.Entity<Doctor>().HasKey(e => e.DoctorID);
             modelBuilder.Entity<Doctor>().Property(d => d.ProfileCompletionPercent).HasPrecision(5,2);
