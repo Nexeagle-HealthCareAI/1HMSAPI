@@ -1,11 +1,15 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Data.Constants;
+using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore;
 using System.Diagnostics.CodeAnalysis;
+using Microsoft.Extensions.DependencyInjection;
+using EasyHMSAPI.Api.Common;
 
 namespace EasyHMSAPI.Api.Controllers
 {
@@ -52,6 +56,9 @@ namespace EasyHMSAPI.Api.Controllers
             if (!AppConstants.LookupTypes.Contains(lookupType.ToUpper()))
                 return BadRequest(new { Message = "Invalid lookup type." });
 
+            if (!await ValidateDoctorHospitalAsync(hospitalId, doctorId, HttpContext.RequestAborted))
+                return BadRequest(new { Message = "Doctor is not associated with the specified hospital." });
+
             var request = new GetPatientLookupDataRequestModel
             {
                 HospitalId = hospitalId,
@@ -71,6 +78,11 @@ namespace EasyHMSAPI.Api.Controllers
         public async Task<IActionResult> GetDoctorPreferenceSetting(Guid doctorId, Guid hospitalId)
         {
             _logger.LogInformation("GetDoctorPreferenceSetting started at {Time} for doctorId: {DoctorId}, hospitalId: {HospitalId}", DateTime.UtcNow, doctorId, hospitalId);
+            if (doctorId == Guid.Empty || hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "Invalid doctorId or hospitalId." });
+
+            if (!await ValidateDoctorHospitalAsync(hospitalId, doctorId, HttpContext.RequestAborted))
+                return BadRequest(new { Message = "Doctor is not associated with the specified hospital." });
             var result = await _mediator.Send(new GetDoctorPreferenceSettingRequestModel { DoctorId = doctorId, HospitalId = hospitalId });
             
             _logger.LogInformation("GetDoctorPreferenceSetting ended for doctorId: {DoctorId}, hospitalId: {HospitalId}", doctorId, hospitalId);
@@ -85,6 +97,11 @@ namespace EasyHMSAPI.Api.Controllers
             _logger.LogInformation("UpdateDoctorPreferenceSetting started at {Time} for doctorId: {DoctorId}, hospitalId: {HospitalId}", DateTime.UtcNow, doctorId, hospitalId);
             if (model == null)
                 return BadRequest("Invalid request body.");
+            if (doctorId == Guid.Empty || hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "Invalid doctorId or hospitalId." });
+
+            if (!await ValidateDoctorHospitalAsync(hospitalId, doctorId, HttpContext.RequestAborted))
+                return BadRequest(new { Message = "Doctor is not associated with the specified hospital." });
             model.DoctorId = doctorId;
             model.HospitalId = hospitalId;
             var request = new UpdateDoctorPreferenceSettingRequestModel
@@ -103,6 +120,8 @@ namespace EasyHMSAPI.Api.Controllers
         [Authorize]
         public async Task<IActionResult> UpsertPersonalizedData([FromQuery] Guid hospitalId, [FromQuery] Guid doctorId, [FromQuery] string lookupType, [FromBody] PersonalizedLookupDataModel model)
         {
+            var currentUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext, HttpContext.RequestAborted);
+            _logger.LogInformation("UpsertPersonalizedData invoked by: {UserName}", currentUserName ?? "(unknown)");
             _logger.LogInformation("UpsertPersonalizedData started at {Time} for hospitalId: {HospitalId}, doctorId: {DoctorId}, lookupType: {LookupType}", DateTime.UtcNow, hospitalId, doctorId, lookupType);
             if (model == null || hospitalId == Guid.Empty || doctorId == Guid.Empty || string.IsNullOrWhiteSpace(lookupType))
                 return BadRequest(new { Message = "Invalid request parameters." });
@@ -110,11 +129,15 @@ namespace EasyHMSAPI.Api.Controllers
             if(!AppConstants.LookupTypes.Contains(lookupType.ToUpper()))
                 return BadRequest(new { Message = "Invalid lookup type." });
 
+            if (!await ValidateDoctorHospitalAsync(hospitalId, doctorId, HttpContext.RequestAborted))
+                return BadRequest(new { Message = "Doctor is not associated with the specified hospital." });
+
             var request = new UpsertPersonalizedDataRequestModel
             {
                 HospitalId = hospitalId,
                 DoctorId = doctorId,
                 LookupType = lookupType,
+                username= currentUserName,
                 Data = model
             };
             var result = await _mediator.Send(request);
@@ -134,6 +157,9 @@ namespace EasyHMSAPI.Api.Controllers
 
             if (!AppConstants.LookupTypes.Contains(lookupType.ToUpper()))
                 return BadRequest(new { Message = "Invalid lookup type." });
+
+            if (!await ValidateDoctorHospitalAsync(hospitalId, doctorId, HttpContext.RequestAborted))
+                return BadRequest(new { Message = "Doctor is not associated with the specified hospital." });
 
             var request = new GetPersonalizedDataRequestModel
             {
@@ -156,6 +182,9 @@ namespace EasyHMSAPI.Api.Controllers
             if (hospitalId == Guid.Empty || doctorId == Guid.Empty || personalId == Guid.Empty)
                 return BadRequest(new { Message = "Invalid request parameters." });
 
+            if (!await ValidateDoctorHospitalAsync(hospitalId, doctorId, HttpContext.RequestAborted))
+                return BadRequest(new { Message = "Doctor is not associated with the specified hospital." });
+
             var request = new DeletePersonalizedDataRequestModel
             {
                 HospitalId = hospitalId,
@@ -177,6 +206,9 @@ namespace EasyHMSAPI.Api.Controllers
             if (model == null || doctorId == Guid.Empty || hospitalId == Guid.Empty)
                 return BadRequest(new { Message = "Invalid request parameters." });
 
+            if (!await ValidateDoctorHospitalAsync(hospitalId, doctorId, HttpContext.RequestAborted))
+                return BadRequest(new { Message = "Doctor is not associated with the specified hospital." });
+
             var request = new UpsertPreferredMedicineRequestModel
             {
                 DoctorId = doctorId,
@@ -196,6 +228,9 @@ namespace EasyHMSAPI.Api.Controllers
             _logger.LogInformation("GetPreferredMedicines started at {Time} for doctorId: {DoctorId}, hospitalId: {HospitalId}", DateTime.UtcNow, doctorId, hospitalId);
             if (doctorId == Guid.Empty || hospitalId == Guid.Empty)
                 return BadRequest(new { Message = "Invalid doctorId or hospitalId." });
+
+            if (!await ValidateDoctorHospitalAsync(hospitalId, doctorId, HttpContext.RequestAborted))
+                return BadRequest(new { Message = "Doctor is not associated with the specified hospital." });
 
             var request = new GetPreferredMedicinesRequestModel
             {
@@ -218,12 +253,31 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 return BadRequest(new { Message = "Invalid request parameters." });
             }
+
+            if (!await ValidateDoctorHospitalAsync(request.HospitalId, request.DoctorId, HttpContext.RequestAborted))
+                return BadRequest(new { Message = "Doctor is not associated with the specified hospital." });
             
             var result = await _mediator.Send(request);
 
             _logger.LogInformation("GeneratePrescription ended for appointmentId: {AppointmentId}, patientId: {PatientId}", request.AppointmentId, request.PatientId);
 
             return Ok(result);
+        }
+
+        private async Task<bool> ValidateDoctorHospitalAsync(Guid hospitalId, Guid doctorId, CancellationToken ct)
+        {
+            var db = HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+            // Ensure the doctor exists and is linked to the hospital through HospitalUsers
+            var doctor = await db.Doctors
+                .Where(d => d.DoctorID == doctorId)
+                .Select(d => new { d.UserID })
+                .FirstOrDefaultAsync(ct);
+            if (doctor == null) return false;
+
+            var isLinked = await db.HospitalUsers
+                .AnyAsync(hu => hu.HospitalID == hospitalId && hu.UserID == doctor.UserID, ct);
+
+            return isLinked;
         }
     }
 }
