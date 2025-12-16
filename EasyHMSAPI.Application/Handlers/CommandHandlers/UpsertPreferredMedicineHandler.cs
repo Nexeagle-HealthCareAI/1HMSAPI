@@ -17,12 +17,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
         public async Task<UpsertPreferredMedicineResponseModel> Handle(UpsertPreferredMedicineRequestModel request, CancellationToken cancellationToken)
         {
+            UpsertPreferredMedicineResponseModel response = new()
+            {
+                Success = false
+            };
+
             var existingDoctor = await _dbContext.Doctors
               .Where(x => x.DoctorID == request.DoctorId)
               .FirstOrDefaultAsync(cancellationToken);
             if (existingDoctor == null)
             {
-                return new UpsertPreferredMedicineResponseModel { Message = "Doctor not found." };
+                response.Message = "Invalid doctorId";
             }
 
             var existingHospital = await _dbContext.Hospitals
@@ -30,53 +35,72 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 .FirstOrDefaultAsync(cancellationToken);
             if (existingHospital == null)
             {
-                return new UpsertPreferredMedicineResponseModel { Message = "Hospital not found." };
+                response.Message = "Invalid hospitalId";
             }
 
-            var existing = await _dbContext.DoctorPreferredMedicines
-                .FirstOrDefaultAsync(dpm => dpm.DoctorId == request.DoctorId && dpm.HospitalId == request.HospitalId && dpm.MedicineId == request.Medicine.MedicineId, cancellationToken);
-
-            if (existing != null)
+            if(request.PreferrredId is not null)
             {
-                existing.BrandName = request.Medicine.BrandName;
-                existing.GenericName = request.Medicine.GenericName;
-                existing.Form = request.Medicine.Form;
-                existing.StrengthValue = request.Medicine.StrengthValue;
-                existing.StrengthUnit = request.Medicine.StrengthUnit;
-                existing.Route = request.Medicine.Route;
-                existing.Dose = request.Medicine.Dose;
-                existing.Indication = request.Medicine.Indication;
-                existing.Notes = request.Medicine.Notes;
-                existing.UpdatedAt = DateTime.UtcNow;
-                existing.HospitalId = request.HospitalId;
+                if(request.PreferrredId <= 0)
+                {
+                    response.Message = "Invalid PreferredId for update.";
+                }
+                else
+                {
+                    var existingPreference = await _dbContext.DoctorPreferredMedicines
+                        .FirstOrDefaultAsync(dpm => dpm.PreferrredId == request.PreferrredId && dpm.DoctorId == request.DoctorId && dpm.HospitalId == request.HospitalId, cancellationToken);
+                    if (existingPreference != null)
+                    {
+                        existingPreference.BrandName = request.Medicine.BrandName;
+                        existingPreference.GenericName = request.Medicine.GenericName;
+                        existingPreference.Form = request.Medicine.Form;
+                        existingPreference.StrengthValue = request.Medicine.StrengthValue;
+                        existingPreference.StrengthUnit = request.Medicine.StrengthUnit;
+                        existingPreference.Route = request.Medicine.Route;
+                        existingPreference.Dose = request.Medicine.Dose;
+                        existingPreference.Indication = request.Medicine.Indication;
+                        existingPreference.Notes = request.Medicine.Notes;
+                        existingPreference.UpdatedAt = DateTime.UtcNow;
+                        existingPreference.HospitalId = request.HospitalId;
+                        await _dbContext.SaveChangesAsync(cancellationToken);
 
-                _dbContext.DoctorPreferredMedicines.Update(existing);
-                await _dbContext.SaveChangesAsync(cancellationToken);
-                return new UpsertPreferredMedicineResponseModel { Message = "Success" };
+                        response.Success = true;
+                        response.Message = "Preferred medicine updated";
+                    }
+                    else
+                    {
+                        response.Message = "Preferred medicine not found for update.";
+                    }
+                }  
             }
-
-            var newMed = new DoctorPreferredMedicine
+            else
             {
-                BrandName = request.Medicine.BrandName,
-                GenericName = request.Medicine.GenericName,
-                Form = request.Medicine.Form,
-                StrengthValue = request.Medicine.StrengthValue,
-                StrengthUnit = request.Medicine.StrengthUnit,
-                Route = request.Medicine.Route,
-                Dose = request.Medicine.Dose,
-                Indication = request.Medicine.Indication,
-                Notes = request.Medicine.Notes,
-                MedicineId = request.Medicine.MedicineId,
-                DoctorId = request.DoctorId,
-                HospitalId = request.HospitalId,
-                CreatedAt = DateTime.UtcNow,
-                IsActive = true
-            };
+                var newMed = new DoctorPreferredMedicine
+                {
+                    BrandName = request.Medicine.BrandName,
+                    GenericName = request.Medicine.GenericName,
+                    Form = request.Medicine.Form,
+                    StrengthValue = request.Medicine.StrengthValue,
+                    StrengthUnit = request.Medicine.StrengthUnit,
+                    Route = request.Medicine.Route,
+                    Dose = request.Medicine.Dose,
+                    Indication = request.Medicine.Indication,
+                    Notes = request.Medicine.Notes,
+                    MedicineId = request.Medicine.MedicineId,
+                    DoctorId = request.DoctorId,
+                    HospitalId = request.HospitalId,
+                    CreatedAt = DateTime.UtcNow,
+                    IsActive = true
+                };
 
-            await _dbContext.DoctorPreferredMedicines.AddAsync(newMed, cancellationToken);
+                _dbContext.DoctorPreferredMedicines.Add(newMed);
+
+                response.Success = true;
+                response.Message = "Preferred medicine added";
+            }
+            
             await _dbContext.SaveChangesAsync(cancellationToken);
 
-            return new UpsertPreferredMedicineResponseModel { Message = "Success" };
+            return response;
         }
     }
 }

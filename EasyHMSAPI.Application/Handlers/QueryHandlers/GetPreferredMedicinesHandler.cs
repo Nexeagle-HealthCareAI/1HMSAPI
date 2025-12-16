@@ -38,7 +38,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     Dose = d.Dose ?? string.Empty,
                     Indication = d.Indication ?? string.Empty,
                     Notes = d.Notes ?? string.Empty,
-                    MedicineId = d.MedicineId ?? string.Empty
+                    MedicineId = d.MedicineId ?? string.Empty,
+                    UsageCount = d.UsageCount,
+                    LastModifiedAt = d.UpdatedAt
                 })
                 .ToListAsync(cancellationToken);
 

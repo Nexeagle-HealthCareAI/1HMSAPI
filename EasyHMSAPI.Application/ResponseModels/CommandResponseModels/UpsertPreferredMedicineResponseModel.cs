@@ -5,6 +5,7 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
     [ExcludeFromCodeCoverage]
     public class UpsertPreferredMedicineResponseModel
     {
-        public string Message { get; set; } = "Success";
+        public bool Success { get; set; }
+        public string? Message { get; set; }
     }
 }

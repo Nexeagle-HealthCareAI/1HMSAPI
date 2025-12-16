@@ -58,17 +58,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             var masterLookup = await _dbContext.LookupMasters
                 .FirstOrDefaultAsync(lm => lm.LookupTypeId == lookupType.LookupTypeId, cancellationToken);
 
-            if (masterLookup == null)
-            {
-                return new UpsertPersonalizedDataResponseModel { Message = "Master lookup not found for the given name and lookup type." };
-            }
 
             var newPersonal = new LookupPersonal
             {
                 PersonalId = Guid.NewGuid(),
                 HospitalID = request.HospitalId,
                 DoctorID = request.DoctorId,
-                MasterLookupId = masterLookup.LookupId,
+                MasterLookupId = masterLookup?.LookupId,
                 LookupTypeId = lookupType.LookupTypeId,
                 Code = request.Data.Code,
                 Name = request.Data.Name,
