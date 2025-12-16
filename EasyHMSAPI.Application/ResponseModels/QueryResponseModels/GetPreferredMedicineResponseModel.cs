@@ -16,5 +16,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string Indication { get; set; } = string.Empty;
         public string Notes { get; set; } = string.Empty;
         public string MedicineId { get; set; } = string.Empty;
+        public int? UsageCount { get; set; }
+        public DateTime? LastModifiedAt { get; set; }
     }
 }
