@@ -4,6 +4,7 @@ using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
@@ -24,32 +25,31 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 return new UpsertPersonalizedDataResponseModel { Message = "Lookup type not found." };
             }
 
-            var existingDoctor = await _dbContext.Doctors
-                .Where(x => x.DoctorID == request.DoctorId)
-                .FirstOrDefaultAsync(cancellationToken);
-            if(existingDoctor == null)
-            {
-                return new UpsertPersonalizedDataResponseModel { Message = "Doctor not found." };
-            }
+            // Normalize MetaJson to satisfy CHECK constraint: (MetaJson IS NULL OR ISJSON(MetaJson) = 1)
+            string? metaJson = NormalizeToJsonOrNull(request.Data.Synonyms);
 
-            var existingHospital = await _dbContext.Hospitals
-                .Where(x => x.HospitalID == request.HospitalId)
-                .FirstOrDefaultAsync(cancellationToken);
-            if (existingHospital == null)
+            // If PersonalId is provided, update the record; otherwise insert a new record
+            if (!string.IsNullOrWhiteSpace(request.Data.PersonalId) && Guid.TryParse(request.Data.PersonalId, out var personalId) && personalId != Guid.Empty)
             {
-                return new UpsertPersonalizedDataResponseModel { Message = "Hospital not found." };
-            }
+                var existing = await _dbContext.LookupPersonals
+                    .FirstOrDefaultAsync(lp => lp.PersonalId == personalId
+                                               && lp.DoctorID == request.DoctorId
+                                               && lp.HospitalID == request.HospitalId
+                                               && lp.LookupTypeId == lookupType.LookupTypeId,
+                                               cancellationToken);
 
-            var existing = await _dbContext.LookupPersonals
-                .FirstOrDefaultAsync(lp => lp.DoctorID == request.DoctorId && lp.LookupTypeId == lookupType.LookupTypeId && lp.Name == request.Data.Name, cancellationToken);
+                if (existing == null)
+                {
+                    return new UpsertPersonalizedDataResponseModel { Message = "Personalized data not found." };
+                }
 
-            if (existing != null)
-            {
                 existing.Code = request.Data.Code;
+                existing.Name = request.Data.Name;
                 existing.ShortDesc = request.Data.ShortDesc;
-                existing.MetaJson = string.IsNullOrWhiteSpace(request.Data.Synonyms) ? null : request.Data.Synonyms;
-                existing.ModifiedAt = DateTime.UtcNow;
-                _dbContext.LookupPersonals.Update(existing);
+                existing.MetaJson = metaJson;
+                existing.IsActive = true;
+                existing.IsOverride = true;
+                existing.ModifiedAt = DateTime.UtcNow;                
                 await _dbContext.SaveChangesAsync(cancellationToken);
 
                 return new UpsertPersonalizedDataResponseModel { Message = "Success", PersonalId = existing.PersonalId };
@@ -73,19 +73,51 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 Code = request.Data.Code,
                 Name = request.Data.Name,
                 ShortDesc = request.Data.ShortDesc,
-                MetaJson = string.IsNullOrWhiteSpace(request.Data.Synonyms) ? null : request.Data.Synonyms,
+                MetaJson = metaJson,
                 IsActive = true,
-                IsOverride = true,
+                IsOverride = false,
                 HideMaster = false,
                 UsageCount = 0,
                 CreatedAt = DateTime.UtcNow,
-                ModifiedAt = DateTime.UtcNow
+                ModifiedAt= DateTime.UtcNow               
             };
 
             await _dbContext.LookupPersonals.AddAsync(newPersonal, cancellationToken);
             await _dbContext.SaveChangesAsync(cancellationToken);
 
             return new UpsertPersonalizedDataResponseModel { Message = "Success", PersonalId = newPersonal.PersonalId };
+        }
+
+        private static string? NormalizeToJsonOrNull(string? input)
+        {
+            if (string.IsNullOrWhiteSpace(input)) return null;
+
+            // If already valid JSON, keep as-is
+            if (IsValidJson(input)) return input;
+
+            // Otherwise, treat as comma-separated synonyms and serialize to JSON array
+            var items = input
+                .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim())
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            if (items.Length == 0) return null;
+            return JsonSerializer.Serialize(items);
+        }
+
+        private static bool IsValidJson(string s)
+        {
+            try
+            {
+                using var _ = JsonDocument.Parse(s);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
 }
