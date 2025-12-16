@@ -28,7 +28,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     Name = lp.Name ?? string.Empty,
                     ShortDesc = lp.ShortDesc,
                     Code = lp.Code,
-                    Synonyms = lp.MetaJson
+                    Synonyms = lp.MetaJson,
+                    UsageCount = lp.UsageCount,
+                    CreatedAt = lp.CreatedAt,
+                    ModifiedAt = lp.ModifiedAt
                 })
                 .ToListAsync(cancellationToken);
 

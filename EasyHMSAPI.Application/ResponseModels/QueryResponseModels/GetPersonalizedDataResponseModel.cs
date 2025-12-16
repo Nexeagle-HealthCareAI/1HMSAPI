@@ -10,5 +10,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? ShortDesc { get; set; }
         public string? Code { get; set; }
         public string? Synonyms { get; set; }
+        public long UsageCount { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime ModifiedAt { get; set; }
     }
 }
