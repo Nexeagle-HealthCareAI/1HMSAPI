@@ -10,12 +10,14 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public Guid HospitalId { get; set; }
         public Guid DoctorId { get; set; }
         public string LookupType { get; set; } = string.Empty;
+        public string? username { get; set; }
         public PersonalizedLookupDataModel Data { get; set; } = null!;
     }
 
     [ExcludeFromCodeCoverage]
     public class PersonalizedLookupDataModel
     {
+        public string? PersonalId { get; set; }
         public string Name { get; set; } = string.Empty;
         public string Code { get; set; } = string.Empty;
         public string? ShortDesc { get; set; }

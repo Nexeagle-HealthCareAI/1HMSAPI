@@ -65,13 +65,27 @@ namespace EasyHMSAPI.Domain.Context
 
             // Lookup entities
             modelBuilder.Entity<LookupType>().ToTable("LookupTypes");
-            modelBuilder.Entity<LookupMaster>().ToTable("LookupMasters");
-            modelBuilder.Entity<LookupPersonal>().ToTable("LookupPersonals");
+            modelBuilder.Entity<LookupMaster>().ToTable("LookupMaster");
+            modelBuilder.Entity<LookupPersonal>().ToTable("LookupPersonal");
 
             // Keys and relationships for lookup entities
             modelBuilder.Entity<LookupType>().HasKey(e => e.LookupTypeId);
             modelBuilder.Entity<LookupMaster>().HasKey(e => e.LookupId);
             modelBuilder.Entity<LookupPersonal>().HasKey(e => e.PersonalId);
+            modelBuilder.Entity<LookupPersonal>(entity =>
+            {
+                // Computed persisted column in DB: [NameLower] AS (LOWER([Name])) PERSISTED
+                entity.Property(lp => lp.NameLower)
+                      .HasComputedColumnSql("LOWER([Name])", stored: true);
+
+                // Timestamp/rowversion column: prevent explicit insert/update values
+                entity.Property(lp => lp.RowVersion)
+                      .IsRowVersion();
+
+                // Align column types with DB (do not force values; DB has defaults)
+                entity.Property(lp => lp.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(lp => lp.ModifiedAt).HasColumnType("datetime2(3)");
+            });
 
             modelBuilder.Entity<LookupMaster>()
                 .HasOne(lm => lm.LookupType)
