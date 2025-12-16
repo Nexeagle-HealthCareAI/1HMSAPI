@@ -17,10 +17,27 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
         public async Task<UpsertPersonalizedDataResponseModel> Handle(UpsertPersonalizedDataRequestModel request, CancellationToken cancellationToken)
         {
-            var lookupType = await _dbContext.LookupTypes.FirstOrDefaultAsync(lt => lt.LookupTypeCode == request.LookupType, cancellationToken);
+            var lookupType = await _dbContext.LookupTypes
+                .FirstOrDefaultAsync(lt => lt.LookupTypeCode == request.LookupType, cancellationToken);
             if (lookupType == null)
             {
                 return new UpsertPersonalizedDataResponseModel { Message = "Lookup type not found." };
+            }
+
+            var existingDoctor = await _dbContext.Doctors
+                .Where(x => x.DoctorID == request.DoctorId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if(existingDoctor == null)
+            {
+                return new UpsertPersonalizedDataResponseModel { Message = "Doctor not found." };
+            }
+
+            var existingHospital = await _dbContext.Hospitals
+                .Where(x => x.HospitalID == request.HospitalId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (existingHospital == null)
+            {
+                return new UpsertPersonalizedDataResponseModel { Message = "Hospital not found." };
             }
 
             var existing = await _dbContext.LookupPersonals
@@ -30,7 +47,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             {
                 existing.Code = request.Data.Code;
                 existing.ShortDesc = request.Data.ShortDesc;
-                existing.MetaJson = request.Data.Synonyms;
+                existing.MetaJson = string.IsNullOrWhiteSpace(request.Data.Synonyms) ? null : request.Data.Synonyms;
                 existing.ModifiedAt = DateTime.UtcNow;
                 _dbContext.LookupPersonals.Update(existing);
                 await _dbContext.SaveChangesAsync(cancellationToken);
@@ -38,22 +55,31 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 return new UpsertPersonalizedDataResponseModel { Message = "Success", PersonalId = existing.PersonalId };
             }
 
+            var masterLookup = await _dbContext.LookupMasters
+                .FirstOrDefaultAsync(lm => lm.LookupTypeId == lookupType.LookupTypeId, cancellationToken);
+
+            if (masterLookup == null)
+            {
+                return new UpsertPersonalizedDataResponseModel { Message = "Master lookup not found for the given name and lookup type." };
+            }
+
             var newPersonal = new LookupPersonal
             {
                 PersonalId = Guid.NewGuid(),
                 HospitalID = request.HospitalId,
                 DoctorID = request.DoctorId,
+                MasterLookupId = masterLookup.LookupId,
                 LookupTypeId = lookupType.LookupTypeId,
                 Code = request.Data.Code,
                 Name = request.Data.Name,
-                NameLower = request.Data.Name?.ToLowerInvariant(),
                 ShortDesc = request.Data.ShortDesc,
-                MetaJson = request.Data.Synonyms,
+                MetaJson = string.IsNullOrWhiteSpace(request.Data.Synonyms) ? null : request.Data.Synonyms,
                 IsActive = true,
                 IsOverride = true,
                 HideMaster = false,
                 UsageCount = 0,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                ModifiedAt = DateTime.UtcNow
             };
 
             await _dbContext.LookupPersonals.AddAsync(newPersonal, cancellationToken);

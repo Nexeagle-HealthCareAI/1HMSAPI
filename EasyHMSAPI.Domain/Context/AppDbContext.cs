@@ -65,8 +65,8 @@ namespace EasyHMSAPI.Domain.Context
 
             // Lookup entities
             modelBuilder.Entity<LookupType>().ToTable("LookupTypes");
-            modelBuilder.Entity<LookupMaster>().ToTable("LookupMasters");
-            modelBuilder.Entity<LookupPersonal>().ToTable("LookupPersonals");
+            modelBuilder.Entity<LookupMaster>().ToTable("LookupMaster");
+            modelBuilder.Entity<LookupPersonal>().ToTable("LookupPersonal");
 
             // Keys and relationships for lookup entities
             modelBuilder.Entity<LookupType>().HasKey(e => e.LookupTypeId);
@@ -87,6 +87,16 @@ namespace EasyHMSAPI.Domain.Context
                 .HasOne(lp => lp.MasterLookup)
                 .WithMany(lm => lm.LookupPersonals)
                 .HasForeignKey(lp => lp.MasterLookupId);
+
+            // Configure LookupPersonal computed and generated columns
+            modelBuilder.Entity<LookupPersonal>()
+                .Property(lp => lp.NameLower)
+                .HasComputedColumnSql(null)
+                .ValueGeneratedOnAddOrUpdate();
+
+            modelBuilder.Entity<LookupPersonal>()
+                .Property(lp => lp.RowVersion)
+                .IsRowVersion();
 
             modelBuilder.Entity<Doctor>().ToTable("Doctors");
             modelBuilder.Entity<Doctor>().HasKey(e => e.DoctorID);
