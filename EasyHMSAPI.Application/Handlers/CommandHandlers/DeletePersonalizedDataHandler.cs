@@ -16,24 +16,24 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
         public async Task<DeletePersonalizedDataResponseModel> Handle(DeletePersonalizedDataRequestModel request, CancellationToken cancellationToken)
         {
-            var existingDoctor = await _dbContext.Doctors
-               .Where(x => x.DoctorID == request.DoctorId)
-               .FirstOrDefaultAsync(cancellationToken);
-            if (existingDoctor == null)
+            var doctorExists = await _dbContext.Doctors
+               .AsNoTracking()
+               .AnyAsync(x => x.DoctorID == request.DoctorId, cancellationToken);
+            if (!doctorExists)
             {
                 return new DeletePersonalizedDataResponseModel { Message = "Doctor not found." };
             }
 
-            var existingHospital = await _dbContext.Hospitals
-                .Where(x => x.HospitalID == request.HospitalId)
-                .FirstOrDefaultAsync(cancellationToken);
-            if (existingHospital == null)
+            var hospitalExists = await _dbContext.Hospitals
+                .AsNoTracking()
+                .AnyAsync(x => x.HospitalID == request.HospitalId, cancellationToken);
+            if (!hospitalExists)
             {
                 return new DeletePersonalizedDataResponseModel { Message = "Hospital not found." };
             }
 
             var existing = await _dbContext.LookupPersonals
-                .FirstOrDefaultAsync(lp => lp.PersonalId == request.PersonalId && lp.DoctorID == request.DoctorId, cancellationToken);
+                .FirstOrDefaultAsync(lp => lp.PersonalId == request.PersonalId && lp.DoctorID == request.DoctorId && lp.HospitalID == request.HospitalId, cancellationToken);
             if (existing == null)
             {
                 return new DeletePersonalizedDataResponseModel { Message = "Not Found" };
