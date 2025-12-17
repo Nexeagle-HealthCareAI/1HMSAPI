@@ -89,6 +89,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     DoctorId = request.DoctorId,
                     HospitalId = request.HospitalId,
                     CreatedAt = DateTime.UtcNow,
+                    UsageCount=0,
                     IsActive = true
                 };
 
