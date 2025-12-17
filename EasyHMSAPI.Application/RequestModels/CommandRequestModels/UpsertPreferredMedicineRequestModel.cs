@@ -1,6 +1,7 @@
 ﻿using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using MediatR;
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json.Serialization;
 
 namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
 {
@@ -9,12 +10,14 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     {
         public long? PreferrredId { get; set; }
         public Guid DoctorId { get; set; }
-        public Guid HospitalId { get; set; } // Added hospitalId
-        public PreferredMedicineDataModel Medicine { get; set; } = null!;
+        public Guid HospitalId { get; set; }
+        [JsonIgnore]
+        public Guid LoggedInUserId { get; set; }
+        public PreferredMedicineModel Medicine { get; set; } = null!;
     }
 
     [ExcludeFromCodeCoverage]
-    public class PreferredMedicineDataModel
+    public class PreferredMedicineModel
     {
         public string GenericName { get; set; } = string.Empty;
         public string BrandName { get; set; } = string.Empty;
