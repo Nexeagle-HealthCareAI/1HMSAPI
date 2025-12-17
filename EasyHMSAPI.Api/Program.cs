@@ -1,4 +1,6 @@
 ﻿using EasyHMSAPI.Application.Handlers.CommandHandlers;
+using EasyHMSAPI.Application.Helpers.Implementations;
+using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.Services.Implementations;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
@@ -149,6 +151,7 @@ builder.Services.AddScoped<IJwtAuthService, JwtAuthService>();
 builder.Services.AddScoped<IBlobStorageService, BlobStorageService>();
 builder.Services.AddScoped<ISmsService, SmsService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<IDoctorValidationHelper, DoctorValidationHelper>();
 
 // ------------------------------------------------------------
 // Azure App Service File Logger Options (optional)

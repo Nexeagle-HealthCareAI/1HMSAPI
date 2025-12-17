@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Domain.Context;
@@ -10,9 +11,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     public class UpsertPreferredMedicineHandler : IRequestHandler<UpsertPreferredMedicineRequestModel, UpsertPreferredMedicineResponseModel>
     {
         private readonly AppDbContext _dbContext;
-        public UpsertPreferredMedicineHandler(AppDbContext dbContext)
+        private readonly IDoctorValidationHelper _doctorValidationHelper;
+        public UpsertPreferredMedicineHandler(AppDbContext dbContext, IDoctorValidationHelper doctorValidationHelper)
         {
             _dbContext = dbContext;
+            _doctorValidationHelper = doctorValidationHelper;
         }
 
         public async Task<UpsertPreferredMedicineResponseModel> Handle(UpsertPreferredMedicineRequestModel request, CancellationToken cancellationToken)
@@ -37,10 +40,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             {
                 response.Message = "Invalid hospitalId";
             }
-
-            if(request.PreferrredId is not null)
+            else
             {
-                if(request.PreferrredId <= 0)
+                if (!await _doctorValidationHelper.ValidateDoctorAsync(request.HospitalId, request.DoctorId, cancellationToken))
+                {
+                    response.Message = "Doctor is not associated with the specified hospital.";
+                }
+            }
+
+            if (request.PreferrredId is not null)
+            {
+                if (request.PreferrredId <= 0)
                 {
                     response.Message = "Invalid PreferredId for update.";
                 }
@@ -50,27 +60,34 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         .FirstOrDefaultAsync(dpm => dpm.PreferrredId == request.PreferrredId && dpm.DoctorId == request.DoctorId && dpm.HospitalId == request.HospitalId, cancellationToken);
                     if (existingPreference != null)
                     {
-                        existingPreference.BrandName = request.Medicine.BrandName;
-                        existingPreference.GenericName = request.Medicine.GenericName;
-                        existingPreference.Form = request.Medicine.Form;
-                        existingPreference.StrengthValue = request.Medicine.StrengthValue;
-                        existingPreference.StrengthUnit = request.Medicine.StrengthUnit;
-                        existingPreference.Route = request.Medicine.Route;
-                        existingPreference.Dose = request.Medicine.Dose;
-                        existingPreference.Indication = request.Medicine.Indication;
-                        existingPreference.Notes = request.Medicine.Notes;
-                        existingPreference.UpdatedAt = DateTime.UtcNow;
-                        existingPreference.HospitalId = request.HospitalId;
-                        await _dbContext.SaveChangesAsync(cancellationToken);
+                        if(!existingPreference.IsActive)
+                        {
+                            response.Message = "Cannot update an inactive preferred medicine.";
+                        }
+                        else
+                        {
+                            if (!string.IsNullOrEmpty(request.Medicine.BrandName)) existingPreference.BrandName = request.Medicine.BrandName;
+                            if (!string.IsNullOrEmpty(request.Medicine.GenericName)) existingPreference.GenericName = request.Medicine.GenericName;
+                            if (!string.IsNullOrEmpty(request.Medicine.Form)) existingPreference.Form = request.Medicine.Form;
+                            if (!string.IsNullOrEmpty(request.Medicine.StrengthValue)) existingPreference.StrengthValue = request.Medicine.StrengthValue;
+                            if (!string.IsNullOrEmpty(request.Medicine.StrengthUnit)) existingPreference.StrengthUnit = request.Medicine.StrengthUnit;
+                            if (!string.IsNullOrEmpty(request.Medicine.Route)) existingPreference.Route = request.Medicine.Route;
+                            if (!string.IsNullOrEmpty(request.Medicine.Dose)) existingPreference.Dose = request.Medicine.Dose;
+                            if (!string.IsNullOrEmpty(request.Medicine.Indication)) existingPreference.Indication = request.Medicine.Indication;
+                            if (!string.IsNullOrEmpty(request.Medicine.Notes)) existingPreference.Notes = request.Medicine.Notes;
+                            existingPreference.UpdatedAt = DateTime.UtcNow;
+                            existingPreference.UpdatedBy = request.LoggedInUserId.ToString();
+                            await _dbContext.SaveChangesAsync(cancellationToken);
 
-                        response.Success = true;
-                        response.Message = "Preferred medicine updated";
+                            response.Success = true;
+                            response.Message = "Preferred medicine updated";
+                        } 
                     }
                     else
                     {
                         response.Message = "Preferred medicine not found for update.";
                     }
-                }  
+                }
             }
             else
             {
@@ -89,17 +106,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     DoctorId = request.DoctorId,
                     HospitalId = request.HospitalId,
                     CreatedAt = DateTime.UtcNow,
-                    UsageCount=0,
-                    IsActive = true
+                    UsageCount = 0,
+                    IsActive = true,
+                    CreatedBy = request.LoggedInUserId.ToString(),
                 };
 
                 _dbContext.DoctorPreferredMedicines.Add(newMed);
+                await _dbContext.SaveChangesAsync(cancellationToken);
 
                 response.Success = true;
                 response.Message = "Preferred medicine added";
             }
-            
-            await _dbContext.SaveChangesAsync(cancellationToken);
 
             return response;
         }

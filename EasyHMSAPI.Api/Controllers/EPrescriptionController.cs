@@ -198,53 +198,6 @@ namespace EasyHMSAPI.Api.Controllers
             return Ok(result);
         }
 
-        [HttpPut("configuration/personalized-medicine/doctorId={doctorId}&hospitalId={hospitalId}")]
-        [Authorize]
-        public async Task<IActionResult> UpsertPreferredMedicine(Guid doctorId, Guid hospitalId, [FromQuery] string? preferrredId, [FromBody] PreferredMedicineDataModel model)
-        {
-            _logger.LogInformation("UpsertPreferredMedicine started at {Time} for doctorId: {DoctorId}, hospitalId: {HospitalId}", DateTime.UtcNow, doctorId, hospitalId);
-            if (model == null || doctorId == Guid.Empty || hospitalId == Guid.Empty)
-                return BadRequest(new { Message = "Invalid request parameters." });
-
-            if (!await ValidateDoctorHospitalAsync(hospitalId, doctorId, HttpContext.RequestAborted))
-                return BadRequest(new { Message = "Doctor is not associated with the specified hospital." });
-            long? parsedPreferrredId = long.TryParse(preferrredId, out var value) ? value : null;
-
-            var request = new UpsertPreferredMedicineRequestModel
-            {
-                PreferrredId = parsedPreferrredId,
-                DoctorId = doctorId,
-                HospitalId = hospitalId,
-                Medicine = model
-            };
-            var result = await _mediator.Send(request);
-            _logger.LogInformation("UpsertPreferredMedicine ended for doctorId: {DoctorId}, hospitalId: {HospitalId}", doctorId, hospitalId);
-
-            return Ok(result);
-        }
-
-        [HttpGet("configuration/personalized-medicine/doctorId={doctorId}&hospitalId={hospitalId}")]
-        [Authorize]
-        public async Task<IActionResult> GetPreferredMedicines(Guid doctorId, Guid hospitalId)
-        {
-            _logger.LogInformation("GetPreferredMedicines started at {Time} for doctorId: {DoctorId}, hospitalId: {HospitalId}", DateTime.UtcNow, doctorId, hospitalId);
-            if (doctorId == Guid.Empty || hospitalId == Guid.Empty)
-                return BadRequest(new { Message = "Invalid doctorId or hospitalId." });
-
-            if (!await ValidateDoctorHospitalAsync(hospitalId, doctorId, HttpContext.RequestAborted))
-                return BadRequest(new { Message = "Doctor is not associated with the specified hospital." });
-
-            var request = new GetPreferredMedicinesRequestModel
-            {
-                DoctorId = doctorId,
-                HospitalId = hospitalId
-            };
-            var result = await _mediator.Send(request);
-            _logger.LogInformation("GetPreferredMedicines ended for doctorId: {DoctorId}, hospitalId: {HospitalId}", doctorId, hospitalId);
-
-            return Ok(result);
-        }
-
         [HttpPost("generate-prescription-details")]
         [Authorize]
         public async Task<IActionResult> GeneratePrescription([FromBody] GeneratePrescriptionRequestModel request)
