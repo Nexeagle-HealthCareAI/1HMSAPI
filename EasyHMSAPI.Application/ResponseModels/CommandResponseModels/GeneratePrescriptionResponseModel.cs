@@ -67,18 +67,18 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
     public class PatientVitalsModel
     {
         public BloodPressureModel? Bp { get; set; }
-        public int Pulse { get; set; }
-        public int TempC { get; set; }
-        public int Spo2 { get; set; }
-        public int HeightCm { get; set; }
-        public int WeightKg { get; set; }
+        public double Pulse { get; set; }
+        public double TempC { get; set; }
+        public double Spo2 { get; set; }
+        public double HeightCm { get; set; }
+        public double WeightKg { get; set; }
         public double Bmi { get; set; }
     }
 
     [ExcludeFromCodeCoverage]
     public class BloodPressureModel
     {
-        public int Sys { get; set; }
-        public int Dia { get; set; }
+        public double Sys { get; set; }
+        public double Dia { get; set; }
     }
 }
