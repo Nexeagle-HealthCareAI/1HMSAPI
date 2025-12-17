@@ -200,7 +200,7 @@ namespace EasyHMSAPI.Api.Controllers
 
         [HttpPut("configuration/personalized-medicine/doctorId={doctorId}&hospitalId={hospitalId}")]
         [Authorize]
-        public async Task<IActionResult> UpsertPreferredMedicine(Guid doctorId, Guid hospitalId, long? preferrredId, [FromBody] PreferredMedicineDataModel model)
+        public async Task<IActionResult> UpsertPreferredMedicine(Guid doctorId, Guid hospitalId, [FromQuery] string? preferrredId, [FromBody] PreferredMedicineDataModel model)
         {
             _logger.LogInformation("UpsertPreferredMedicine started at {Time} for doctorId: {DoctorId}, hospitalId: {HospitalId}", DateTime.UtcNow, doctorId, hospitalId);
             if (model == null || doctorId == Guid.Empty || hospitalId == Guid.Empty)
@@ -208,10 +208,11 @@ namespace EasyHMSAPI.Api.Controllers
 
             if (!await ValidateDoctorHospitalAsync(hospitalId, doctorId, HttpContext.RequestAborted))
                 return BadRequest(new { Message = "Doctor is not associated with the specified hospital." });
+            long? parsedPreferrredId = long.TryParse(preferrredId, out var value) ? value : null;
 
             var request = new UpsertPreferredMedicineRequestModel
             {
-                PreferrredId = preferrredId,
+                PreferrredId = parsedPreferrredId,
                 DoctorId = doctorId,
                 HospitalId = hospitalId,
                 Medicine = model
