@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Domain.Context;
@@ -10,10 +11,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     public class GeneratePrescriptionHandler : IRequestHandler<GeneratePrescriptionRequestModel, GeneratePrescriptionResponseModel>
     {
         private readonly AppDbContext _context;
+        private readonly IDoctorValidationHelper _doctorValidationHelper;
 
-        public GeneratePrescriptionHandler(AppDbContext context)
+        public GeneratePrescriptionHandler(AppDbContext context, IDoctorValidationHelper doctorValidationHelper)
         {
             _context = context;
+            _doctorValidationHelper = doctorValidationHelper;
         }
 
         public async Task<GeneratePrescriptionResponseModel> Handle(GeneratePrescriptionRequestModel request, CancellationToken cancellationToken)
@@ -49,6 +52,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return response;
                 }
 
+                if (!await _doctorValidationHelper.ValidateDoctorAsync(request.HospitalId, request.DoctorId, cancellationToken))
+                {
+                    response.Message = "Doctor is not associated with the specified hospital.";
+                    return response;
+                }
+
                 var existingPatient = await _context.PatientRegistrations
                     .AsNoTracking()
                     .FirstOrDefaultAsync(p => p.PatientId == request.PatientId && p.HospitalId == request.HospitalId, cancellationToken);
@@ -72,8 +81,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
 
                 var prescriptionSettings = await _context.PrescriptionSettings
-                .AsNoTracking()
-                .FirstOrDefaultAsync(ps => ps.DoctorId == request.DoctorId && ps.HospitalId == request.HospitalId, cancellationToken);
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(ps => ps.DoctorId == request.DoctorId && ps.HospitalId == request.HospitalId, cancellationToken);
 
                 var templateModel = new PrescriptionTemplateModel();
                 if (prescriptionSettings != null)
@@ -192,25 +201,25 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 {
                     model.Bp = new BloodPressureModel
                     {
-                        Sys = bpElement.TryGetProperty("Sys", out var sys) ? sys.GetInt32() : 0,
-                        Dia = bpElement.TryGetProperty("Dia", out var dia) ? dia.GetInt32() : 0
+                        Sys = bpElement.TryGetProperty("Sys", out var sys) ? sys.GetDouble() : 0,
+                        Dia = bpElement.TryGetProperty("Dia", out var dia) ? dia.GetDouble() : 0
                     };
                 }
 
                 if (vitalsJson.TryGetProperty("Pulse", out var pulse))
-                    model.Pulse = pulse.GetInt32();
+                    model.Pulse = pulse.GetDouble();
 
                 if (vitalsJson.TryGetProperty("TempC", out var tempC))
-                    model.TempC = tempC.GetInt32();
+                    model.TempC = tempC.GetDouble();
 
                 if (vitalsJson.TryGetProperty("Spo2", out var spo2))
-                    model.Spo2 = spo2.GetInt32();
+                    model.Spo2 = spo2.GetDouble();
 
                 if (vitalsJson.TryGetProperty("HeightCm", out var heightCm))
-                    model.HeightCm = heightCm.GetInt32();
+                    model.HeightCm = heightCm.GetDouble();
 
                 if (vitalsJson.TryGetProperty("WeightKg", out var weightKg))
-                    model.WeightKg = weightKg.GetInt32();
+                    model.WeightKg = weightKg.GetDouble();
 
                 if (vitalsJson.TryGetProperty("Bmi", out var bmi))
                     model.Bmi = bmi.GetDouble();

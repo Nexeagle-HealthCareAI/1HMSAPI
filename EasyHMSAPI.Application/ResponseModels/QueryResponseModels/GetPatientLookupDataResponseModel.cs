@@ -1,50 +1,38 @@
+using MediatR;
 using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
 {
     [ExcludeFromCodeCoverage]
-    public class LookupTypeInfo
+    public class GetPatientLookupDataResponseModel : IRequest<GetPatientLookupDataResponseModel>
     {
-        public int Id { get; set; }
-        public string Name { get; set; } = string.Empty;
+        public Guid? HospitalId { get; set; }
+        public Guid? DoctorId { get; set; }
+        public string? LookupType { get; set; }
+        public int? TotalTypes { get; set; }
+        public List<LookIpDetailsDataModel>? Items { get; set; }
+        public bool Success { get; set; }
+        public string? Message { get; set; }
     }
 
     [ExcludeFromCodeCoverage]
-    public class ScopeInfo
+    public class LookIpDetailsDataModel
     {
-        public Guid HospitalId { get; set; }
-        public Guid DoctorId { get; set; }
+        public int LookupTypeId { get; set; }
+        public string? LookupType { get; set; }
+        public long Count { get; set; }
+        public List<LookupPersonalDataModel>? PersonalData { get; set; }
+        public DateTime GeneratedAtUtc { get; set; }
     }
 
     [ExcludeFromCodeCoverage]
-    public class LookupItemPersonal
+    public class LookupPersonalDataModel
     {
         public Guid PersonalId { get; set; }
         public string? Code { get; set; }
-        public string Name { get; set; } = string.Empty;
+        public string? Name { get; set; }
         public string? NameLower { get; set; }
         public string? ShortDesc { get; set; }
         public long UsageCount { get; set; }
-    }
-
-    [ExcludeFromCodeCoverage]
-    public class LookupItemGeneral
-    {
-        public string? Code { get; set; }
-        public string Name { get; set; } = string.Empty;
-        public string? NameLower { get; set; }
-        public string? ShortDesc { get; set; }
-        public List<string>? Synonyms { get; set; }
-        public long UsageCount { get; set; }
-    }
-
-    [ExcludeFromCodeCoverage]
-    public class GetPatientLookupDataResponseModel
-    {
-        public LookupTypeInfo LookupType { get; set; } = new LookupTypeInfo();
-        public ScopeInfo Scope { get; set; } = new ScopeInfo();
-        public (int personal, int general) Counts { get; set; }
-        public List<LookupItemPersonal> PersonalItems { get; set; } = new List<LookupItemPersonal>();
-        public List<LookupItemGeneral> GeneralItems { get; set; } = new List<LookupItemGeneral>();
     }
 }

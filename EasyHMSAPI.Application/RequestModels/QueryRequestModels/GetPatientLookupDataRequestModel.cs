@@ -9,6 +9,5 @@ namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
     {
         public Guid HospitalId { get; set; }
         public Guid DoctorId { get; set; }
-        public string LookupType { get; set; } = string.Empty;
     }
 }

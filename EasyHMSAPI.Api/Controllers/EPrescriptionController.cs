@@ -1,15 +1,14 @@
+using EasyHMSAPI.Api.Common;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
+using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using System.Diagnostics.CodeAnalysis;
-using Microsoft.Extensions.DependencyInjection;
-using EasyHMSAPI.Api.Common;
 
 namespace EasyHMSAPI.Api.Controllers
 {
@@ -45,32 +44,37 @@ namespace EasyHMSAPI.Api.Controllers
             return Ok(result);
         }
 
-        [HttpGet("patient-details/lookup-data")]
+        [HttpGet("lookup-details")]
         [Authorize]
-        public async Task<IActionResult> GetLookupData([FromQuery] Guid hospitalId, [FromQuery] Guid doctorId, [FromQuery] string lookupType)
+        public async Task<ActionResult<GetPatientLookupDataResponseModel>> GetLookupData([FromQuery] Guid hospitalId, [FromQuery] Guid doctorId)
         {
-            _logger.LogInformation("GetLookupData started at {Time} for hospitalId: {HospitalId}, doctorId: {DoctorId}, lookupType: {LookupType}", DateTime.UtcNow, hospitalId, doctorId, lookupType);
-            if (hospitalId == Guid.Empty || doctorId == Guid.Empty || string.IsNullOrWhiteSpace(lookupType))
-                return BadRequest(new { Message = "Invalid request parameters." });
-
-            if (!AppConstants.LookupTypes.Contains(lookupType.ToUpper()))
-                return BadRequest(new { Message = "Invalid lookup type." });
-
-            if (!await ValidateDoctorHospitalAsync(hospitalId, doctorId, HttpContext.RequestAborted))
-                return BadRequest(new { Message = "Doctor is not associated with the specified hospital." });
-
-            var request = new GetPatientLookupDataRequestModel
+            _logger.LogInformation("GetLookupData started at {Time} for doctorId: {DoctorId}, hospitalId: {HospitalId}", DateTime.UtcNow, doctorId, hospitalId);
+            GetPatientLookupDataResponseModel response = new();
+            try
             {
-                HospitalId = hospitalId,
-                DoctorId = doctorId,
-                LookupType = lookupType
-            };
+                if (hospitalId == Guid.Empty || doctorId == Guid.Empty)
+                {
+                    response.Success = false;
+                    response.Message = "Invalid request parameters.";
+                }
+                else
+                {
+                    GetPatientLookupDataRequestModel requestModel = new()
+                    {
+                        HospitalId = hospitalId,
+                        DoctorId = doctorId
+                    };
+                    response = await _mediator.Send(requestModel);
+                    _logger.LogInformation("GetLookupData ended for doctorId: {DoctorId}, hospitalId: {HospitalId}", doctorId, hospitalId);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetLookupData for doctorId: {DoctorId}, hospitalId: {HospitalId}", doctorId, hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while processing your request." });
+            }
 
-            var result = await _mediator.Send(request);
-
-            _logger.LogInformation("GetLookupData ended for hospitalId: {HospitalId}, doctorId: {DoctorId}, lookupType: {LookupType}", hospitalId, doctorId, lookupType);
-
-            return Ok(result);
+            return response;
         }
 
         [HttpGet("configuration/preference-setting/doctorId={doctorId}&hospitalId={hospitalId}")]
