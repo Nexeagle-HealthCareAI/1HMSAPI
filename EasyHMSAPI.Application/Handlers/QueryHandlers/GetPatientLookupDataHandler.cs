@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Domain.Context;
@@ -9,71 +10,105 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
     public class GetPatientLookupDataHandler : IRequestHandler<GetPatientLookupDataRequestModel, GetPatientLookupDataResponseModel>
     {
         private readonly AppDbContext _dbContext;
-        public GetPatientLookupDataHandler(AppDbContext dbContext)
+        private readonly IDoctorValidationHelper _doctorValidationHelper;
+
+        public GetPatientLookupDataHandler(AppDbContext dbContext, IDoctorValidationHelper doctorValidationHelper)
         {
             _dbContext = dbContext;
+            _doctorValidationHelper = doctorValidationHelper;
         }
 
         public async Task<GetPatientLookupDataResponseModel> Handle(GetPatientLookupDataRequestModel request, CancellationToken cancellationToken)
         {
-            var lookupTypeEntity = await _dbContext.LookupTypes
-                .AsNoTracking()
-                .FirstOrDefaultAsync(lt => lt.LookupTypeCode == request.LookupType, cancellationToken);
-
-            if (lookupTypeEntity == null)
-                return new GetPatientLookupDataResponseModel();
-
-            var lookupTypeInfo = new LookupTypeInfo { Id = lookupTypeEntity.LookupTypeId, Name = lookupTypeEntity.LookupTypeCode };
-
-            var personalQuery = _dbContext.LookupPersonals
-                .AsNoTracking()
-                .Where(lp => lp.LookupTypeId == lookupTypeEntity.LookupTypeId && lp.DoctorID == request.DoctorId && lp.IsActive)
-                .Select(lp => new LookupItemPersonal
-                {
-                    PersonalId = lp.PersonalId,
-                    Code = lp.Code,
-                    Name = lp.Name ?? string.Empty,
-                    NameLower = lp.NameLower,
-                    ShortDesc = lp.ShortDesc,
-                    UsageCount = lp.UsageCount
-                });
-
-            var generalQuery = _dbContext.LookupMasters
-                .AsNoTracking()
-                .Where(lm => lm.LookupTypeId == lookupTypeEntity.LookupTypeId && lm.IsActive)
-                .Select(lm => new
-                {
-                    lm.Code,
-                    lm.Name,
-                    lm.NameLower,
-                    lm.ShortDesc,
-                    Synonyms = lm.Synonyms,
-                    lm.UsageCount
-                });
-
-            var personalList = await personalQuery.ToListAsync(cancellationToken);
-            var generalRawList = await generalQuery.ToListAsync(cancellationToken);
-
-            var generalList = generalRawList
-                .Select(lm => new LookupItemGeneral
-                {
-                    Code = lm.Code,
-                    Name = lm.Name ?? string.Empty,
-                    NameLower = lm.NameLower,
-                    ShortDesc = lm.ShortDesc,
-                    Synonyms = string.IsNullOrEmpty(lm.Synonyms) ? new List<string>() : lm.Synonyms.Split(';').Select(s => s.Trim()).Where(s => !string.IsNullOrEmpty(s)).ToList(),
-                    UsageCount = lm.UsageCount
-                })
-                .ToList();
-
-            var response = new GetPatientLookupDataResponseModel
+            GetPatientLookupDataResponseModel response = new()
             {
-                LookupType = lookupTypeInfo,
-                Scope = new ScopeInfo { HospitalId = request.HospitalId, DoctorId = request.DoctorId },
-                Counts = (personalList.Count, generalList.Count),
-                PersonalItems = personalList,
-                GeneralItems = generalList
+                Success = false,
             };
+            try
+            {
+                var existingDoctor = await _dbContext.Doctors
+                    .Where(x => x.DoctorID == request.DoctorId)
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (existingDoctor == null)
+                {
+                    response.Message = "Doctor not found.";
+                    return response;
+                }
+
+                var existingHospital = await _dbContext.Hospitals
+                    .Where(x => x.HospitalID == request.HospitalId)
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (existingHospital == null)
+                {
+                    response.Message = "Hospital not found.";
+                    return response;
+                }
+
+                if (!await _doctorValidationHelper.ValidateDoctorAsync(request.HospitalId, request.DoctorId, cancellationToken))
+                {
+                    response.Message = "Doctor is not associated with the specified hospital.";
+                    return response;
+                }
+
+                var existingPersonalLookup = await _dbContext.LookupPersonals
+                    .Where(x => x.HospitalID == request.HospitalId && x.DoctorID == request.DoctorId)
+                    .ToListAsync(cancellationToken);
+                
+                if (existingPersonalLookup == null || !existingPersonalLookup.Any())
+                {
+                    response.Message = "No personal lookup data found for the specified hospital and doctor.";
+                    return response;
+                }
+
+                var lookupTypes = await _dbContext.LookupTypes.ToListAsync(cancellationToken);
+
+                var groupedData = existingPersonalLookup
+                    .GroupBy(lp => lp.LookupTypeId)
+                    .Select(g => new LookIpDetailsDataModel
+                    {
+                        LookupTypeId = g.Key,
+                        Count = g.Count(),
+                        PersonalData = g
+                            .OrderByDescending(x => x.UsageCount)
+                            .ThenBy(x => x.Name)
+                            .Take(20)
+                            .Select(x => new LookupPersonalDataModel
+                            {
+                                PersonalId = x.PersonalId,
+                                Code = x.Code,
+                                Name = x.Name,
+                                NameLower = x.Name?.ToLower(),
+                                ShortDesc = x.ShortDesc,
+                                UsageCount = x.UsageCount
+                            }).ToList()
+                    })
+                    .ToList();
+
+                var items = groupedData.Select(g => {
+                    var type = lookupTypes.FirstOrDefault(t => t.LookupTypeId == g.LookupTypeId);
+                    return new LookIpDetailsDataModel
+                    {
+                        LookupTypeId = g.LookupTypeId,
+                        LookupType = type?.LookupTypeCode ?? "",
+                        Count = g.Count,
+                        PersonalData = g.PersonalData,
+                        GeneratedAtUtc = DateTime.UtcNow
+                    };
+                }).ToList();
+
+                response.HospitalId = request.HospitalId;
+                response.DoctorId = request.DoctorId;
+                response.LookupType = "All";
+                response.TotalTypes = items.Count;
+                response.Items = items;
+                response.Success = true;
+                response.Message = "Personal lookup data retrieved successfully.";
+            }
+            catch (Exception ex)
+            {
+                response.Success = false;
+                response.Message = "An error occurred: " + ex.Message + " " + ex.InnerException + " " + ex.StackTrace;
+            }
 
             return response;
         }
