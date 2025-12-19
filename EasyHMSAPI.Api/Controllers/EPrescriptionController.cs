@@ -1,6 +1,7 @@
 using EasyHMSAPI.Api.Common;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
+using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
@@ -236,6 +237,110 @@ namespace EasyHMSAPI.Api.Controllers
 
             _logger.LogInformation("DeletePersonalizedData ended for hospitalId: {HospitalId}, doctorId: {DoctorId}, personalId: {PersonalId}", hospitalId, doctorId, personalId);
 
+            return Ok(result);
+        }
+
+        [HttpPost("attachments/upload")]
+        [Authorize]
+        public async Task<ActionResult<UploadPrescriptionAttachmentsResponseModel>> UploadAttachment(UploadPrescriptionAttachmentsRequestModel request)
+        {
+            _logger.LogInformation("UploadAttachment started at {Time} for appointmentId: {AppointmentId}, patientId: {PatientId}, hospitalId: {HospitalId}, doctorId: {DoctorId}", DateTime.UtcNow, request.AppointmentId, request.PatientId, request.HospitalId, request.DoctorId);
+            UploadPrescriptionAttachmentsResponseModel result = new();
+            try
+            {
+                if (request == null || request.AppointmentId == Guid.Empty || string.IsNullOrEmpty(request.PatientId) || request.HospitalId == Guid.Empty || request.DoctorId == Guid.Empty || request.File == null || string.IsNullOrEmpty(request.Notes))
+                {
+                    result.Success = false;
+                    result.Message = "Invalid request parameters.";
+                }
+                else
+                {
+                    var userIdClaim = User.FindFirst("userId")?.Value;
+                    if (userIdClaim is not null && Guid.TryParse(userIdClaim, out var userId))
+                    {
+                        request.LoggedInUserId = userId;
+
+                        if (request.LoggedInUserId == Guid.Empty)
+                        {
+                            result.Success = false;
+                            result.Message = "Invalid logged in user.";
+                        }
+                        else
+                        {
+                            result =  await  _mediator.Send(request);
+                            _logger.LogInformation("UploadAttachment ended for appointmentId: {AppointmentId}, patientId: {PatientId}", request.AppointmentId, request.PatientId);
+                        }
+                    }
+                    else
+                    {
+                        result.Success = false;
+                        result.Message = "Invalid logged in user.";
+                    }
+                }
+            }
+            catch(Exception ex)
+            {
+                _logger.LogError(ex, "Error in UploadAttachment for appointmentId: {AppointmentId}, patientId: {PatientId}", request.AppointmentId, request.PatientId);
+                result.Success = false;
+                result.Message = "An error occurred while processing your request." + ex.Message + ex.InnerException + ex.StackTrace;
+            }
+
+            return Ok(result);
+        }
+        [HttpGet("attachments/list")]
+        [Authorize]
+        public async Task<ActionResult<GetPrescriptionAttachmentsResponseModel>> GetAttachments([FromQuery] Guid appointmentId, Guid hospitalId, Guid doctorId, [FromQuery] string patientId)
+        {
+            _logger.LogInformation("GetAttachments started at {Time} for appointmentId: {AppointmentId}, patientId: {PatientId}", DateTime.UtcNow, appointmentId, patientId);
+            GetPrescriptionAttachmentsResponseModel result = new();
+            try
+            {
+                if (appointmentId == Guid.Empty || hospitalId == Guid.Empty || doctorId == Guid.Empty || string.IsNullOrEmpty(patientId))
+                {
+                    result.Success = false;
+                    result.Message = "Invalid request parameters.";
+                }
+                else
+                {
+                    GetPrescriptionAttachmentsRequestModel requestModel = new()
+                    {
+                        AppointmentId = appointmentId,
+                        PatientId = patientId,
+                        HospitalId = hospitalId,
+                        DoctorId = doctorId
+                    };
+                    result = await _mediator.Send(requestModel);
+                    _logger.LogInformation("GetAttachments ended at {Time} for appointmentId: {AppointmentId}, patientId: {PatientId}", DateTime.UtcNow, appointmentId, patientId);
+                }
+                
+            }
+            catch(Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetAttachments for appointmentId: {AppointmentId}, patientId: {PatientId}", appointmentId, patientId);
+                result.Success = false;
+                result.Message = "An error occurred while processing your request." + ex.Message + ex.InnerException + ex.StackTrace;
+            }
+
+            return Ok(result);
+        }
+        [HttpDelete("attachments/delete")]
+        [Authorize]
+        public async Task<ActionResult<DeletePrescriptionAttachmentResponseModel>> DeleteAttachment([FromQuery] DeletePrescriptionAttachmentRequestModel request)
+        {
+            _logger.LogInformation("DeleteAttachment started at {Time} for attachmentId: {AttachmentId}", DateTime.UtcNow, request.AttachmentId);
+            DeletePrescriptionAttachmentResponseModel result = new();
+
+            if (request.AttachmentId == Guid.Empty)
+            {
+                result.Success = false;
+                result.Message = "Invalid request parameters.";
+            }
+            else
+            {
+                result = await _mediator.Send(request);
+                _logger.LogInformation("DeleteAttachment ended for attachmentId: {AttachmentId}", request.AttachmentId);
+            }
+           
             return Ok(result);
         }
 

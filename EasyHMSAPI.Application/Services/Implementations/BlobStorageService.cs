@@ -15,7 +15,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
         private readonly string _accountKey;
         private readonly string _profilePhotosContainer;
         private readonly string _prescriptionAssestsContainer;
-        private readonly string _prescriptionsContainer;
+        private readonly string _prescriptionAttachmentsContainer;
 
 
         public BlobStorageService(IConfiguration configuration)
@@ -25,7 +25,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
             _accountKey = configuration["BlobStorage:AccountKey"] ?? string.Empty;
             _profilePhotosContainer = configuration["BlobStorage:PrescriptionAssetsContainer"] ?? string.Empty;
             _prescriptionAssestsContainer = configuration["BlobStorage:PrescriptionAssetsContainer"] ?? string.Empty;
-            _prescriptionsContainer = configuration["BlobStorage:PrescriptionAssetsContainer"] ?? string.Empty;
+            _prescriptionAttachmentsContainer = configuration["BlobStorage:PrescriptionAttachmentsContainer"] ?? string.Empty;
         }
 
         public async Task<string> UploadAsync(string entityId, IFormFile? file, string containerName, CancellationToken cancellationToken)
@@ -38,7 +38,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
             var containerClient = blobServiceClient.GetBlobContainerClient(sanitizedContainerName);
             await containerClient.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
 
-            if (sanitizedContainerName == _prescriptionAssestsContainer)
+            if (sanitizedContainerName == _prescriptionAttachmentsContainer)
             {
                 var extension = Path.GetExtension(file.FileName);
                 var blobName = $"{entityId}_{Guid.NewGuid()}_{sanitizedContainerName}{extension}";
@@ -122,7 +122,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
             var blobServiceClient = new BlobServiceClient(_connectionString);
             var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
 
-            if (containerName == _prescriptionAssestsContainer)
+            if (containerName == _prescriptionAttachmentsContainer)
             {
                 var blobClient = containerClient.GetBlobClient(entityId.ToString());
                 return await blobClient.DeleteIfExistsAsync(cancellationToken: cancellationToken);

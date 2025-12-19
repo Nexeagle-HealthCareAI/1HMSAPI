@@ -15,6 +15,9 @@ namespace EasyHMSAPI.Data.Constants
         public static readonly string AppointmentStatus_VitalsRequired = "VITALS_REQUIRED";
         public static readonly string AppointmentStatus_Future = "FUTURE";
         public static readonly string AppointmentStatus_Ready = "READY";
+        public static readonly string AppointmentStatus_Completed = "COMPLETED";
+        public static readonly string AppointmentStatus_LabRequired = "LAB_REQUIRED";
+        public static readonly string AppointmentStatus_AwaitingReconsult = "AWAITING_RECONSULT";
 
         public static readonly string TokenStrategy_Sequential = "SEQUENTIAL";
 
