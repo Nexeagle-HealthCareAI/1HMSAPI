@@ -21,17 +21,17 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     public class VitalsJson
     {
         public BloodPressure? Bp { get; set; }
-        public short? Pulse { get; set; }
+        public decimal? Pulse { get; set; }
         public decimal? TempC { get; set; }
         public decimal? Spo2 { get; set; }
-        public short? HeightCm { get; set; }
+        public decimal? HeightCm { get; set; }
         public decimal? WeightKg { get; set; }
         public decimal? Bmi { get; set; }
     }
 
     public class BloodPressure
     {
-        public short? Sys { get; set; }
-        public short? Dia { get; set; }
+        public decimal? Sys { get; set; }
+        public decimal? Dia { get; set; }
     }
 }

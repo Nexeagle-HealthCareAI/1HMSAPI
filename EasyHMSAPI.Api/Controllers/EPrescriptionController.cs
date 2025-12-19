@@ -4,6 +4,7 @@ using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
+using MailKit.Search;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -44,7 +45,7 @@ namespace EasyHMSAPI.Api.Controllers
             return Ok(result);
         }
 
-        [HttpGet("lookup-details")]
+        [HttpGet("lookup/details")]
         [Authorize]
         public async Task<ActionResult<GetPatientLookupDataResponseModel>> GetLookupData([FromQuery] Guid hospitalId, [FromQuery] Guid doctorId)
         {
@@ -75,6 +76,42 @@ namespace EasyHMSAPI.Api.Controllers
             }
 
             return response;
+        }
+
+        [HttpGet("lookup/search")]
+        [Authorize]
+        public async Task<ActionResult<SearchLookupDataResponseModel>> SearchLookupData([FromQuery] string lookupType, [FromQuery] Guid hospitalId, [FromQuery] Guid doctorId, [FromQuery] string searchText)
+        {
+            _logger.LogInformation("SearchLookupData started at {Time} for doctorId: {DoctorId}, hospitalId: {HospitalId}, lookupType: {LookupType}, searchTerm: {SearchTerm}", DateTime.UtcNow, doctorId, hospitalId, lookupType, searchText);
+            SearchLookupDataResponseModel response = new();
+            try
+            {
+                if (hospitalId == Guid.Empty || doctorId == Guid.Empty || string.IsNullOrWhiteSpace(lookupType) || string.IsNullOrWhiteSpace(searchText))
+                {
+                    response.Success = false;
+                    response.Message = "Invalid request parameters.";
+                }
+                else
+                {
+                    SearchLookupDataRequestModel request = new()
+                    {
+                        HospitalId = hospitalId,
+                        DoctorId = doctorId,
+                        LookupType = lookupType,
+                        SearchText = searchText
+                    };
+                    response = await _mediator.Send(request);
+                    _logger.LogInformation("SearchLookupData ended for doctorId: {DoctorId}, hospitalId: {HospitalId}, lookupType: {LookupType}, searchTerm: {SearchTerm}", doctorId, hospitalId, lookupType, searchText);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in SearchLookupData for doctorId: {DoctorId}, hospitalId: {HospitalId}, lookupType: {LookupType}, searchTerm: {SearchTerm}", doctorId, hospitalId, lookupType, searchText);
+                response.Success = false;
+                response.Message = "An error occurred while processing your request." + ex.Message + ex.InnerException + ex.StackTrace;
+            }
+           
+            return Ok(response);
         }
 
         [HttpGet("configuration/preference-setting/doctorId={doctorId}&hospitalId={hospitalId}")]
