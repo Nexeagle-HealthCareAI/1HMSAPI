@@ -43,6 +43,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<DoctorSectionPreference> DoctorSectionPreferences { get; set; }
         public DbSet<UserStatus> UserStatuses { get; set; }
         public DbSet<UserHistory> UserHistories { get; set; }
+        public DbSet<PrescriptionAttachment> PrescriptionAttachments { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {   
@@ -68,6 +69,8 @@ namespace EasyHMSAPI.Domain.Context
             modelBuilder.Entity<LookupMaster>().ToTable("LookupMaster");
             modelBuilder.Entity<LookupPersonal>().ToTable("LookupPersonal");
 
+            modelBuilder.Entity<PrescriptionAttachment>().ToTable("PrescriptionAttachment");
+
             // Keys and relationships for lookup entities
             modelBuilder.Entity<LookupType>().HasKey(e => e.LookupTypeId);
             modelBuilder.Entity<LookupMaster>().HasKey(e => e.LookupId);
@@ -85,6 +88,12 @@ namespace EasyHMSAPI.Domain.Context
                 // Align column types with DB (do not force values; DB has defaults)
                 entity.Property(lp => lp.CreatedAt).HasColumnType("datetime2(3)");
                 entity.Property(lp => lp.ModifiedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<PrescriptionAttachment>(entity =>
+            {
+                entity.Property(pa => pa.RowVersion)
+                      .IsRowVersion();
             });
 
             modelBuilder.Entity<LookupMaster>()
@@ -191,6 +200,11 @@ namespace EasyHMSAPI.Domain.Context
             modelBuilder.Entity<DoctorTimeOff>().HasKey(e => e.TimeOffID);
             modelBuilder.Entity<PrescriptionSetting>().HasKey(e => e.PrescriptionSettingId);
 
+            // Configure PrescriptionAttachment
+            modelBuilder.Entity<PrescriptionAttachment>().ToTable("PrescriptionAttachment");
+            modelBuilder.Entity<PrescriptionAttachment>().HasKey(e => e.AttachmentId);
+            modelBuilder.Entity<PrescriptionAttachment>().Property(e => e.UploadedAt).HasColumnType("datetime2").IsRequired(false);
+            modelBuilder.Entity<PrescriptionAttachment>().Property(e => e.RowVersion).IsRowVersion();
 
             modelBuilder.Entity<UserAuth>()
                 .HasOne(ua => ua.User)
