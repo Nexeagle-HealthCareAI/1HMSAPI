@@ -5,6 +5,14 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
     [ExcludeFromCodeCoverage]
     public class GetPersonalizedDataResponseModel
     {
+        public bool Success { get; set; }
+        public string? Message { get; set; }
+        public List<PersonalizedDataModel>? Data { get; set; }
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class PersonalizedDataModel
+    {
         public Guid PersonalId { get; set; }
         public string Name { get; set; } = string.Empty;
         public string? ShortDesc { get; set; }
