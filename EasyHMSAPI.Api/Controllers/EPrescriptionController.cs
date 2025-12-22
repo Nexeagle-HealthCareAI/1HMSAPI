@@ -162,82 +162,136 @@ namespace EasyHMSAPI.Api.Controllers
         [Authorize]
         public async Task<IActionResult> UpsertPersonalizedData([FromQuery] Guid hospitalId, [FromQuery] Guid doctorId, [FromQuery] string lookupType, [FromBody] PersonalizedLookupDataModel model)
         {
-            var currentUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext, HttpContext.RequestAborted);
-            _logger.LogInformation("UpsertPersonalizedData invoked by: {UserName}", currentUserName ?? "(unknown)");
             _logger.LogInformation("UpsertPersonalizedData started at {Time} for hospitalId: {HospitalId}, doctorId: {DoctorId}, lookupType: {LookupType}", DateTime.UtcNow, hospitalId, doctorId, lookupType);
-            if (model == null || hospitalId == Guid.Empty || doctorId == Guid.Empty || string.IsNullOrWhiteSpace(lookupType))
-                return BadRequest(new { Message = "Invalid request parameters." });
-
-            if(!AppConstants.LookupTypes.Contains(lookupType.ToUpper()))
-                return BadRequest(new { Message = "Invalid lookup type." });
-
-            if (!await ValidateDoctorHospitalAsync(hospitalId, doctorId, HttpContext.RequestAborted))
-                return BadRequest(new { Message = "Doctor is not associated with the specified hospital." });
-
-            var request = new UpsertPersonalizedDataRequestModel
+            UpsertPersonalizedDataResponseModel response = new();
+            try
             {
-                HospitalId = hospitalId,
-                DoctorId = doctorId,
-                LookupType = lookupType,
-                username= currentUserName,
-                Data = model
-            };
-            var result = await _mediator.Send(request);
+                if (model == null || hospitalId == Guid.Empty || doctorId == Guid.Empty || string.IsNullOrWhiteSpace(lookupType))
+                {
+                    response.Success = false;
+                    response.Message = "Invalid request parameters.";
 
-            _logger.LogInformation("UpsertPersonalizedData ended for hospitalId: {HospitalId}, doctorId: {DoctorId}, lookupType: {LookupType}", hospitalId, doctorId, lookupType);
+                }
+                else if(string.IsNullOrEmpty(model.Name) || string.IsNullOrWhiteSpace(model.Name))
+                {
+                    response.Success = false;
+                    response.Message = "Invalid request parameters.";
+                }
+                else
+                {
+                    var userIdClaim = User.FindFirst("userId")?.Value;
+                    if (userIdClaim is not null && Guid.TryParse(userIdClaim, out var userId))
+                    {
+                        UpsertPersonalizedDataRequestModel request = new()
+                        {
+                            HospitalId = hospitalId,
+                            DoctorId = doctorId,
+                            LookupType = lookupType,
+                            Data = model,
+                            LoggedInUserId = userId
+                        };
 
-            return Ok(result);
+                        if (request.LoggedInUserId == Guid.Empty)
+                        {
+                            response.Success = false;
+                            response.Message = "Invalid logged in user.";
+                        }
+                        else
+                        {
+                            request.HospitalId = hospitalId;
+                            request.DoctorId = doctorId;
+                            request.LookupType = lookupType;
+
+                            response = await _mediator.Send(request);
+                            _logger.LogInformation("UpsertPersonalizedData ended for hospitalId: {HospitalId}, doctorId: {DoctorId}, lookupType: {LookupType}", hospitalId, doctorId, lookupType);
+                        }
+                    }
+                    else
+                    {
+                        response.Success = false;
+                        response.Message = "Invalid logged in user.";
+                    }
+                }
+            }
+            catch(Exception ex)
+            {
+                _logger.LogError(ex, "Error in UpsertPersonalizedData for hospitalId: {HospitalId}, doctorId: {DoctorId}, lookupType: {LookupType}", hospitalId, doctorId, lookupType);
+                response.Success = false;
+                response.Message = "An error occurred while processing your request." + ex.Message + ex.InnerException + ex.StackTrace;
+            }
+
+            return Ok(response);
         }
 
         [HttpGet("configuration/personalized-data")]
         [Authorize]
-        public async Task<IActionResult> GetPersonalizedData([FromQuery] Guid hospitalId, [FromQuery] Guid doctorId, [FromQuery] string lookupType)
+        public async Task<ActionResult<GetPersonalizedDataResponseModel>> GetPersonalizedData([FromQuery] Guid hospitalId, [FromQuery] Guid doctorId, [FromQuery] string lookupType)
         {
             _logger.LogInformation("GetPersonalizedData started at {Time} for hospitalId: {HospitalId}, doctorId: {DoctorId}, lookupType: {LookupType}", DateTime.UtcNow, hospitalId, doctorId, lookupType);
-            if (hospitalId == Guid.Empty || doctorId == Guid.Empty || string.IsNullOrWhiteSpace(lookupType))
-                return BadRequest(new { Message = "Invalid request parameters." });
-
-            if (!AppConstants.LookupTypes.Contains(lookupType.ToUpper()))
-                return BadRequest(new { Message = "Invalid lookup type." });
-
-            if (!await ValidateDoctorHospitalAsync(hospitalId, doctorId, HttpContext.RequestAborted))
-                return BadRequest(new { Message = "Doctor is not associated with the specified hospital." });
-
-            var request = new GetPersonalizedDataRequestModel
+            GetPersonalizedDataResponseModel response = new();
+            try
             {
-                HospitalId = hospitalId,
-                DoctorId = doctorId,
-                LookupType = lookupType
-            };
-            var result = await _mediator.Send(request);
+                if (hospitalId == Guid.Empty || doctorId == Guid.Empty || string.IsNullOrWhiteSpace(lookupType))
+                {
+                    response.Success = false;
+                    response.Message = "Invalid request parameters.";
+                }
+                else
+                {
+                    var request = new GetPersonalizedDataRequestModel
+                    {
+                        HospitalId = hospitalId,
+                        DoctorId = doctorId,
+                        LookupType = lookupType
+                    };
+                    response = await _mediator.Send(request);
 
-            _logger.LogInformation("GetPersonalizedData ended for hospitalId: {HospitalId}, doctorId: {DoctorId}, lookupType: {LookupType}", hospitalId, doctorId, lookupType);
+                    _logger.LogInformation("GetPersonalizedData ended for hospitalId: {HospitalId}, doctorId: {DoctorId}, lookupType: {LookupType}", hospitalId, doctorId, lookupType);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetPersonalizedData for hospitalId: {HospitalId}, doctorId: {DoctorId}, lookupType: {LookupType}", hospitalId, doctorId, lookupType);
+                response.Success = false;
+                response.Message = "An error occurred while processing your request." + ex.Message + ex.InnerException + ex.StackTrace;
+            }
 
-            return Ok(result);
+            return Ok(response);
         }
 
         [HttpDelete("configuration/personalized-data")]
         [Authorize]
-        public async Task<IActionResult> DeletePersonalizedData([FromQuery] Guid hospitalId, [FromQuery] Guid doctorId, [FromQuery] Guid personalId)
+        public async Task<ActionResult<DeletePersonalizedDataResponseModel>> DeletePersonalizedData([FromQuery] Guid hospitalId, [FromQuery] Guid doctorId, [FromQuery] Guid personalId)
         {
             _logger.LogInformation("DeletePersonalizedData started at {Time} for hospitalId: {HospitalId}, doctorId: {DoctorId}, personalId: {PersonalId}", DateTime.UtcNow, hospitalId, doctorId, personalId);
-            if (hospitalId == Guid.Empty || doctorId == Guid.Empty || personalId == Guid.Empty)
-                return BadRequest(new { Message = "Invalid request parameters." });
-
-            if (!await ValidateDoctorHospitalAsync(hospitalId, doctorId, HttpContext.RequestAborted))
-                return BadRequest(new { Message = "Doctor is not associated with the specified hospital." });
-
-            var request = new DeletePersonalizedDataRequestModel
+            DeletePersonalizedDataResponseModel response = new();
+            try
             {
-                HospitalId = hospitalId,
-                DoctorId = doctorId,
-                PersonalId = personalId
-            };
-            var result = await _mediator.Send(request);
+                if (hospitalId == Guid.Empty || doctorId == Guid.Empty || personalId == Guid.Empty)
+                {
+                    response.Success = false;
+                    response.Message = "Invalid request parameters.";
+                }
+                else
+                {
+                    var request = new DeletePersonalizedDataRequestModel
+                    {
+                        HospitalId = hospitalId,
+                        DoctorId = doctorId,
+                        PersonalId = personalId
+                    };
+                    response = await _mediator.Send(request);
 
-            _logger.LogInformation("DeletePersonalizedData ended for hospitalId: {HospitalId}, doctorId: {DoctorId}, personalId: {PersonalId}", hospitalId, doctorId, personalId);
+                    _logger.LogInformation("DeletePersonalizedData ended for hospitalId: {HospitalId}, doctorId: {DoctorId}, personalId: {PersonalId}", hospitalId, doctorId, personalId);
+                }
+            }
+            catch(Exception ex)
+            {
+                response.Success = false;
+                response.Message = "An error occurred while processing your request." + ex.Message + ex.InnerException + ex.StackTrace;
+            }
 
-            return Ok(result);
+            return Ok(response);
         }
 
         [HttpPost("attachments/upload")]

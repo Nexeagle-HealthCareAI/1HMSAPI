@@ -5,10 +5,10 @@ using System.Diagnostics.CodeAnalysis;
 namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
 {
     [ExcludeFromCodeCoverage]
-    public class GetPersonalizedDataRequestModel : IRequest<List<GetPersonalizedDataResponseModel>>
+    public class GetPersonalizedDataRequestModel : IRequest<GetPersonalizedDataResponseModel>
     {
         public Guid HospitalId { get; set; }
         public Guid DoctorId { get; set; }
-        public string LookupType { get; set; } = string.Empty;
+        public string? LookupType { get; set; }
     }
 }
