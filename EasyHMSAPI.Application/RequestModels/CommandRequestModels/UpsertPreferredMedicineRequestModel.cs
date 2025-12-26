@@ -19,15 +19,17 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     [ExcludeFromCodeCoverage]
     public class PreferredMedicineModel
     {
-        public string GenericName { get; set; } = string.Empty;
-        public string BrandName { get; set; } = string.Empty;
-        public string Form { get; set; } = string.Empty;
-        public string StrengthValue { get; set; } = string.Empty;
-        public string StrengthUnit { get; set; } = string.Empty;
-        public string Route { get; set; } = string.Empty;
-        public string Dose { get; set; } = string.Empty;
-        public string Indication { get; set; } = string.Empty;
-        public string Notes { get; set; } = string.Empty;
-        public string MedicineId { get; set; } = string.Empty;
+        public string? MedicineName { get; set; }
+        public string? BrancdName { get; set; }
+        public string? Manufacturer { get; set; }
+        public string? GenericName { get; set; }
+        public string? BrandName { get; set; }
+        public string? DosageForm { get; set; }
+        public string? Strength { get; set; }
+        public int? Price { get; set; }
+        public string? UsageDescription { get; set; }
+        public string? SideEffects { get; set; }
+        public string? Notes { get; set; }
+        public int? UsageCount { get; set; }
     }
 }

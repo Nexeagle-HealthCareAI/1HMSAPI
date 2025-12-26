@@ -2,6 +2,7 @@
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -69,7 +70,7 @@ namespace EasyHMSAPI.Api.Controllers
         }
 
         [HttpGet("doctor-preference/doctorId={doctorId}&hospitalId={hospitalId}")]
-        //[Authorize]
+        [Authorize]
         public async Task<ActionResult<GetPreferredMedicinesResponseModel>> GetPreferredMedicines(Guid doctorId, Guid hospitalId)
         {
             _logger.LogInformation("GetPreferredMedicines started at {Time} for doctorId: {DoctorId}, hospitalId: {HospitalId}", DateTime.UtcNow, doctorId, hospitalId);
@@ -104,7 +105,7 @@ namespace EasyHMSAPI.Api.Controllers
         }
 
         [HttpDelete("doctor-preference")]
-        //[Authorize]
+        [Authorize]
         public async Task<ActionResult<DeletePreferredMedicineResponseModel>> DeletePreferredMedicine(DeletePreferredMedicineRequestModel request)
         {
             _logger.LogInformation("DeletePreferredMedicine started at {Time} for preferredId: {PreferredId}, doctorId: {DoctorId}, hospitalId: {HospitalId}", DateTime.UtcNow, request.PreferredId, request.DoctorId, request.HospitalId);
@@ -129,6 +130,41 @@ namespace EasyHMSAPI.Api.Controllers
                 _logger.LogError(ex, "Error in DeletePreferredMedicine for preferredId: {PreferredId}, doctorId: {DoctorId}, hospitalId: {HospitalId}" + ex.Message + ex.InnerException + ex.StackTrace, request.PreferredId, request.DoctorId, request.HospitalId);
             }
             
+            return Ok(response);
+        }
+
+        [HttpGet("search")]
+        [Authorize]
+        public async Task<ActionResult<SearchMedicinesResponseModel>> GetMedicineSuggestions([FromQuery] Guid hospitalId, [FromQuery] Guid doctorId, [FromQuery] string searchText)
+        {
+            _logger.LogInformation("SearchMedicines started at {Time} for doctorId: {DoctorId}, hospitalId: {HospitalId}, searchTerm: {SearchTerm}", DateTime.UtcNow, doctorId, hospitalId, searchText);
+            SearchMedicinesResponseModel response = new();
+            try
+            {
+                if (hospitalId == Guid.Empty || doctorId == Guid.Empty || string.IsNullOrWhiteSpace(searchText) || string.IsNullOrEmpty(searchText))
+                {
+                    response.Success = false;
+                    response.Message = "Invalid request parameters.";
+                }
+                else
+                {
+                    SearchMedicinesRequestModel request = new()
+                    {
+                        HospitalId = hospitalId,
+                        DoctorId = doctorId,
+                        SearchText = searchText
+                    };
+                    response = await _mediator.Send(request);
+                    _logger.LogInformation("SearchLookupData ended for doctorId: {DoctorId}, hospitalId: {HospitalId}, searchText: {searchText}", doctorId, hospitalId, searchText);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Error in SearchMedicines" + ex.Message + ex.InnerException + ex.StackTrace);
+                response.Success = false;
+                response.Message = "An error occurred while processing the request." + ex.Message + ex.InnerException + ex.StackTrace;
+            }
+
             return Ok(response);
         }
     }

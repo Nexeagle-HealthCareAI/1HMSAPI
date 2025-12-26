@@ -12,6 +12,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<LookupMaster> LookupMasters { get; set; }
         public DbSet<LookupPersonal> LookupPersonals { get; set; }
         public DbSet<DoctorPreferredMedicine> DoctorPreferredMedicines { get; set; }
+        public DbSet<MedicineMaster> MedicineMaster { get; set; }
         public DbSet<User> Users { get; set; }
         public DbSet<UserAuth> UserAuths { get; set; }
         public DbSet<UserProfile> UserProfiles { get; set; }
@@ -365,24 +366,22 @@ namespace EasyHMSAPI.Domain.Context
             // DoctorPreferredMedicine
             modelBuilder.Entity<DoctorPreferredMedicine>().ToTable("DoctorPreferredMedicine");
             modelBuilder.Entity<DoctorPreferredMedicine>().HasKey(e => e.PreferrredId);
+            modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.MedicineName).HasMaxLength(400);
             modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.BrandName).HasMaxLength(400);
             modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.GenericName).HasMaxLength(400).IsRequired();
-            modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.Form).HasMaxLength(100);
-            modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.StrengthValue).HasMaxLength(100);
-            modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.StrengthUnit).HasMaxLength(50);
-            modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.Route).HasMaxLength(50);
-            modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.Dose).HasMaxLength(100);
-            modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.Frequency).HasMaxLength(50);
-            modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.DurationValue).HasMaxLength(50);
-            modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.DurationUnit).HasMaxLength(20);
-            modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.Indication).HasMaxLength(400);
+            modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.Manufacturer).HasMaxLength(200);
+            modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.DosageForm).HasMaxLength(100);
+            modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.Strength).HasMaxLength(100);
+            modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.Price);
+            modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.Usage).HasMaxLength(500);
+            modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.SideEffects).HasMaxLength(500);
             modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.Notes).HasMaxLength(1000);
-            modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.MedicineId).HasMaxLength(100);
             modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.IsActive).IsRequired();
             modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.CreatedAt).HasColumnType("datetime2").IsRequired();
             modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.CreatedBy).HasMaxLength(100).IsRequired(false);
             modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.UpdatedAt).HasColumnType("datetime2").IsRequired(false);
             modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.UpdatedBy).HasMaxLength(100).IsRequired(false);
+            modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.UsageCount);
             modelBuilder.Entity<DoctorPreferredMedicine>().Property(e => e.RowVersion).IsRowVersion();
 
             modelBuilder.Entity<UserStatus>().ToTable("UserStatus");
