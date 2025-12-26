@@ -79,7 +79,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 if (!string.IsNullOrEmpty(request.Medicine.UsageDescription)) existingPreference.Usage = request.Medicine.UsageDescription;
                                 if (!string.IsNullOrEmpty(request.Medicine.SideEffects)) existingPreference.SideEffects = request.Medicine.SideEffects;
                                 if (!string.IsNullOrEmpty(request.Medicine.Notes)) existingPreference.Notes = request.Medicine.Notes;
-                                if (request.Medicine.UsageCount.HasValue) existingPreference.UsageCount = request.Medicine.UsageCount;
                                 existingPreference.UpdatedAt = DateTime.UtcNow;
                                 existingPreference.UpdatedBy = request.LoggedInUserId.ToString();
                                 await _dbContext.SaveChangesAsync(cancellationToken);
@@ -110,7 +109,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         Usage = request.Medicine.UsageDescription,
                         SideEffects = request.Medicine.SideEffects,
                         Notes = request.Medicine.Notes,
-                        UsageCount = request.Medicine.UsageCount,
+                        UsageCount = 0,
                         CreatedAt = DateTime.UtcNow,
                         CreatedBy = request.LoggedInUserId.ToString(),
                         UpdatedAt = DateTime.UtcNow,

@@ -309,27 +309,9 @@ namespace EasyHMSAPI.Api.Controllers
                 }
                 else
                 {
-                    var userIdClaim = User.FindFirst("userId")?.Value;
-                    if (userIdClaim is not null && Guid.TryParse(userIdClaim, out var userId))
-                    {
-                        request.LoggedInUserId = userId;
-
-                        if (request.LoggedInUserId == Guid.Empty)
-                        {
-                            result.Success = false;
-                            result.Message = "Invalid logged in user.";
-                        }
-                        else
-                        {
-                            result =  await  _mediator.Send(request);
-                            _logger.LogInformation("UploadAttachment ended for appointmentId: {AppointmentId}, patientId: {PatientId}", request.AppointmentId, request.PatientId);
-                        }
-                    }
-                    else
-                    {
-                        result.Success = false;
-                        result.Message = "Invalid logged in user.";
-                    }
+                    request.UserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                    result = await _mediator.Send(request);
+                    _logger.LogInformation("UploadAttachment ended for appointmentId: {AppointmentId}, patientId: {PatientId}", request.AppointmentId, request.PatientId);
                 }
             }
             catch(Exception ex)

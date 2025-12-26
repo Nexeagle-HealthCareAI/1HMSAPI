@@ -30,6 +30,5 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? UsageDescription { get; set; }
         public string? SideEffects { get; set; }
         public string? Notes { get; set; }
-        public int? UsageCount { get; set; }
     }
 }

@@ -27,6 +27,6 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         [Required]
         public Guid AppointmentId { get; set; }
         [JsonIgnore]
-        public Guid LoggedInUserId { get; set; }
+        public string? UserName { get; set; }
     }
 }
