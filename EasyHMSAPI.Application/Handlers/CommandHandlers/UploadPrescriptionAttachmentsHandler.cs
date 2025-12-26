@@ -87,7 +87,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 FileName = request.FileName,
                                 Notes = request.Notes,
                                 UploadedAt = DateTime.UtcNow,
-                                UploadedBy = request.LoggedInUserId.ToString(),
+                                UploadedBy = request.UserName ?? string.Empty
                             };
                             _context.PrescriptionAttachments.Add(newAttachment);
 

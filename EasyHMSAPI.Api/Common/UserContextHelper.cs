@@ -1,12 +1,6 @@
-using System;
-using System.Linq;
-using System.Security.Claims;
-using System.Threading;
-using System.Threading.Tasks;
 using EasyHMSAPI.Domain.Context;
-using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
+using System.Security.Claims;
 
 namespace EasyHMSAPI.Api.Common
 {
