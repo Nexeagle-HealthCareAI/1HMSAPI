@@ -30,6 +30,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             {
                 var existingDoctor = await _dbContext.Doctors
                     .Where(x => x.DoctorID == request.DoctorId)
+                    .AsNoTracking()
                     .FirstOrDefaultAsync(cancellationToken);
                 if (existingDoctor == null)
                 {
@@ -39,6 +40,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
                 var existingHospital = await _dbContext.Hospitals
                     .Where(x => x.HospitalID == request.HospitalId)
+                    .AsNoTracking()
                     .FirstOrDefaultAsync(cancellationToken);
                 if (existingHospital == null)
                 {
