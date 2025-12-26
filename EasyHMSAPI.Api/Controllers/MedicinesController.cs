@@ -136,7 +136,7 @@ namespace EasyHMSAPI.Api.Controllers
         [Authorize]
         public async Task<ActionResult<SearchMedicinesResponseModel>> GetMedicineSuggestions([FromQuery] Guid hospitalId, [FromQuery] Guid doctorId, [FromQuery] string searchText)
         {
-            _logger.LogInformation("SearchMedicines started at {Time} for doctorId: {DoctorId}, hospitalId: {HospitalId}, searchTerm: {SearchTerm}", DateTime.UtcNow, doctorId, hospitalId, searchText);
+            _logger.LogInformation("SearchMedicines started at {Time} for doctorId: {doctorId}, hospitalId: {hospitalId}, searchText: {searchText}", DateTime.UtcNow, doctorId, hospitalId, searchText);
             SearchMedicinesResponseModel response = new();
             try
             {
@@ -154,7 +154,7 @@ namespace EasyHMSAPI.Api.Controllers
                         SearchText = searchText
                     };
                     response = await _mediator.Send(request);
-                    _logger.LogInformation("SearchLookupData ended for doctorId: {DoctorId}, hospitalId: {HospitalId}, searchText: {searchText}", doctorId, hospitalId, searchText);
+                    _logger.LogInformation("SearchLookupData ended for doctorId: {doctorId}, hospitalId: {hospitalId}, searchText: {searchText}", doctorId, hospitalId, searchText);
                 }
             }
             catch (Exception ex)
