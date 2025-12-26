@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 {
-    public class GetPreferredMedicinesHandler : IRequestHandler<GetPreferredMedicinesRequestModel, ResponseModels.QueryResponseModels.GetPreferredMedicinesResponseModel>
+    public class GetPreferredMedicinesHandler : IRequestHandler<GetPreferredMedicinesRequestModel, GetPreferredMedicinesResponseModel>
     {
         private readonly AppDbContext _dbContext;
         private readonly IDoctorValidationHelper _doctorValidationHelper;
@@ -27,6 +27,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             {
                 var existingDoctor = await _dbContext.Doctors
                   .Where(x => x.DoctorID == request.DoctorId)
+                  .AsNoTracking()
                   .FirstOrDefaultAsync(cancellationToken);
                 if(existingDoctor == null)
                 {
@@ -35,6 +36,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
                 var existingHospital = await _dbContext.Hospitals
                     .Where(x => x.HospitalID == request.HospitalId)
+                    .AsNoTracking()
                     .FirstOrDefaultAsync(cancellationToken) ?? throw new Exception("Hospital not found.");
                 if (existingHospital == null) 
                 { 
@@ -51,21 +53,23 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 var list = await _dbContext.DoctorPreferredMedicines
                     .AsNoTracking()
                     .Where(d => d.DoctorId == request.DoctorId && d.HospitalId == request.HospitalId && d.IsActive)
-                    .Select(d => new PreferredMedicineDataModel
+                    .Select(x => new PreferredMedicineDataModel
                     {
-                        PrefferedId = d.PreferrredId,
-                        GenericName = d.GenericName,
-                        BrandName = d.BrandName ?? string.Empty,
-                        Form = d.Form ?? string.Empty,
-                        StrengthValue = d.StrengthValue ?? string.Empty,
-                        StrengthUnit = d.StrengthUnit ?? string.Empty,
-                        Route = d.Route ?? string.Empty,
-                        Dose = d.Dose ?? string.Empty,
-                        Indication = d.Indication ?? string.Empty,
-                        Notes = d.Notes ?? string.Empty,
-                        MedicineId = d.MedicineId ?? string.Empty,
-                        UsageCount = d.UsageCount,
-                        LastModifiedAt = d.UpdatedAt
+                        PrefferedId = x.PreferrredId,
+                        MedicineName = x.MedicineName,
+                        BrandName = x.BrandName,
+                        GenericName = x.GenericName,
+                        Manufacturer = x.Manufacturer,
+                        DosageForm = x.DosageForm,
+                        Strength = x.Strength,
+                        UsageDescription = x.Usage,
+                        SideEffects = x.SideEffects,
+                        Price = x.Price,
+                        Notes = x.Notes,
+                        IsActive = x.IsActive,
+                        UsageCount = x.UsageCount,
+                        LastModifiedAt = x.UpdatedAt,
+                        LastModifiedBy = x.UpdatedBy
                     })
                     .ToListAsync(cancellationToken);
                 if(list.Count > 0)
