@@ -24,5 +24,8 @@ namespace EasyHMSAPI.Data.Constants
         
         public static readonly string Prescription_ActionType_Submit = "submit";
         public static readonly string Prescription_ActionType_Draft = "draft";
+
+        public static readonly string LookupType_Procedure = "PROCEDURE";
+        public static readonly string LookupType_Investigation = "INVESTIGATION";
     }
 }

@@ -130,7 +130,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 if (request.Orders.Investigations is not null)
                                 {
                                     var investigationLookup = await _context.LookupTypes
-                                        .Where(x => x.LookupTypeCode == "INVESTIGATION")
+                                        .Where(x => x.LookupTypeCode == AppConstants.LookupType_Investigation)
                                         .Select(x => new
                                         {
                                             x.LookupTypeId,
@@ -143,7 +143,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                         PrescriptionId = existingPrescription.PrescriptionId,
                                         LookupTypeId = investigationLookup is not null ? investigationLookup.LookupTypeId : 0,
                                         OrdersType = investigationLookup is not null ? investigationLookup.LookupTypeCode : string.Empty,
-                                        Name = request.Orders.Investigations.ToString(),
+                                        Name = string.Join(", ", request.Orders.Investigations),
                                         CreatedAt = request.CurrentDateTime,
                                         UpdatedAt = request.CurrentDateTime,
                                         UpdateBy = request.LoggedInUserName,
@@ -154,7 +154,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 if(request.Orders.Procedures is not null)
                                 {
                                     var medicationLookup = await _context.LookupTypes
-                                        .Where(x => x.LookupTypeCode == "PROCEDURE")
+                                        .Where(x => x.LookupTypeCode == AppConstants.LookupType_Procedure)
                                         .Select(x => new
                                         {
                                             x.LookupTypeId,
@@ -167,7 +167,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                         PrescriptionId = existingPrescription.PrescriptionId,
                                         LookupTypeId = medicationLookup is not null ? medicationLookup.LookupTypeId : 0,
                                         OrdersType = medicationLookup is not null ? medicationLookup.LookupTypeCode : string.Empty,
-                                        Name = request.Orders.Procedures.ToString(),
+                                        Name = string.Join(", ", request.Orders.Procedures),
                                         CreatedAt = request.CurrentDateTime,
                                         UpdatedAt = request.CurrentDateTime,
                                         UpdateBy = request.LoggedInUserName,
@@ -241,6 +241,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             }
 
                             await _context.SaveChangesAsync(cancellationToken);
+
                             response.Success = true;
                             response.Message = "Prescription saved for later.";
                         }
@@ -282,7 +283,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             if (request.Orders.Investigations is not null)
                             {
                                 var investigationLookup = await _context.LookupTypes
-                                    .Where(x => x.LookupTypeCode == "INVESTIGATION")
+                                    .Where(x => x.LookupTypeCode == AppConstants.LookupType_Investigation)
                                     .Select(x => new
                                     {
                                         x.LookupTypeId,
@@ -295,7 +296,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                     PrescriptionId = newPrescriptionId,
                                     LookupTypeId = investigationLookup is not null ? investigationLookup.LookupTypeId : 0,
                                     OrdersType = investigationLookup is not null ? investigationLookup.LookupTypeCode : string.Empty,
-                                    Name = request.Orders.Investigations.ToString(),
+                                    Name = string.Join(", ", request.Orders.Investigations),
                                     CreatedAt = request.CurrentDateTime,
                                     UpdatedAt = request.CurrentDateTime,
                                     UpdateBy = request.LoggedInUserName,
@@ -305,7 +306,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             if (request.Orders.Procedures is not null)
                             {
                                 var procedureLookup = await _context.LookupTypes
-                                    .Where(x => x.LookupTypeCode == "PROCEDURE")
+                                    .Where(x => x.LookupTypeCode == AppConstants.LookupType_Procedure)
                                     .Select(x => new
                                     {
                                         x.LookupTypeId,
@@ -318,7 +319,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                     PrescriptionId = newPrescriptionId,
                                     LookupTypeId = procedureLookup is not null ? procedureLookup.LookupTypeId : 0,
                                     OrdersType = procedureLookup is not null ? procedureLookup.LookupTypeCode : string.Empty,
-                                    Name = request.Orders.Procedures.ToString(),
+                                    Name = string.Join(", ", request.Orders.Procedures),
                                     CreatedAt = request.CurrentDateTime,
                                     UpdatedAt = request.CurrentDateTime,
                                     UpdateBy = request.LoggedInUserName,
@@ -400,6 +401,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         _context.Prescription.Add(newPrescription);
 
                         await _context.SaveChangesAsync(cancellationToken);
+
                         response.Success = true;
                         response.Message = "Prescription saved.";
                     }
