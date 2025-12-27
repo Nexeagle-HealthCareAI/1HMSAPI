@@ -10,7 +10,7 @@ namespace EasyHMSAPI.Domain.Entities
         public Guid UserProfileID { get; set; }
         public Guid UserID { get; set; }
         public int UserStatusId { get; set; } // Added
-        public UserStatus UserStatus { get; set; } // Navigation property
+        public UserStatus? UserStatus { get; set; } // Navigation property
         public string FullName { get; set; } = null!;
         public string? Gender { get; set; }
         public string? Language { get; set; }

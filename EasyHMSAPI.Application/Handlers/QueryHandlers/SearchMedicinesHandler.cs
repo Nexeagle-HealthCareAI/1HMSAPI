@@ -59,7 +59,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 var personalMedicines = await _dbContext.DoctorPreferredMedicines
                     .Where(x => x.HospitalId == request.HospitalId
                                 && x.DoctorId == request.DoctorId
-                                && (x.MedicineName != null && x.MedicineName.Contains(searchTextLower)))
+                                && ((x.MedicineName != null && x.MedicineName.Contains(searchTextLower)) 
+                                || (x.BrandName != null && x.BrandName.Contains(searchTextLower))
+                                ))
                     .Select(x => new PersonalMedicineDataModel
                     {
                         MedicineName = x.MedicineName,
@@ -75,7 +77,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     .ToListAsync(cancellationToken);
 
                 var masterMedicines = await _dbContext.MedicineMaster
-                    .Where(x => x.MedicineName != null && x.MedicineName.Contains(searchTextLower))
+                    .Where(x => (x.MedicineName != null && x.MedicineName.Contains(searchTextLower)
+                                || x.BrandName != null && x.BrandName.Contains(searchTextLower)
+                                ))
                     .Select(x => new MasterMedicineDataModel
                     {
                         MedicineName = x.MedicineName,

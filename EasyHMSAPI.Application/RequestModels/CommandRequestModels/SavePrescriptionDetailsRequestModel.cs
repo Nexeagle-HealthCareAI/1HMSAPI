@@ -1,0 +1,112 @@
+﻿using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using MediatR;
+using System.Diagnostics.CodeAnalysis;
+using System.Text.Json.Serialization;
+
+namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
+{
+    [ExcludeFromCodeCoverage]
+    public class SavePrescriptionDetailsRequestModel : IRequest<SavePrescriptionDetailsResponseModel>
+    {
+        public Guid? PrescriptionId { get; set; }
+        public Guid AppointmentId { get; set; }
+        public string? PatientId { get; set; }
+        public Guid DoctorId { get; set; }
+        public Guid HospitalId { get; set; }
+        public PatientVitalsModel? VitalsJson { get; set; }
+        public string? ChiefComplaint { get; set; }
+        public string? History { get; set; }
+        public string? Comorbidity { get; set; }
+        public string? Examination { get; set; }
+        public string? Diagnosis { get; set; }
+        public OrdersModel? Orders { get; set; }
+        public List<MedicationModel>? Medications { get; set; }
+        public List<NonPharmacologicalAdviceModel>? NonPharmacologicalAdvice { get; set; }
+        public string? PrivateNotes { get; set; }
+        public CertificateModel? Certificates { get; set; }
+        public FollowUpModel? FollowUp { get; set; }
+        public List<ImmunizationModel>? Immunizations { get; set; }
+        [JsonIgnore]
+        public string? ActionType { get; set; }
+        [JsonIgnore]
+        public DateTime CurrentDateTime { get; set; }
+        [JsonIgnore]
+        public Guid LoggedInUserId { get; set; }
+        public string? LoggedInUserName { get; set; }
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class OrdersModel
+    {
+        public List<string>? Investigations { get; set; }
+        public List<string>? Procedures { get; set; }
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class MedicationModel
+    {
+        public string? DrugName { get; set; }
+        public string? Dose { get; set; }
+        public string? Route { get; set; }
+        public string? Frequency { get; set; }
+        public string? Duration { get; set; }
+        public string? Instructions { get; set; }
+        public string? SaltName { get; set; }
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class NonPharmacologicalAdviceModel
+    {
+        public string? Advice { get; set; }
+        public string? Duration { get; set; }
+        public string? Notes { get; set; }
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class CertificateModel
+    {
+        public string? Type { get; set; }
+        public string? Content { get; set; }
+        public DateTime IssuedDate { get; set; }
+        public DateTime FromDate { get; set; }
+        public DateTime? ToDate { get; set; }
+        public string? FitnessStatus { get; set; }
+        public string? Remarks { get; set; }
+        public string? Category { get; set; }
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class FollowUpModel
+    {
+        public DateTime FollowUpOn { get; set; }
+        public string? Reason { get; set; }
+        public string? PatientInstructions { get; set; }
+        public bool ReferralEnabled { get; set; }
+        public ReferralModel? Referral { get; set; }
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class ReferralModel
+    {
+        public ReferredToModel? ReferredTo { get; set; }
+        public string? ClinicalSummary { get; set; }
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class ReferredToModel
+    {
+        public string? Specialty { get; set; }
+        public string? DoctorName { get; set; }
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class ImmunizationModel
+    {
+        public string? Name { get; set; }
+        public string? Status { get; set; }
+        public DateTime Date { get; set; }
+        public DateTime? NextDueDate { get; set; }
+        public int DoseNumber { get; set; }
+        public string? Remarks { get; set; }
+    }
+}
