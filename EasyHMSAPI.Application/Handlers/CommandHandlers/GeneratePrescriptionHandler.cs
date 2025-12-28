@@ -1,6 +1,7 @@
 using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -155,7 +156,101 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     }
                     catch
                     {
+                    }
+                }
 
+                // Fetch prescription details if it exists
+                var prescriptionDetails = await _context.Prescription
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(p => p.ApptId == request.AppointmentId
+                        && p.DoctorId == request.DoctorId
+                        && p.HospitalId == request.HospitalId
+                        && p.PatientId == request.PatientId, cancellationToken);
+
+                OrdersModel? ordersModel = null;
+                List<MedicationModel>? medicationsModel = null;
+                List<NonPharmacologicalAdviceModel>? nonPharmacologicalAdviceModel = null;
+                CertificateDataModel? certificatesModel = null;
+                FollowUpModel? followUpModel = null;
+                List<ImmunizationModel>? immunizationsModel = null;
+
+                if (prescriptionDetails != null)
+                {
+                    // Fetch investigations
+                    var prescriptionInvestigation = await _context.PrescriptionInvestigation
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(x => x.PrescriptionId == prescriptionDetails.PrescriptionId
+                            && x.OrdersType == AppConstants.LookupType_Investigation, cancellationToken);
+
+                    // Fetch procedures
+                    var prescriptionProcedure = await _context.PrescriptionInvestigation
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(x => x.PrescriptionId == prescriptionDetails.PrescriptionId
+                            && x.OrdersType == AppConstants.LookupType_Procedure, cancellationToken);
+
+                    // Fetch all medicines
+                    var prescriptionMedicines = await _context.PrescriptionMedicine
+                        .AsNoTracking()
+                        .Where(x => x.PrescriptionId == prescriptionDetails.PrescriptionId)
+                        .ToListAsync(cancellationToken);
+
+                    // Build Orders model
+                    ordersModel = new   OrdersModel
+                    {
+                        Investigations = prescriptionInvestigation?.Name is not null
+                            ? prescriptionInvestigation.Name.Split(new[] { ", " }, StringSplitOptions.RemoveEmptyEntries).ToList()
+                            : null,
+                        Procedures = prescriptionProcedure?.Name is not null
+                            ? prescriptionProcedure.Name.Split(new[] { ", " }, StringSplitOptions.RemoveEmptyEntries).ToList()
+                            : null
+                    };
+
+                    // Build Medications model
+                    if (prescriptionMedicines?.Count > 0)
+                    {
+                        medicationsModel = prescriptionMedicines.Select(m => new MedicationModel
+                        {
+                            DrugName = m.MedicineName,
+                            Dose = m.Dosage,
+                            Route = m.Route,
+                            Frequency = m.Frequency,
+                            Duration = m.Durations,
+                            Instructions = m.Instructions,
+                            SaltName = m.SaltName
+                        }).ToList();
+                    }
+
+                    // Parse NonPharmacologicalAdvice
+                    if (!string.IsNullOrWhiteSpace(prescriptionDetails.NonPharmacologicalAdvice))
+                    {
+                        nonPharmacologicalAdviceModel = SafeDeserialize<List<NonPharmacologicalAdviceModel>>(prescriptionDetails.NonPharmacologicalAdvice);
+                    }
+
+                    // Parse Certificates
+                    if (!string.IsNullOrWhiteSpace(prescriptionDetails.CertificatesAndNotes))
+                    {
+                        certificatesModel = SafeDeserialize<CertificateDataModel>(prescriptionDetails.CertificatesAndNotes);
+                    }
+
+                    // Build FollowUp model
+                    ReferralModel? referralModel = null;
+                    if (!string.IsNullOrWhiteSpace(prescriptionDetails.Referral))
+                    {
+                        referralModel = SafeDeserialize<ReferralModel>(prescriptionDetails.Referral);
+                    }
+
+                    followUpModel = new FollowUpModel
+                    {
+                        FollowUpOn = prescriptionDetails.FollowUpDate,
+                        Reason = prescriptionDetails.FollowUpNotes,
+                        Referral = referralModel,
+                        ReferralEnabled = prescriptionDetails.Referral is not null
+                    };
+
+                    // Parse Immunizations
+                    if (!string.IsNullOrWhiteSpace(prescriptionDetails.Immunizations))
+                    {
+                        immunizationsModel = SafeDeserialize<List<ImmunizationModel>>(prescriptionDetails.Immunizations);
                     }
                 }
 
@@ -166,7 +261,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     {
                         PatientDetails = patientDetails,
                         Vitals = vitalsModel
-                    }
+                    },
+                    ChiefComplaint = prescriptionDetails?.ChiefComplaint,
+                    History = prescriptionDetails?.History,
+                    Comorbidity = prescriptionDetails?.Comorbidity,
+                    Examination = prescriptionDetails?.Examination,
+                    Diagnosis = prescriptionDetails?.Diagnosis,
+                    Orders = ordersModel,
+                    Medications = medicationsModel,
+                    NonPharmacologicalAdvice = nonPharmacologicalAdviceModel,
+                    PrivateNotes = prescriptionDetails?.PrivateNotes,
+                    Certificates = certificatesModel,
+                    FollowUp = followUpModel,
+                    Immunizations = immunizationsModel
                 };
 
                 response.Success = true;
@@ -230,6 +337,21 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
 
             return model;
+        }
+
+        private T? SafeDeserialize<T>(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+                return default;
+
+            try
+            {
+                return JsonSerializer.Deserialize<T>(json);
+            }
+            catch (JsonException)
+            {
+                return default;
+            }
         }
     }
 }
