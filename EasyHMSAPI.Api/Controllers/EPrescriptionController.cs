@@ -22,6 +22,7 @@ namespace EasyHMSAPI.Api.Controllers
     {
         private readonly IMediator _mediator;
         private readonly ILogger<EPrescriptionController> _logger;
+
         public EPrescriptionController(IMediator mediator, ILogger<EPrescriptionController> logger)
         {
             _mediator = mediator;
@@ -516,7 +517,7 @@ namespace EasyHMSAPI.Api.Controllers
             return Ok(response);
         }
 
-        [HttpPost("deatils/generate-prescription")]
+        [HttpPost("details/generate-prescription")]
         [Authorize]
         public async Task<ActionResult<GeneratePrescriptionResponseModel>> GeneratePrescription([FromBody] GeneratePrescriptionRequestModel request)
         {
