@@ -18,27 +18,14 @@ namespace EasyHMSAPI.Data.Constants
         public static readonly string AppointmentStatus_Completed = "COMPLETED";
         public static readonly string AppointmentStatus_LabRequired = "LAB_REQUIRED";
         public static readonly string AppointmentStatus_AwaitingReconsult = "AWAITING_RECONSULT";
+        public static readonly string AppointmentStatus_UnderConsult = "UNDER_CONSULT";
 
         public static readonly string TokenStrategy_Sequential = "SEQUENTIAL";
+        
+        public static readonly string Prescription_ActionType_Submit = "submit";
+        public static readonly string Prescription_ActionType_Draft = "draft";
 
-        public static readonly List<string> LookupTypes =
-        [
-            "CHIEF_COMPLAINT",
-            "HISTORY",
-            "COMORBIDITY",
-            "EXAMINATION",
-            "DIAGNOSIS",
-            "DIFFERENTIAL_DIAGNOSIS",
-            "INVESTIGATION",
-            "PROCEDURE",
-            "MEDICATION",
-            "ADVICE",
-            "NONPHARM_ADVICE",
-            "CERTIFICATE",
-            "NOTE",
-            "IMMUNIZATION",
-            "FOLLOW_UP",
-            "ATTACHMENT"
-        ];
+        public static readonly string LookupType_Procedure = "PROCEDURE";
+        public static readonly string LookupType_Investigation = "INVESTIGATION";
     }
 }

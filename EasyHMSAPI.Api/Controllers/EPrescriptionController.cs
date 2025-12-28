@@ -9,6 +9,7 @@ using MailKit.Search;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using System.Diagnostics.CodeAnalysis;
 
@@ -377,6 +378,70 @@ namespace EasyHMSAPI.Api.Controllers
                 _logger.LogInformation("DeleteAttachment ended for attachmentId: {AttachmentId}", request.AttachmentId);
             }
            
+            return Ok(result);
+        }
+
+        [HttpPost("details/actionType={actionType}")]
+        [Authorize]
+        public async Task<ActionResult<SavePrescriptionDetailsResponseModel>> SavePrescriptionDetails(string actionType, [FromBody] SavePrescriptionDetailsRequestModel request)
+        {
+            _logger.LogInformation("SavePrescriptionForLater started at {Time} for appointmentId: {AppointmentId}, patientId: {PatientId}, hospitalId: {HospitalId}, doctorId: {DoctorId}", DateTime.UtcNow, request.AppointmentId, request.PatientId, request.HospitalId, request.DoctorId);
+            SavePrescriptionDetailsResponseModel result = new();
+            try
+            {
+                if (request.AppointmentId == Guid.Empty || string.IsNullOrEmpty(request.PatientId) || request.HospitalId == Guid.Empty || request.DoctorId == Guid.Empty)
+                {
+                    result.Success = false;
+                    result.Message = "Invalid request parameters.";
+                }
+                else
+                {  
+                    List<string> validActionTypes = new() 
+                    { 
+                        AppConstants.Prescription_ActionType_Draft,
+                        AppConstants.Prescription_ActionType_Submit
+                    };
+                    var userIdClaim = User.FindFirst("userId")?.Value;
+                    if(userIdClaim is not null && Guid.TryParse(userIdClaim, out var userId))
+                    {
+                        request.LoggedInUserId = userId;
+                        request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                        request.CurrentDateTime = DateTime.UtcNow;
+                        request.ActionType = actionType;
+
+                        if (request.LoggedInUserId == Guid.Empty)
+                        {
+                            result.Success = false;
+                            result.Message = "Invalid logged in user.";
+                        }
+                        else
+                        {
+                            if (validActionTypes.Contains(actionType.ToLower()))
+                            {
+                                result = await _mediator.Send(request);
+                            }
+                            else
+                            {
+                                result.Success = false;
+                                result.Message = "Invalid action type.";
+                            }
+                        }
+                    }
+                    else
+                    {
+                        result.Success = false;
+                        result.Message = "Invalid logged in user.";
+                    }
+                }
+                _logger.LogInformation("SavePrescriptionForLater ended for appointmentId: {AppointmentId}, patientId: {PatientId}", request.AppointmentId, request.PatientId);
+            }
+            catch(Exception ex)
+            {
+                _logger.LogError(ex, "Error in SavePrescriptionForLater for appointmentId: {AppointmentId}, patientId: {PatientId}", request.AppointmentId, request.PatientId);
+                result.Success = false;
+                result.Message = "An error occurred while processing your request." + ex.Message + ex.InnerException + ex.StackTrace;
+            }
+            
             return Ok(result);
         }
 

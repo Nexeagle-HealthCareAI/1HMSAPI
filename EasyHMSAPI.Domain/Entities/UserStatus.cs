@@ -5,12 +5,11 @@ namespace EasyHMSAPI.Domain.Entities
 {
     public class UserStatus
     {
-  [Key]
-  public int UserStatusId { get; set; }
+        [Key]
+        public int UserStatusId { get; set; }
         [Required]
-    [MaxLength(50)]
-        public string StatusName { get; set; }
-
-    public ICollection<UserHistory> UserHistories { get; set; }
+        [MaxLength(50)]
+        public string? StatusName { get; set; }
+        public ICollection<UserHistory>? UserHistories { get; set; }
     }
 }

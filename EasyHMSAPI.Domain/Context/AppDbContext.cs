@@ -45,6 +45,9 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<UserStatus> UserStatuses { get; set; }
         public DbSet<UserHistory> UserHistories { get; set; }
         public DbSet<PrescriptionAttachment> PrescriptionAttachments { get; set; }
+        public DbSet<Prescription> Prescription { get; set; }
+        public DbSet<PrescriptionMedicine> PrescriptionMedicine { get; set; }
+        public DbSet<PrescriptionInvestigation> PrescriptionInvestigation { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {   
@@ -94,6 +97,23 @@ namespace EasyHMSAPI.Domain.Context
             modelBuilder.Entity<PrescriptionAttachment>(entity =>
             {
                 entity.Property(pa => pa.RowVersion)
+                      .IsRowVersion();
+            });
+
+            modelBuilder.Entity<Prescription>(entity =>             {
+                entity.Property(p => p.RowVersion)
+                      .IsRowVersion();
+            });
+
+            modelBuilder.Entity<PrescriptionMedicine>(entity =>
+            {
+                entity.Property(pm => pm.RowVersion)
+                      .IsRowVersion();
+            });
+
+            modelBuilder.Entity<PrescriptionInvestigation>(entity =>
+            {
+                entity.Property(pi => pi.RowVersion)
                       .IsRowVersion();
             });
 
