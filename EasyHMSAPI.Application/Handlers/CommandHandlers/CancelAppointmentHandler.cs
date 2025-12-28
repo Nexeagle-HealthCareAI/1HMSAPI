@@ -44,26 +44,29 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     appt.LastStatusCodeAt = DateTime.UtcNow;
                     var history = string.IsNullOrEmpty(appt?.StatusHistoryJson)
                    ? new List<object>()
-                   : System.Text.Json.JsonSerializer.Deserialize<List<object>>(appt.StatusHistoryJson) ?? new List<object>();
+                   : JsonSerializer.Deserialize<List<object>>(appt.StatusHistoryJson) ?? new List<object>();
                     history.Add(new { status = AppConstants.AppointmentStatus_Cancelled, timestamp = DateTime.UtcNow.ToString("o") });
-                    appt.StatusHistoryJson = JsonSerializer.Serialize(history);
-
-                    var token = await _context.AppointmentTokens
-                        .Where(t => t.ApptId == appt.ApptId)
-                        .FirstOrDefaultAsync(cancellationToken);
-
-                    if (token != null)
+                    if(appt?.StatusHistoryJson != null)
                     {
-                        token.TokenNo = 0;
-                        _context.AppointmentTokens.Update(token);
-                    }
+                        appt.StatusHistoryJson = JsonSerializer.Serialize(history);
+                        var token = await _context.AppointmentTokens
+                       .Where(t => t.ApptId == appt.ApptId)
+                       .FirstOrDefaultAsync(cancellationToken);
 
-                    _context.Appointments.Update(appt);
+                        if (token != null)
+                        {
+                            token.TokenNo = 0;
+                            _context.AppointmentTokens.Update(token);
+                        }
+
+                        _context.Appointments.Update(appt);
+                    }
                 }
                 await _context.SaveChangesAsync(cancellationToken);
 
                 // Send SMS to patient
-                var patient = await _context.PatientRegistrations.FirstOrDefaultAsync(p => p.PatientId == appt.PatientId, cancellationToken);
+                var patientId = appt?.PatientId;
+                var patient = await _context.PatientRegistrations.FirstOrDefaultAsync(p => p.PatientId == patientId, cancellationToken);
                 bool isSmsSent = false;
                 if (patient != null && !string.IsNullOrWhiteSpace(patient.Mobile))
                 {
