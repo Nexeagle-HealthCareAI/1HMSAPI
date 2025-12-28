@@ -67,8 +67,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     {
         public string? Type { get; set; }
         public string? Content { get; set; }
-        public DateTime IssuedDate { get; set; }
-        public DateTime FromDate { get; set; }
+        public DateTime? IssuedDate { get; set; }
+        public DateTime? FromDate { get; set; }
         public DateTime? ToDate { get; set; }
         public string? FitnessStatus { get; set; }
         public string? Remarks { get; set; }
@@ -81,7 +81,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public DateTime? FollowUpOn { get; set; }
         public string? Reason { get; set; }
         public string? PatientInstructions { get; set; }
-        public bool ReferralEnabled { get; set; }
+        public bool? ReferralEnabled { get; set; }
         public ReferralModel? Referral { get; set; }
     }
 
@@ -104,9 +104,9 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     {
         public string? Name { get; set; }
         public string? Status { get; set; }
-        public DateTime Date { get; set; }
+        public DateTime? Date { get; set; }
         public DateTime? NextDueDate { get; set; }
-        public int DoseNumber { get; set; }
+        public int? DoseNumber { get; set; }
         public string? Remarks { get; set; }
     }
 }

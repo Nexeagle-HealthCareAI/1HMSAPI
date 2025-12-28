@@ -326,6 +326,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 };
                                 _context.PrescriptionInvestigation.Add(procedure);
                             }
+
+                            existingAppointment.CurrentStatusCode = AppConstants.AppointmentStatus_LabRequired;
+                            existingAppointment.LastStatusCodeAt = request.CurrentDateTime;
+                            var history = string.IsNullOrEmpty(existingAppointment.StatusHistoryJson)
+                            ? new List<object>()
+                            : JsonSerializer.Deserialize<List<object>>(existingAppointment.StatusHistoryJson) ?? new List<object>();
+                            history.Add(new { status = AppConstants.AppointmentStatus_LabRequired, timestamp = request.CurrentDateTime });
+                            existingAppointment.StatusHistoryJson = JsonSerializer.Serialize(history);
+                            status = AppConstants.AppointmentStatus_LabRequired;
                         }
                         if(request.Medications is not null)
                         {
