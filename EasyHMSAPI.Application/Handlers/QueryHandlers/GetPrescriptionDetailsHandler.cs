@@ -156,7 +156,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                                 PatientId = request.PatientId,
                                 DoctorId = request.DoctorId,
                                 HospitalId = request.HospitalId,
-                                VitalsJson = vitals is not null ? SafeDeserialize<PatientVitalsModel>(vitals) : null,
+                                VitalsJson = SafeDeserialize<PatientVitalsModel>(vitals)
                             };
 
                             response.Data = prescriptionDetailsDataModel;
