@@ -117,14 +117,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 }
                                 else
                                 {
-                                    existingAppointment.CurrentStatusCode = AppConstants.AppointmentStatus_LabRequired;
-                                    existingAppointment.LastStatusCodeAt = request.CurrentDateTime;
-                                    var history = string.IsNullOrEmpty(existingAppointment.StatusHistoryJson)
-                                    ? new List<object>()
-                                    : JsonSerializer.Deserialize<List<object>>(existingAppointment.StatusHistoryJson) ?? new List<object>();
-                                    history.Add(new { status = AppConstants.AppointmentStatus_LabRequired, timestamp = request.CurrentDateTime });
-                                    existingAppointment.StatusHistoryJson = JsonSerializer.Serialize(history);
-                                    existingPrescription.Status = AppConstants.AppointmentStatus_LabRequired;
+                                    if (existingAppointment.CurrentStatusCode == AppConstants.AppointmentStatus_VitalsRequired || existingAppointment.CurrentStatusCode == AppConstants.AppointmentStatus_Ready || existingAppointment.CurrentStatusCode == AppConstants.AppointmentStatus_UnderConsult)
+                                    {
+                                        existingAppointment.CurrentStatusCode = AppConstants.AppointmentStatus_LabRequired;
+                                        existingAppointment.LastStatusCodeAt = request.CurrentDateTime;
+                                        var history = string.IsNullOrEmpty(existingAppointment.StatusHistoryJson)
+                                        ? new List<object>()
+                                        : JsonSerializer.Deserialize<List<object>>(existingAppointment.StatusHistoryJson) ?? new List<object>();
+                                        history.Add(new { status = AppConstants.AppointmentStatus_LabRequired, timestamp = request.CurrentDateTime });
+                                        existingAppointment.StatusHistoryJson = JsonSerializer.Serialize(history);
+                                        existingPrescription.Status = AppConstants.AppointmentStatus_LabRequired;
+                                    }
                                 }
 
                                 if (request.Orders.Investigations is not null)
@@ -175,20 +178,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                     _context.PrescriptionInvestigation.Add(medication);
                                 }
                             }
-                            else
-                            {
-                                if (existingAppointment.CurrentStatusCode == AppConstants.AppointmentStatus_VitalsRequired || existingAppointment.CurrentStatusCode == AppConstants.AppointmentStatus_Ready)
-                                {
-                                    existingAppointment.CurrentStatusCode = AppConstants.AppointmentStatus_UnderConsult;
-                                    existingAppointment.LastStatusCodeAt = request.CurrentDateTime;
-                                    var history = string.IsNullOrEmpty(existingAppointment.StatusHistoryJson)
-                                    ? new List<object>()
-                                    : JsonSerializer.Deserialize<List<object>>(existingAppointment.StatusHistoryJson) ?? new List<object>();
-                                    history.Add(new { status = AppConstants.AppointmentStatus_UnderConsult, timestamp = request.CurrentDateTime });
-                                    existingAppointment.StatusHistoryJson = JsonSerializer.Serialize(history);
-                                    existingPrescription.Status = AppConstants.AppointmentStatus_UnderConsult;
-                                }
-                            }
                             if (request.Medications is not null)
                             {
                                 var existingMedications = await _context.PrescriptionMedicine
@@ -209,6 +198,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                         Dosage = med.Dose,
                                         Frequency = med.Frequency,
                                         Durations = med.Duration,
+                                        Instructions = med.Instructions,
+                                        Route = med.Route,
+                                        SaltName = med.SaltName,
                                         CreatedAt = request.CurrentDateTime,
                                         UpdatedAt = request.CurrentDateTime,
                                         UpdateBy = request.LoggedInUserName,
@@ -279,7 +271,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         }
                         if(request.Orders is not null)
                         {
-                            existingAppointment.CurrentStatusCode = AppConstants.AppointmentStatus_LabRequired;
+                            if (existingAppointment.CurrentStatusCode == AppConstants.AppointmentStatus_VitalsRequired || existingAppointment.CurrentStatusCode == AppConstants.AppointmentStatus_Ready || existingAppointment.CurrentStatusCode == AppConstants.AppointmentStatus_UnderConsult)
+                            {
+                                existingAppointment.CurrentStatusCode = AppConstants.AppointmentStatus_LabRequired;
+                                existingAppointment.LastStatusCodeAt = request.CurrentDateTime;
+                                var history = string.IsNullOrEmpty(existingAppointment.StatusHistoryJson)
+                                ? new List<object>()
+                                : JsonSerializer.Deserialize<List<object>>(existingAppointment.StatusHistoryJson) ?? new List<object>();
+                                history.Add(new { status = AppConstants.AppointmentStatus_LabRequired, timestamp = request.CurrentDateTime });
+                                existingAppointment.StatusHistoryJson = JsonSerializer.Serialize(history);
+                                status = AppConstants.AppointmentStatus_LabRequired;
+                            }
+
                             if (request.Orders.Investigations is not null)
                             {
                                 var investigationLookup = await _context.LookupTypes
@@ -326,15 +329,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 };
                                 _context.PrescriptionInvestigation.Add(procedure);
                             }
-
-                            existingAppointment.CurrentStatusCode = AppConstants.AppointmentStatus_LabRequired;
-                            existingAppointment.LastStatusCodeAt = request.CurrentDateTime;
-                            var history = string.IsNullOrEmpty(existingAppointment.StatusHistoryJson)
-                            ? new List<object>()
-                            : JsonSerializer.Deserialize<List<object>>(existingAppointment.StatusHistoryJson) ?? new List<object>();
-                            history.Add(new { status = AppConstants.AppointmentStatus_LabRequired, timestamp = request.CurrentDateTime });
-                            existingAppointment.StatusHistoryJson = JsonSerializer.Serialize(history);
-                            status = AppConstants.AppointmentStatus_LabRequired;
                         }
                         if(request.Medications is not null)
                         {
@@ -353,6 +347,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                     UpdateBy = request.LoggedInUserName,
                                     Instructions = med.Instructions,
                                     SaltName = med.SaltName,
+                                    Route = med.Route,
                                 };
                                 _context.PrescriptionMedicine.Add(prescriptionMedicine);
                             }

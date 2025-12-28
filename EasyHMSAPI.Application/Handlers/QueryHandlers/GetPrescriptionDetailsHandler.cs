@@ -66,18 +66,18 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 else
                 {
                     var prescriptionDetails = await _context.Prescription
-                        .Where(p => p.ApptId == request.AppointmentId 
-                            && p.DoctorId == request.DoctorId 
+                        .Where(p => p.ApptId == request.AppointmentId
+                            && p.DoctorId == request.DoctorId
                             && p.HospitalId == request.HospitalId
                             && p.PatientId == request.PatientId)
                         .FirstOrDefaultAsync(cancellationToken);
-
-                    if(prescriptionDetails is not null)
-                    {
-                        var vitals = await _context.AppointmentVitals
+                    var vitals = await _context.AppointmentVitals
                             .Where(v => v.ApptId == request.AppointmentId)
                             .Select(v => v.VitalsJson)
                             .FirstOrDefaultAsync(cancellationToken);
+
+                    if (prescriptionDetails is not null)
+                    {
                         var prescriptionInvestigation = await _context.PrescriptionInvestigation
                             .Where(x => x.PrescriptionId == prescriptionDetails.PrescriptionId
                                         && x.OrdersType == AppConstants.LookupType_Investigation)
@@ -90,7 +90,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                             .Where(x => x.PrescriptionId == prescriptionDetails.PrescriptionId)
                             .ToListAsync(cancellationToken);
 
-                        PrescriptionDetailsDataModel model = new()
+                        PrescriptionDetailsDataModel prescriptionDetailsDataModel = new()
                         {
                             PrescriptionId = prescriptionDetails.PrescriptionId,
                             AppointmentId = request.AppointmentId,
@@ -137,13 +137,32 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                             Immunizations = SafeDeserialize<List<ImmunizationModel>>(prescriptionDetails.Immunizations)
                         };
 
-                        response.Data = model;
+                        response.Data = prescriptionDetailsDataModel;
                         response.Success = true;
                         response.Message = "Prescription details retrieved successfully.";
+
                     }
                     else
                     {
-                        response.Message = "No prescription details found for the specified appointment.";
+                        if(vitals is null)
+                        {
+                            response.Message = "No prescription details or vitals found for the given appointment.";
+                        }
+                        else
+                        {
+                            PrescriptionDetailsDataModel prescriptionDetailsDataModel = new()
+                            {
+                                AppointmentId = request.AppointmentId,
+                                PatientId = request.PatientId,
+                                DoctorId = request.DoctorId,
+                                HospitalId = request.HospitalId,
+                                VitalsJson = vitals is not null ? SafeDeserialize<PatientVitalsModel>(vitals) : null,
+                            };
+
+                            response.Data = prescriptionDetailsDataModel;
+                            response.Success = true;
+                            response.Message = "Vitals data retrieved successfully.";
+                        }
                     }
                 }
             }
