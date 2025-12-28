@@ -47,6 +47,41 @@ namespace EasyHMSAPI.Api.Controllers
             return Ok(result);
         }
 
+        [HttpGet("patient-details/timeline")]
+        [Authorize]
+        public async Task<ActionResult<GetPatientTimelineResponseModel>> GetPatientTimeline([FromQuery] string patientId, [FromQuery] Guid doctorId, [FromQuery] Guid hospitalId)
+        {
+            _logger.LogInformation("GetPatientTimeline started at {Time} for patientId: {PatientId}", DateTime.UtcNow, patientId);
+            GetPatientTimelineResponseModel result = new();
+            try
+            {
+                if (string.IsNullOrEmpty(patientId) || doctorId == Guid.Empty || hospitalId == Guid.Empty)
+                {
+                    result.Success = false;
+                    result.Message = "Invalid request parameters.";
+                }
+                else
+                {
+                    GetPatientTimelineRequestModel requestModel = new()
+                    {
+                        PatientId = patientId,
+                        DoctorId = doctorId,
+                        HospitalId = hospitalId
+                    };
+                    result = await _mediator.Send(requestModel);
+                    _logger.LogInformation("GetPatientTimeline ended for patientId: {PatientId}", patientId);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetPatientTimeline for patientId: {PatientId}", patientId);
+                result.Success = false;
+                result.Message = "An error occurred while processing your request." + ex.Message + ex.InnerException + ex.StackTrace;
+            }
+
+            return Ok(result);
+        }
+
         [HttpGet("lookup/details")]
         [Authorize]
         public async Task<ActionResult<GetPatientLookupDataResponseModel>> GetLookupData([FromQuery] Guid hospitalId, [FromQuery] Guid doctorId)
@@ -445,25 +480,69 @@ namespace EasyHMSAPI.Api.Controllers
             return Ok(result);
         }
 
-        [HttpPost("generate-prescription-details")]
+        [HttpGet("details/appointmentId={appointmentId}&patientId={patientId}&doctorId={doctorId}&hospitalId={hospitalId}")]
         [Authorize]
-        public async Task<IActionResult> GeneratePrescription([FromBody] GeneratePrescriptionRequestModel request)
+        public async Task<ActionResult<GetPrescriptionDetailsResponseModel>> GetPrescriptionDetails(Guid appointmentId, string patientId, Guid doctorId,  Guid hospitalId)
         {
-            _logger.LogInformation("GeneratePrescription started at {Time} for appointmentId: {AppointmentId}, patientId: {PatientId}, hospitalId: {HospitalId}, doctorId: {DoctorId}", DateTime.UtcNow, request.AppointmentId, request.PatientId, request.HospitalId, request.DoctorId);
-
-            if (request == null || request.AppointmentId == Guid.Empty || string.IsNullOrEmpty(request.PatientId) || request.HospitalId == Guid.Empty || request.DoctorId == Guid.Empty)
+            _logger.LogInformation("GetPrescriptionDetails started at {Time} for appointmentId: {AppointmentId}, patientId: {PatientId}", DateTime.UtcNow, appointmentId, patientId);
+            GetPrescriptionDetailsResponseModel response = new();
+            try
             {
-                return BadRequest(new { Message = "Invalid request parameters." });
+                if (appointmentId == Guid.Empty || string.IsNullOrEmpty(patientId) || hospitalId == Guid.Empty || doctorId == Guid.Empty)
+                {
+                    response.Success = false;
+                    response.Message = "Invalid request parameters.";
+                }
+                else
+                {
+                    GetPrescriptionDetailsRequestModel request = new()
+                    {
+                        AppointmentId = appointmentId,
+                        PatientId = patientId,
+                        DoctorId = doctorId,
+                        HospitalId = hospitalId
+                    };
+                    response = await _mediator.Send(request);
+                    _logger.LogInformation("GetPrescriptionDetails ended for appointmentId: {AppointmentId}, patientId: {PatientId}", appointmentId, patientId);
+                }
+            }
+            catch(Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetPrescriptionDetails for appointmentId: {AppointmentId}, patientId: {PatientId}", appointmentId, patientId);
+                response.Success = false;
+                response.Message = "An error occurred while processing your request." + ex.Message + ex.InnerException + ex.StackTrace;
             }
 
-            if (!await ValidateDoctorHospitalAsync(request.HospitalId, request.DoctorId, HttpContext.RequestAborted))
-                return BadRequest(new { Message = "Doctor is not associated with the specified hospital." });
-            
-            var result = await _mediator.Send(request);
+            return Ok(response);
+        }
 
-            _logger.LogInformation("GeneratePrescription ended for appointmentId: {AppointmentId}, patientId: {PatientId}", request.AppointmentId, request.PatientId);
+        [HttpPost("deatils/generate-prescription")]
+        [Authorize]
+        public async Task<ActionResult<GeneratePrescriptionResponseModel>> GeneratePrescription([FromBody] GeneratePrescriptionRequestModel request)
+        {
+            _logger.LogInformation("GeneratePrescription started at {Time} for appointmentId: {AppointmentId}, patientId: {PatientId}, hospitalId: {HospitalId}, doctorId: {DoctorId}", DateTime.UtcNow, request.AppointmentId, request.PatientId, request.HospitalId, request.DoctorId);
+            GeneratePrescriptionResponseModel response = new();
+            try
+            {
+                if (request == null || request.AppointmentId == Guid.Empty || string.IsNullOrEmpty(request.PatientId) || request.HospitalId == Guid.Empty || request.DoctorId == Guid.Empty)
+                {
+                    response.Success = false;
+                    response.Message = "Invalid request parameters.";
+                }
+                else
+                {
+                    response = await _mediator.Send(request);
+                    _logger.LogInformation("GeneratePrescription ended for appointmentId: {AppointmentId}, patientId: {PatientId}", request.AppointmentId, request.PatientId);
+                } 
+            }
+            catch(Exception ex)
+            {
+                _logger.LogError(ex, "Error in GeneratePrescription for appointmentId: {AppointmentId}, patientId: {PatientId}", request.AppointmentId, request.PatientId);
+                response.Success = false;
+                response.Message = "An error occurred while processing your request." + ex.Message + ex.InnerException + ex.StackTrace;
+            }
 
-            return Ok(result);
+            return Ok(response);
         }
 
         private async Task<bool> ValidateDoctorHospitalAsync(Guid hospitalId, Guid doctorId, CancellationToken ct)
