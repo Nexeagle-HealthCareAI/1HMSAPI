@@ -251,7 +251,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             catch(Exception ex)
             {
                 response.Success = false;
-                response.Message = "An error occurred while retrieving the patient timeline." + ex.Message;
+                response.Message = "An error occurred while retrieving the patient timeline." + ex.Message + ex.InnerException + ex.StackTrace;
             }
 
             return response;
