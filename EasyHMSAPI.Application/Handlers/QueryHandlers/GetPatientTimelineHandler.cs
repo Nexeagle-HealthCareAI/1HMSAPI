@@ -8,6 +8,7 @@ using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 {
@@ -15,6 +16,11 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
     {
         private readonly AppDbContext _context;
         private readonly IDoctorValidationHelper _doctorValidationHelper;
+        private static readonly JsonSerializerOptions JsonOptions = new()
+        {
+            PropertyNameCaseInsensitive = true,
+            Converters = { new JsonStringEnumConverter() }
+        };
 
         public GetPatientTimelineHandler(AppDbContext context, IDoctorValidationHelper doctorValidationHelper)
         {
@@ -97,7 +103,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     {
                         try
                         {
-                            var statusHistory = JsonSerializer.Deserialize<List<StatusHistoryModel>>(appointment.StatusHistoryJson);
+                            var statusHistory = JsonSerializer.Deserialize<List<StatusHistoryModel>>(appointment.StatusHistoryJson, JsonOptions);
                             timelineAppointment.StatusJsonHistory = statusHistory ?? new List<StatusHistoryModel>();
                         }
                         catch
@@ -116,7 +122,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     {
                         try
                         {
-                            var vitalsJson = JsonSerializer.Deserialize<JsonElement>(appointmentVitals.VitalsJson);
+                            var vitalsJson = JsonSerializer.Deserialize<JsonElement>(appointmentVitals.VitalsJson, JsonOptions);
                             timelineAppointment.VitalsJson = ParseVitalsFromJson(vitalsJson);
                         }
                         catch
@@ -313,7 +319,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
             try
             {
-                return JsonSerializer.Deserialize<T>(json);
+                return JsonSerializer.Deserialize<T>(json, JsonOptions);
             }
             catch (JsonException)
             {
