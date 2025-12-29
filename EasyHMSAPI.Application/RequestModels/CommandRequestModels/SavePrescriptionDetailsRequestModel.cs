@@ -32,6 +32,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public DateTime CurrentDateTime { get; set; }
         [JsonIgnore]
         public Guid LoggedInUserId { get; set; }
+        [JsonIgnore]
         public string? LoggedInUserName { get; set; }
     }
 

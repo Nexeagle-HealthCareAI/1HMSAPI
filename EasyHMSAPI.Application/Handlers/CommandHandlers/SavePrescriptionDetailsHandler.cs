@@ -219,7 +219,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 existingPrescription.Referral = request.FollowUp.Referral is not null ? JsonSerializer.Serialize(request.FollowUp.Referral) : null;
                             }
                             existingPrescription.UpdatedAt = request.CurrentDateTime;
-
                             if(request.ActionType == AppConstants.Prescription_ActionType_Submit)
                             {
                                 existingAppointment.CurrentStatusCode = AppConstants.AppointmentStatus_Completed;
@@ -350,20 +349,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                     Route = med.Route,
                                 };
                                 _context.PrescriptionMedicine.Add(prescriptionMedicine);
-                            }
-                        }
-                        else
-                        {
-                            if (existingAppointment.CurrentStatusCode == AppConstants.AppointmentStatus_VitalsRequired || existingAppointment.CurrentStatusCode == AppConstants.AppointmentStatus_Ready)
-                            {
-                                existingAppointment.CurrentStatusCode = AppConstants.AppointmentStatus_UnderConsult;
-                                existingAppointment.LastStatusCodeAt = request.CurrentDateTime;
-                                var history = string.IsNullOrEmpty(existingAppointment.StatusHistoryJson)
-                                    ? new List<object>()
-                                    : JsonSerializer.Deserialize<List<object>>(existingAppointment.StatusHistoryJson) ?? new List<object>();
-                                history.Add(new { status = AppConstants.AppointmentStatus_UnderConsult, timestamp = request.CurrentDateTime });
-                                existingAppointment.StatusHistoryJson = JsonSerializer.Serialize(history);
-                                status = AppConstants.AppointmentStatus_UnderConsult;
                             }
                         }
                         if(request.ActionType == AppConstants.Prescription_ActionType_Submit)
