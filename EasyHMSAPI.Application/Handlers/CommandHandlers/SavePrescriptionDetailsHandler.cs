@@ -108,6 +108,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             if (!string.IsNullOrEmpty(request.Diagnosis)) existingPrescription.Diagnosis = request.Diagnosis;
                             if(request.Orders is not null)
                             {
+                                if (existingAppointment.CurrentStatusCode == AppConstants.AppointmentStatus_VitalsRequired || existingAppointment.CurrentStatusCode == AppConstants.AppointmentStatus_Ready || existingAppointment.CurrentStatusCode == AppConstants.AppointmentStatus_UnderConsult)
+                                {
+                                    existingAppointment.CurrentStatusCode = AppConstants.AppointmentStatus_LabRequired;
+                                    existingAppointment.LastStatusCodeAt = request.CurrentDateTime;
+                                    var history = string.IsNullOrEmpty(existingAppointment.StatusHistoryJson)
+                                    ? new List<object>()
+                                    : JsonSerializer.Deserialize<List<object>>(existingAppointment.StatusHistoryJson) ?? new List<object>();
+                                    history.Add(new { status = AppConstants.AppointmentStatus_LabRequired, timestamp = request.CurrentDateTime });
+                                    existingAppointment.StatusHistoryJson = JsonSerializer.Serialize(history);
+                                }
+
                                 var existingItems= await _context.PrescriptionInvestigation
                                     .Where(x => x.PrescriptionId == request.PrescriptionId)
                                     .ToListAsync(cancellationToken);

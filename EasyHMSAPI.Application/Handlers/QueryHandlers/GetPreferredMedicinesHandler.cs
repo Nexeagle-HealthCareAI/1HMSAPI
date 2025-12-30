@@ -4,6 +4,7 @@ using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using static Microsoft.AspNetCore.Hosting.Internal.HostingApplication;
 
 namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 {
@@ -26,28 +27,29 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             try
             {
                 var existingDoctor = await _dbContext.Doctors
-                  .Where(x => x.DoctorID == request.DoctorId)
-                  .AsNoTracking()
-                  .FirstOrDefaultAsync(cancellationToken);
-                if(existingDoctor == null)
+                 .Where(x => x.DoctorID == request.DoctorId)
+                 .AsNoTracking()
+                 .FirstOrDefaultAsync(cancellationToken);
+                if (existingDoctor == null)
                 {
                     response.Message = "Doctor not found.";
+                    return response;
                 }
 
                 var existingHospital = await _dbContext.Hospitals
                     .Where(x => x.HospitalID == request.HospitalId)
                     .AsNoTracking()
-                    .FirstOrDefaultAsync(cancellationToken) ?? throw new Exception("Hospital not found.");
-                if (existingHospital == null) 
-                { 
-                    response.Message = "Hospital not found.";
-                }
-                else
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (existingHospital == null)
                 {
-                    if (!await _doctorValidationHelper.ValidateDoctorAsync(request.HospitalId, request.DoctorId, cancellationToken))
-                    {
-                        response.Message = "Doctor is not associated with the specified hospital.";
-                    }
+                    response.Message = "Hospital not found.";
+                    return response;
+                }
+
+                if (!await _doctorValidationHelper.ValidateDoctorAsync(request.HospitalId, request.DoctorId, cancellationToken))
+                {
+                    response.Message = "Doctor is not associated with the specified hospital.";
+                    return response;
                 }
 
                 var list = await _dbContext.DoctorPreferredMedicines

@@ -1,6 +1,7 @@
 ﻿using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using MediatR;
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
@@ -68,8 +69,11 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     {
         public string? Type { get; set; }
         public string? Content { get; set; }
+        [JsonConverter(typeof(NullableDateTimeConverter))]
         public DateTime? IssuedDate { get; set; }
+        [JsonConverter(typeof(NullableDateTimeConverter))]
         public DateTime? FromDate { get; set; }
+        [JsonConverter(typeof(NullableDateTimeConverter))]
         public DateTime? ToDate { get; set; }
         public string? FitnessStatus { get; set; }
         public string? Remarks { get; set; }
@@ -79,6 +83,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     [ExcludeFromCodeCoverage]
     public class FollowUpModel
     {
+        [JsonConverter(typeof(NullableDateTimeConverter))]
         public DateTime? FollowUpOn { get; set; }
         public string? Reason { get; set; }
         public string? PatientInstructions { get; set; }
@@ -105,9 +110,41 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     {
         public string? Name { get; set; }
         public string? Status { get; set; }
+        [JsonConverter(typeof(NullableDateTimeConverter))]
         public DateTime? Date { get; set; }
+        [JsonConverter(typeof(NullableDateTimeConverter))]
         public DateTime? NextDueDate { get; set; }
         public int? DoseNumber { get; set; }
         public string? Remarks { get; set; }
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class NullableDateTimeConverter : JsonConverter<DateTime?>
+    {
+        public override DateTime? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            switch (reader.TokenType)
+            {
+                case JsonTokenType.Null:
+                    return null;
+                case JsonTokenType.String:
+                    var stringValue = reader.GetString();
+                    if (string.IsNullOrWhiteSpace(stringValue))
+                        return null;
+                    if (DateTime.TryParse(stringValue, out var dateTime))
+                        return dateTime;
+                    throw new JsonException($"Unable to convert \"{stringValue}\" to DateTime.");
+                default:
+                    throw new JsonException($"Unexpected token {reader.TokenType} when parsing DateTime.");
+            }
+        }
+
+        public override void Write(Utf8JsonWriter writer, DateTime? value, JsonSerializerOptions options)
+        {
+            if (value.HasValue)
+                writer.WriteStringValue(value.Value.ToString("o"));
+            else
+                writer.WriteNullValue();
+        }
     }
 }
