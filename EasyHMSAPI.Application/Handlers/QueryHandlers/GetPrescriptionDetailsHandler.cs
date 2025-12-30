@@ -90,6 +90,11 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                             .Where(x => x.PrescriptionId == prescriptionDetails.PrescriptionId)
                             .ToListAsync(cancellationToken);
 
+                        var referralData = SafeDeserialize<ReferralModel>(prescriptionDetails.Referral);
+                        var hasValidReferral = referralData?.ReferredTo is not null && 
+                                              (!string.IsNullOrWhiteSpace(referralData.ReferredTo.Specialty) || 
+                                               !string.IsNullOrWhiteSpace(referralData.ReferredTo.DoctorName));
+
                         PrescriptionDetailsDataModel prescriptionDetailsDataModel = new()
                         {
                             PrescriptionId = prescriptionDetails.PrescriptionId,
@@ -131,8 +136,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                             {
                                 FollowUpOn = prescriptionDetails.FollowUpDate,
                                 Reason = prescriptionDetails.FollowUpNotes,
-                                Referral = SafeDeserialize<ReferralModel>(prescriptionDetails.Referral),
-                                ReferralEnabled = prescriptionDetails.Referral is not null,
+                                Referral = referralData,
+                                ReferralEnabled = hasValidReferral,
                             },
                             Immunizations = SafeDeserialize<List<ImmunizationModel>>(prescriptionDetails.Immunizations)
                         };
