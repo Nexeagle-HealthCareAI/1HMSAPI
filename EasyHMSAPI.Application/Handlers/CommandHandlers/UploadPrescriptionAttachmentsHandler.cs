@@ -8,6 +8,7 @@ using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using System.Text.Json;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
@@ -94,6 +95,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             if(appointment.CurrentStatusCode.ToUpper() == AppConstants.AppointmentStatus_LabRequired)
                             {
                                 appointment.CurrentStatusCode = AppConstants.AppointmentStatus_AwaitingReconsult;
+                                var history = string.IsNullOrEmpty(appointment.StatusHistoryJson)
+                                    ? new List<object>()
+                                    : JsonSerializer.Deserialize<List<object>>(appointment.StatusHistoryJson) ?? new List<object>();
+                                history.Add(new { status = AppConstants.AppointmentStatus_Completed, timestamp = DateTime.Now });
+                                appointment.StatusHistoryJson = JsonSerializer.Serialize(history);
+                                appointment.LastStatusCodeAt = DateTime.UtcNow;
                             }
                             await _context.SaveChangesAsync(cancellationToken);
 

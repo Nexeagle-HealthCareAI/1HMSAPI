@@ -213,9 +213,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         timelineAppointment.FollowUp = new FollowUpModel
                         {
                             FollowUpOn = prescriptionDetails.FollowUpDate,
-                            Reason = prescriptionDetails.FollowUpNotes,
-                            Referral = referralModel,
-                            ReferralEnabled = prescriptionDetails.Referral is not null
+                            Reason = SafeDeserialize<FollowupReasonModel>(prescriptionDetails.FollowUpNotes),
+                            Referral = SafeDeserialize<ReferralModel>(prescriptionDetails.Referral)
                         };
 
                         // Parse Immunizations

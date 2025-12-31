@@ -4,7 +4,6 @@ using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using static Microsoft.AspNetCore.Hosting.Internal.HostingApplication;
 
 namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 {
