@@ -106,7 +106,26 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             if (!string.IsNullOrEmpty(request.Comorbidity)) existingPrescription.Comorbidity = request.Comorbidity;
                             if (!string.IsNullOrEmpty(request.Examination)) existingPrescription.Examination = request.Examination;
                             if (!string.IsNullOrEmpty(request.Diagnosis)) existingPrescription.Diagnosis = request.Diagnosis;
-                            if(request.Orders is not null)
+                            if (request.Orders is null)
+                            {
+                                var existingItems = await _context.PrescriptionInvestigation
+                                    .Where(x => x.PrescriptionId == request.PrescriptionId)
+                                    .ToListAsync(cancellationToken);
+                                if (existingItems is null)
+                                {
+                                    if (existingAppointment.CurrentStatusCode == AppConstants.AppointmentStatus_VitalsRequired || existingAppointment.CurrentStatusCode == AppConstants.AppointmentStatus_Ready)
+                                    {
+                                        existingAppointment.CurrentStatusCode = AppConstants.AppointmentStatus_UnderConsult;
+                                        existingAppointment.LastStatusCodeAt = request.CurrentDateTime;
+                                        var history = string.IsNullOrEmpty(existingAppointment.StatusHistoryJson)
+                                        ? new List<object>()
+                                        : JsonSerializer.Deserialize<List<object>>(existingAppointment.StatusHistoryJson) ?? new List<object>();
+                                        history.Add(new { status = AppConstants.AppointmentStatus_UnderConsult, timestamp = request.CurrentDateTime });
+                                        existingAppointment.StatusHistoryJson = JsonSerializer.Serialize(history);
+                                    }
+                                }
+                            }
+                            if (request.Orders is not null)
                             {
                                 if (existingAppointment.CurrentStatusCode == AppConstants.AppointmentStatus_VitalsRequired || existingAppointment.CurrentStatusCode == AppConstants.AppointmentStatus_Ready || existingAppointment.CurrentStatusCode == AppConstants.AppointmentStatus_UnderConsult)
                                 {
@@ -226,7 +245,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             if(request.FollowUp is not null)
                             {
                                 existingPrescription.FollowUpDate = request.FollowUp.FollowUpOn;
-                                existingPrescription.FollowUpNotes = request.FollowUp.Reason;
+                                existingPrescription.FollowUpNotes = request.FollowUp.Reason is not null ? JsonSerializer.Serialize(request.FollowUp.Reason) : null;
                                 existingPrescription.Referral = request.FollowUp.Referral is not null ? JsonSerializer.Serialize(request.FollowUp.Referral) : null;
                             }
                             existingPrescription.UpdatedAt = request.CurrentDateTime;
@@ -279,7 +298,21 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 _context.AppointmentVitals.Add(newVitals);
                             }
                         }
-                        if(request.Orders is not null)
+                        if (request.Orders is null)
+                        {
+                            if (existingAppointment.CurrentStatusCode == AppConstants.AppointmentStatus_VitalsRequired || existingAppointment.CurrentStatusCode == AppConstants.AppointmentStatus_Ready)
+                            {
+                                existingAppointment.CurrentStatusCode = AppConstants.AppointmentStatus_UnderConsult;
+                                existingAppointment.LastStatusCodeAt = request.CurrentDateTime;
+                                var history = string.IsNullOrEmpty(existingAppointment.StatusHistoryJson)
+                                ? new List<object>()
+                                : JsonSerializer.Deserialize<List<object>>(existingAppointment.StatusHistoryJson) ?? new List<object>();
+                                history.Add(new { status = AppConstants.AppointmentStatus_UnderConsult, timestamp = request.CurrentDateTime });
+                                existingAppointment.StatusHistoryJson = JsonSerializer.Serialize(history);
+                                status = AppConstants.AppointmentStatus_UnderConsult;
+                            }
+                        }
+                        if (request.Orders is not null)
                         {
                             if (existingAppointment.CurrentStatusCode == AppConstants.AppointmentStatus_VitalsRequired || existingAppointment.CurrentStatusCode == AppConstants.AppointmentStatus_Ready || existingAppointment.CurrentStatusCode == AppConstants.AppointmentStatus_UnderConsult)
                             {
@@ -373,7 +406,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             existingAppointment.StatusHistoryJson = JsonSerializer.Serialize(history);
                             status = AppConstants.AppointmentStatus_Completed;
                         }
-
                         var newPrescription = new Prescription
                         {
                             PrescriptionId = newPrescriptionId,
@@ -394,7 +426,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             CertificatesAndNotes = request.Certificates is not null ? JsonSerializer.Serialize(request.Certificates) : null,
                             Immunizations = request.Immunizations is not null ? JsonSerializer.Serialize(request.Immunizations) : null,
                             FollowUpDate = request.FollowUp?.FollowUpOn,
-                            FollowUpNotes = request.FollowUp?.Reason,
+                            FollowUpNotes = request.FollowUp?.Reason is not null ? JsonSerializer.Serialize(request.FollowUp.Reason) : null,
                             Referral = request.FollowUp?.Referral is not null ? JsonSerializer.Serialize(request.FollowUp.Referral) : null,
                             NonPharmacologicalAdvice = request.NonPharmacologicalAdvice is not null ? JsonSerializer.Serialize(request.NonPharmacologicalAdvice) : null,
                         };

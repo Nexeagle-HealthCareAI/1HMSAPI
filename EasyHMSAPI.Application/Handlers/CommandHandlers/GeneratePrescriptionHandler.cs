@@ -232,19 +232,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         certificatesModel = SafeDeserialize<CertificateDataModel>(prescriptionDetails.CertificatesAndNotes);
                     }
 
-                    // Build FollowUp model
-                    ReferralModel? referralModel = null;
-                    if (!string.IsNullOrWhiteSpace(prescriptionDetails.Referral))
-                    {
-                        referralModel = SafeDeserialize<ReferralModel>(prescriptionDetails.Referral);
-                    }
-
                     followUpModel = new FollowUpModel
                     {
                         FollowUpOn = prescriptionDetails.FollowUpDate,
-                        Reason = prescriptionDetails.FollowUpNotes,
-                        Referral = referralModel,
-                        ReferralEnabled = prescriptionDetails.Referral is not null
+                        Reason = SafeDeserialize<FollowupReasonModel>(prescriptionDetails.FollowUpNotes),
+                        Referral = SafeDeserialize<ReferralModel>(prescriptionDetails.Referral),
                     };
 
                     // Parse Immunizations

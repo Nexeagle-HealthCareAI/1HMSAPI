@@ -85,13 +85,17 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     {
         [JsonConverter(typeof(NullableDateTimeConverter))]
         public DateTime? FollowUpOn { get; set; }
-        public string? Reason { get; set; }
-        public string? PatientInstructions { get; set; }
-        public bool? ReferralEnabled { get; set; }
+        public FollowupReasonModel? Reason {get; set; }
         public ReferralModel? Referral { get; set; }
     }
 
-    [ExcludeFromCodeCoverage]
+    public class FollowupReasonModel
+    {
+        public string? Reason { get; set; }
+        public string? PatientInstructions { get; set; }
+    }
+
+[ExcludeFromCodeCoverage]
     public class ReferralModel
     {
         public ReferredToModel? ReferredTo { get; set; }
@@ -103,6 +107,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     {
         public string? Specialty { get; set; }
         public string? DoctorName { get; set; }
+        public bool? ReferralEnabled { get; set; }
     }
 
     [ExcludeFromCodeCoverage]
