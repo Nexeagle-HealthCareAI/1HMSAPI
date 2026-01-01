@@ -98,7 +98,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 var history = string.IsNullOrEmpty(appointment.StatusHistoryJson)
                                     ? new List<object>()
                                     : JsonSerializer.Deserialize<List<object>>(appointment.StatusHistoryJson) ?? new List<object>();
-                                history.Add(new { status = AppConstants.AppointmentStatus_Completed, timestamp = DateTime.Now });
+                                history.Add(new { status = AppConstants.AppointmentStatus_AwaitingReconsult, timestamp = DateTime.Now });
                                 appointment.StatusHistoryJson = JsonSerializer.Serialize(history);
                                 appointment.LastStatusCodeAt = DateTime.UtcNow;
                             }
