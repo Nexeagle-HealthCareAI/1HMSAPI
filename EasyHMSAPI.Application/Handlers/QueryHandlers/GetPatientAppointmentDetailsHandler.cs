@@ -4,12 +4,19 @@ using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 {
     public class GetPatientAppointmentDetailsHandler : IRequestHandler<GetPatientAppointmentDetailsRequestModel, GetPatientAppointmentDetailsResponseModel>
     {
         private readonly AppDbContext _context;
+        private static readonly JsonSerializerOptions JsonOptions = new()
+        {
+            PropertyNameCaseInsensitive = true,
+            Converters = { new JsonStringEnumConverter() }
+        };
 
         public GetPatientAppointmentDetailsHandler(AppDbContext context)
         {
@@ -98,7 +105,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         TokenId = token.TokenId,
                         TokenNumber = token.TokenNo,
                         CreatedAt = token.CreatedAt
-                    }
+                    },
+                    StatusJsonHistory = string.IsNullOrWhiteSpace(a.StatusHistoryJson) ? null :
+                        JsonSerializer.Deserialize<List<StatusHistoryModel>>(a.StatusHistoryJson, JsonOptions)
+
                 });
             }
 

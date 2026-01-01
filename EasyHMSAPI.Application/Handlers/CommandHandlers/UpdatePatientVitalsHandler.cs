@@ -51,6 +51,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     };
 
                     appointment.CurrentStatusCode = AppConstants.AppointmentStatus_Ready;
+                    var history = string.IsNullOrEmpty(appointment.StatusHistoryJson)
+                                    ? new List<object>()
+                                    : JsonSerializer.Deserialize<List<object>>(appointment.StatusHistoryJson) ?? new List<object>();
+                    history.Add(new { status = AppConstants.AppointmentStatus_Ready, timestamp = DateTime.Now });
+                    appointment.StatusHistoryJson = JsonSerializer.Serialize(history);
+                    appointment.LastStatusCodeAt = DateTime.UtcNow;
 
                     _context.AppointmentVitals.Add(vitals);
                 }
@@ -59,6 +65,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     vitals.VitalsJson = JsonSerializer.Serialize(request.VitalsJson);
                     vitals.RecordedAt = DateTime.UtcNow;
                     vitals.RecordedBy = request.RecordedBy;
+
+                    appointment.CurrentStatusCode = AppConstants.AppointmentStatus_Ready;
+                    var history = string.IsNullOrEmpty(appointment.StatusHistoryJson)
+                                   ? new List<object>()
+                                   : JsonSerializer.Deserialize<List<object>>(appointment.StatusHistoryJson) ?? new List<object>();
+                    history.Add(new { status = AppConstants.AppointmentStatus_Ready, timestamp = DateTime.Now });
+                    appointment.StatusHistoryJson = JsonSerializer.Serialize(history);
+                    appointment.LastStatusCodeAt = DateTime.UtcNow;
 
                     _context.AppointmentVitals.Update(vitals);
                 }

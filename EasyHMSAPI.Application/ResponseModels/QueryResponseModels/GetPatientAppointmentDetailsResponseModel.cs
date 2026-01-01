@@ -30,6 +30,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public DateTime LastStatusAt { get; set; }
         public DateTime CreatedAt { get; set; }
         public TokenDetail? Token { get; set; }
+        public List<StatusHistoryModel>? StatusJsonHistory { get; set; }
     }
 
     [ExcludeFromCodeCoverage]
