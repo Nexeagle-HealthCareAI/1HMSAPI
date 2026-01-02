@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Helpers.Implementations;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Domain.Context;
@@ -10,9 +11,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     public class UpdatePrescriptionSettingsHandler : IRequestHandler<UpdatePrescriptionSettingsRequestModel, UpdatePrescriptionSettingsResponseModel>
     {
         private readonly AppDbContext _context;
-        public UpdatePrescriptionSettingsHandler(AppDbContext dbContext)
+        private readonly DoctorValidationHelper _doctorValidationHelper;
+        public UpdatePrescriptionSettingsHandler(AppDbContext dbContext, DoctorValidationHelper doctorValidationHelper)
         {
             _context = dbContext;
+            _doctorValidationHelper = doctorValidationHelper;
         }
 
         public async Task<UpdatePrescriptionSettingsResponseModel> Handle(UpdatePrescriptionSettingsRequestModel request, CancellationToken cancellationToken)
@@ -42,6 +45,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return response;
                 }
 
+                if (!await _doctorValidationHelper.ValidateDoctorAsync(request.HospitalId, request.DoctorId, cancellationToken))
+                {
+                    response.Success = false;
+                    response.Message = "Doctor is not associated with the specified hospital.";
+                    return response;
+                }
+
                 var existingSettings = await _context.PrescriptionSettings
                     .FirstOrDefaultAsync(x => x.HospitalId == request.HospitalId && x.DoctorId == request.DoctorId, cancellationToken);
                 var currentDateTime = DateTime.UtcNow;
@@ -65,7 +75,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         TextColour = request.TextColour,
                         CreatedAt = currentDateTime,
                         UpdatedAt = currentDateTime,
-                        CreatedByUserId = request.LoggedInUserId
+                        CreatedByUserId = request.LoggedInUserId,
+                        ValidDuration = request.ValidUpto is not null ? request.ValidUpto.Value : 0
                     };
                     _context.PrescriptionSettings.Add(newSettings);
 
@@ -93,6 +104,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         existingSettings.FontWeight = request.FontWeight;
                     if (!string.IsNullOrEmpty(request.TextColour))
                         existingSettings.TextColour = request.TextColour;
+                    if(request.ValidUpto.HasValue)
+                        existingSettings.ValidDuration = request.ValidUpto.Value;
                     existingSettings.UpdatedAt = currentDateTime;
 
                     response.PrescriptionSettingId = existingSettings.PrescriptionSettingId;

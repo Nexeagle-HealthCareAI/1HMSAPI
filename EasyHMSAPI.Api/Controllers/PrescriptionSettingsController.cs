@@ -1,5 +1,7 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
+using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -23,7 +25,7 @@ namespace EasyHMSAPI.Api.Controllers
 
         [Authorize]
         [HttpGet]
-        public async Task<IActionResult> GetPrescriptionSettings(Guid doctorId, Guid hospitalId)
+        public async Task<ActionResult<GetPrescriptionSettingsResponseModel>> GetPrescriptionSettings(Guid doctorId, Guid hospitalId)
         {
             _logger.LogInformation("GetPrescriptionSettings started at {Time} for doctorId: {DoctorId} & hospitalId: {HospitalId}", DateTime.UtcNow, doctorId, hospitalId);
             try
@@ -54,7 +56,7 @@ namespace EasyHMSAPI.Api.Controllers
 
         [Authorize]
         [HttpPut]
-        public async Task<IActionResult> UpdatePrescriptionSettings(UpdatePrescriptionSettingsRequestModel request)
+        public async Task<ActionResult<UpdatePrescriptionSettingsResponseModel>> UpdatePrescriptionSettings(UpdatePrescriptionSettingsRequestModel request)
         {
             _logger.LogInformation("UpdatePrescriptionSettings started at {Time} for doctorId: {DoctorId} & hospitalId: {HospitalId}", DateTime.UtcNow, request.DoctorId, request.HospitalId);
             try
@@ -90,7 +92,7 @@ namespace EasyHMSAPI.Api.Controllers
 
         [Authorize]
         [HttpPost("upload-template")]
-        public async Task<IActionResult> UploadPrescriptionTemplate([FromForm] UploadPrescriptionTemplateRequestModel request)
+        public async Task<ActionResult<UploadPrescriptionAttachmentsResponseModel>> UploadPrescriptionTemplate([FromForm] UploadPrescriptionTemplateRequestModel request)
         {
             _logger.LogInformation("UploadAsset started at {Time} for doctorId: {DoctorId} & hospitalId: {HospitalId}", DateTime.UtcNow, request.DoctorId, request.HospitalId);
             try
