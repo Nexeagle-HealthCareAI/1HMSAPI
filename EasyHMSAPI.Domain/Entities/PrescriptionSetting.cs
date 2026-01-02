@@ -30,5 +30,6 @@ namespace EasyHMSAPI.Domain.Entities
         public DateTime UpdatedAt { get; set; }
         [Timestamp]
         public byte[] RowVersion { get; set; } = null!;
+        public int ValidDuration { get; set; }
     }
 }

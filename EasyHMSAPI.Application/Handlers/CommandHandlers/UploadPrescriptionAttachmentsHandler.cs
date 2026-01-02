@@ -57,6 +57,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     response.Message = "Doctor is not associated with the specified hospital.";
                     return response;
                 }
+
                 var appointment = await _context.Appointments
                     .Where(x => x.ApptId == request.AppointmentId && x.PatientId == request.PatientId && x.DoctorId == request.DoctorId && x.HospitalId == request.HospitalId)
                     .FirstOrDefaultAsync(cancellationToken);

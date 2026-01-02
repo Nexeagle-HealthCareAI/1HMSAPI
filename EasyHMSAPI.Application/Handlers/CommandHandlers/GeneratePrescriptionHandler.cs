@@ -103,9 +103,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         FontWeight = prescriptionSettings.FontWeight,
                         TextColour = prescriptionSettings.TextColour,
                         Uri = prescriptionSettings.URI,
+                        ValidUpto = prescriptionSettings.ValidDuration,
                         CreatedBy = null,
                         CreatedAtUtc = prescriptionSettings.CreatedAt,
-                        UpdatedAtUtc = prescriptionSettings.UpdatedAt
+                        UpdatedAtUtc = prescriptionSettings.UpdatedAt,
+
                     };
                 }
 

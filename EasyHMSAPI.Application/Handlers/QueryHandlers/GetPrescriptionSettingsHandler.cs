@@ -1,3 +1,5 @@
+using EasyHMSAPI.Application.Helpers.Implementations;
+using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Domain.Context;
@@ -9,9 +11,12 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
     public class GetPrescriptionSettingsHandler : IRequestHandler<GetPrescriptionSettingsRequestModel, GetPrescriptionSettingsResponseModel>
     {
         private readonly AppDbContext _context;
-        public GetPrescriptionSettingsHandler(AppDbContext context)
+        private readonly IDoctorValidationHelper _doctorValidationHelper;
+
+        public GetPrescriptionSettingsHandler(AppDbContext context, IDoctorValidationHelper doctorValidationHelper)
         {
             _context = context;
+            _doctorValidationHelper = doctorValidationHelper;
         }
 
         public async Task<GetPrescriptionSettingsResponseModel> Handle(GetPrescriptionSettingsRequestModel request, CancellationToken cancellationToken)
@@ -40,6 +45,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     return response;
                 }
 
+                if (!await _doctorValidationHelper.ValidateDoctorAsync(request.HospitalId, request.DoctorId, cancellationToken))
+                {
+                    response.Success = false;
+                    response.Message = "Doctor is not associated with the specified hospital.";
+                    return response;
+                }
+
                 var prescriptionSettings = await _context.PrescriptionSettings
                 .AsNoTracking()
                 .FirstOrDefaultAsync(ps => ps.DoctorId == request.DoctorId && ps.HospitalId == request.HospitalId, cancellationToken);
@@ -63,6 +75,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         URI = prescriptionSettings.URI,
                         CreatedAtUtc = prescriptionSettings.CreatedAt,
                         UpdatedAtUtc = prescriptionSettings.UpdatedAt,
+                        ValidUpto = prescriptionSettings.ValidDuration,
                     };
 
                     response.Success = true;
