@@ -1,4 +1,4 @@
-using EasyHMSAPI.Application.Helpers.Implementations;
+using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Domain.Context;
@@ -11,8 +11,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     public class UpdatePrescriptionSettingsHandler : IRequestHandler<UpdatePrescriptionSettingsRequestModel, UpdatePrescriptionSettingsResponseModel>
     {
         private readonly AppDbContext _context;
-        private readonly DoctorValidationHelper _doctorValidationHelper;
-        public UpdatePrescriptionSettingsHandler(AppDbContext dbContext, DoctorValidationHelper doctorValidationHelper)
+        private readonly IDoctorValidationHelper _doctorValidationHelper;
+        public UpdatePrescriptionSettingsHandler(AppDbContext dbContext, IDoctorValidationHelper doctorValidationHelper)
         {
             _context = dbContext;
             _doctorValidationHelper = doctorValidationHelper;
