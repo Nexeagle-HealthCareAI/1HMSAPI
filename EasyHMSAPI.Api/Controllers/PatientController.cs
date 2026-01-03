@@ -1,6 +1,7 @@
 ﻿using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EasyHMSAPI.Api.Controllers
@@ -18,6 +19,7 @@ namespace EasyHMSAPI.Api.Controllers
         }
 
         [HttpGet]
+        [Authorize]
         [Route("hospitalId={hospitalId}")]
         public async Task<ActionResult<GetPatientsByHospitalIdResponseModel>> GetPatientsByHospitalIdAsync(Guid hospitalId)
         {
@@ -41,6 +43,39 @@ namespace EasyHMSAPI.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "An error occurred while fetching patients for HospitalId: {HospitalId}", hospitalId);
+                result.Success = false;
+                result.Message = "An error occurred while processing your request." + ex.Message + ex.InnerException + ex.StackTrace;
+            }
+
+            return Ok(result);
+        }
+
+        [HttpGet]
+        //[Authorize]
+        [Route("analysis/hospitalId={hospitalId}&patientId={patientId}")]
+        public async Task<ActionResult<GetPatientAnalysisResponseModel>> GetPatientDetailsByIdAsync(Guid hospitalId, string? patientId)
+        {
+            GetPatientAnalysisResponseModel result = new();
+            try
+            {
+                if (hospitalId == Guid.Empty || string.IsNullOrWhiteSpace(patientId) || string.IsNullOrEmpty(patientId))
+                {
+                    result.Success = false;
+                    result.Message = "Invalid HospitalId or PatientId provided.";
+                }
+                else
+                {
+                    GetPatientAnalysisRequestModel request = new()
+                    {
+                        HospitalId = hospitalId,
+                        PatientId = patientId
+                    };
+                    result = await _mediator.Send(request);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while fetching patient details for HospitalId: {HospitalId} and PatientId: {PatientId}", hospitalId, patientId);
                 result.Success = false;
                 result.Message = "An error occurred while processing your request." + ex.Message + ex.InnerException + ex.StackTrace;
             }
