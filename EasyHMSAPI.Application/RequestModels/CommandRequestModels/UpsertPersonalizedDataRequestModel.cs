@@ -11,6 +11,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public Guid HospitalId { get; set; }
         public Guid DoctorId { get; set; }
         public string? LookupType { get; set; }
+        public string? Source  { get; set; }
         [JsonIgnore]
         public Guid LoggedInUserId { get; set; }
         public PersonalizedLookupDataModel Data { get; set; } = null!;

@@ -24,5 +24,6 @@ namespace EasyHMSAPI.Domain.Entities
         public DateTime LastStatusCodeAt { get; set; }
         public DateTime CreatedAt { get; set; }
         public Guid? CreatedBy { get; set; }
+        public string? AppointmentType { get; set; }
     }
 }

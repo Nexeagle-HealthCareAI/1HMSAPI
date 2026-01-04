@@ -27,6 +27,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? Reason { get; set; }
         public string? InsuranceId { get; set; }
         public string? PaymentMode { get; set; }
+        public string? AppointmentType { get; set; }
         public DateTime LastStatusAt { get; set; }
         public DateTime CreatedAt { get; set; }
         public TokenDetail? Token { get; set; }

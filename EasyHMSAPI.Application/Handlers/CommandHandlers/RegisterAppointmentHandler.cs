@@ -42,6 +42,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 var (appointment, isNewAppointment) = await CreateOrUpdateAppointment(request, patient, status, cancellationToken);
 
+                // Determine appointment type based on patient history and prescription settings
+                await SetAppointmentType(appointment, patient, request, isNewAppointment, cancellationToken);
+
                 // Save appointment first to ensure ApptId exists in DB
                 await _context.SaveChangesAsync(cancellationToken);
 
@@ -88,11 +91,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
             catch (DbUpdateException dbEx)
             {
-                throw new Exception($"Failed to register appointment", dbEx);
+                var msg = "Failed to register appointment, Db Exception" + dbEx + dbEx.InnerException + dbEx.StackTrace;
+                throw new Exception(msg);
             }
             catch (Exception ex)
             {
-                throw new Exception("Failed to register appointment: " + ex.Message, ex);
+                var msg = "Failed to register appointment" + ex + ex.InnerException + ex.StackTrace;
+                throw new Exception(msg);
             }
         }
 
@@ -194,6 +199,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     LastStatusCodeAt = DateTime.UtcNow,
                     CreatedAt = DateTime.UtcNow,
                     CreatedBy = request?.UserId,
+                    AppointmentType = null // Will be set by SetAppointmentType
                 };
                 _context.Appointments.Add(appointment);
                 isNew = true;
@@ -211,6 +217,60 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 _context.Appointments.Update(appointment);
             }
             return (appointment, isNew);
+        }
+
+        private async Task SetAppointmentType(Appointment appointment, PatientRegistration patient, RegisterAppointmentRequestModel request, bool isNewAppointment, CancellationToken cancellationToken)
+        {
+            if (isNewAppointment)
+            {
+                // New patient = New/Fee
+                appointment.AppointmentType = "New/Fee";
+            }
+            else
+            {
+                // Old patient - check prescription validity
+                var prescriptionSetting = await _context.PrescriptionSettings
+                    .FirstOrDefaultAsync(ps => ps.DoctorId == request.DoctorId && ps.HospitalId == request.HospitalId, cancellationToken);
+
+                if (prescriptionSetting != null && prescriptionSetting.ValidDuration > 0)
+                {
+                    // Get the last completed appointment for this patient with this doctor
+                    var lastCompletedAppointment = await _context.Appointments
+                        .Where(a => a.PatientId == patient.PatientId &&
+                                   a.DoctorId == request.DoctorId &&
+                                   a.HospitalId == request.HospitalId &&
+                                   a.CurrentStatusCode == AppConstants.AppointmentStatus_Completed)
+                        .OrderByDescending(a => a.ApptDate)
+                        .FirstOrDefaultAsync(cancellationToken);
+
+                    if (lastCompletedAppointment != null)
+                    {
+                        // Calculate the date within which prescription is valid
+                        var prescriptionValidUntilDate = lastCompletedAppointment.ApptDate.AddDays(prescriptionSetting.ValidDuration);
+
+                        // If current appointment date is within valid period, mark as Old/No Fee
+                        if (request.ApptDate.Date <= prescriptionValidUntilDate)
+                        {
+                            appointment.AppointmentType = "Old/No Fee";
+                        }
+                        else
+                        {
+                            // If current appointment date is beyond valid period, mark as Old/Fee
+                            appointment.AppointmentType = "Old/Fee";
+                        }
+                    }
+                    else
+                    {
+                        // No completed appointment found, mark as Old/Fee
+                        appointment.AppointmentType = "Old/Fee";
+                    }
+                }
+                else
+                {
+                    // No prescription setting found or ValidDuration is 0, mark as Old/Fee
+                    appointment.AppointmentType = "Old/Fee";
+                }
+            }
         }
 
         private string GenerateNewPatientId()

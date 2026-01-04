@@ -68,7 +68,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                                        && lp.HospitalID == request.HospitalId
                                                        && lp.LookupTypeId == lookupType.LookupTypeId,
                                                        cancellationToken);
-
                         if (existingLookup == null)
                         {
                             response.Success = false;
@@ -76,7 +75,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         }
                         else
                         {
-                            if(!string.IsNullOrEmpty(request.Data.Code))existingLookup.Code = request.Data.Code;
+                            if(!string.IsNullOrEmpty(request.Data.Code))existingLookup.Code = request.Data.Code.ToUpper();
                             if(!string.IsNullOrEmpty(request.Data.Name))existingLookup.Name = request.Data.Name;
                             if (!string.IsNullOrEmpty(request.Data.ShortDesc)) existingLookup.ShortDesc = request.Data.ShortDesc;
                             if (!string.IsNullOrEmpty(metaJson)) existingLookup.MetaJson = metaJson;
@@ -84,6 +83,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             existingLookup.IsOverride = true;
                             existingLookup.ModifiedAt = DateTime.UtcNow;
                             existingLookup.ModifiedBy = request.LoggedInUserId;
+                            if(!string.IsNullOrEmpty(request.Source))
+                            {
+                                if(request.Source.ToLower() == "prescription")
+                                {
+                                    existingLookup.UsageCount += 1;
+                                }
+                            }
                             await _dbContext.SaveChangesAsync(cancellationToken);
 
                             response.Success = true;
@@ -101,9 +107,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             DoctorID = request.DoctorId,
                             MasterLookupId = masterLookup?.LookupId,
                             LookupTypeId = lookupType.LookupTypeId,
-                            Code = request.Data.Code,
-                            Name = request.Data.Name ?? string.Empty,
-                            ShortDesc = request.Data.ShortDesc,
+                            Code = request.Data?.Code?.ToUpper(),
+                            Name = request.Data?.Name ?? string.Empty,
+                            ShortDesc = request.Data?.ShortDesc,
                             MetaJson = metaJson,
                             IsActive = true,
                             IsOverride = false,
