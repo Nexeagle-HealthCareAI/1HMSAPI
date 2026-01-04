@@ -1,5 +1,7 @@
 using EasyHMSAPI.Application.Handlers.CommandHandlers;
+using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Domain.Context;
+using Moq;
 using NUnit.Framework;
 using System;
 
@@ -9,11 +11,13 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
     public class UpdatePrescriptionSettingsHandlerTests
     {
         private AppDbContext _context = null!;
+        private Mock<IDoctorValidationHelper> _mockDoctorValidationHelper = null!;
 
         [SetUp]
         public void SetUp()
         {
             _context = InMemoryDbContextFactory.CreateContext();
+            _mockDoctorValidationHelper = new Mock<IDoctorValidationHelper>();
         }
 
         [TearDown]
@@ -26,7 +30,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test, Ignore("TODO: Implement test logic")]
         public void Constructor_Smoke()
         {
-            var handler = new UpdatePrescriptionSettingsHandler(_context);
+            var handler = new UpdatePrescriptionSettingsHandler(_context, _mockDoctorValidationHelper.Object);
             Assert.That(handler, Is.Not.Null);
         }
 

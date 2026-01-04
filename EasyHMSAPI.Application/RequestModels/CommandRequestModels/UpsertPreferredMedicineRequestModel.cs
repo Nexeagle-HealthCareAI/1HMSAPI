@@ -11,6 +11,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public long? PreferrredId { get; set; }
         public Guid DoctorId { get; set; }
         public Guid HospitalId { get; set; }
+        public string? Source { get; set; }
         [JsonIgnore]
         public Guid LoggedInUserId { get; set; }
         public PreferredMedicineModel Medicine { get; set; } = null!;

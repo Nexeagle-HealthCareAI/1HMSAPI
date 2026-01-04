@@ -69,7 +69,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             }
                             else
                             {
-                                if (!string.IsNullOrEmpty(request.Medicine.MedicineName)) existingPreference.MedicineName = request.Medicine.MedicineName;
+                                if (!string.IsNullOrEmpty(request.Medicine.MedicineName)) existingPreference.MedicineName = request.Medicine.MedicineName.ToUpper();
                                 if (!string.IsNullOrEmpty(request.Medicine.BrandName)) existingPreference.BrandName = request.Medicine.BrandName;
                                 if (!string.IsNullOrEmpty(request.Medicine.GenericName)) existingPreference.GenericName = request.Medicine.GenericName;
                                 if (!string.IsNullOrEmpty(request.Medicine.Manufacturer)) existingPreference.Manufacturer = request.Medicine.Manufacturer;
@@ -90,6 +90,59 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         else
                         {
                             response.Message = "Preferred medicine not found for update.";
+                        }
+                    }
+                }
+                else if(!string.IsNullOrEmpty(request.Source))
+                {
+                    if(request?.Source.ToLower() == "prescription")
+                    {
+                        var existing = await _dbContext.DoctorPreferredMedicines
+                            .Where(x => 
+                                x.MedicineName != null && 
+                                request.Medicine.MedicineName != null &&
+                                x.MedicineName.ToLower() == request.Medicine.MedicineName.ToLower()
+                            )
+                            .FirstOrDefaultAsync(cancellationToken);
+                        if (existing is not null)
+                        {
+                            existing.UsageCount = (existing.UsageCount ?? 0) + 1;
+                            existing.UpdatedAt = DateTime.UtcNow;
+                            existing.UpdatedBy = request.LoggedInUserId.ToString();
+                            await _dbContext.SaveChangesAsync(cancellationToken);
+
+                            response.Success = true;
+                            response.Message = "Preferred medicine usage count updated";
+
+                        }
+                        else
+                        {
+                            var newMed = new DoctorPreferredMedicine
+                            {
+                                DoctorId = request.DoctorId,
+                                HospitalId = request.HospitalId,
+                                MedicineName = request.Medicine?.MedicineName?.ToUpper(),
+                                BrandName = request?.Medicine?.BrandName,
+                                GenericName = request?.Medicine?.GenericName,
+                                Manufacturer = request?.Medicine?.Manufacturer,
+                                DosageForm = request?.Medicine?.DosageForm,
+                                Strength = request?.Medicine?.Strength,
+                                Price = request?.Medicine?.Price,
+                                Usage = request?.Medicine?.UsageDescription,
+                                SideEffects = request?.Medicine?.SideEffects,
+                                Notes = request?.Medicine?.Notes,
+                                UsageCount = 0,
+                                CreatedAt = DateTime.UtcNow,
+                                CreatedBy = request?.LoggedInUserId.ToString(),
+                                UpdatedAt = DateTime.UtcNow,
+                                UpdatedBy = request?.LoggedInUserId.ToString(),
+                            };
+
+                            _dbContext.DoctorPreferredMedicines.Add(newMed);
+                            await _dbContext.SaveChangesAsync(cancellationToken);
+
+                            response.Success = true;
+                            response.Message = "Preferred medicine added";
                         }
                     }
                 }

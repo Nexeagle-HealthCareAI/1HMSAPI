@@ -78,7 +78,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             return response;
         }
 
-        private double CalculateVisitFrequency(List<Domain.Entities.Appointment> appointments)
+        private static double CalculateVisitFrequency(List<Domain.Entities.Appointment> appointments)
         {
             if (appointments.Count <= 1)
                 return 0;
@@ -99,7 +99,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             return Math.Round((double)gaps.Sum() / gaps.Count, 2);
         }
 
-        private string DeterminePatientTags(List<Domain.Entities.Appointment> appointments)
+        private static string DeterminePatientTags(List<Domain.Entities.Appointment> appointments)
         {
             var tags = new List<string>();
 
@@ -135,7 +135,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             return string.Join(", ", tags);
         }
 
-        private bool CheckHighRiskEngagement(List<Domain.Entities.Appointment> appointments)
+        private static bool CheckHighRiskEngagement(List<Domain.Entities.Appointment> appointments)
         {
             if (appointments.Count == 0)
                 return false;
@@ -184,7 +184,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             return false;
         }
 
-        private bool CheckNoShow(List<Domain.Entities.Appointment> appointments)
+        private static bool CheckNoShow(List<Domain.Entities.Appointment> appointments)
         {
             // No-show: Appointment is in Vitals Required or Ready status
             return appointments.Any(x => 

@@ -77,6 +77,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     PaymentMode = a.PaymentMode,
                     LastStatusAt = a.LastStatusCodeAt,
                     CreatedAt = a.CreatedAt,
+                    AppointmentType = a.AppointmentType,
                     TokenDetails = token == null ? null : new TokenDetailsDataModel
                     {
                         TokenId = token.TokenId,
