@@ -83,17 +83,29 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             existingLookup.IsOverride = true;
                             existingLookup.ModifiedAt = DateTime.UtcNow;
                             existingLookup.ModifiedBy = request.LoggedInUserId;
-                            if(!string.IsNullOrEmpty(request.Source))
-                            {
-                                if(request.Source.ToLower() == "prescription")
-                                {
-                                    existingLookup.UsageCount += 1;
-                                }
-                            }
+                           
                             await _dbContext.SaveChangesAsync(cancellationToken);
 
                             response.Success = true;
                             response.Message = "Personalized data updated";
+                        }
+                    }
+                    else if (!string.IsNullOrEmpty(request.Source))
+                    {
+                        if (request.Source.ToLower() == "prescription")
+                        {
+                            var name = request?.Data?.Name?.Trim().ToLower();
+                            var existingLookup = await _dbContext.LookupPersonals
+                                .Where(x => x.Name != null 
+                                       && x.Name.Trim().ToLower() == name 
+                                       && request != null 
+                                       && x.DoctorID == request.DoctorId
+                                       && x.HospitalID == request.HospitalId)
+                                .FirstOrDefaultAsync(cancellationToken);
+                            if (existingLookup != null)
+                            {
+                                existingLookup.UsageCount += 1;
+                            }
                         }
                     }
                     else
