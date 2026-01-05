@@ -88,6 +88,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                             response.Success = true;
                             response.Message = "Personalized data updated";
+                            response.PersonalId = existingLookup.PersonalId;
                         }
                     }
                     else if (!string.IsNullOrEmpty(request.Source))
@@ -105,6 +106,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             if (existingLookup != null)
                             {
                                 existingLookup.UsageCount += 1;
+
+                                response.Success = true;
+                                response.PersonalId = existingLookup.PersonalId;
+                                response.Message = "Personalized data usage count updated";
+                            }
+                            else
+                            {
+                                response.Success = false;
+                                response.Message = "Personalized data not found for usage count updated.";
                             }
                         }
                     }
