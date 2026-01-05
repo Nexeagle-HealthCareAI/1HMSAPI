@@ -301,82 +301,88 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         {
             var queueDate = request.ApptDate.Date;
             
-            using (var transaction = await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, cancellationToken))
+            // Use the DbContext's execution strategy to handle retries with transactions
+            var executionStrategy = _context.Database.CreateExecutionStrategy();
+            
+            return await executionStrategy.ExecuteAsync(async () =>
             {
-                try
+                using (var transaction = await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, cancellationToken))
                 {
-                    // Query with exclusive lock using UPDLOCK hint to prevent race conditions
-                    var doctorQueue = await _context.DoctorQueues
-                        .FromSql($@"SELECT * FROM DoctorQueues WITH (UPDLOCK, ROWLOCK) 
-                                   WHERE DoctorId = {request.DoctorId} AND TokenDate = {queueDate}")
-                        .FirstOrDefaultAsync(cancellationToken);
+                    try
+                    {
+                        // Query with exclusive lock using UPDLOCK hint to prevent race conditions
+                        var doctorQueue = await _context.DoctorQueues
+                            .FromSql($@"SELECT * FROM DoctorQueues WITH (UPDLOCK, ROWLOCK) 
+                                       WHERE DoctorId = {request.DoctorId} AND TokenDate = {queueDate}")
+                            .FirstOrDefaultAsync(cancellationToken);
 
-                    int tokenNumber;
-                    if (doctorQueue == null)
-                    {
-                        // Create a new queue with token 1
-                        doctorQueue = new DoctorQueue
+                        int tokenNumber;
+                        if (doctorQueue == null)
                         {
-                            HospitalId = request.HospitalId,
-                            DoctorId = request.DoctorId,
-                            TokenDate = queueDate,
-                            NextTokenNo = 2,
-                            TokenStrategy = AppConstants.TokenStrategy_Sequential,
-                        };
-                        tokenNumber = 1;
-                        _context.DoctorQueues.Add(doctorQueue);
-                        await _context.SaveChangesAsync(cancellationToken);
-                    }
-                    else
-                    {
-                        // Use next token number and increment
-                        tokenNumber = doctorQueue.NextTokenNo;
-                        doctorQueue.NextTokenNo++;
-                        _context.DoctorQueues.Update(doctorQueue);
-                        await _context.SaveChangesAsync(cancellationToken);
-                    }
+                            // Create a new queue with token 1
+                            doctorQueue = new DoctorQueue
+                            {
+                                HospitalId = request.HospitalId,
+                                DoctorId = request.DoctorId,
+                                TokenDate = queueDate,
+                                NextTokenNo = 2,
+                                TokenStrategy = AppConstants.TokenStrategy_Sequential,
+                            };
+                            tokenNumber = 1;
+                            _context.DoctorQueues.Add(doctorQueue);
+                            await _context.SaveChangesAsync(cancellationToken);
+                        }
+                        else
+                        {
+                            // Use next token number and increment
+                            tokenNumber = doctorQueue.NextTokenNo;
+                            doctorQueue.NextTokenNo++;
+                            _context.DoctorQueues.Update(doctorQueue);
+                            await _context.SaveChangesAsync(cancellationToken);
+                        }
 
-                    // Check for existing token to prevent duplicates
-                    var existingToken = await _context.AppointmentTokens
-                        .FirstOrDefaultAsync(t => t.ApptId == appointment.ApptId &&
-                                                 t.DoctorId == request.DoctorId &&
-                                                 t.TokenDate == queueDate &&
-                                                 t.HospitalId == request.HospitalId,
-                                                 cancellationToken);
-                    
-                    if (existingToken == null)
-                    {
-                        var appointmentToken = new AppointmentToken
+                        // Check for existing token to prevent duplicates
+                        var existingToken = await _context.AppointmentTokens
+                            .FirstOrDefaultAsync(t => t.ApptId == appointment.ApptId &&
+                                                     t.DoctorId == request.DoctorId &&
+                                                     t.TokenDate == queueDate &&
+                                                     t.HospitalId == request.HospitalId,
+                                                     cancellationToken);
+                        
+                        if (existingToken == null)
                         {
-                            TokenId = Guid.NewGuid(),
-                            HospitalId = request.HospitalId,
-                            DoctorId = request.DoctorId,
-                            ApptId = appointment.ApptId,
-                            TokenDate = queueDate,
-                            TokenNo = tokenNumber,
-                            IsManual = false,
-                            CreatedAt = DateTime.UtcNow
-                        };
-                        _context.AppointmentTokens.Add(appointmentToken);
+                            var appointmentToken = new AppointmentToken
+                            {
+                                TokenId = Guid.NewGuid(),
+                                HospitalId = request.HospitalId,
+                                DoctorId = request.DoctorId,
+                                ApptId = appointment.ApptId,
+                                TokenDate = queueDate,
+                                TokenNo = tokenNumber,
+                                IsManual = false,
+                                CreatedAt = DateTime.UtcNow
+                            };
+                            _context.AppointmentTokens.Add(appointmentToken);
+                        }
+                        else
+                        {
+                            existingToken.TokenNo = tokenNumber;
+                            existingToken.IsManual = false;
+                            existingToken.CreatedAt = DateTime.UtcNow;
+                            _context.AppointmentTokens.Update(existingToken);
+                        }
+                        
+                        await _context.SaveChangesAsync(cancellationToken);
+                        await transaction.CommitAsync(cancellationToken);
+                        return tokenNumber;
                     }
-                    else
+                    catch
                     {
-                        existingToken.TokenNo = tokenNumber;
-                        existingToken.IsManual = false;
-                        existingToken.CreatedAt = DateTime.UtcNow;
-                        _context.AppointmentTokens.Update(existingToken);
+                        await transaction.RollbackAsync(cancellationToken);
+                        throw;
                     }
-                    
-                    await _context.SaveChangesAsync(cancellationToken);
-                    await transaction.CommitAsync(cancellationToken);
-                    return tokenNumber;
                 }
-                catch
-                {
-                    await transaction.RollbackAsync(cancellationToken);
-                    throw;
-                }
-            }
+            });
         }
     }
 }
