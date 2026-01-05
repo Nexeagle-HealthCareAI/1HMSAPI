@@ -7,6 +7,6 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
     {
         public bool Success { get; set; }
         public string Message { get; set; } = "Success";
-        public Guid PersonalId { get; set; }
+        public Guid? PersonalId { get; set; }
     }
 }
