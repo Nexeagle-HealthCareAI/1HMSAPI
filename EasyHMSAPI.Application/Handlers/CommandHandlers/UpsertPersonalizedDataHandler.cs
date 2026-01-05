@@ -96,7 +96,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         {
                             var name = request?.Data?.Name?.Trim().ToLower();
                             var existingLookup = await _dbContext.LookupPersonals
-                                .Where(x => x.Name != null && x.Name.Trim().ToLower() == name)
+                                .Where(x => x.Name != null 
+                                       && x.Name.Trim().ToLower() == name 
+                                       && request != null 
+                                       && x.DoctorID == request.DoctorId
+                                       && x.HospitalID == request.HospitalId)
                                 .FirstOrDefaultAsync(cancellationToken);
                             if (existingLookup != null)
                             {
