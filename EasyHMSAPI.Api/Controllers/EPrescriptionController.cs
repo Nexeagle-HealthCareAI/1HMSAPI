@@ -197,7 +197,7 @@ namespace EasyHMSAPI.Api.Controllers
 
         [HttpPut("configuration/personalized-data")]
         [Authorize]
-        public async Task<IActionResult> UpsertPersonalizedData([FromQuery] Guid hospitalId, [FromQuery] Guid doctorId, [FromQuery] string lookupType, [FromBody] PersonalizedLookupDataModel model)
+        public async Task<IActionResult> UpsertPersonalizedData([FromQuery] Guid hospitalId, [FromQuery] Guid doctorId, [FromQuery] string lookupType, [FromQuery] string? source, [FromBody] PersonalizedLookupDataModel model)
         {
             _logger.LogInformation("UpsertPersonalizedData started at {Time} for hospitalId: {HospitalId}, doctorId: {DoctorId}, lookupType: {LookupType}", DateTime.UtcNow, hospitalId, doctorId, lookupType);
             UpsertPersonalizedDataResponseModel response = new();
@@ -225,7 +225,8 @@ namespace EasyHMSAPI.Api.Controllers
                             DoctorId = doctorId,
                             LookupType = lookupType,
                             Data = model,
-                            LoggedInUserId = userId
+                            LoggedInUserId = userId,
+                            Source = source ?? string.Empty
                         };
 
                         if (request.LoggedInUserId == Guid.Empty)
