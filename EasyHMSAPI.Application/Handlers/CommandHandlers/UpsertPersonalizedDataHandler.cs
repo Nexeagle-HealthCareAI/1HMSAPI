@@ -106,6 +106,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             if (existingLookup != null)
                             {
                                 existingLookup.UsageCount += 1;
+                                await _dbContext.SaveChangesAsync(cancellationToken);
 
                                 response.Success = true;
                                 response.PersonalId = existingLookup.PersonalId;
@@ -113,8 +114,35 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             }
                             else
                             {
-                                response.Success = false;
-                                response.Message = "Personalized data not found for usage count updated.";
+                                var masterLookup = await _dbContext.LookupMasters
+                                    .FirstOrDefaultAsync(lm => lm.LookupTypeId == lookupType.LookupTypeId, cancellationToken);
+                                var newPersonal = new LookupPersonal
+                                {
+                                    PersonalId = Guid.NewGuid(),
+                                    HospitalID = request is not null ? request.HospitalId : Guid.Empty,
+                                    DoctorID = request is not null ? request.DoctorId : Guid.Empty,
+                                    MasterLookupId = masterLookup?.LookupId,
+                                    LookupTypeId = lookupType.LookupTypeId,
+                                    Code = request is not null ? request.Data?.Code?.ToUpper() : null,
+                                    Name = request is not null && request.Data?.Name != null ? request.Data.Name : string.Empty,
+                                    ShortDesc = request is not null ? request.Data?.ShortDesc : string.Empty,
+                                    MetaJson = metaJson,
+                                    IsActive = true,
+                                    IsOverride = false,
+                                    HideMaster = false,
+                                    UsageCount = 1,
+                                    CreatedAt = DateTime.UtcNow,
+                                    CreatedBy = request is not null ? request.LoggedInUserId :Guid.Empty,
+                                    ModifiedAt = DateTime.UtcNow,
+                                    ModifiedBy = request is not null ? request.LoggedInUserId : Guid.Empty
+                                };
+
+                                await _dbContext.LookupPersonals.AddAsync(newPersonal, cancellationToken);
+                                await _dbContext.SaveChangesAsync(cancellationToken);
+
+                                response.PersonalId = newPersonal.PersonalId;
+                                response.Success = true;
+                                response.Message = "Personalized data added";
                             }
                         }
                     }
