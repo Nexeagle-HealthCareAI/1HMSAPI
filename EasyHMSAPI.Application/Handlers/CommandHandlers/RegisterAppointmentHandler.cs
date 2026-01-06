@@ -254,7 +254,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             var newDate = lastAppoitment.ApptDate.AddDays(prescriptionSettings.ValidDuration);
                             if (request.ApptDate <= newDate)
                             {
-                                appointment.AppointmentType = "Old/NoFee";
+                                appointment.AppointmentType = "Old/No-Fee";
                             }
                             else
                             {
@@ -263,18 +263,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         }
                         else
                         {
-                            appointment.AppointmentType = "New/Fee";
+                            appointment.AppointmentType = "New";
                         }
                     }
                     else
                     {
-                        appointment.AppointmentType = "New/Fee";
+                        appointment.AppointmentType = "New";
                     }
                 }
             }
             else
             {
-                appointment.AppointmentType = "New/Fee";
+                appointment.AppointmentType = "New";
             }
 
             return;

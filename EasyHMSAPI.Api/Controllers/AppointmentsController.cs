@@ -1,8 +1,10 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
+using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Org.BouncyCastle.Asn1.Esf;
 using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Api.Controllers
@@ -315,5 +317,33 @@ namespace EasyHMSAPI.Api.Controllers
 
             return Ok(response);
         }
-    }
+
+        [HttpPost("complete-appointment")]
+        [Authorize]
+        public async Task<ActionResult<CompleteAppointmentResponseModel>> CompleteAppointment([FromBody] CompleteAppointmentRequestModel request)
+        {
+            _logger.LogInformation("CompleteAppointment started at {Time} for AppointmentId: {AppointmentId}", DateTime.UtcNow, request.AppointmentId);
+            CompleteAppointmentResponseModel result = new();
+            try
+            {
+                if (request.HospitalId == Guid.Empty || request.DoctordId == Guid.Empty || request.AppointmentId == Guid.Empty || string.IsNullOrEmpty(request.PatientId) || string.IsNullOrWhiteSpace(request.PatientId))
+                {
+                    result.Success = false;
+                    result.Message = "HospitalId, DoctordId, AppointmentId, and PatientId are required.";
+                }
+                else
+                {
+                    result = await _mediator.Send(request);
+                    _logger.LogInformation("CompleteAppointment successful for AppointmentId: {AppointmentId}", request.AppointmentId);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in CompleteAppointment for AppointmentId: {AppointmentId}", request.AppointmentId);
+                result.Success = false;
+                result.Message = ex.Message + ex.InnerException + ex.StackTrace;
+            }
+
+            return Ok(result);
+        }
 }
