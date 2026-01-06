@@ -69,7 +69,7 @@ namespace EasyHMSAPI.Api.Controllers
                 request.UserId = userId;
             }
 
-            if(request.UserId == Guid.Empty)
+            if (request.UserId == Guid.Empty)
                 return BadRequest(new { Message = "User ID is required." });
 
             if (!ModelState.IsValid)
@@ -346,4 +346,5 @@ namespace EasyHMSAPI.Api.Controllers
 
             return Ok(result);
         }
+    }
 }
