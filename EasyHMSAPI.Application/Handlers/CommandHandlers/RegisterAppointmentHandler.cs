@@ -236,12 +236,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
                 if (existingPatient is null)
                 {
-                    appointment.AppointmentType = "New/Fee";
+                    appointment.AppointmentType = "New";
                 }
                 else
                 {
                     var lastAppoitment = await _context.Appointments
-                        .Where(a => a.PatientId == existingPatient.PatientId && a.CurrentStatusCode != AppConstants.AppointmentStatus_VitalsRequired)
+                        .Where(a => a.PatientId == existingPatient.PatientId && (a.CurrentStatusCode != AppConstants.AppointmentStatus_VitalsRequired && a.CurrentStatusCode != AppConstants.AppointmentStatus_Cancelled))
                         .OrderByDescending(a => a.ApptDate)
                         .FirstOrDefaultAsync(cancellationToken);
                     if (lastAppoitment is not null)
