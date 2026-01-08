@@ -51,7 +51,7 @@ namespace EasyHMSAPI.Api.Controllers
         }
 
         [HttpGet]
-        //[Authorize]
+        [Authorize]
         [Route("analysis/hospitalId={hospitalId}&patientId={patientId}")]
         public async Task<ActionResult<GetPatientAnalysisResponseModel>> GetPatientDetailsByIdAsync(Guid hospitalId, string? patientId)
         {
@@ -76,6 +76,36 @@ namespace EasyHMSAPI.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "An error occurred while fetching patient details for HospitalId: {HospitalId} and PatientId: {PatientId}", hospitalId, patientId);
+                result.Success = false;
+                result.Message = "An error occurred while processing your request." + ex.Message + ex.InnerException + ex.StackTrace;
+            }
+
+            return Ok(result);
+        }
+        [HttpGet]
+        [Route("visit-summary-pdf/appointmentId={appointmentId}")]
+        public async Task<ActionResult<GetPatientVisitSummaryPdfResponseModel>> GetPatientVisitSummaryAsync(Guid appointmentId)
+        {
+            GetPatientVisitSummaryPdfResponseModel result = new();
+            try
+            {
+                if (appointmentId == Guid.Empty)
+                {
+                    result.Success = false;
+                    result.Message = "AppointmentId is required.";
+                }
+                else
+                {
+                    GetPatientVisitSummaryPdfRequestModel request = new()
+                    {
+                        AppointmentId = appointmentId
+                    };
+                    result = await _mediator.Send(request);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while fetching visit summary for AppointmentId: {appointmentId}", appointmentId);
                 result.Success = false;
                 result.Message = "An error occurred while processing your request." + ex.Message + ex.InnerException + ex.StackTrace;
             }

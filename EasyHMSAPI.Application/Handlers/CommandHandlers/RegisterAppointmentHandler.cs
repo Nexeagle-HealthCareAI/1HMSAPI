@@ -224,6 +224,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
             var existingPatient = await _context.PatientRegistrations
                 .Where(p => p.PatientId != null && p.PatientId.ToUpper() == requestPatientId)
+                .Select(x => new
+                {
+                    x.PatientId,
+                    x.FullName
+                })
                 .FirstOrDefaultAsync(cancellationToken);
             if (existingPatient is null)
             {
@@ -232,49 +237,64 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     var requestFullName = request.Patient.FullName.Trim().ToLower();
                     existingPatient = await _context.PatientRegistrations
                         .Where(p => p.FullName != null && p.FullName.Trim().ToLower() == requestFullName)
-                        .FirstOrDefaultAsync(cancellationToken);
-                }
-                if (existingPatient is null)
-                {
-                    appointment.AppointmentType = "New";
-                }
-                else
-                {
-                    var lastAppoitment = await _context.Appointments
-                        .Where(a => a.PatientId == existingPatient.PatientId && (a.CurrentStatusCode != AppConstants.AppointmentStatus_VitalsRequired && a.CurrentStatusCode != AppConstants.AppointmentStatus_Cancelled))
-                        .OrderByDescending(a => a.ApptDate)
-                        .FirstOrDefaultAsync(cancellationToken);
-                    if (lastAppoitment is not null)
-                    {
-                        var prescriptionSettings = await _context.PrescriptionSettings
-                            .Where(ps => ps.DoctorId == request.DoctorId)
-                            .FirstOrDefaultAsync(cancellationToken);
-                        if (prescriptionSettings is not null)
+                        .Select(x => new
                         {
-                            var newDate = lastAppoitment.ApptDate.AddDays(prescriptionSettings.ValidDuration);
-                            if (request.ApptDate <= newDate)
-                            {
-                                appointment.AppointmentType = "Old/No-Fee";
-                            }
-                            else
-                            {
-                                appointment.AppointmentType = "Old/Fee";
-                            }
+                            x.PatientId,
+                            x.FullName
+                        })
+                        .FirstOrDefaultAsync(cancellationToken);
+                }
+            }
+
+            if (existingPatient is not null)
+            {
+                var lastAppoitment = await _context.Appointments
+                    .Where(a => a.PatientId == existingPatient.PatientId 
+                        && (a.CurrentStatusCode != AppConstants.AppointmentStatus_VitalsRequired 
+                        && a.CurrentStatusCode != AppConstants.AppointmentStatus_Cancelled)
+                        && a.AppointmentType != AppConstants.AppointmentType_OldNoFee)
+                    .Select(x =>  new
+                    {
+                        x.ApptDate,
+                        x.ApptId
+                    })
+                    .OrderByDescending(a => a.ApptDate)
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (lastAppoitment is not null)
+                {
+                    var prescriptionSettings = await _context.PrescriptionSettings
+                        .Where(ps => ps.DoctorId == request.DoctorId)
+                        .Select(ps => new
+                        {
+                            ps.ValidDuration,
+                            ps.PrescriptionSettingId
+                        })
+                        .FirstOrDefaultAsync(cancellationToken);
+                    if (prescriptionSettings is not null)
+                    {
+                        var effectiveDate = lastAppoitment.ApptDate.AddDays(prescriptionSettings.ValidDuration);
+                        if (request.ApptDate <= effectiveDate)
+                        {
+                            appointment.AppointmentType = AppConstants.AppointmentType_OldNoFee;
                         }
                         else
                         {
-                            appointment.AppointmentType = "New";
+                            appointment.AppointmentType = AppConstants.AppointmentType_OldFee;
                         }
                     }
                     else
                     {
-                        appointment.AppointmentType = "New";
+                        appointment.AppointmentType = AppConstants.AppointmentType_New;
                     }
+                }
+                else
+                {
+                    appointment.AppointmentType = AppConstants.AppointmentType_New;
                 }
             }
             else
             {
-                appointment.AppointmentType = "New";
+                appointment.AppointmentType = AppConstants.AppointmentType_New;
             }
 
             return;

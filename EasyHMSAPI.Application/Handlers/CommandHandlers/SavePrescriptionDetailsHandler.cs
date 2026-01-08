@@ -1,11 +1,13 @@
 ﻿using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using System.Text.Json;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
@@ -14,11 +16,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     {
         private readonly AppDbContext _context;
         private readonly IDoctorValidationHelper _doctorValidationHelper;
+        private readonly IBlobStorageService _blobStorageService;
+        private readonly string _containerName;
 
-        public SavePrescriptionDetailsHandler(AppDbContext context, IDoctorValidationHelper doctorValidationHelper)
+        public SavePrescriptionDetailsHandler(AppDbContext context, IDoctorValidationHelper doctorValidationHelper, IBlobStorageService blobStorageService, IConfiguration configuration)
         {
             _context = context;
             _doctorValidationHelper = doctorValidationHelper;
+            _blobStorageService = blobStorageService;
+            _containerName = configuration["BlobStorage:PrescriptionsContainer"] ?? string.Empty;
         }
 
         public async Task<SavePrescriptionDetailsResponseModel> Handle(SavePrescriptionDetailsRequestModel request, CancellationToken cancellationToken)
@@ -259,6 +265,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 history.Add(new { status = AppConstants.AppointmentStatus_Completed, timestamp = request.CurrentDateTime });
                                 existingAppointment.StatusHistoryJson = JsonSerializer.Serialize(history);
                                 existingPrescription.Status = AppConstants.AppointmentStatus_Completed;
+
+                                var fileUrl = await _blobStorageService.UploadAsync(existingAppointment.ApptId.ToString(), request.PdfFile, _containerName, cancellationToken);
+                                if (!string.IsNullOrEmpty(fileUrl))
+                                {
+                                    existingAppointment.PdfUrl = fileUrl;
+                                }
                             }
 
                             await _context.SaveChangesAsync(cancellationToken);
@@ -405,6 +417,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             history.Add(new { status = AppConstants.AppointmentStatus_Completed, timestamp = request.CurrentDateTime });
                             existingAppointment.StatusHistoryJson = JsonSerializer.Serialize(history);
                             status = AppConstants.AppointmentStatus_Completed;
+
+                            var fileUrl = await _blobStorageService.UploadAsync(existingAppointment.ApptId.ToString(), request.PdfFile, _containerName, cancellationToken);
+                            if (!string.IsNullOrEmpty(fileUrl))
+                            {
+                                existingAppointment.PdfUrl = fileUrl;
+                            }
                         }
                         var newPrescription = new Prescription
                         {

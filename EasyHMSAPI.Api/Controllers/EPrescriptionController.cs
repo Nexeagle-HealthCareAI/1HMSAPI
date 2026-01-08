@@ -420,7 +420,7 @@ namespace EasyHMSAPI.Api.Controllers
 
         [HttpPost("details/actionType={actionType}")]
         [Authorize]
-        public async Task<ActionResult<SavePrescriptionDetailsResponseModel>> SavePrescriptionDetails(string actionType, [FromBody] SavePrescriptionDetailsRequestModel request)
+        public async Task<ActionResult<SavePrescriptionDetailsResponseModel>> SavePrescriptionDetails(string actionType, [FromForm] SavePrescriptionDetailsRequestModel request)
         {
             _logger.LogInformation("SavePrescriptionForLater started at {Time} for appointmentId: {AppointmentId}, patientId: {PatientId}, hospitalId: {HospitalId}, doctorId: {DoctorId}", DateTime.UtcNow, request.AppointmentId, request.PatientId, request.HospitalId, request.DoctorId);
             SavePrescriptionDetailsResponseModel result = new();
@@ -432,14 +432,14 @@ namespace EasyHMSAPI.Api.Controllers
                     result.Message = "Invalid request parameters.";
                 }
                 else
-                {  
-                    List<string> validActionTypes = new() 
-                    { 
+                {
+                    List<string> validActionTypes = new()
+                    {
                         AppConstants.Prescription_ActionType_Draft,
                         AppConstants.Prescription_ActionType_Submit
                     };
                     var userIdClaim = User.FindFirst("userId")?.Value;
-                    if(userIdClaim is not null && Guid.TryParse(userIdClaim, out var userId))
+                    if (userIdClaim is not null && Guid.TryParse(userIdClaim, out var userId))
                     {
                         request.LoggedInUserId = userId;
                         request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
@@ -455,7 +455,19 @@ namespace EasyHMSAPI.Api.Controllers
                         {
                             if (validActionTypes.Contains(actionType.ToLower()))
                             {
-                                result = await _mediator.Send(request);
+                                if (actionType.ToLower() == AppConstants.Prescription_ActionType_Submit)
+                                {
+                                    if (request.PdfFile is not null)
+                                    {
+                                        result = await _mediator.Send(request);
+                                    }
+                                    else
+                                    {
+                                        result.Success = false;
+                                        result.Message = "Prescription PDF is required for submitting the prescription.";
+                                    }
+                                }
+
                             }
                             else
                             {
@@ -472,13 +484,13 @@ namespace EasyHMSAPI.Api.Controllers
                 }
                 _logger.LogInformation("SavePrescriptionForLater ended for appointmentId: {AppointmentId}, patientId: {PatientId}", request.AppointmentId, request.PatientId);
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in SavePrescriptionForLater for appointmentId: {AppointmentId}, patientId: {PatientId}", request.AppointmentId, request.PatientId);
                 result.Success = false;
                 result.Message = "An error occurred while processing your request." + ex.Message + ex.InnerException + ex.StackTrace;
             }
-            
+
             return Ok(result);
         }
 

@@ -27,5 +27,9 @@ namespace EasyHMSAPI.Data.Constants
 
         public static readonly string LookupType_Procedure = "PROCEDURE";
         public static readonly string LookupType_Investigation = "INVESTIGATION";
+
+        public static readonly string AppointmentType_OldFee = "Old/Fee";
+        public static readonly string AppointmentType_OldNoFee = "Old/No-Fee";
+        public static readonly string AppointmentType_New = "New";
     }
 }
