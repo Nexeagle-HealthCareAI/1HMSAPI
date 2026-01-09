@@ -420,7 +420,7 @@ namespace EasyHMSAPI.Api.Controllers
 
         [HttpPost("details/actionType={actionType}")]
         [Authorize]
-        public async Task<ActionResult<SavePrescriptionDetailsResponseModel>> SavePrescriptionDetails(string actionType, [FromForm] SavePrescriptionDetailsRequestModel request)
+        public async Task<ActionResult<SavePrescriptionDetailsResponseModel>> SavePrescriptionDetails(string actionType, [FromBody] SavePrescriptionDetailsRequestModel request)
         {
             _logger.LogInformation("SavePrescriptionForLater started at {Time} for appointmentId: {AppointmentId}, patientId: {PatientId}, hospitalId: {HospitalId}, doctorId: {DoctorId}", DateTime.UtcNow, request.AppointmentId, request.PatientId, request.HospitalId, request.DoctorId);
             SavePrescriptionDetailsResponseModel result = new();
@@ -455,19 +455,7 @@ namespace EasyHMSAPI.Api.Controllers
                         {
                             if (validActionTypes.Contains(actionType.ToLower()))
                             {
-                                if (actionType.ToLower() == AppConstants.Prescription_ActionType_Submit)
-                                {
-                                    if (request.PdfFile is not null)
-                                    {
-                                        result = await _mediator.Send(request);
-                                    }
-                                    else
-                                    {
-                                        result.Success = false;
-                                        result.Message = "Prescription PDF is required for submitting the prescription.";
-                                    }
-                                }
-
+                                result = await _mediator.Send(request);
                             }
                             else
                             {
