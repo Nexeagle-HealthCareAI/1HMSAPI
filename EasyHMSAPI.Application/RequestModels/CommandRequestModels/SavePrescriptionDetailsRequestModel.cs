@@ -1,6 +1,5 @@
 ﻿using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using MediatR;
-using Microsoft.AspNetCore.Http;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -30,8 +29,6 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public List<ImmunizationModel>? Immunizations { get; set; }
         [JsonIgnore]
         public string? ActionType { get; set; }
-        [JsonIgnore] 
-        public IFormFile? PdfFile { get; set; }
         public DateTime CurrentDateTime { get; set; }
         [JsonIgnore]
         public Guid LoggedInUserId { get; set; }
