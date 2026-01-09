@@ -42,24 +42,41 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return resp;
                 }
 
-                var entity = new DoctorTimeOff
+                var existingTimeOff = await _context.DoctorTimeOffs
+                    .Where(dto => dto.DoctorID == request.DoctorId &&
+                                  dto.HospitalId == request.HospitalId &&
+                                  dto.FromDate == from &&
+                                  dto.ToDate == to)
+                    .FirstOrDefaultAsync(cancellationToken);
+                if(existingTimeOff is null)
                 {
-                    TimeOffID = Guid.NewGuid(),
-                    DoctorID = request.DoctorId,
-                    HospitalId = request.HospitalId, // Set hospitalId
-                    FromDate = from,
-                    ToDate = to,
-                    Reason = request.Reason,
-                    CreatedAt = DateTime.UtcNow
-                };
+                    var entity = new DoctorTimeOff
+                    {
+                        TimeOffID = Guid.NewGuid(),
+                        DoctorID = request.DoctorId,
+                        HospitalId = request.HospitalId,
+                        FromDate = from,
+                        ToDate = to,
+                        Reason = request.Reason,
+                        CreatedAt = DateTime.UtcNow
+                    };
 
-                _context.DoctorTimeOffs.Add(entity);
-                await _context.SaveChangesAsync(cancellationToken);
+                    _context.DoctorTimeOffs.Add(entity);
+                    await _context.SaveChangesAsync(cancellationToken);
 
-                resp.Success = true;
-                resp.Message = "Time-off saved";
-                resp.TimeOffId = entity.TimeOffID;
-                resp.CreatedAt = entity.CreatedAt;
+                    resp.Success = true;
+                    resp.Message = "Time-off saved";
+                    resp.TimeOffId = entity.TimeOffID;
+                    resp.CreatedAt = entity.CreatedAt;
+                }
+                else
+                {
+                    resp.Success = false;
+                    resp.Message = "Time-off already exists";
+                    resp.TimeOffId = existingTimeOff.TimeOffID;
+                    resp.CreatedAt = existingTimeOff.CreatedAt;
+                }
+
                 return resp;
             }
             catch (Exception ex)
