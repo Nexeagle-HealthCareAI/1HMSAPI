@@ -547,6 +547,34 @@ namespace EasyHMSAPI.Api.Controllers
             return Ok(response);
         }
 
+        [HttpPost("visit-summary/upload")]
+        public async Task<ActionResult<UploadVisitSummaryResponseModel>> UploadVisitSummary(UploadVisitSummaryRequestModel request)
+        {
+            _logger.LogInformation("UploadVisitSummary started at {Time} for appointmentId: {AppointmentId}", DateTime.UtcNow, request.AppointmentId);
+            UploadVisitSummaryResponseModel response = new();
+            try
+            {
+                if (request.AppointmentId == Guid.Empty || request.File == null)
+                {
+                    response.Success = false;
+                    response.Message = "Invalid request parameters.";
+                }
+                else
+                {
+                    response = await _mediator.Send(request);
+                    _logger.LogInformation("UploadVisitSummary ended for appointmentId: {AppointmentId}", request.AppointmentId);
+                }
+            }
+            catch(Exception ex)
+            {
+                _logger.LogError(ex, "Error in UploadVisitSummary for appointmentId: {AppointmentId}", request.AppointmentId);
+                response.Success = false;
+                response.Message = "An error occurred while processing your request." + ex.Message + ex.InnerException + ex.StackTrace;
+            }
+
+            return Ok(response);
+        }
+
         private async Task<bool> ValidateDoctorHospitalAsync(Guid hospitalId, Guid doctorId, CancellationToken ct)
         {
             var db = HttpContext.RequestServices.GetRequiredService<AppDbContext>();
