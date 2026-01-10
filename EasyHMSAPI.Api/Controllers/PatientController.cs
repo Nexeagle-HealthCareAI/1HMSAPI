@@ -83,7 +83,7 @@ namespace EasyHMSAPI.Api.Controllers
             return Ok(result);
         }
         [HttpGet]
-        [Route("visit-summary-pdf/appointmentId={appointmentId}")]
+        [Route("visit-summary/appointmentId={appointmentId}")]
         public async Task<ActionResult<GetPatientVisitSummaryPdfResponseModel>> GetPatientVisitSummaryAsync(Guid appointmentId)
         {
             GetPatientVisitSummaryPdfResponseModel result = new();
