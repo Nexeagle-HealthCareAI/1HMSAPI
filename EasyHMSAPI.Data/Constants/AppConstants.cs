@@ -31,5 +31,8 @@ namespace EasyHMSAPI.Data.Constants
         public static readonly string AppointmentType_OldFee = "Old/Fee";
         public static readonly string AppointmentType_OldNoFee = "Old/No-Fee";
         public static readonly string AppointmentType_New = "New";
+
+        public static readonly string PatientSex_Male = "Male";
+        public static readonly string PatientSex_Female = "Female";
     }
 }

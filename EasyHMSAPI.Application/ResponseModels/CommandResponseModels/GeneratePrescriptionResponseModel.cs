@@ -87,6 +87,7 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public double HeightCm { get; set; }
         public double WeightKg { get; set; }
         public double Bmi { get; set; }
+        public double RespiratoryRate { get; set; }
     }
 
     [ExcludeFromCodeCoverage]
