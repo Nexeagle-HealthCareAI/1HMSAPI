@@ -6,9 +6,19 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
     public class GetPatientsByHospitalIdResponseModel
     {
         public Guid HospitalId { get; set; }
+        public List<DoctorDataModel>? DoctorsData { get; set; }
         public List<PatientDataModel>? PatientsData { get; set; }
         public bool Success { get; set; }
         public string? Message { get; set; }
+    }
+
+    public class DoctorDataModel
+    {
+        public string? DoctorName { get; set; }
+        public int? TotalPatientCount { get; set; }
+        public int? FemalePatientCount { get; set; }
+        public int? MalePatientCount { get; set; }
+        public int? SharedPatientCount { get; set; }
     }
 
     [ExcludeFromCodeCoverage]

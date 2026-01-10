@@ -27,6 +27,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public decimal? HeightCm { get; set; }
         public decimal? WeightKg { get; set; }
         public decimal? Bmi { get; set; }
+        public decimal? RespiratoryRate { get; set; }
     }
 
     public class BloodPressure
