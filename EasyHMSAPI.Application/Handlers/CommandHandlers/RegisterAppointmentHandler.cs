@@ -252,24 +252,26 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     .Where(a => a.PatientId == existingPatient.PatientId 
                         && (a.CurrentStatusCode != AppConstants.AppointmentStatus_VitalsRequired 
                         && a.CurrentStatusCode != AppConstants.AppointmentStatus_Cancelled)
-                        && a.AppointmentType != AppConstants.AppointmentType_OldNoFee)
+                        && a.AppointmentType != AppConstants.AppointmentType_OldNoFee
+                        && a.DoctorId == request.DoctorId)
                     .Select(x =>  new
                     {
                         x.ApptDate,
-                        x.ApptId
+                        x.ApptId,
+                        x.DoctorId
                     })
                     .OrderByDescending(a => a.ApptDate)
                     .FirstOrDefaultAsync(cancellationToken);
                 if (lastAppoitment is not null)
                 {
                     var prescriptionSettings = await _context.PrescriptionSettings
-                        .Where(ps => ps.DoctorId == request.DoctorId)
-                        .Select(ps => new
-                        {
-                            ps.ValidDuration,
-                            ps.PrescriptionSettingId
-                        })
-                        .FirstOrDefaultAsync(cancellationToken);
+                    .Where(ps => ps.DoctorId == request.DoctorId)
+                    .Select(ps => new
+                    {
+                        ps.ValidDuration,
+                        ps.PrescriptionSettingId
+                    })
+                    .FirstOrDefaultAsync(cancellationToken);
                     if (prescriptionSettings is not null)
                     {
                         var effectiveDate = lastAppoitment.ApptDate.AddDays(prescriptionSettings.ValidDuration);
