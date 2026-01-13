@@ -8,6 +8,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     [ExcludeFromCodeCoverage]
     public class RegisterAppointmentRequestModel : IRequest<RegisterAppointmentResponseModel>
     {
+        public Guid? AppointmentId { get; set; }
         [JsonIgnore]
         public Guid HospitalId { get; set; }
         [JsonIgnore]
@@ -15,9 +16,9 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public Patient? Patient { get; set; }
         public Guid DoctorId { get; set; }
         public DateTime ApptDate { get; set; }
-        public DateTime StartAt { get; set; }
+        public DateTime? StartAt { get; set; }
         public string? Reason { get; set; }
-        public int SlotTimeInMinutes { get; set; }
+        public int? SlotTimeInMinutes { get; set; }
         public Guid? UserId { get; set; }
     }
 
