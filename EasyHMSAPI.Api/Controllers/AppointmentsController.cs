@@ -239,12 +239,7 @@ namespace EasyHMSAPI.Api.Controllers
 
         [HttpGet("patient-appointment-details")]
         [Authorize]
-        public async Task<IActionResult> GetPatientAppointmentDetails(
-            [FromQuery] string? status,
-            [FromQuery] DateTime? startDate,
-            [FromQuery] DateTime? endDate,
-            [FromQuery] Guid hospitalId,
-            [FromQuery] Guid? doctorId)
+        public async Task<IActionResult> GetPatientAppointmentDetails([FromQuery] string? status, [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] Guid hospitalId, [FromQuery] Guid? doctorId)
         {
             _logger.LogInformation("GetPatientAppointmentDetails started at {Time} for hospitalId: {HospitalId}, status: {Status}, startDate: {StartDate}, endDate: {EndDate}", DateTime.UtcNow, hospitalId, status, startDate, endDate);
             if (hospitalId == Guid.Empty)

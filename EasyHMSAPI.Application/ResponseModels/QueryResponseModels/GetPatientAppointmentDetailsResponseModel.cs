@@ -20,6 +20,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public int? PatientAgeYears { get; set; }
         public Guid DoctorId { get; set; }
         public string? DoctorName { get; set; }
+        public Guid DepartmentId { get; set; }
+        public string? DepartmentName { get; set; }
         public DateTime AppointmentDate { get; set; }
         public DateTime StartAt { get; set; }
         public DateTime EndAt { get; set; }

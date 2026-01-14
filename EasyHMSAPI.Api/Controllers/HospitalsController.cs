@@ -117,5 +117,24 @@ namespace EasyHMSAPI.Api.Controllers
                 return StatusCode(500, new { Message = "An error occurred while retrieving hospital user", Error = ex.Message });
             }
         }
+
+        [HttpGet("analysis/hospitalId={hospitalId}")]
+        [Authorize]
+        public async Task<ActionResult<GetHospitalOverallAnalysisResponseModel>> GetHospitalOverallAnalysis(Guid hospitalId)
+        {
+            _logger.LogInformation("GetAllHospitals started at {Time}", DateTime.UtcNow);
+            try
+            {
+                GetHospitalOverallAnalysisRequestModel requestModel = new() { HospitalId = hospitalId };
+                var response = await _mediator.Send(requestModel);
+                _logger.LogInformation("GetAllHospitals ended");
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetAllHospitals");
+                return StatusCode(500, new { Message = "An error occurred while retrieving all hospitals" + ex.Message + ex.InnerException + ex.StackTrace });
+            }
+        }
     }
 }
