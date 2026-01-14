@@ -21,12 +21,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             var response = new DoctorDashboardAppointmentDetailsResponseModel();
             var query = _context.Appointments.AsQueryable();
             query = query.Where(a => a.HospitalId == request.HospitalId && a.DoctorId == request.DoctorId);
-            // Add doctor status check
-            var doctorActive = await (from d in _context.Doctors
+            var doctorDeptInfo = await (from d in _context.Doctors
                  join u in _context.Users on d.UserID equals u.UserID
+                 join dp in _context.Departments on d.PrimaryDepartmentID equals dp.DepartmentID into deptJoin
+                 from dept in deptJoin.DefaultIfEmpty()
                  where d.DoctorID == request.DoctorId && u.UserStatusId != (int)UserStatusEnum.Revoked
-                 select d.DoctorID).AnyAsync(cancellationToken);
-            if (!doctorActive)
+                 select new { d.DoctorID, DepartmentId = d.PrimaryDepartmentID, DepartmentName = dept.Name }).FirstOrDefaultAsync(cancellationToken);
+            if (doctorDeptInfo == null)
             {
                 return response;
             }
@@ -62,6 +63,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 var token = tokens.FirstOrDefault(t => t.ApptId == a.ApptId);
                 response.Items.Add(new DoctorDashboardAppointmentDetail
                 {
+                    Department = doctorDeptInfo.DepartmentId ?? Guid.Empty,
+                    DepartmentName = doctorDeptInfo.DepartmentName,
                     PatientId = a.PatientId,
                     PatientFullName = p?.FullName,
                     PatientMobile = p?.Mobile,

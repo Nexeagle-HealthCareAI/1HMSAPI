@@ -68,8 +68,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             var doctorNames = await (from a in _context.Appointments
                                     join d in _context.Doctors on a.DoctorId equals d.DoctorID
                                     join u in _context.UserProfiles on d.UserID equals u.UserID
+                                    join dp in _context.Departments on d.PrimaryDepartmentID equals dp.DepartmentID into deptJoin
+                                    from dept in deptJoin.DefaultIfEmpty()
                                     where appts.Select(x => x.ApptId).Contains(a.ApptId)
-                                    select new { a.ApptId, DoctorName = u.FullName }).ToListAsync(cancellationToken);
+                                    select new { a.ApptId, DoctorName = u.FullName, DepartmentId = d.PrimaryDepartmentID, DepartmentName = dept.Name }).ToListAsync(cancellationToken);
 
             foreach (var a in appts)
             {
@@ -79,7 +81,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     patients.TryGetValue(a.PatientId, out p);
                 }
                 var token = tokens.FirstOrDefault(t => t.ApptId == a.ApptId);
-                string? doctorName = doctorNames.FirstOrDefault(x => x.ApptId == a.ApptId)?.DoctorName;
+                var doctorInfo = doctorNames.FirstOrDefault(x => x.ApptId == a.ApptId);
+                string? doctorName = doctorInfo?.DoctorName;
+                Guid? departmentId = doctorInfo?.DepartmentId;
+                string? departmentName = doctorInfo?.DepartmentName;
 
                 response.Items.Add(new AppointmentDetail
                 {
@@ -91,6 +96,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     PatientAgeYears = p?.AgeYears,
                     DoctorId = a.DoctorId,
                     DoctorName = doctorName,
+                    DepartmentId = departmentId ?? Guid.Empty,
+                    DepartmentName = departmentName,
                     AppointmentDate = a.ApptDate,
                     StartAt = a.StartAt,
                     EndAt = a.EndAt,

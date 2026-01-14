@@ -11,6 +11,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
     [ExcludeFromCodeCoverage]
     public class DoctorDashboardAppointmentDetail
     {
+        public Guid Department { get; set; }
+        public string? DepartmentName { get; set; }
         public string? PatientId { get; set; }
         public string? PatientFullName { get; set; }
         public string? PatientMobile { get; set; }
