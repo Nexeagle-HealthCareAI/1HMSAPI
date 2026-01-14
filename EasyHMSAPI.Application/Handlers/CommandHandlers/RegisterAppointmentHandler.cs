@@ -271,6 +271,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     if (availableSlotStart.HasValue)
                     {
                         existingAppointment.StartAt = availableSlotStart.Value;
+                        request.StartAt = availableSlotStart.Value;
                         existingAppointment.EndAt = availableSlotStart.Value.AddMinutes(slotDurationMinutes);
                     }
 
@@ -285,6 +286,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             {
                 if (request.StartAt is null)
                     throw new ArgumentNullException(nameof(request.StartAt));
+                if(patient.PatientId is null)
+                    throw new Exception("PatientId cannot be null when creating an appointment");
 
                 var appointment = new Appointment
                 {
