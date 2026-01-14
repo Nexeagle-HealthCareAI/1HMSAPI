@@ -47,6 +47,7 @@ builder.Services.ConfigureTelemetryModule<DependencyTrackingTelemetryModule>((mo
 // Add services
 // ------------------------------------------------------------
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddHttpClient();
 builder.Services.AddControllers();
 
 // ------------------------------------------------------------
@@ -151,6 +152,7 @@ builder.Services.AddScoped<IJwtAuthService, JwtAuthService>();
 builder.Services.AddScoped<IBlobStorageService, BlobStorageService>();
 builder.Services.AddScoped<ISmsService, SmsService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<IWhatsAppMessagingService, WhatsAppMessagingService>();
 builder.Services.AddScoped<IDoctorValidationHelper, DoctorValidationHelper>();
 
 // ------------------------------------------------------------

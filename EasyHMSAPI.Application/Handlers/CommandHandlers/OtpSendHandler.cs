@@ -6,11 +6,8 @@ using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-using System;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
@@ -19,19 +16,21 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         private readonly AppDbContext _context;
         private readonly ISmsService _smsService;
         private readonly IEmailService _emailService;
+        private readonly IWhatsAppMessagingService _whatsAppMessagingService;
         private readonly IConfiguration _configuration;
 
-        public OtpSendHandler(AppDbContext context, ISmsService smsService, IEmailService emailService, IConfiguration configuration)
+        public OtpSendHandler(AppDbContext context, ISmsService smsService, IEmailService emailService, IWhatsAppMessagingService whatsAppMessagingService, IConfiguration configuration)
         {
             _context = context;
             _smsService = smsService;
             _emailService = emailService;
+            _whatsAppMessagingService = whatsAppMessagingService;
             _configuration = configuration;
         }
 
         public async Task<OtpSendResponseModel> Handle(OtpSendRequestModel request, CancellationToken cancellationToken)
         {
-            var response = new OtpSendResponseModel { Success = true, IsSmsSent = false, IsEmailSent = false };
+            var response = new OtpSendResponseModel { Success = true, IsSmsSent = false, IsEmailSent = false, IsWhatsappSent = false };
 
             if (string.IsNullOrEmpty(request.MobileNumber))
             {
@@ -67,9 +66,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             var otpHash = HMACSHA256.HashData(key, data);
             var otpHashB64 = Convert.ToBase64String(otpHash);
 
-            bool smsSent = await _smsService.SendOtpSmsAsync(user.MobileNumber, newGeneratedOtp);
+            //bool smsSent = await _smsService.SendOtpSmsAsync(user.MobileNumber, newGeneratedOtp);
+            bool smsSent = false;
+            bool whatsappSent = await _whatsAppMessagingService.SendOtpAsync(user.MobileNumber, newGeneratedOtp);
 
-            if(smsSent)
+            if(whatsappSent)
+            {
+                response.IsWhatsappSent = true;
+                response.Success = true;
+                response.Message = "OTP sent successfully via WhatsApp.";
+                response.UserId = user.UserID;
+            }
+
+            if (smsSent)
             {
                 response.IsSmsSent = true;
                 response.Success = true;
