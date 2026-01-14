@@ -79,6 +79,10 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 request.HospitalId = hospitalId;
                 request.AllocateToken = allocateToken;
+                if(request.StartAt == null)
+                {
+                    request.StartAt = DateTime.Now;
+                }
                 var response = await _mediator.Send(request);
                 _logger.LogInformation("RegisterAppointment successful for hospitalId: {HospitalId}, UserId: {UserId}", hospitalId, request.UserId);
 
