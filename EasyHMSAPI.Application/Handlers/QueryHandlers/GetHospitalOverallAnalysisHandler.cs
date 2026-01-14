@@ -44,21 +44,16 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 var now = DateTime.UtcNow;
                 var today = now.Date;
 
-                // Fetch appointments and patients in parallel with AsNoTracking
-                var appointmentTask = _context.Appointments
+                // Fetch appointments and patients sequentially to avoid DbContext concurrency issues
+                var appointments = await _context.Appointments
                     .AsNoTracking()
                     .Where(a => a.HospitalId == request.HospitalId)
                     .ToListAsync(cancellationToken);
 
-                var patientTask = _context.PatientRegistrations
+                var patients = await _context.PatientRegistrations
                     .AsNoTracking()
                     .Where(p => p.HospitalId == request.HospitalId)
                     .ToListAsync(cancellationToken);
-
-                await Task.WhenAll(appointmentTask, patientTask);
-
-                var appointments = appointmentTask.Result;
-                var patients = patientTask.Result;
 
                 if (appointments.Count == 0)
                 {
@@ -94,7 +89,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             }
             catch (Exception ex)
             {
-                response.Message = $"An error occurred: {ex.Message}";
+                response.Message = "An error occurred:" + ex.Message + ex.InnerException + ex.StackTrace;
             }
 
             return response;
@@ -280,6 +275,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .GroupBy(a => doctorSpecDict[a.DoctorId])
                 .Where(g => g.Key != Guid.Empty);
 
+            // Fetch all specializations at once to avoid async calls in loop
+            var specialtyIds = appointmentsBySpecialty.Select(g => g.Key).Distinct().ToList();
+            var specialtiesDict = await _context.Specializations
+                .AsNoTracking()
+                .Where(s => specialtyIds.Contains(s.SpecializationID))
+                .ToDictionaryAsync(s => s.SpecializationID, cancellationToken);
+
             foreach (var specGroup in appointmentsBySpecialty)
             {
                 var specId = specGroup.Key;
@@ -287,7 +289,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 var uniquePatients = specAppts.Where(a => !string.IsNullOrEmpty(a.PatientId)).Select(a => a.PatientId).Distinct().Count();
                 var sharePercent = appointments.Count > 0 ? Math.Round((decimal)specAppts.Count / appointments.Count * 100, 2) : 0;
 
-                var specialty = await _context.Specializations.AsNoTracking().FirstOrDefaultAsync(s => s.SpecializationID == specId, cancellationToken);
+                var specialty = specialtiesDict.TryGetValue(specId, out var spec) ? spec : null;
                 var specialtyCode = specialty?.SpecializationID.ToString().Substring(0, Math.Min(4, specialty.SpecializationID.ToString().Length)).ToUpper() ?? "N/A";
 
                 specialtyBreakdowns[specId] = new SpecialtyBreakdownModel

@@ -133,7 +133,7 @@ namespace EasyHMSAPI.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in GetAllHospitals");
-                return StatusCode(500, new { Message = "An error occurred while retrieving all hospitals", Error = ex.Message });
+                return StatusCode(500, new { Message = "An error occurred while retrieving all hospitals" + ex.Message + ex.InnerException + ex.StackTrace });
             }
         }
     }
