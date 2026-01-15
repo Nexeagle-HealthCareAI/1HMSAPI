@@ -5,6 +5,6 @@
         Task<bool> SendOtpAsync(string mobileNumber, string otp);
         Task<bool> SendInvitationAsync(string mobileNumber, string hospitalName, string role, string registrationUrl);
         Task<bool> SendAppointmentConfirmationAsync(string mobileNumber, string patientName, string hospitalName, string doctorName, string tokenNumber, string appointmentDate);
-        Task<bool> SendPrescriptionAsync(string mobileNumber, string documentLink, string filename, string hospitalName, string doctorName);
+        Task<bool> SendPrescriptionAsync(string mobileNumber, string documentLink, string fileName, string hospitalName, string doctorName);
     }
 }

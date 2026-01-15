@@ -97,7 +97,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             return response;
         }
 
-        private KpisModel CalculateKpis(List<Domain.Entities.Appointment> appointments, List<Domain.Entities.PatientRegistration> patients,
+        private KpisModel CalculateKpis(List<Appointment> appointments, List<PatientRegistration> patients,
             DateTime today, DateTime yesterday, DateTime last7Days, DateTime monthStart, DateTime yearStart, DateTime prevYearStart, DateTime prevYearEnd)
         {
             var kpis = new KpisModel();
@@ -317,7 +317,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             return breakdowns;
         }
 
-        private OverallModel CalculateOverallAnalysis(List<Domain.Entities.Appointment> appointments, List<Domain.Entities.PatientRegistration> patients)
+        private OverallModel CalculateOverallAnalysis(List<Appointment> appointments, List<PatientRegistration> patients)
         {
             var overall = new OverallModel();
 
@@ -378,7 +378,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             // Top 5 Cities
             overall.Top5City = patients
                 .Where(p => !string.IsNullOrEmpty(p.City))
-                .GroupBy(p => p.City!.Trim().ToLower())
+                .GroupBy(p => p.City?.Trim().ToLower())
                 .OrderByDescending(g => g.Count())
                 .Take(5)
                 .ToDictionary(g => g.Key, g => g.Count());
@@ -386,7 +386,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             // Unique Cities
             overall.UniqueCities = patients
                 .Where(p => !string.IsNullOrEmpty(p.City))
-                .Select(p => p.City!.Trim().ToLower())
+                .Select(p => p.City?.Trim().ToLower())
                 .Distinct()
                 .ToList();
 
