@@ -239,7 +239,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
             }
         }
 
-        public async Task<bool> SendPrescriptionAsync(string mobileNumber, string documentLink, string filename, string hospitalName, string doctorName)
+        public async Task<bool> SendPrescriptionAsync(string mobileNumber, string documentLink, string fileName, string hospitalName, string doctorName)
         {
             try
             {
@@ -270,7 +270,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
                                         document = new
                                         {
                                             link = documentLink,
-                                            filename = filename
+                                            filename = fileName
                                         }
                                     }
                                 }
