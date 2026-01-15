@@ -217,6 +217,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .AsNoTracking()
                 .Where(d => doctorIds.Contains(d.DoctorID))
                 .Include(d => d.User)
+                .ThenInclude(u => u.UserProfiles)
                 .Include(d => d.DoctorSpecializations)
                     .ThenInclude(ds => ds.Specialization)
                 .ToDictionaryAsync(d => d.DoctorID, cancellationToken);
