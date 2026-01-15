@@ -378,7 +378,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             // Top 5 Cities
             overall.Top5City = patients
                 .Where(p => !string.IsNullOrEmpty(p.City))
-                .GroupBy(p => p.City!.ToLower())
+                .GroupBy(p => p.City!.Trim().ToLower())
                 .OrderByDescending(g => g.Count())
                 .Take(5)
                 .ToDictionary(g => g.Key, g => g.Count());
@@ -386,7 +386,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             // Unique Cities
             overall.UniqueCities = patients
                 .Where(p => !string.IsNullOrEmpty(p.City))
-                .Select(p => p.City!.ToLower())
+                .Select(p => p.City!.Trim().ToLower())
                 .Distinct()
                 .ToList();
 
