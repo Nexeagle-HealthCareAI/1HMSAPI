@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -118,7 +119,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             var uniquePatientsThisMonth = new HashSet<string?>();
             var uniquePatientsThisYear = new HashSet<string?>();
             var uniquePatientsPrevYear = new HashSet<string?>();
-            var patientFirstApptDate = new Dictionary<string, DateTime>();
+            var newPatientAppts = new HashSet<string?>();
+            var returningPatientAppts = new HashSet<string?>();
 
             // Single pass through appointments
             foreach (var appt in appointments)
@@ -145,14 +147,14 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     if (apptYear == currentYear) uniquePatientsThisYear.Add(appt.PatientId);
                     if (apptYear == prevYear) uniquePatientsPrevYear.Add(appt.PatientId);
 
-                    // Track first appointment date for each patient
-                    if (!patientFirstApptDate.ContainsKey(appt.PatientId))
+                    // Track new vs returning based on appointment type
+                    if (!string.IsNullOrEmpty(appt.AppointmentType) && appt.AppointmentType.Equals("New", StringComparison.OrdinalIgnoreCase))
                     {
-                        patientFirstApptDate[appt.PatientId] = appt.ApptDate;
+                        newPatientAppts.Add(appt.PatientId);
                     }
-                    else if (appt.ApptDate < patientFirstApptDate[appt.PatientId])
+                    else
                     {
-                        patientFirstApptDate[appt.PatientId] = appt.ApptDate;
+                        returningPatientAppts.Add(appt.PatientId);
                     }
                 }
             }
@@ -188,8 +190,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             };
 
             // New vs Returning Patients
-            var newPatients = patientFirstApptDate.Count(p => p.Value.Date >= monthStart);
-            var returningPatients = uniquePatientIds - newPatients;
+            var newPatients = newPatientAppts.Count;
+            var returningPatients = returningPatientAppts.Count;
             var newPercent = uniquePatientIds > 0 ? Math.Round((decimal)newPatients / uniquePatientIds * 100, 2) : 0;
             var returningPercent = uniquePatientIds > 0 ? Math.Round((decimal)returningPatients / uniquePatientIds * 100, 2) : 0;
 
@@ -246,7 +248,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 var specialty = doctor?.DoctorSpecializations?.FirstOrDefault()?.Specialization?.Name ?? "General";
                 var uniquePatients = doctorAppts.Where(a => !string.IsNullOrEmpty(a.PatientId)).Select(a => a.PatientId).Distinct().Count();
                 var newPatientCount = doctorAppts.Where(a => a.ApptDate.Date >= last30Days && !string.IsNullOrEmpty(a.PatientId)).Select(a => a.PatientId).Distinct().Count();
-                var noShow = doctorAppts.Count(a => a.CurrentStatusCode == "NO_SHOW");
+                var noShow = doctorAppts.Count(a => a.ApptDate.Date < now.Date && a.CurrentStatusCode == AppConstants.AppointmentStatus_VitalsRequired);
                 var sharePercent = appointments.Count > 0 ? Math.Round((decimal)doctorAppts.Count / appointments.Count * 100, 2) : 0;
 
                 doctorBreakdowns.Add(new DoctorBreakdownModel
@@ -361,9 +363,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             // No-shows and Cancellations - Single pass
             var noShowCount = 0;
             var cancelledCount = 0;
+            var now = DateTime.UtcNow;
             foreach (var appt in appointments)
             {
-                if (appt.CurrentStatusCode == "NO_SHOW") noShowCount++;
+                if (appt.ApptDate.Date < now.Date && appt.CurrentStatusCode == "Vital Required") noShowCount++;
                 if (appt.CurrentStatusCode == "CANCELLED") cancelledCount++;
             }
 
@@ -449,7 +452,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 {
                     Gender = gender,
                     OverallVisits = genderAppts.Count,
-                    NoShow = genderAppts.Count(a => a.CurrentStatusCode == "NO_SHOW"),
+                    NoShow = genderAppts.Count(a => a.ApptDate.Date < DateTime.UtcNow.Date && a.CurrentStatusCode == "Vital Required"),
                     Cancelled = genderAppts.Count(a => a.CurrentStatusCode == "CANCELLED"),
                     AgeDistribution = ageDistribution
                 });
