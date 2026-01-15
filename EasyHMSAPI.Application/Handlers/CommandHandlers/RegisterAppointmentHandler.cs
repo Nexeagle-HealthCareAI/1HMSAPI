@@ -31,8 +31,16 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             try
             {
                 // Check doctor status before proceeding
-                var doctorActive = await _context.Doctors.AnyAsync(d => d.DoctorID == request.DoctorId && d.User.UserStatusId != (int)UserStatusEnum.Revoked, cancellationToken);
-                if (!doctorActive)
+                var existingDoctor = await _context.Doctors
+                    .Where(d => d.DoctorID == request.DoctorId && d.User.UserStatusId != (int)UserStatusEnum.Revoked)
+                    .Select(x => new
+                    {
+                        x.User.UserStatusId,
+                        x.DoctorID,
+                        DoctorName = x.User.UserProfiles.FirstOrDefault()!.FullName
+                    })
+                    .FirstOrDefaultAsync();
+                if (existingDoctor is null)
                 {
                     throw new Exception("Doctor is not active or has been revoked.");
                 }
@@ -58,7 +66,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
 
                 // Determine appointment type based on patient history and prescription settings
-                await SetAppointmentType(appointment, patient, request, isNewAppointment, cancellationToken);
+                if(patient is not null)
+                {
+                    await SetAppointmentType(appointment, patient, request, isNewAppointment, cancellationToken);
+                }
+                else
+                {
+                    throw new Exception("Patient not found for setting appointment type.");
+                }
 
                 // Save appointment first to ensure ApptId exists in DB
                 await _context.SaveChangesAsync(cancellationToken);
@@ -97,12 +112,27 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (!string.IsNullOrWhiteSpace(patient.Mobile))
                 {
                     var smsMsg = $"Dear {patient.FullName}, your appointment is booked for {appointment.ApptDate:yyyy-MM-dd} at {appointment.StartAt:HH:mm}.";
+                    var token = string.Empty;
                     if (tokenNumber.HasValue)
                     {
                         smsMsg += $" Your token number is {tokenNumber}.";
+                        token = tokenNumber.HasValue ? tokenNumber.Value.ToString() : string.Empty;
                     }
                     isSmsSent = await _smsService.SendInvitationSmsAsync(patient.Mobile, smsMsg);
 
+                    var hospitalName = await _context.Hospitals
+                        .Where(h => h.HospitalID == request.HospitalId)
+                        .Select(h => h.Name)
+                        .FirstOrDefaultAsync(cancellationToken);
+                    var doctorName = existingDoctor.DoctorName;
+                    var appointmentDate = appointment.ApptDate.Date.ToString("dd-MM-yyyy");
+                    await _whatsAppMessagingService.SendAppointmentConfirmationAsync(
+                        patient.Mobile,
+                        patient.FullName ?? string.Empty,
+                        hospitalName ?? string.Empty,
+                        doctorName,
+                        token,
+                        appointmentDate);
                 }
 
                 return new RegisterAppointmentResponseModel

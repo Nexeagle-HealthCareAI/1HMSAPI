@@ -8,5 +8,6 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public bool Success { get; set; }
         public string? Message { get; set; }
         public string? Url { get; set; }
+        public bool IsSentViaWhatsApp { get; set; }
     }
 }
