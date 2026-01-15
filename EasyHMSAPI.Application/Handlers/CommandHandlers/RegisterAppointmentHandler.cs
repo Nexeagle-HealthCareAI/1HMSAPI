@@ -250,7 +250,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             history.Add(new { status = AppConstants.AppointmentStatus_Future, timestamp = DateTime.UtcNow });
                             existingAppointment.StatusHistoryJson = JsonSerializer.Serialize(history);
                         }
-                        else if(request.ApptDate.Date <=  DateTime.UtcNow.Date)
+                        else if(request.ApptDate.Date <= DateTime.UtcNow.Date)
                         {
                             existingAppointment.CurrentStatusCode = AppConstants.AppointmentStatus_VitalsRequired;
                             existingAppointment.LastStatusCodeAt = DateTime.UtcNow;
