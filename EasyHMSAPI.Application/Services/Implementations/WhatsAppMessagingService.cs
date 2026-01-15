@@ -158,5 +158,17 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 return false;
             }
         }
+
+        public async Task<bool> SendAppointmentConfirmationAsync(string mobileNumber, string hospitalName, string role, string registrationUrl)
+        {
+            try
+            {
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
     }
 }

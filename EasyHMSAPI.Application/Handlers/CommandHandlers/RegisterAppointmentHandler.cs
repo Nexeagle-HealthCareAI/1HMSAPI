@@ -17,11 +17,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     {
         private readonly AppDbContext _context;
         private readonly ISmsService _smsService;
+        private readonly IWhatsAppMessagingService _whatsAppMessagingService;
 
-        public RegisterAppointmentHandler(AppDbContext context, ISmsService smsService)
+        public RegisterAppointmentHandler(AppDbContext context, ISmsService smsService, IWhatsAppMessagingService whatsAppMessagingService)
         {
             _context = context;
             _smsService = smsService;
+            _whatsAppMessagingService = whatsAppMessagingService;
         }
 
         public async Task<RegisterAppointmentResponseModel> Handle(RegisterAppointmentRequestModel request, CancellationToken cancellationToken)
@@ -89,6 +91,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     if (existingToken != null)
                         tokenNumber = existingToken.TokenNo;
                 }
+
                 // Send SMS reminder
                 bool isSmsSent = false;
                 if (!string.IsNullOrWhiteSpace(patient.Mobile))
@@ -99,6 +102,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         smsMsg += $" Your token number is {tokenNumber}.";
                     }
                     isSmsSent = await _smsService.SendInvitationSmsAsync(patient.Mobile, smsMsg);
+
                 }
 
                 return new RegisterAppointmentResponseModel
@@ -364,36 +368,44 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     {
                         x.ApptDate,
                         x.ApptId,
-                        x.DoctorId
+                        x.DoctorId,
+                        x.AppointmentType
                     })
                     .OrderByDescending(a => a.ApptDate)
                     .FirstOrDefaultAsync(cancellationToken);
                 if (lastAppoitment is not null)
                 {
-                    var prescriptionSettings = await _context.PrescriptionSettings
-                    .Where(ps => ps.DoctorId == request.DoctorId)
-                    .Select(ps => new
-                    {
-                        ps.ValidDuration,
-                        ps.PrescriptionSettingId
-                    })
-                    .FirstOrDefaultAsync(cancellationToken);
-                    if (prescriptionSettings is not null)
-                    {
-                        var effectiveDate = lastAppoitment.ApptDate.AddDays(prescriptionSettings.ValidDuration);
-                        if (request.ApptDate <= effectiveDate)
-                        {
-                            appointment.AppointmentType = AppConstants.AppointmentType_OldNoFee;
-                        }
-                        else
-                        {
-                            appointment.AppointmentType = AppConstants.AppointmentType_OldFee;
-                        }
-                    }
-                    else
+                    if(request.AppointmentId is not null && lastAppoitment.AppointmentType == AppConstants.AppointmentType_New)
                     {
                         appointment.AppointmentType = AppConstants.AppointmentType_New;
                     }
+                    else
+                    {
+                        var prescriptionSettings = await _context.PrescriptionSettings
+                        .Where(ps => ps.DoctorId == request.DoctorId)
+                        .Select(ps => new
+                        {
+                            ps.ValidDuration,
+                            ps.PrescriptionSettingId
+                        })
+                        .FirstOrDefaultAsync(cancellationToken);
+                        if (prescriptionSettings is not null)
+                        {
+                            var effectiveDate = lastAppoitment.ApptDate.AddDays(prescriptionSettings.ValidDuration);
+                            if (request.ApptDate <= effectiveDate)
+                            {
+                                appointment.AppointmentType = AppConstants.AppointmentType_OldNoFee;
+                            }
+                            else
+                            {
+                                appointment.AppointmentType = AppConstants.AppointmentType_OldFee;
+                            }
+                        }
+                        else
+                        {
+                            appointment.AppointmentType = AppConstants.AppointmentType_New;
+                        }
+                    }   
                 }
                 else
                 {
@@ -425,7 +437,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             return newId;
         }
 
-        private DateTime? FindFirstAvailableSlot(List<TimeSpan> bookedSlots, List<ShiftDayDetailsModel> shiftDetails, int slotDurationMinutes, DateTime appointmentDate)
+        private static DateTime? FindFirstAvailableSlot(List<TimeSpan> bookedSlots, List<ShiftDayDetailsModel> shiftDetails, int slotDurationMinutes, DateTime appointmentDate)
         {
             foreach (var shift in shiftDetails)
             {
