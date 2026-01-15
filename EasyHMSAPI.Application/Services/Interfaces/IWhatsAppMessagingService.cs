@@ -3,5 +3,6 @@
     public interface IWhatsAppMessagingService
     {
         Task<bool> SendOtpAsync(string mobileNumber, string otp);
+        Task<bool> SendInvitationAsync(string mobileNumber, string hospitalName, string role, string registrationUrl);
     }
 }

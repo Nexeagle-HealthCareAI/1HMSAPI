@@ -218,9 +218,14 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     .ThenInclude(ds => ds.Specialization)
                 .ToDictionaryAsync(d => d.DoctorID, cancellationToken);
 
-            var doctorSpecDict = await _context.DoctorSpecializations
+            var doctorSpecList = await _context.DoctorSpecializations
                 .AsNoTracking()
-                .ToDictionaryAsync(ds => ds.DoctorID, ds => ds.SpecializationID, cancellationToken);
+                .Where(ds => doctorIds.Contains(ds.DoctorID))
+                .ToListAsync(cancellationToken);
+            
+            var doctorSpecDict = doctorSpecList
+                .GroupBy(ds => ds.DoctorID)
+                .ToDictionary(g => g.Key, g => g.Select(ds => ds.SpecializationID).FirstOrDefault());
 
             var now = DateTime.UtcNow;
             var currentYear = now.Year;
