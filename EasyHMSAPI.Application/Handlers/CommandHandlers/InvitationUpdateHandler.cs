@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services.Implementations;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
@@ -17,13 +18,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         private readonly AppDbContext _context;
         private readonly ISmsService _smsService;
         private readonly IEmailService _emailService;
+        public readonly IWhatsAppMessagingService _whatsAppMessagingService;
         private readonly string _registrationBaseUrl;
 
-        public InvitationUpdateHandler(AppDbContext context, ISmsService smsService, IEmailService emailService, IConfiguration configuration)
+        public InvitationUpdateHandler(AppDbContext context, ISmsService smsService, IEmailService emailService, IWhatsAppMessagingService whatsAppMessagingService, IConfiguration configuration)
         {
             _context = context;
             _smsService = smsService;
             _emailService = emailService;
+            _whatsAppMessagingService = whatsAppMessagingService;
             _registrationBaseUrl = configuration["Invitation:RegistrationBaseUrl"] ?? string.Empty;
         }
 
@@ -60,9 +63,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 await _context.SaveChangesAsync(cancellationToken);
 
                 string registrationUrl = _registrationBaseUrl + Uri.EscapeDataString(rawToken);
+                var hospitalName = await _context.Hospitals
+                    .Where(h => h.HospitalID == invitation.HospitalID)
+                    .Select(h => h.Name)
+                    .FirstOrDefaultAsync(cancellationToken);
+                var roleName = await _context.Roles
+                    .Where(r => r.RoleID == invitation.RoleID)
+                    .Select(r => r.RoleName)
+                    .FirstOrDefaultAsync(cancellationToken);
 
-                var smsMsg = $"Your easyHMS registration link has been reissued: {registrationUrl} (valid 24 hours)";
-                _ = _smsService.SendInvitationSmsAsync(invitation.RecipientMobile, smsMsg);
+                //var smsMsg = $"Your easyHMS registration link has been reissued: {registrationUrl} (valid 24 hours)";
+                //_ = _smsService.SendInvitationSmsAsync(invitation.RecipientMobile, smsMsg);
+                await _whatsAppMessagingService.SendInvitationAsync(invitation.RecipientMobile, hospitalName ?? string.Empty
+                    , roleName ?? string.Empty, registrationUrl);
 
                 if (!string.IsNullOrWhiteSpace(invitation.RecipientEmail))
                 {

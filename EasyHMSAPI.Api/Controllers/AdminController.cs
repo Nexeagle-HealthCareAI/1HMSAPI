@@ -52,7 +52,7 @@ namespace EasyHMSAPI.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError("Error in CreateInvitation for scope: {Scope}. Error: {Error}", scope, ex);
-                return StatusCode(500, new { Message = "An error occurred while creating the invitation.", Error = ex.Message });
+                return StatusCode(500, new { Message = "An error occurred while creating the invitation." + ex.Message + ex.StackTrace + ex.InnerException });
             }
         }
 

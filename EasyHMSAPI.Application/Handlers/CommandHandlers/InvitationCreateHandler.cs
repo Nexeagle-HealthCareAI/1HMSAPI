@@ -17,26 +17,42 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         private readonly AppDbContext _context;
         private readonly ISmsService _smsService;
         private readonly IEmailService _emailService;
+        private readonly IWhatsAppMessagingService _whatsAppMessagingService;
         private readonly string _registrationBaseUrl;
 
-        public InvitationCreateHandler(AppDbContext context, ISmsService smsService, IEmailService emailService, IConfiguration configuration)
+        public InvitationCreateHandler(AppDbContext context, ISmsService smsService, IEmailService emailService, IWhatsAppMessagingService whatsAppMessagingService, IConfiguration configuration)
         {
             _context = context;
             _smsService = smsService;
             _emailService = emailService;
+            _whatsAppMessagingService = whatsAppMessagingService;
             _registrationBaseUrl = configuration["Invitation:RegistrationBaseUrl"] ?? string.Empty;
         }
 
         public async Task<InvitationCreateResponseModel> Handle(InvitationCreateRequestModel request, CancellationToken cancellationToken)
         {
-            var hospitalExists = await _context.Hospitals.AnyAsync(h => h.HospitalID == request.HospitalId, cancellationToken);
-            var roleExists = await _context.Roles.AnyAsync(r => r.RoleID == request.RoleId, cancellationToken);
-            if (!hospitalExists || !roleExists)
+            var existingHospital = await _context.Hospitals
+                .Where(h => h.HospitalID == request.HospitalId)
+                .Select(x => new
+                {
+                    x.HospitalID,
+                    x.Name
+                })
+                .FirstOrDefaultAsync();
+            var existingRole = await _context.Roles
+                .Where(r => r.RoleID == request.RoleId)
+                .Select(x => new
+                {
+                    x.RoleID,
+                    x.RoleName
+                })
+                .FirstOrDefaultAsync();
+            if (existingHospital is null || existingRole is null)
             {
                 return new InvitationCreateResponseModel
                 {
                     Success = false,
-                    Message = !hospitalExists ? "Hospital not found." : "Role not found."
+                    Message = existingHospital is null ? "Hospital not found." : "Role not found."
                 };
             }
 
@@ -76,8 +92,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
             string registrationUrl = _registrationBaseUrl + Uri.EscapeDataString(rawToken);
 
-            var smsMsg = $"You have been invited to easyHMS. Complete your registration: {registrationUrl} (valid for 24 hours)";
-            _ = _smsService.SendInvitationSmsAsync(request.Mobile, smsMsg);
+            //var smsMsg = $"You have been invited to easyHMS. Complete your registration: {registrationUrl} (valid for 24 hours)";
+            //_ = _smsService.SendInvitationSmsAsync(request.Mobile, smsMsg);
+            await _whatsAppMessagingService.SendInvitationAsync(request.Mobile, existingHospital.Name, existingRole.RoleName, registrationUrl);
 
             if (!string.IsNullOrWhiteSpace(request.Email))
             {

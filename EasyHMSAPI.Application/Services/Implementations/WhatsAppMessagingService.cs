@@ -9,27 +9,24 @@ namespace EasyHMSAPI.Application.Services.Implementations
     {
         private readonly HttpClient _httpClient;
         private readonly IConfiguration _configuration;
+        private readonly string _phoneNumberId;
+        private readonly string _accessToken;
+        private readonly string _apiVersion;
 
         public WhatsAppMessagingService(HttpClient httpClient, IConfiguration configuration)
         {
             _httpClient = httpClient;
             _configuration = configuration;
+            _phoneNumberId = "917702338094533";
+            _accessToken = "EAAUmI8VYHh4BQd31SXZCATub5xlJS8NCRTem4mtKiveq3ihvVrLObOcUxBfKGrCCJpI4QLcClY86qc5sqpD5aYO2y94mHrdOU559HhjS9CEHpyPOtFODEzgTmdzMM8mhXtFDTK5wUWXyvSe5NQGUAVhlTZAj36jMISBZAvBZA29QJ7Kdz65Bfnk4IjdcvuVxHQZDZD";
+            _apiVersion = "v22.0";
         }
 
         public async Task<bool> SendOtpAsync(string mobileNumber, string otp)
         {
             try
             {
-                var phoneNumberId = "917702338094533";
-                var accessToken = "EAAUmI8VYHh4BQd31SXZCATub5xlJS8NCRTem4mtKiveq3ihvVrLObOcUxBfKGrCCJpI4QLcClY86qc5sqpD5aYO2y94mHrdOU559HhjS9CEHpyPOtFODEzgTmdzMM8mhXtFDTK5wUWXyvSe5NQGUAVhlTZAj36jMISBZAvBZA29QJ7Kdz65Bfnk4IjdcvuVxHQZDZD";
-                var apiVersion = "v22.0";
-
-                if (string.IsNullOrEmpty(phoneNumberId) || string.IsNullOrEmpty(accessToken) || string.IsNullOrEmpty(apiVersion))
-                {
-                    return false;
-                }
-
-                var url = $"https://graph.facebook.com/{apiVersion}/{phoneNumberId}/messages";
+                var url = $"https://graph.facebook.com/{_apiVersion}/{_phoneNumberId}/messages";
 
                 var payload = new
                 {
@@ -82,7 +79,75 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 {
                     Content = content
                 };
-                request.Headers.Add("Authorization", $"Bearer {accessToken}");
+                request.Headers.Add("Authorization", $"Bearer {_accessToken}");
+
+                var response = await _httpClient.SendAsync(request);
+
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        public async Task<bool> SendInvitationAsync(string mobileNumber, string hospitalName, string role, string registrationUrl)
+        {
+            try
+            {
+                var url = $"https://graph.facebook.com/{_apiVersion}/{_phoneNumberId}/messages";
+
+                var payload = new
+                {
+                    messaging_product = "whatsapp",
+                    to = mobileNumber,
+                    type = "template",
+                    template = new
+                    {
+                        name = "role_access_setup",
+                        language = new
+                        {
+                            code = "en"
+                        },
+                        components = new object[]
+                        {
+                            new
+                            {
+                                type = "body",
+                                parameters = new object[]
+                                {
+                                    new
+                                    {
+                                        type = "text",
+                                        text = hospitalName,
+                                        parameter_name = "hosp_name"
+                                    },
+                                    new
+                                    {
+                                        type = "text",
+                                        text = role,
+                                        parameter_name = "role"
+                                    },
+                                    new
+                                    {
+                                        type = "text",
+                                        text = registrationUrl,
+                                        parameter_name = "url"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                };
+
+                var json = JsonSerializer.Serialize(payload);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                var request = new HttpRequestMessage(HttpMethod.Post, url)
+                {
+                    Content = content
+                };
+                request.Headers.Add("Authorization", $"Bearer {_accessToken}");
 
                 var response = await _httpClient.SendAsync(request);
 
