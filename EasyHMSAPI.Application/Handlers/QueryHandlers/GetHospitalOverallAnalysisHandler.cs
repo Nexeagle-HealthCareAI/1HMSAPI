@@ -2,6 +2,7 @@ using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -148,7 +149,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     if (apptYear == prevYear) uniquePatientsPrevYear.Add(appt.PatientId);
 
                     // Track new vs returning based on appointment type
-                    if (!string.IsNullOrEmpty(appt.AppointmentType) && appt.AppointmentType.Equals("New", StringComparison.OrdinalIgnoreCase))
+                    if (!string.IsNullOrEmpty(appt.AppointmentType) && appt.AppointmentType == AppConstants.AppointmentType_New)
                     {
                         newPatientAppts.Add(appt.PatientId);
                     }
@@ -245,7 +246,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     continue;
 
                 var doctorAppts = group.ToList();
-                var specialty = doctor?.DoctorSpecializations?.FirstOrDefault()?.Specialization?.Name ?? "General";
+                var specialty = doctor?.DoctorSpecializations?.FirstOrDefault()?.Specialization?.Name ?? string.Empty;
                 var uniquePatients = doctorAppts.Where(a => !string.IsNullOrEmpty(a.PatientId)).Select(a => a.PatientId).Distinct().Count();
                 var newPatientCount = doctorAppts.Where(a => a.ApptDate.Date >= last30Days && !string.IsNullOrEmpty(a.PatientId)).Select(a => a.PatientId).Distinct().Count();
                 var noShow = doctorAppts.Count(a => a.ApptDate.Date < now.Date && a.CurrentStatusCode == AppConstants.AppointmentStatus_VitalsRequired);
@@ -254,7 +255,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 doctorBreakdowns.Add(new DoctorBreakdownModel
                 {
                     DoctorId = doctorId,
-                    DoctorName = doctor?.User?.UserProfiles?.FirstOrDefault()?.FullName ?? "Unknown",
+                    DoctorName = doctor?.User?.UserProfiles?.FirstOrDefault()?.FullName ?? string.Empty,
                     Specialty = specialty,
                     OverallVisits = doctorAppts.Count,
                     UniquePatients = uniquePatients,
@@ -366,8 +367,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             var now = DateTime.UtcNow;
             foreach (var appt in appointments)
             {
-                if (appt.ApptDate.Date < now.Date && appt.CurrentStatusCode == "Vital Required") noShowCount++;
-                if (appt.CurrentStatusCode == "CANCELLED") cancelledCount++;
+                if (appt.ApptDate.Date < now.Date && appt.CurrentStatusCode == AppConstants.AppointmentStatus_VitalsRequired) noShowCount++;
+                if (appt.CurrentStatusCode == AppConstants.AppointmentStatus_Cancelled) cancelledCount++;
             }
 
             overall.NoShow = noShowCount;
@@ -376,23 +377,22 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             // Top 5 Cities
             overall.Top5City = patients
                 .Where(p => !string.IsNullOrEmpty(p.City))
-                .GroupBy(p => p.City)
+                .GroupBy(p => p.City!.ToLower())
                 .OrderByDescending(g => g.Count())
                 .Take(5)
-                .ToDictionary(g => g.Key ?? string.Empty, g => g.Count());
+                .ToDictionary(g => g.Key, g => g.Count());
 
             // Unique Cities
             overall.UniqueCities = patients
                 .Where(p => !string.IsNullOrEmpty(p.City))
-                .Select(p => p.City)
-                .Where(c => c != null)
+                .Select(p => p.City!.ToLower())
                 .Distinct()
                 .ToList();
 
             return overall;
         }
 
-        private List<GenderWiseModel> CalculateGenderWiseAnalysis(List<Domain.Entities.Appointment> appointments, List<Domain.Entities.PatientRegistration> patients)
+        private List<GenderWiseModel> CalculateGenderWiseAnalysis(List<Appointment> appointments, List<PatientRegistration> patients)
         {
             var genderWise = new List<GenderWiseModel>();
 
@@ -452,8 +452,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 {
                     Gender = gender,
                     OverallVisits = genderAppts.Count,
-                    NoShow = genderAppts.Count(a => a.ApptDate.Date < DateTime.UtcNow.Date && a.CurrentStatusCode == "Vital Required"),
-                    Cancelled = genderAppts.Count(a => a.CurrentStatusCode == "CANCELLED"),
+                    NoShow = genderAppts.Count(a => a.ApptDate.Date < DateTime.UtcNow.Date && a.CurrentStatusCode == AppConstants.AppointmentStatus_VitalsRequired),
+                    Cancelled = genderAppts.Count(a => a.CurrentStatusCode == AppConstants.AppointmentStatus_Cancelled),
                     AgeDistribution = ageDistribution
                 });
             }
