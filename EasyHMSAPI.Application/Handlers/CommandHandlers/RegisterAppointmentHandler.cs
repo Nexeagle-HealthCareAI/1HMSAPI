@@ -250,6 +250,16 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             history.Add(new { status = AppConstants.AppointmentStatus_Future, timestamp = DateTime.UtcNow });
                             existingAppointment.StatusHistoryJson = JsonSerializer.Serialize(history);
                         }
+                        else if(request.ApptDate.Date <=  DateTime.UtcNow.Date)
+                        {
+                            existingAppointment.CurrentStatusCode = AppConstants.AppointmentStatus_VitalsRequired;
+                            existingAppointment.LastStatusCodeAt = DateTime.UtcNow;
+                            var history = string.IsNullOrEmpty(existingAppointment.StatusHistoryJson)
+                            ? new List<object>()
+                            : JsonSerializer.Deserialize<List<object>>(existingAppointment.StatusHistoryJson) ?? new List<object>();
+                            history.Add(new { status = AppConstants.AppointmentStatus_VitalsRequired, timestamp = DateTime.UtcNow });
+                            existingAppointment.StatusHistoryJson = JsonSerializer.Serialize(history);
+                        }
                     }
 
                     var bookedSlots = await (from a in _context.Appointments
