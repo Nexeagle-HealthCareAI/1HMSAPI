@@ -50,7 +50,9 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 await using var stream = file.OpenReadStream();
                 await blobClient.UploadAsync(stream, new BlobUploadOptions { HttpHeaders = headers }, cancellationToken);
 
-                return GenerateSasUrl(containerClient, blobName, TimeSpan.FromDays(365));
+                // Return both the blob name and the SAS URL separated by a pipe
+                var sasUrl = GenerateSasUrl(containerClient, blobName, TimeSpan.FromDays(365));
+                return $"{blobName}|{sasUrl}";
             }
             else
             {
@@ -124,8 +126,17 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
             if (containerName == _prescriptionAttachmentsContainer)
             {
-                var blobClient = containerClient.GetBlobClient(entityId.ToString());
-                return await blobClient.DeleteIfExistsAsync(cancellationToken: cancellationToken);
+                // For prescription attachments, find blob by entityId prefix since blob name has GUID suffix
+                var searchPrefix = $"{entityId}_";
+                await foreach (var blobItem in containerClient.GetBlobsAsync(prefix: searchPrefix, cancellationToken: cancellationToken))
+                {
+                    if (blobItem.Name.StartsWith(searchPrefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var blobClient = containerClient.GetBlobClient(blobItem.Name);
+                        return await blobClient.DeleteIfExistsAsync(cancellationToken: cancellationToken);
+                    }
+                }
+                return false;
             }
             else
             {

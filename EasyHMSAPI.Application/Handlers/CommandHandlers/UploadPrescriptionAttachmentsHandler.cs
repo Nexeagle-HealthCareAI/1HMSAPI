@@ -73,10 +73,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     if (!string.IsNullOrEmpty(appointment?.CurrentStatusCode) && allowedStatuses.Contains(appointment.CurrentStatusCode.ToUpper()))
                     {
                         var newAttachmentId = Guid.NewGuid();
-                        var fileUrl = await _blobStorageService.UploadAsync(newAttachmentId.ToString(), request.File, _containerName, cancellationToken);
+                        var uploadResult = await _blobStorageService.UploadAsync(newAttachmentId.ToString(), request.File, _containerName, cancellationToken);
 
-                        if (!string.IsNullOrEmpty(fileUrl))
+                        if (!string.IsNullOrEmpty(uploadResult))
                         {
+                            // Parse blob name and URL (format: "blobName|sasUrl")
+                            var urlParts = uploadResult.Split('|');
+                            var blobName = urlParts.Length > 0 ? urlParts[0] : string.Empty;
+                            var fileUrl = urlParts.Length > 1 ? urlParts[1] : uploadResult;
+
                             PrescriptionAttachment newAttachment = new()
                             {
                                 AttachmentId = newAttachmentId,
@@ -86,7 +91,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 DoctorId = request.DoctorId,
                                 ReportType = request.ReportType,
                                 StorageUrl = fileUrl,
-                                FileName = request.FileName,
+                                FileName = !string.IsNullOrEmpty(blobName) ? blobName : request.FileName,
                                 Notes = request.Notes,
                                 UploadedAt = DateTime.UtcNow,
                                 UploadedBy = request.UserName ?? string.Empty
