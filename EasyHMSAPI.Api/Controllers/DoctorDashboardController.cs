@@ -1,6 +1,7 @@
 ﻿using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics.CodeAnalysis;
@@ -22,6 +23,7 @@ namespace EasyHMSAPI.Api.Controllers
         }
 
         [HttpGet("appointment-details")]
+        [Authorize]
         public async Task<IActionResult> GetAppointmentDetails([FromQuery] string? status, [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] Guid hospitalId, [FromQuery] Guid doctorId)
         {
             _logger.LogInformation("GetAppointmentDetails started at {Time} for hospitalId: {HospitalId}, doctorId: {DoctorId}", DateTime.UtcNow, hospitalId, doctorId);
@@ -53,6 +55,7 @@ namespace EasyHMSAPI.Api.Controllers
         }
 
         [HttpGet("analysis/hospitalId={hospitalId}&doctorId={doctorId}")]
+        [Authorize]
         public async Task<ActionResult<GetDoctorDashboardAnalysisResponseModel>> GetDoctorDashboardAnalysis(Guid hospitalId, Guid doctorId)
         {
             _logger.LogInformation("GetDoctorDashboardAnalysis started at {Time} for hospitalId: {HospitalId}, doctorId: {DoctorId}", DateTime.UtcNow, hospitalId, doctorId);
