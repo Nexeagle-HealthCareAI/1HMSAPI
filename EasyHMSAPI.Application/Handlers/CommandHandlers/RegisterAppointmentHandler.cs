@@ -108,7 +108,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
 
                 // Send SMS reminder
-                bool isSmsSent = false;
+                //bool isSmsSent = false;
+                bool isReminderSent = false;
                 if (!string.IsNullOrWhiteSpace(patient.Mobile))
                 {
                     var smsMsg = $"Dear {patient.FullName}, your appointment is booked for {appointment.ApptDate:yyyy-MM-dd} at {appointment.StartAt:HH:mm}.";
@@ -118,7 +119,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         smsMsg += $" Your token number is {tokenNumber}.";
                         token = tokenNumber.HasValue ? tokenNumber.Value.ToString() : string.Empty;
                     }
-                    isSmsSent = await _smsService.SendInvitationSmsAsync(patient.Mobile, smsMsg);
+                    //isSmsSent = await _smsService.SendInvitationSmsAsync(patient.Mobile, smsMsg);
 
                     var hospitalName = await _context.Hospitals
                         .Where(h => h.HospitalID == request.HospitalId)
@@ -126,13 +127,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         .FirstOrDefaultAsync(cancellationToken);
                     var doctorName = existingDoctor.DoctorName;
                     var appointmentDate = appointment.ApptDate.Date.ToString("dd-MM-yyyy");
-                    await _whatsAppMessagingService.SendAppointmentConfirmationAsync(
+                    var appointmentTime = appointment.StartAt.ToString("HH:mm");
+                    isReminderSent = await _whatsAppMessagingService.SendAppointmentConfirmationAsync(
                         patient.Mobile,
                         patient.FullName ?? string.Empty,
                         hospitalName ?? string.Empty,
                         doctorName,
                         token,
-                        appointmentDate);
+                        appointmentDate,
+                        appointmentTime);
                 }
 
                 return new RegisterAppointmentResponseModel
@@ -141,7 +144,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     AppointmentId = appointment.ApptId,
                     Status = status,
                     TokenNumber = tokenNumber,
-                    IsReminderSent = isSmsSent,
+                    IsReminderSent = isReminderSent,
                     Message = "Appointment registered successfully"
                 };
             }

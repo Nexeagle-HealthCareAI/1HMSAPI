@@ -1,5 +1,7 @@
 ﻿using EasyHMSAPI.Application.Services.Interfaces;
 using Microsoft.Extensions.Configuration;
+using System;
+using System.Security.Policy;
 using System.Text;
 using System.Text.Json;
 
@@ -8,39 +10,37 @@ namespace EasyHMSAPI.Application.Services.Implementations
     public class WhatsAppMessagingService : IWhatsAppMessagingService
     {
         private readonly HttpClient _httpClient;
-        private readonly IConfiguration _configuration;
-        private readonly string _phoneNumberId;
+        private readonly string _isEnabled;
+        private readonly string _apiUrl;
         private readonly string _accessToken;
-        private readonly string _apiVersion;
 
         public WhatsAppMessagingService(HttpClient httpClient, IConfiguration configuration)
         {
             _httpClient = httpClient;
-            _configuration = configuration;
-            _phoneNumberId = "917702338094533";
-            _accessToken = "EAAUmI8VYHh4BQd31SXZCATub5xlJS8NCRTem4mtKiveq3ihvVrLObOcUxBfKGrCCJpI4QLcClY86qc5sqpD5aYO2y94mHrdOU559HhjS9CEHpyPOtFODEzgTmdzMM8mhXtFDTK5wUWXyvSe5NQGUAVhlTZAj36jMISBZAvBZA29QJ7Kdz65Bfnk4IjdcvuVxHQZDZD";
-            _apiVersion = "v22.0";
+            _isEnabled = configuration["WhatsApp:IsEnabled"] ?? string.Empty;
+            _apiUrl = configuration["WhatsApp:ApiUrl"] ?? string.Empty;
+            _accessToken = configuration["WhatsApp:AccessToken"] ?? string.Empty;
         }
 
         public async Task<bool> SendOtpAsync(string mobileNumber, string otp)
         {
             try
             {
-                var url = $"https://graph.facebook.com/{_apiVersion}/{_phoneNumberId}/messages";
-
-                var payload = new
+                if(!string.IsNullOrEmpty(_isEnabled) && _isEnabled.Trim().ToLower() == "true")
                 {
-                    messaging_product = "whatsapp",
-                    to = mobileNumber,
-                    type = "template",
-                    template = new
+                    var payload = new
                     {
-                        name = "otp",
-                        language = new
+                        messaging_product = "whatsapp",
+                        to = mobileNumber,
+                        type = "template",
+                        template = new
                         {
-                            code = "en"
-                        },
-                        components = new object[]
+                            name = "otp",
+                            language = new
+                            {
+                                code = "en"
+                            },
+                            components = new object[]
                         {
                             new
                             {
@@ -69,21 +69,26 @@ namespace EasyHMSAPI.Application.Services.Implementations
                                 }
                             }
                         }
-                    }
-                };
+                        }
+                    };
 
-                var json = JsonSerializer.Serialize(payload);
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                    var json = JsonSerializer.Serialize(payload);
+                    var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                var request = new HttpRequestMessage(HttpMethod.Post, url)
+                    var request = new HttpRequestMessage(HttpMethod.Post, _apiUrl)
+                    {
+                        Content = content
+                    };
+                    request.Headers.Add("Authorization", $"Bearer {_accessToken}");
+
+                    var response = await _httpClient.SendAsync(request);
+
+                    return response.IsSuccessStatusCode;
+                }
+                else
                 {
-                    Content = content
-                };
-                request.Headers.Add("Authorization", $"Bearer {_accessToken}");
-
-                var response = await _httpClient.SendAsync(request);
-
-                return response.IsSuccessStatusCode;
+                    return false;
+                }
             }
             catch (Exception)
             {
@@ -95,21 +100,21 @@ namespace EasyHMSAPI.Application.Services.Implementations
         {
             try
             {
-                var url = $"https://graph.facebook.com/{_apiVersion}/{_phoneNumberId}/messages";
-
-                var payload = new
+                if (!string.IsNullOrEmpty(_isEnabled) && _isEnabled.Trim().ToLower() == "true")
                 {
-                    messaging_product = "whatsapp",
-                    to = mobileNumber,
-                    type = "template",
-                    template = new
+                    var payload = new
                     {
-                        name = "role_access_setup",
-                        language = new
+                        messaging_product = "whatsapp",
+                        to = mobileNumber,
+                        type = "template",
+                        template = new
                         {
-                            code = "en"
-                        },
-                        components = new object[]
+                            name = "role_access_setup",
+                            language = new
+                            {
+                                code = "en"
+                            },
+                            components = new object[]
                         {
                             new
                             {
@@ -137,21 +142,26 @@ namespace EasyHMSAPI.Application.Services.Implementations
                                 }
                             }
                         }
-                    }
-                };
+                        }
+                    };
 
-                var json = JsonSerializer.Serialize(payload);
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                    var json = JsonSerializer.Serialize(payload);
+                    var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                var request = new HttpRequestMessage(HttpMethod.Post, url)
+                    var request = new HttpRequestMessage(HttpMethod.Post, _apiUrl)
+                    {
+                        Content = content
+                    };
+                    request.Headers.Add("Authorization", $"Bearer {_accessToken}");
+
+                    var response = await _httpClient.SendAsync(request);
+
+                    return response.IsSuccessStatusCode;
+                }
+                else
                 {
-                    Content = content
-                };
-                request.Headers.Add("Authorization", $"Bearer {_accessToken}");
-
-                var response = await _httpClient.SendAsync(request);
-
-                return response.IsSuccessStatusCode;
+                    return false;
+                } 
             }
             catch (Exception)
             {
@@ -159,79 +169,86 @@ namespace EasyHMSAPI.Application.Services.Implementations
             }
         }
 
-        public async Task<bool> SendAppointmentConfirmationAsync(string mobileNumber, string patientName, string hospitalName, string doctorName, string tokenNumber, string appointmentDate)
+        public async Task<bool> SendAppointmentConfirmationAsync(string mobileNumber, string patientName, string hospitalName, string doctorName, string tokenNumber, string appointmentDate, string appointmentTime)
         {
             try
             {
-                var url = $"https://graph.facebook.com/{_apiVersion}/{_phoneNumberId}/messages";
-
-                var payload = new
+                if (!string.IsNullOrEmpty(_isEnabled) && _isEnabled.Trim().ToLower() == "true")
                 {
-                    messaging_product = "whatsapp",
-                    to = mobileNumber,
-                    type = "template",
-                    template = new
+                    doctorName = FormatDoctorName(doctorName);
+                    var appointmentDateTime = $"{appointmentDate} at {appointmentTime}";
+                    var payload = new
                     {
-                        name = "appointment_sent_eng",
-                        language = new
+                        messaging_product = "whatsapp",
+                        to = mobileNumber,
+                        type = "template",
+                        template = new
                         {
-                            code = "en"
-                        },
-                        components = new object[]
-                        {
-                            new
+                            name = "appointment_sent_eng",
+                            language = new
                             {
-                                type = "body",
-                                parameters = new object[]
+                                code = "en"
+                            },
+                            components = new object[]
+                            {
+                                new
                                 {
-                                    new
+                                    type = "body",
+                                    parameters = new object[]
                                     {
-                                        type = "text",
-                                        text = patientName,
-                                        parameter_name = "patient_name"
-                                    },
-                                    new
-                                    {
-                                        type = "text",
-                                        text = hospitalName,
-                                        parameter_name = "hospital_name"
-                                    },
-                                    new
-                                    {
-                                        type = "text",
-                                        text = doctorName,
-                                        parameter_name = "doctor_name"
-                                    },
-                                    new
-                                    {
-                                        type = "text",
-                                        text = tokenNumber,
-                                        parameter_name = "token_num"
-                                    },
-                                    new
-                                    {
-                                        type = "text",
-                                        text = appointmentDate,
-                                        parameter_name = "date"
+                                        new
+                                        {
+                                            type = "text",
+                                            text = patientName,
+                                            parameter_name = "patient_name"
+                                        },
+                                        new
+                                        {
+                                            type = "text",
+                                            text = hospitalName,
+                                            parameter_name = "hospital_name"
+                                        },
+                                        new
+                                        {
+                                            type = "text",
+                                            text = doctorName,
+                                            parameter_name = "doctor_name"
+                                        },
+                                        new
+                                        {
+                                            type = "text",
+                                            text = tokenNumber,
+                                            parameter_name = "token_num"
+                                        },
+                                        new
+                                        {
+                                            type = "text",
+                                            text = appointmentDateTime,
+                                            parameter_name = "date"
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                };
+                    };
 
-                var json = JsonSerializer.Serialize(payload);
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                    var json = JsonSerializer.Serialize(payload);
+                    var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                var request = new HttpRequestMessage(HttpMethod.Post, url)
+                    var request = new HttpRequestMessage(HttpMethod.Post, _apiUrl)
+                    {
+                        Content = content
+                    };
+                    request.Headers.Add("Authorization", $"Bearer {_accessToken}");
+
+                    var response = await _httpClient.SendAsync(request);
+
+                    return response.IsSuccessStatusCode;
+                }
+                else
                 {
-                    Content = content
-                };
-                request.Headers.Add("Authorization", $"Bearer {_accessToken}");
-
-                var response = await _httpClient.SendAsync(request);
-
-                return response.IsSuccessStatusCode;
+                    return false;
+                }   
             }
             catch (Exception)
             {
@@ -243,21 +260,21 @@ namespace EasyHMSAPI.Application.Services.Implementations
         {
             try
             {
-                var url = $"https://graph.facebook.com/{_apiVersion}/{_phoneNumberId}/messages";
-
-                var payload = new
+                if (!string.IsNullOrEmpty(_isEnabled) && _isEnabled.Trim().ToLower() == "true")
                 {
-                    messaging_product = "whatsapp",
-                    to = mobileNumber,
-                    type = "template",
-                    template = new
+                    var payload = new
                     {
-                        name = "prescription_sent_doctor_note",
-                        language = new
+                        messaging_product = "whatsapp",
+                        to = mobileNumber,
+                        type = "template",
+                        template = new
                         {
-                            code = "en"
-                        },
-                        components = new object[]
+                            name = "prescription_sent_doctor_note",
+                            language = new
+                            {
+                                code = "en"
+                            },
+                            components = new object[]
                         {
                             new
                             {
@@ -295,26 +312,50 @@ namespace EasyHMSAPI.Application.Services.Implementations
                                 }
                             }
                         }
-                    }
-                };
+                        }
+                    };
 
-                var json = JsonSerializer.Serialize(payload);
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                    var json = JsonSerializer.Serialize(payload);
+                    var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                var request = new HttpRequestMessage(HttpMethod.Post, url)
+                    var request = new HttpRequestMessage(HttpMethod.Post, _apiUrl)
+                    {
+                        Content = content
+                    };
+                    request.Headers.Add("Authorization", $"Bearer {_accessToken}");
+
+                    var response = await _httpClient.SendAsync(request);
+
+                    return response.IsSuccessStatusCode;
+                }
+                else
                 {
-                    Content = content
-                };
-                request.Headers.Add("Authorization", $"Bearer {_accessToken}");
-
-                var response = await _httpClient.SendAsync(request);
-
-                return response.IsSuccessStatusCode;
+                    return false;
+                }   
             }
             catch (Exception)
             {
                 return false;
             }
+        }
+
+        private static string FormatDoctorName(string doctorName)
+        {
+            if (string.IsNullOrWhiteSpace(doctorName))
+                return doctorName;
+
+            var trimmed = doctorName.Trim();
+
+            if (trimmed.StartsWith("Dr.", StringComparison.OrdinalIgnoreCase))
+            {
+                return trimmed.Substring(3).TrimStart();
+            }
+            else if (trimmed.StartsWith("Dr ", StringComparison.OrdinalIgnoreCase))
+            {
+                return trimmed.Substring(2).TrimStart();
+            }
+
+            return trimmed;
         }
     }
 }
