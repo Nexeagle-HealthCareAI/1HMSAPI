@@ -295,10 +295,6 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             kpis.Cancelled = appointments.Count(a => a.CurrentStatusCode == AppConstants.AppointmentStatus_Cancelled);
             kpis.NoShow = appointments.Count(x => x.CurrentStatusCode == AppConstants.AppointmentStatus_VitalsRequired && x.ApptDate.Date < DateTime.UtcNow.Date);
 
-            //var totalPatients = uniquePatientIds.Count;
-            //var totalNewPercent = totalPatients > 0 ? (newPatients * 100m) / totalPatients : 0;
-            //var totalReturningPercent = totalPatients > 0 ? (returningPatients * 100m) / totalPatients : 0;
-
             return kpis;
         }
 
