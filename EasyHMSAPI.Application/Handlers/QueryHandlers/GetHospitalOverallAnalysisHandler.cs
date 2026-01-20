@@ -43,18 +43,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     return response;
                 }
 
-                var now = DateTime.UtcNow;
-                var today = now.Date;
-
-                // Fetch appointments and patients sequentially to avoid DbContext concurrency issues
                 var appointments = await _context.Appointments
                     .AsNoTracking()
                     .Where(a => a.HospitalId == request.HospitalId)
-                    .ToListAsync(cancellationToken);
-
-                var patients = await _context.PatientRegistrations
-                    .AsNoTracking()
-                    .Where(p => p.HospitalId == request.HospitalId)
                     .ToListAsync(cancellationToken);
 
                 if (appointments.Count == 0)
@@ -65,16 +56,15 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     return response;
                 }
 
-                var data = new HospitalAnalysisDataModel();
-                var yesterday = today.AddDays(-1);
-                var last7Days = today.AddDays(-7);
-                var monthStart = new DateTime(now.Year, now.Month, 1);
-                var yearStart = new DateTime(now.Year, 1, 1);
-                var prevYearStart = new DateTime(now.Year - 1, 1, 1);
-                var prevYearEnd = new DateTime(now.Year - 1, 12, 31);
+                var patients = await _context.PatientRegistrations
+                    .AsNoTracking()
+                    .Where(p => p.HospitalId == request.HospitalId)
+                    .ToListAsync(cancellationToken);
 
+
+                var data = new HospitalAnalysisDataModel();
                 // Calculate KPIs
-                data.Kpis = CalculateKpis(appointments, patients, today, yesterday, last7Days, monthStart, yearStart, prevYearStart, prevYearEnd);
+                data.Kpis = CalculateKpis(appointments);
 
                 // Calculate Breakdowns
                 data.Breakdowns = await CalculateBreakdownsOptimized(appointments, request.HospitalId, cancellationToken);
@@ -97,74 +87,38 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             return response;
         }
 
-        private KpisModel CalculateKpis(List<Appointment> appointments, List<PatientRegistration> patients,
-            DateTime today, DateTime yesterday, DateTime last7Days, DateTime monthStart, DateTime yearStart, DateTime prevYearStart, DateTime prevYearEnd)
+        private static KpisModel CalculateKpis(List<Appointment> appointments)
         {
             var kpis = new KpisModel();
+            var now = DateTime.UtcNow;
+            var today = now.Date;
+            var yesterday = today.AddDays(-1);
+            var last7Days = today.AddDays(-7);
+            var monthStart = new DateTime(now.Year, now.Month, 1);
             var currentYear = DateTime.UtcNow.Year;
             var prevYear = currentYear - 1;
 
-            // Total Visits - Single pass with HashSet for unique patients
-            var totalVisits = appointments.Count;
+            var totalVisitsCount = appointments.Count;
             var visitsToday = 0;
             var visitsYesterday = 0;
             var visitsLast7Days = 0;
             var visitsThisMonth = 0;
             var visitsThisYear = 0;
             var visitsPrevYear = 0;
-
-            var uniquePatientIdsSet = new HashSet<string?>();
-            var uniquePatientsToday = new HashSet<string?>();
-            var uniquePatientsYesterday = new HashSet<string?>();
-            var uniquePatientsLast7Days = new HashSet<string?>();
-            var uniquePatientsThisMonth = new HashSet<string?>();
-            var uniquePatientsThisYear = new HashSet<string?>();
-            var uniquePatientsPrevYear = new HashSet<string?>();
-            var newPatientAppts = new HashSet<string?>();
-            var returningPatientAppts = new HashSet<string?>();
-
-            // Single pass through appointments
             foreach (var appt in appointments)
             {
                 var apptDate = appt.ApptDate.Date;
                 var apptYear = appt.ApptDate.Year;
-
-                // Total visits
                 if (apptDate == today) visitsToday++;
                 if (apptDate == yesterday) visitsYesterday++;
                 if (apptDate >= last7Days && apptDate <= today) visitsLast7Days++;
                 if (apptDate >= monthStart && apptDate <= today) visitsThisMonth++;
                 if (apptYear == currentYear) visitsThisYear++;
                 if (apptYear == prevYear) visitsPrevYear++;
-
-                // Unique patients
-                if (!string.IsNullOrEmpty(appt.PatientId))
-                {
-                    uniquePatientIdsSet.Add(appt.PatientId);
-                    if (apptDate == today) uniquePatientsToday.Add(appt.PatientId);
-                    if (apptDate == yesterday) uniquePatientsYesterday.Add(appt.PatientId);
-                    if (apptDate >= last7Days && apptDate <= today) uniquePatientsLast7Days.Add(appt.PatientId);
-                    if (apptDate >= monthStart && apptDate <= today) uniquePatientsThisMonth.Add(appt.PatientId);
-                    if (apptYear == currentYear) uniquePatientsThisYear.Add(appt.PatientId);
-                    if (apptYear == prevYear) uniquePatientsPrevYear.Add(appt.PatientId);
-
-                    // Track new vs returning based on appointment type
-                    if (!string.IsNullOrEmpty(appt.AppointmentType) && appt.AppointmentType == AppConstants.AppointmentType_New)
-                    {
-                        newPatientAppts.Add(appt.PatientId);
-                    }
-                    else
-                    {
-                        returningPatientAppts.Add(appt.PatientId);
-                    }
-                }
             }
-
-            var uniquePatientIds = uniquePatientIdsSet.Count;
-
             kpis.TotalVisits = new VisitMetricModel
             {
-                Overall = totalVisits,
+                Overall = totalVisitsCount,
                 ByBucket = new BucketMetricModel
                 {
                     Today = visitsToday,
@@ -176,9 +130,43 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 }
             };
 
+            var allPatients = appointments
+                .Where(x => !string.IsNullOrEmpty(x.PatientId))
+                .ToList();
+            var uniquPatients = allPatients
+               .Select(x => x.PatientId)
+               .Distinct()
+               .ToList();
+            var uniquePatientsAppointments = allPatients
+                 .GroupBy(x => x.PatientId)
+                 .Select(g => new { g.Key, ApptDate = g.First().ApptDate })
+                 .ToList()
+                 .Select(x => new { PatientId = x.Key, x.ApptDate})
+                 .ToList();
+
+            var uniquePatientsToday = new HashSet<string?>();
+            var uniquePatientsYesterday = new HashSet<string?>();
+            var uniquePatientsLast7Days = new HashSet<string?>();
+            var uniquePatientsThisMonth = new HashSet<string?>();
+            var uniquePatientsThisYear = new HashSet<string?>();
+            var uniquePatientsPrevYear = new HashSet<string?>();
+            foreach (var appt in uniquePatientsAppointments)
+            {
+                var apptDate = appt.ApptDate.Date;
+                var apptYear = appt.ApptDate.Year;
+                if (!string.IsNullOrEmpty(appt.PatientId) && !string.IsNullOrWhiteSpace(appt.PatientId))
+                {
+                    if (apptDate == today) uniquePatientsToday.Add(appt.PatientId);
+                    if (apptDate == yesterday) uniquePatientsYesterday.Add(appt.PatientId);
+                    if (apptDate >= last7Days && apptDate <= today) uniquePatientsLast7Days.Add(appt.PatientId);
+                    if (apptDate >= monthStart && apptDate <= today) uniquePatientsThisMonth.Add(appt.PatientId);
+                    if (apptYear == currentYear) uniquePatientsThisYear.Add(appt.PatientId);
+                    if (apptYear == prevYear) uniquePatientsPrevYear.Add(appt.PatientId);
+                }
+            }
             kpis.UniquePatients = new VisitMetricModel
             {
-                Overall = uniquePatientIds,
+                Overall = uniquPatients.Count,
                 ByBucket = new BucketMetricModel
                 {
                     Today = uniquePatientsToday.Count,
@@ -190,16 +178,45 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 }
             };
 
-            // New vs Returning Patients
-            var newPatients = newPatientAppts.Count;
-            var returningPatients = returningPatientAppts.Count;
-            var newPercent = uniquePatientIds > 0 ? Math.Round((decimal)newPatients / uniquePatientIds * 100, 2) : 0;
-            var returningPercent = uniquePatientIds > 0 ? Math.Round((decimal)returningPatients / uniquePatientIds * 100, 2) : 0;
+            var returningPatientsCount = 0;
+            var newPatientCount = 0;
+            foreach (var item in uniquPatients)
+            {
+                var apptDetails = appointments
+                    .Where(a => a.PatientId == item && a.CurrentStatusCode != AppConstants.AppointmentStatus_Cancelled)
+                    .OrderByDescending(a => a.ApptDate)
+                    .ToList();
+                if (apptDetails.Count > 1)
+                {
+                    var allApptsAreNew = apptDetails.All(a => a.AppointmentType == AppConstants.AppointmentType_New);
+
+                    if (allApptsAreNew)
+                    {
+                        newPatientCount++;
+                    }
+                    else
+                    {
+                        returningPatientsCount++;
+                    }
+                }
+                else
+                {
+                    newPatientCount++;
+                }
+            }
+
+            var totalUniquePatients = newPatientCount + returningPatientsCount;
+            var newPatientPercent = totalUniquePatients > 0
+                ? Math.Round((decimal)newPatientCount / totalUniquePatients * 100, 2)
+                : 0;
+            var returningPatientPercent = totalUniquePatients > 0
+                ? Math.Round((decimal)returningPatientsCount / totalUniquePatients * 100, 2)
+                : 0;
 
             kpis.NewVsReturningPatients = new PatientTypeModel
             {
-                New = new PatientCountModel { Count = newPatients, Percent = newPercent },
-                Returning = new PatientCountModel { Count = returningPatients, Percent = returningPercent }
+                New = new PatientCountModel { Count = newPatientCount, Percent = newPatientPercent },
+                Returning = new PatientCountModel { Count = returningPatientsCount, Percent = returningPatientPercent }
             };
 
             return kpis;
