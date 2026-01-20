@@ -5,6 +5,7 @@ using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using System.Threading.Tasks;
 
 namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 {
@@ -73,7 +74,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 data.Overall = CalculateOverallAnalysis(appointments, patients);
 
                 // Calculate Gender-wise Analysis
-                data.GenderWise = CalculateGenderWiseAnalysis(appointments, patients);
+                data.GenderWise = await CalculateGenderWiseAnalysis(appointments);
 
                 response.Data = data;
                 response.Success = true;
@@ -222,7 +223,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             return kpis;
         }
 
-        private async Task<BreakdownsModel> CalculateBreakdownsOptimized(List<Domain.Entities.Appointment> appointments, Guid hospitalId, CancellationToken cancellationToken)
+        private async Task<BreakdownsModel> CalculateBreakdownsOptimized(List<Appointment> appointments, Guid hospitalId, CancellationToken cancellationToken)
         {
             var breakdowns = new BreakdownsModel();
 
@@ -334,7 +335,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             return breakdowns;
         }
 
-        private OverallModel CalculateOverallAnalysis(List<Appointment> appointments, List<PatientRegistration> patients)
+        private static OverallModel CalculateOverallAnalysis(List<Appointment> appointments, List<PatientRegistration> patients)
         {
             var overall = new OverallModel();
 
@@ -410,11 +411,21 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             return overall;
         }
 
-        private List<GenderWiseModel> CalculateGenderWiseAnalysis(List<Appointment> appointments, List<PatientRegistration> patients)
+        private async Task<List<GenderWiseModel>> CalculateGenderWiseAnalysis(List<Appointment> appointments)
         {
             var genderWise = new List<GenderWiseModel>();
 
-            // Group patients by gender
+            var allPatients = appointments
+              .Where(x => !string.IsNullOrEmpty(x.PatientId))
+              .ToList();
+            var uniquPatientsId = allPatients
+               .Select(x => x.PatientId)
+               .Distinct()
+               .ToList();
+            var patients = await _context.PatientRegistrations
+                .AsNoTracking()
+                .Where(p => uniquPatientsId.Contains(p.PatientId))
+                .ToListAsync();
             var genderGroups = patients
                 .Where(p => !string.IsNullOrEmpty(p.Sex))
                 .GroupBy(p => p.Sex)
@@ -426,7 +437,19 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 var patientIds = new HashSet<string?>(genderGroup.Select(p => p.PatientId));
 
                 // Filter appointments for this gender
-                var genderAppts = appointments.Where(a => patientIds.Contains(a.PatientId)).ToList();
+                var genderAppointments = appointments.Where(a => patientIds.Contains(a.PatientId)).ToList();
+
+                // Get unique patients for this gender
+                var uniqueGenderPatients = genderAppointments
+                    .Select(a => a.PatientId)
+                    .Distinct()
+                    .ToList();
+                var uniquePatientAppointments = genderAppointments
+                     .GroupBy(x => x.PatientId)
+                     .Select(g => new { g.Key, ApptDate = g.First().ApptDate, CurrentStatusCode = g.First().CurrentStatusCode })
+                     .ToList()
+                     .Select(x => new { PatientId = x.Key, x.ApptDate, x.CurrentStatusCode })
+                     .ToList();
 
                 // Age distribution
                 var ageDistribution = new Dictionary<string, int>
@@ -469,9 +492,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 genderWise.Add(new GenderWiseModel
                 {
                     Gender = gender,
-                    OverallVisits = genderAppts.Count,
-                    NoShow = genderAppts.Count(a => a.ApptDate.Date < DateTime.UtcNow.Date && a.CurrentStatusCode == AppConstants.AppointmentStatus_VitalsRequired),
-                    Cancelled = genderAppts.Count(a => a.CurrentStatusCode == AppConstants.AppointmentStatus_Cancelled),
+                    OverallVisits = uniqueGenderPatients.Count,
+                    NoShow = uniquePatientAppointments.Count(a => a.ApptDate.Date < DateTime.UtcNow.Date && a.CurrentStatusCode == AppConstants.AppointmentStatus_VitalsRequired),
+                    Cancelled = genderAppointments.Count(a => a.CurrentStatusCode == AppConstants.AppointmentStatus_Cancelled),
                     AgeDistribution = ageDistribution
                 });
             }
