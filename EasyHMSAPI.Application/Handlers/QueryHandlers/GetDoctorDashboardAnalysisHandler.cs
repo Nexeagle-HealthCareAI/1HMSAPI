@@ -121,14 +121,14 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
         private async Task<KPIData> GetKPIAnalysis(Guid doctorId, Guid hospitalId, CancellationToken cancellationToken)
         {
+            var kpis = new KPIData();
             var now = DateTime.UtcNow;
             var today = now.Date;
             var yesterday = today.AddDays(-1);
-            var last7DaysStart = today.AddDays(-7);
+            var last7Days = today.AddDays(-7);
             var monthStart = new DateTime(now.Year, now.Month, 1);
-            var yearStart = new DateTime(now.Year, 1, 1);
-            var prevYearStart = new DateTime(now.Year - 1, 1, 1);
-            var prevYearEnd = new DateTime(now.Year - 1, 12, 31);
+            var currentYear = DateTime.UtcNow.Year;
+            var prevYear = currentYear - 1;
 
             var appointments = await _context.Appointments
                 .AsNoTracking()
@@ -138,38 +138,130 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     a.ApptId,
                     a.PatientId,
                     a.ApptDate,
-                    a.CurrentStatusCode
+                    a.CurrentStatusCode,
+                    a.AppointmentType
                 })
                 .ToListAsync(cancellationToken);
 
-            var todayVisits = appointments.Count(a => a.ApptDate.Date == today);
-            var yesterdayVisits = appointments.Count(a => a.ApptDate.Date == yesterday);
-            var last7DaysVisits = appointments.Count(a => a.ApptDate.Date >= last7DaysStart && a.ApptDate.Date < today);
-            var thisMonthVisits = appointments.Count(a => a.ApptDate.Date >= monthStart && a.ApptDate.Date < today.AddDays(1));
-            var thisYearVisits = appointments.Count(a => a.ApptDate.Date >= yearStart && a.ApptDate.Date < today.AddDays(1));
-            var prevYearVisits = appointments.Count(a => a.ApptDate.Date >= prevYearStart && a.ApptDate.Date <= prevYearEnd);
-
-            var todayPatients = appointments.Where(a => a.ApptDate.Date == today).Select(a => a.PatientId).Distinct().Count();
-            var yesterdayPatients = appointments.Where(a => a.ApptDate.Date == yesterday).Select(a => a.PatientId).Distinct().Count();
-            var last7DaysPatients = appointments.Where(a => a.ApptDate.Date >= last7DaysStart && a.ApptDate.Date < today).Select(a => a.PatientId).Distinct().Count();
-            var thisMonthPatients = appointments.Where(a => a.ApptDate.Date >= monthStart && a.ApptDate.Date < today.AddDays(1)).Select(a => a.PatientId).Distinct().Count();
-            var thisYearPatients = appointments.Where(a => a.ApptDate.Date >= yearStart && a.ApptDate.Date < today.AddDays(1)).Select(a => a.PatientId).Distinct().Count();
-            var prevYearPatients = appointments.Where(a => a.ApptDate.Date >= prevYearStart && a.ApptDate.Date <= prevYearEnd).Select(a => a.PatientId).Distinct().Count();
-
-            var uniquePatientIds = appointments.Select(a => a.PatientId).Distinct().ToList();
-
-            var patientData = await _context.PatientRegistrations
-                .AsNoTracking()
-                .Where(p => uniquePatientIds.Contains(p.PatientId))
-                .Select(p => new
+            var totalVisitsCount = appointments.Count;
+            var visitsToday = 0;
+            var visitsYesterday = 0;
+            var visitsLast7Days = 0;
+            var visitsThisMonth = 0;
+            var visitsThisYear = 0;
+            var visitsPrevYear = 0;
+            foreach (var appt in appointments)
+            {
+                var apptDate = appt.ApptDate.Date;
+                var apptYear = appt.ApptDate.Year;
+                if (apptDate == today) visitsToday++;
+                if (apptDate == yesterday) visitsYesterday++;
+                if (apptDate >= last7Days && apptDate <= today) visitsLast7Days++;
+                if (apptDate >= monthStart && apptDate <= today) visitsThisMonth++;
+                if (apptYear == currentYear) visitsThisYear++;
+                if (apptYear == prevYear) visitsPrevYear++;
+            }
+            kpis.TotalVisits = new VisitData
+            {
+                Overall = totalVisitsCount,
+                ByBucket = new TimeBucketData
                 {
-                    p.PatientId,
-                    p.RegisteredAt
-                })
-                .ToListAsync(cancellationToken);
+                    Today = visitsToday,
+                    Yesterday = visitsYesterday,
+                    Last7Days = visitsLast7Days,
+                    ThisMonth = visitsThisMonth,
+                    ThisYear = visitsThisYear,
+                    PrevYear = visitsPrevYear
+                }
+            };
 
-            var newPatients = patientData.Count(p => p.RegisteredAt != null && p.RegisteredAt.Value.Date >= monthStart);
-            var returningPatients = patientData.Count(p => p.RegisteredAt != null && p.RegisteredAt.Value.Date < monthStart);
+            var allPatients = appointments
+                .Where(x => !string.IsNullOrEmpty(x.PatientId))
+                .ToList();
+            var uniquPatients = allPatients
+               .Select(x => x.PatientId)
+               .Distinct()
+               .ToList();
+            var uniquePatientsAppointments = allPatients
+                 .GroupBy(x => x.PatientId)
+                 .Select(g => new { g.Key, ApptDate = g.First().ApptDate })
+                 .ToList()
+                 .Select(x => new { PatientId = x.Key, x.ApptDate })
+                 .ToList();
+
+            var uniquePatientsToday = new HashSet<string?>();
+            var uniquePatientsYesterday = new HashSet<string?>();
+            var uniquePatientsLast7Days = new HashSet<string?>();
+            var uniquePatientsThisMonth = new HashSet<string?>();
+            var uniquePatientsThisYear = new HashSet<string?>();
+            var uniquePatientsPrevYear = new HashSet<string?>();
+            foreach (var appt in uniquePatientsAppointments)
+            {
+                var apptDate = appt.ApptDate.Date;
+                var apptYear = appt.ApptDate.Year;
+                if (!string.IsNullOrEmpty(appt.PatientId) && !string.IsNullOrWhiteSpace(appt.PatientId))
+                {
+                    if (apptDate == today) uniquePatientsToday.Add(appt.PatientId);
+                    if (apptDate == yesterday) uniquePatientsYesterday.Add(appt.PatientId);
+                    if (apptDate >= last7Days && apptDate <= today) uniquePatientsLast7Days.Add(appt.PatientId);
+                    if (apptDate >= monthStart && apptDate <= today) uniquePatientsThisMonth.Add(appt.PatientId);
+                    if (apptYear == currentYear) uniquePatientsThisYear.Add(appt.PatientId);
+                    if (apptYear == prevYear) uniquePatientsPrevYear.Add(appt.PatientId);
+                }
+            }
+            kpis.UniquePatients = new VisitData
+            {
+                Overall = uniquPatients.Count,
+                ByBucket = new TimeBucketData
+                {
+                    Today = uniquePatientsToday.Count,
+                    Yesterday = uniquePatientsYesterday.Count,
+                    Last7Days = uniquePatientsLast7Days.Count,
+                    ThisMonth = uniquePatientsThisMonth.Count,
+                    ThisYear = uniquePatientsThisYear.Count,
+                    PrevYear = uniquePatientsPrevYear.Count
+                }
+            };
+
+            var returningPatientsCount = 0;
+            var newPatientCount = 0;
+            foreach (var item in uniquPatients)
+            {
+                var apptDetails = appointments
+                    .Where(a => a.PatientId == item && a.CurrentStatusCode != AppConstants.AppointmentStatus_Cancelled)
+                    .OrderByDescending(a => a.ApptDate)
+                    .ToList();
+                if (apptDetails.Count > 1)
+                {
+                    var allApptsAreNew = apptDetails.All(a => a.AppointmentType == AppConstants.AppointmentType_New);
+
+                    if (allApptsAreNew)
+                    {
+                        newPatientCount++;
+                    }
+                    else
+                    {
+                        returningPatientsCount++;
+                    }
+                }
+                else
+                {
+                    newPatientCount++;
+                }
+            }
+            var totalUniquePatients = newPatientCount + returningPatientsCount;
+            var newPatientPercent = totalUniquePatients > 0
+                ? Math.Round((decimal)newPatientCount / totalUniquePatients * 100, 2)
+                : 0;
+            var returningPatientPercent = totalUniquePatients > 0
+                ? Math.Round((decimal)returningPatientsCount / totalUniquePatients * 100, 2)
+                : 0;
+
+            kpis.NewVsReturningPatients = new PatientTypeData
+            {
+                New = new PatientCountData { Count = newPatientCount, Percent = newPatientPercent },
+                Returning = new PatientCountData { Count = returningPatientsCount, Percent = returningPatientPercent }
+            };
 
             var ageDistribution = new Dictionary<string, int>
             {
@@ -182,13 +274,11 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 { "61-70", 0 },
                 { "71-100", 0 }
             };
-
             var patientAges = await _context.PatientRegistrations
                 .AsNoTracking()
-                .Where(p => uniquePatientIds.Contains(p.PatientId))
+                .Where(p => uniquPatients.Contains(p.PatientId))
                 .Select(p => p.AgeYears)
                 .ToListAsync(cancellationToken);
-
             foreach (var age in patientAges)
             {
                 if (age >= 0 && age <= 10) ageDistribution["0-10"]++;
@@ -200,51 +290,12 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 else if (age >= 61 && age <= 70) ageDistribution["61-70"]++;
                 else if (age >= 71 && age <= 100) ageDistribution["71-100"]++;
             }
+            kpis.AgeDistribution = ageDistribution;
 
-            var cancelledCount = appointments.Count(a => a.CurrentStatusCode == AppConstants.AppointmentStatus_Cancelled);
-            var noShowCount = 0;
+            kpis.Cancelled = appointments.Count(a => a.CurrentStatusCode == AppConstants.AppointmentStatus_Cancelled);
+            kpis.NoShow = appointments.Count(x => x.CurrentStatusCode == AppConstants.AppointmentStatus_VitalsRequired && x.ApptDate.Date < DateTime.UtcNow.Date);
 
-            var totalPatients = uniquePatientIds.Count;
-            var totalNewPercent = totalPatients > 0 ? (newPatients * 100m) / totalPatients : 0;
-            var totalReturningPercent = totalPatients > 0 ? (returningPatients * 100m) / totalPatients : 0;
-
-            return new KPIData
-            {
-                TotalVisits = new VisitData
-                {
-                    Overall = thisMonthVisits,
-                    ByBucket = new TimeBucketData
-                    {
-                        Today = todayVisits,
-                        Yesterday = yesterdayVisits,
-                        Last7Days = last7DaysVisits,
-                        ThisMonth = thisMonthVisits,
-                        ThisYear = thisYearVisits,
-                        PrevYear = prevYearVisits
-                    }
-                },
-                UniquePatients = new VisitData
-                {
-                    Overall = thisMonthPatients,
-                    ByBucket = new TimeBucketData
-                    {
-                        Today = todayPatients,
-                        Yesterday = yesterdayPatients,
-                        Last7Days = last7DaysPatients,
-                        ThisMonth = thisMonthPatients,
-                        ThisYear = thisYearPatients,
-                        PrevYear = prevYearPatients
-                    }
-                },
-                NewVsReturningPatients = new PatientTypeData
-                {
-                    New = new PatientCountData { Count = newPatients, Percent = Math.Round(totalNewPercent, 2) },
-                    Returning = new PatientCountData { Count = returningPatients, Percent = Math.Round(totalReturningPercent, 2) }
-                },
-                AgeDistribution = ageDistribution,
-                NoShow = noShowCount,
-                Cancelled = cancelledCount
-            };
+            return kpis;
         }
 
         private async Task<MedicalStatsData> GetMedicalStats(Guid doctorId, Guid hospitalId, CancellationToken cancellationToken)
