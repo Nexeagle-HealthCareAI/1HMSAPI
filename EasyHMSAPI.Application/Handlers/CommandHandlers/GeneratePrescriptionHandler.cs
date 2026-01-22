@@ -81,6 +81,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return response;
                 }
 
+                response.ValidUptoDate = existingAppointment.ValidUptoDate;
+
                 var prescriptionSettings = await _context.PrescriptionSettings
                     .AsNoTracking()
                     .FirstOrDefaultAsync(ps => ps.DoctorId == request.DoctorId && ps.HospitalId == request.HospitalId, cancellationToken);
