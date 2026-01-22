@@ -399,6 +399,16 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
             }
 
+            var prescriptionSettings = await _context.PrescriptionSettings
+                       .Where(ps => ps.DoctorId == request.DoctorId)
+                       .Select(ps => new
+                       {
+                           ps.ValidDuration,
+                           ps.PrescriptionSettingId
+                       })
+                       .FirstOrDefaultAsync(cancellationToken);
+            var effectiveDate = DateTime.Now;
+
             if (existingPatient is not null)
             {
                 var lastAppoitment = await _context.Appointments
@@ -424,17 +434,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     }
                     else
                     {
-                        var prescriptionSettings = await _context.PrescriptionSettings
-                        .Where(ps => ps.DoctorId == request.DoctorId)
-                        .Select(ps => new
-                        {
-                            ps.ValidDuration,
-                            ps.PrescriptionSettingId
-                        })
-                        .FirstOrDefaultAsync(cancellationToken);
                         if (prescriptionSettings is not null)
                         {
-                            var effectiveDate = lastAppoitment.ApptDate.AddDays(prescriptionSettings.ValidDuration);
+                            effectiveDate = lastAppoitment.ApptDate.AddDays(prescriptionSettings.ValidDuration);
+                            appointment.ValidUptoDate = effectiveDate;
                             if (request.ApptDate <= effectiveDate)
                             {
                                 appointment.AppointmentType = AppConstants.AppointmentType_OldNoFee;
@@ -452,11 +455,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
                 else
                 {
+                    effectiveDate = appointment.ApptDate.AddDays(prescriptionSettings.ValidDuration);
+                    appointment.ValidUptoDate = effectiveDate;
                     appointment.AppointmentType = AppConstants.AppointmentType_New;
                 }
             }
             else
             {
+                effectiveDate = appointment.ApptDate.AddDays(prescriptionSettings.ValidDuration);
+                appointment.ValidUptoDate = effectiveDate;
                 appointment.AppointmentType = AppConstants.AppointmentType_New;
             }
 

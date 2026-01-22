@@ -9,6 +9,7 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public bool Success { get; set; }
         public string? Message { get; set; }
         public Guid AppointmentId { get; set; }
+        public DateTime? ValidUptoDate { get; set; }
         public GeneratePrescriptionDataModel? Data { get; set; }
     }
 
