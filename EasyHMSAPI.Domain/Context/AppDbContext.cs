@@ -48,6 +48,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<Prescription> Prescription { get; set; }
         public DbSet<PrescriptionMedicine> PrescriptionMedicine { get; set; }
         public DbSet<PrescriptionInvestigation> PrescriptionInvestigation { get; set; }
+        public DbSet<BillingChargeCatalog> BillingChargeCatalogs { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {   
