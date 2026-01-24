@@ -73,7 +73,7 @@ namespace EasyHMSAPI.Api.Controllers
             return Ok(responseModel);
         }
 
-        [HttpGet("config/charges/hospitalId={hosppitalId}")]
+        [HttpGet("config/charges/hospitalId={hospitalId}")]
         public async Task<ActionResult<GetBillingChargesResponseModel>> GetBillingCharges(Guid hospitalId)
         {
             _logger.LogInformation("etBillingCharges started at {Time}", DateTime.UtcNow);
