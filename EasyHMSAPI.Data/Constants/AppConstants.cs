@@ -34,5 +34,12 @@ namespace EasyHMSAPI.Data.Constants
 
         public static readonly string PatientSex_Male = "Male";
         public static readonly string PatientSex_Female = "Female";
+
+        public static readonly string VisitType_OPD = "OPD";
+        public static readonly string VisitType_LAB = "LAB";
+        public static readonly string VisitType_PHARMACY = "PHARMACY";
+        public static readonly string VisitType_IPD = "IPD";
+        public static readonly string VisitType_ER = "ER";
+        public static readonly string VisitType_OTHER = "OTHER";
     }
 }

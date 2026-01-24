@@ -3,6 +3,7 @@ using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Data.Constants;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -31,17 +32,35 @@ namespace EasyHMSAPI.Api.Controllers
             UpsertBillingChangesResponseModel responseModel = new();
             try
             {
-                if (request.HospitalId == Guid.Empty)
+                if (request.HospitalId == Guid.Empty || string.IsNullOrEmpty(request.VisitType) || string.IsNullOrWhiteSpace(request.VisitType))
                 {
                     responseModel.Success = false;
-                    responseModel.Message = "HospitalId is required.";
+                    responseModel.Message = "Invalid hospitalId or visitType";
                 }
                 else
                 {
-                    request.CurrentDateTime = DateTime.UtcNow;
-                    request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
-                    responseModel = await _mediator.Send(request);
-                    _logger.LogInformation("UpsertBillingChanges ended");
+                    var visiTypes = new List<string>
+                    {
+                       AppConstants.VisitType_OPD,
+                       AppConstants.VisitType_LAB,
+                       AppConstants.VisitType_PHARMACY,
+                       AppConstants.VisitType_IPD,
+                       AppConstants.VisitType_ER,
+                       AppConstants.VisitType_OTHER
+                    };
+
+                    if(visiTypes.Contains(request.VisitType.Trim().ToUpper()))
+                    {
+                        request.CurrentDateTime = DateTime.UtcNow;
+                        request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                        responseModel = await _mediator.Send(request);
+                        _logger.LogInformation("UpsertBillingChanges ended");
+                    }
+                    else
+                    {
+                        responseModel.Success = false;
+                        responseModel.Message = "Invalid visit type.";
+                    }
                 }
             }
             catch (Exception ex)

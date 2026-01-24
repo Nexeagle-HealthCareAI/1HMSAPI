@@ -31,7 +31,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             ChargeItemId = Guid.NewGuid(),
                             HospitalId = request.HospitalId,
                             DisplayName = request.DisplayName,
-                            VisitType = request.VisitType,
+                            VisitType = !string.IsNullOrEmpty(request.VisitType) ? request.VisitType.Trim().ToUpper() : string.Empty,
                             DefaultRate = request.DefaultRate,
                             DefaultDiscountPercent = request.DefaultDiscountPercent,
                             DefaultQty = request.DefaultQty,
@@ -52,7 +52,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         if(existingItem is not null)
                         {
                             if (!string.IsNullOrEmpty(request.DisplayName)) existingItem.DisplayName = request.DisplayName;
-                            if (!string.IsNullOrEmpty(request.VisitType)) existingItem.VisitType = request.VisitType;
+                            if (!string.IsNullOrEmpty(request.VisitType)) existingItem.VisitType = request.VisitType.Trim().ToUpper();
                             existingItem.DefaultRate = request.DefaultRate;
                             existingItem.DefaultDiscountPercent = request.DefaultDiscountPercent;
                             existingItem.DefaultQty = request.DefaultQty;
