@@ -3,10 +3,9 @@
 namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
 {
     [ExcludeFromCodeCoverage]
-    public class UpsertBillingChangesResponseModel
+    public class UploadInvoiceSettingsTemplateResponseModel
     {
         public bool Success { get; set; }
         public string? Message { get; set; }
-        public Guid? ChargeItemId { get; set; }
     }
 }
