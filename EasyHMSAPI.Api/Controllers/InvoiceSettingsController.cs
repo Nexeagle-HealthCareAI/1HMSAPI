@@ -107,7 +107,7 @@ namespace EasyHMSAPI.Api.Controllers
         [HttpPost("upload/template")]
         public async Task<ActionResult<UploadInvoiceSettingsTemplateResponseModel>> UploadInvoiceSettingsTemplate([FromQuery] UploadInvoiceSettingsTemplateRequestModel request)
         {
-            _logger.LogInformation("GetInvoiceSettings started at {Time}", DateTime.UtcNow);
+            _logger.LogInformation("UploadInvoiceSettingsTemplate started at {Time}", DateTime.UtcNow);
             UploadInvoiceSettingsTemplateResponseModel responseModel = new();
             try
             {
@@ -132,7 +132,7 @@ namespace EasyHMSAPI.Api.Controllers
                         else
                         {
                             responseModel = await _mediator.Send(request);
-                            _logger.LogInformation("GetInvoiceSettings ended");
+                            _logger.LogInformation("UploadInvoiceSettingsTemplate ended");
                         }
                     }
                     else
@@ -144,7 +144,7 @@ namespace EasyHMSAPI.Api.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError("Error in GetInvoiceSettings . Error: {Error}", ex);
+                _logger.LogError("Error in UploadInvoiceSettingsTemplate . Error: {Error}", ex);
                 responseModel.Success = false;
                 responseModel.Message = "An error occurred while fetching the invoice settings." + ex.Message + ex.InnerException + ex.StackTrace;
             }
