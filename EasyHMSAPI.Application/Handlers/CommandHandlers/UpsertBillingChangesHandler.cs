@@ -26,9 +26,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 {
                     if (request.ChargeItemId == Guid.Empty)
                     {
+                        var newGuid = Guid.NewGuid();
                         BillingChargeCatalog billingChargeCatalog = new()
                         {
-                            ChargeItemId = Guid.NewGuid(),
+                            ChargeItemId = newGuid,
                             HospitalId = request.HospitalId,
                             DisplayName = request.DisplayName,
                             VisitType = !string.IsNullOrEmpty(request.VisitType) ? request.VisitType.Trim().ToUpper() : string.Empty,
@@ -43,6 +44,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                         response.Success = true;
                         response.Message = "Billing change inserted successfully.";
+                        response.ChargeItemId = newGuid;
                     }
                     else
                     {
@@ -62,6 +64,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             await _context.SaveChangesAsync(cancellationToken);
                             response.Success = true;
                             response.Message = "Billing change updated successfully.";
+                            response.ChargeItemId = existingItem.ChargeItemId;
                         }
                         else
                         {
