@@ -1,10 +1,12 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Domain.Entities
 {
     [ExcludeFromCodeCoverage]
     public class InvoicePrintSettings
     {
+        [Key]
         public Guid InvoicePrintId { get; set; }
         public Guid HospitalId { get; set; }
         public int? HeaderHeight { get; set; }

@@ -1,10 +1,12 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Domain.Entities
 {
     [ExcludeFromCodeCoverage]
     public class BillingChargeCatalog
     {
+        [Key]
         public Guid ChargeItemId { get; set; }
         public Guid HospitalId { get; set; }
         public string? DisplayName { get; set; }
