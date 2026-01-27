@@ -20,7 +20,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             DeleteBillingChargesResponseModel responseModel = new();
             try
             {
-                var existingItem = await _context.BillingChargeCatalogs
+                var existingItem = await _context.BillingChargeCatalog
                     .Where(x => x.ChargeItemId == request.ChargeItemId && x.HospitalId == request.HospitalId)
                     .FirstOrDefaultAsync(cancellationToken);
                 if(existingItem == null)
@@ -30,7 +30,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
                 else
                 {
-                    _context.BillingChargeCatalogs.Remove(existingItem);
+                    _context.BillingChargeCatalog.Remove(existingItem);
                     await _context.SaveChangesAsync(cancellationToken);
                     responseModel.Success = true;
                     responseModel.Message = "Billing charge item deleted successfully.";
