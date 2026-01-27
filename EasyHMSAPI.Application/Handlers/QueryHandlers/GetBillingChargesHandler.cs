@@ -19,7 +19,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             GetBillingChargesResponseModel responseModel = new(); 
             try
             {
-                var existingItem = await _context.BillingChargeCatalogs
+                var existingItem = await _context.BillingChargeCatalog
                     .Where(x => x.HospitalId == request.HospitalId)
                     .Select(x => new BillingChargeItemDataModel
                     {
