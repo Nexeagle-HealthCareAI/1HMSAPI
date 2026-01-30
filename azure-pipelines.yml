@@ -85,7 +85,7 @@ stages:
               versionSpec: '3.11'
 
           - script: |
-              cd tests/smoke
+              cd tests/smoking
               pip install -r requirements.txt
               pytest --junitxml=smoke-results.xml
             displayName: 'Run Smoke Tests (DEV)'
