@@ -10,6 +10,7 @@ using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using EasyHMSAPI.UnitTests.TestUtils;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Moq;
 using NUnit.Framework;
@@ -50,14 +51,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             // Arrange
             var user = TestDataFactory.SeedUser(_context, phone: "1234567890");
             var otp = "123456";
-            var userAuth = new UserAuth 
-            { 
-                UserID = user.UserID, 
-                Otp = otp, // Storing plain text as per handler logic (though comment says hash, logic compares strings)
-                OtpExpireAt = DateTime.Now.AddMinutes(10),
-                IsOtpUsed = false
-            };
-            _context.UserAuths.Add(userAuth);
+            TestDataFactory.GetOrCreateUserAuth(_context, user, otp: otp, otpExpireAt: DateTime.Now.AddMinutes(10));
             
             var userProfile = new UserProfile { UserID = user.UserID, FullName = "Test User" };
             _context.UserProfiles.Add(userProfile);
@@ -74,7 +68,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(response.Success, Is.True);
             Assert.That(response.AccessToken, Is.EqualTo("fake-jwt-token"));
             
-            var updatedAuth = await _context.UserAuths.FindAsync(userAuth.UserAuthID);
+            var updatedAuth = await _context.UserAuths.FirstOrDefaultAsync(ua => ua.UserID == user.UserID);
             Assert.That(updatedAuth!.IsOtpUsed, Is.True);
         }
 
@@ -83,16 +77,8 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         {
             // Arrange
             var user = TestDataFactory.SeedUser(_context, phone: "1234567890");
-            var userAuth = new UserAuth 
-            { 
-                UserID = user.UserID, 
-                Otp = "123456",
-                OtpExpireAt = DateTime.Now.AddMinutes(10),
-                IsOtpUsed = false
-            };
-            _context.UserAuths.Add(userAuth);
-            await _context.SaveChangesAsync();
-
+            TestDataFactory.GetOrCreateUserAuth(_context, user, otp: "123456", otpExpireAt: DateTime.Now.AddMinutes(10));
+            
             var request = new OtpVerifyRequestModel { MobileNumber = "1234567890", Otp = "999999" };
 
             // Act

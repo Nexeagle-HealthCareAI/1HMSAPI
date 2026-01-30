@@ -72,10 +72,36 @@ namespace EasyHMSAPI.UnitTests.TestUtils
             return doctor;
         }
 
+        public static UserAuth GetOrCreateUserAuth(AppDbContext context, User user, string otp = "123456", DateTime? otpExpireAt = null)
+        {
+            var userAuth = context.UserAuths.FirstOrDefault(ua => ua.UserID == user.UserID);
+            if (userAuth == null)
+            {
+                userAuth = new UserAuth
+                {
+                    UserAuthID = Guid.NewGuid(),
+                    UserID = user.UserID,
+                    UserStatusId = user.UserStatusId,
+                    IsLocked = false,
+                    FailedLoginAttempts = 0
+                };
+                context.UserAuths.Add(userAuth);
+            }
+
+            userAuth.Otp = otp;
+            userAuth.OtpExpireAt = otpExpireAt ?? DateTime.Now.AddMinutes(10);
+            userAuth.IsOtpUsed = false;
+
+            context.SaveChanges();
+            return userAuth;
+        }
+
         public static string HashPassword(string password)
         {
              var hashedBytes = SHA256.HashData(Encoding.UTF8.GetBytes(password));
              return BitConverter.ToString(hashedBytes).Replace("-", "").ToLower();
         }
     }
+
+
 }
