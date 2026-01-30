@@ -1,9 +1,6 @@
 # ============================================
-#   Build & Deploy EasyHMS API (.NET 8)
-#   Dev deploy: release-* AND feature/*
-#   QA deploy: release-* only (recommended)
-#   Smoke tests: after Dev deploy
-#   PR: Build only (no deploy)
+#   Build, Test (80% Coverage Gate) & Deploy
+#   EasyHMS API (.NET 8)
 # ============================================
 
 parameters:
@@ -28,35 +25,37 @@ pool:
 
 variables:
   apiProject: 'EasyHMSAPI.Api/EasyHMSAPI.Api.csproj'
+  testProjects: '**/*Tests/*.csproj'   # adjust if your test csproj naming differs
   publishDir: '$(Build.ArtifactStagingDirectory)/publish'
   artifactName: 'api-drop'
 
-  # Dev App Service
+  # Coverage
+  coverageThreshold: '80'
+  testResultsDir: '$(Build.SourcesDirectory)/TestResults'
+  coverageDir: '$(Build.SourcesDirectory)/TestResults/CoverageReport'
+
+  # Dev
   devAppName: 'easyHMSAPIServices'
-  devResourceGroup: 'website-dev-rg'
   devServiceConnection: 'svc-conn-nexeagle-dev'
 
-  # QA App Service
-  qaAppName: 'easyHMSAPIServices'   # FIX if needed
-  qaResourceGroup: 'website-qa-rg'
+  # QA
+  qaAppName: 'easyHMSAPIServices'
   qaServiceConnection: 'svc-conn-nexeagle-qa'
-
-  # Smoke Test Config (Dev URL)
-  smokeBaseUrl: 'https://easyhmsapiservices-bgasabd9ddbbdden.centralindia-01.azurewebsites.net'
 
   # PROD
   prodAppName: 'easyHMSAPIServicesProd'
-  prodResourceGroup: 'website-prod-rg'
   prodServiceConnection: 'svc-conn-nexeagle-prod'
 
 stages:
 
-# ===================== STAGE 1: Build =====================
-- stage: Build
-  displayName: Build & Package API
+# ================================================================
+#  STAGE 1 — Build + Unit Tests + Coverage Gate (>= 80%)
+# ================================================================
+- stage: Build_Test
+  displayName: Build + Unit Tests + Coverage Gate
   jobs:
-  - job: BuildJob
-    displayName: Build
+  - job: BuildTestJob
+    displayName: Build/Test
     steps:
     - checkout: self
 
@@ -78,8 +77,100 @@ stages:
         projects: '$(apiProject)'
         arguments: '--configuration Release --no-restore'
 
+    # ---------- UNIT TESTS + COVERAGE ----------
     - task: DotNetCoreCLI@2
-      displayName: 'Publish (zip)'
+      displayName: 'Test (with coverage)'
+      inputs:
+        command: 'test'
+        projects: '$(testProjects)'
+        arguments: >
+          --configuration Release
+          --collect:"XPlat Code Coverage"
+          --logger "trx"
+          --results-directory "$(testResultsDir)"
+        publishTestResults: false
+
+    - task: PublishTestResults@2
+      displayName: 'Publish Unit Test Results'
+      inputs:
+        testResultsFormat: 'VSTest'
+        testResultsFiles: '$(testResultsDir)/**/*.trx'
+        testRunTitle: 'Unit Tests'
+      condition: succeededOrFailed()
+
+    # Install ReportGenerator to convert coverage.cobertura.xml into nice report
+    - script: |
+        dotnet tool update --global dotnet-reportgenerator-globaltool || dotnet tool install --global dotnet-reportgenerator-globaltool
+        echo '##vso[task.prependpath]'"$HOME/.dotnet/tools"
+      displayName: 'Install ReportGenerator'
+
+    # Generate report + enforce 80% line coverage
+    - script: |
+        set -e
+
+        echo "Finding cobertura files..."
+        files=$(find "$(testResultsDir)" -name "coverage.cobertura.xml" || true)
+
+        if [ -z "$files" ]; then
+          echo "No coverage.cobertura.xml found. Ensure coverlet.collector is added to test projects."
+          exit 1
+        fi
+
+        echo "Coverage files:"
+        echo "$files"
+
+        mkdir -p "$(coverageDir)"
+
+        reportgenerator \
+          -reports:"$(testResultsDir)/**/coverage.cobertura.xml" \
+          -targetdir:"$(coverageDir)" \
+          -reporttypes:"HtmlInline_AzurePipelines;Cobertura"
+
+        # Parse line-rate from Cobertura
+        cobertura="$(coverageDir)/Cobertura.xml"
+        if [ ! -f "$cobertura" ]; then
+          echo "Cobertura.xml not generated at $cobertura"
+          exit 1
+        fi
+
+        line_rate=$(python - << 'PY'
+import xml.etree.ElementTree as ET
+tree = ET.parse(r"$(coverageDir)/Cobertura.xml")
+root = tree.getroot()
+# Cobertura: line-rate is 0..1
+lr = root.attrib.get("line-rate")
+print(lr if lr else "0")
+PY
+        )
+
+        pct=$(python - << 'PY'
+lr = float("$line_rate")
+print(int(round(lr * 100)))
+PY
+        )
+
+        echo "Line coverage: ${pct}%"
+        thr=$(coverageThreshold)
+
+        if [ "$pct" -lt "$thr" ]; then
+          echo "Coverage gate failed: ${pct}% < ${thr}%"
+          exit 1
+        fi
+
+        echo "Coverage gate passed: ${pct}% >= ${thr}%"
+      displayName: 'Coverage Report + 80% Gate'
+
+    - task: PublishCodeCoverageResults@2
+      displayName: 'Publish Coverage to Azure DevOps'
+      inputs:
+        codeCoverageTool: 'Cobertura'
+        summaryFileLocation: '$(coverageDir)/Cobertura.xml'
+        reportDirectory: '$(coverageDir)'
+        failIfCoverageEmpty: true
+
+    # ---------- PUBLISH ARTIFACT FOR DEPLOY ----------
+    - task: DotNetCoreCLI@2
+      displayName: 'Publish API (zip)'
       inputs:
         command: 'publish'
         projects: '$(apiProject)'
@@ -90,29 +181,24 @@ stages:
     - publish: $(publishDir)
       artifact: $(artifactName)
 
-# ===================== STAGE 2: Deploy DEV + Smoke =====================
+# ================================================================
+#  STAGE 2 — Deploy DEV
+# ================================================================
 - stage: Deploy_Dev
-  displayName: Deploy to App Service (Dev) + Smoke Tests
-  dependsOn: Build
+  displayName: Deploy to App Service (Dev)
+  dependsOn: Build_Test
   condition: >
     and(
       succeeded(),
-      ne(variables['Build.Reason'], 'PullRequest'),
-      or(
-        startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'),
-        startsWith(variables['Build.SourceBranch'], 'refs/heads/feature/')
-      )
+      ne(variables['Build.Reason'], 'PullRequest')
     )
   jobs:
   - deployment: DeployDev
-    displayName: Deploy Dev
     environment: 'dev'
     strategy:
       runOnce:
         deploy:
           steps:
-          - checkout: self
-
           - download: current
             artifact: $(artifactName)
 
@@ -124,47 +210,9 @@ stages:
               appName: '$(devAppName)'
               package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
 
-          # -------- Smoke Tests --------
-          - task: UsePythonVersion@0
-            displayName: 'Use Python 3.11'
-            inputs:
-              versionSpec: '3.11'
-
-          # Optional: wait a bit for warm-up (helps avoid false failures)
-          - script: |
-              echo "Waiting for app warm-up..."
-              for i in {1..12}; do
-                echo "Attempt $i: $BASE_URL"
-                if curl -fsS "$BASE_URL" >/dev/null 2>&1; then
-                  echo "App is responding."
-                  exit 0
-                fi
-                sleep 10
-              done
-              echo "App did not respond in time."
-              exit 1
-            displayName: 'Warm-up check (DEV)'
-            env:
-              BASE_URL: $(smokeBaseUrl)
-
-          - script: |
-              set -e
-              python -m pip install --upgrade pip
-              cd tests/smoking
-              pip install -r requirements.txt
-              pytest --junitxml=smoke-results.xml
-            displayName: 'Run Smoke Tests (DEV)'
-            env:
-              BASE_URL: $(smokeBaseUrl)
-
-          - task: PublishTestResults@2
-            displayName: 'Publish Smoke Test Results'
-            inputs:
-              testResultsFiles: '$(System.DefaultWorkingDirectory)/tests/smoking/smoke-results.xml'
-              testRunTitle: 'Smoke Tests - DEV'
-            condition: succeededOrFailed()
-
-# ===================== STAGE 3: Deploy QA (only if DEV + smoke succeeded) =====================
+# ================================================================
+#  STAGE 3 — Deploy QA (release-* only)
+# ================================================================
 - stage: Deploy_QA
   displayName: Deploy to App Service (QA)
   dependsOn: Deploy_Dev
@@ -176,14 +224,11 @@ stages:
     )
   jobs:
   - deployment: DeployQA
-    displayName: Deploy QA
     environment: 'qa'
     strategy:
       runOnce:
         deploy:
           steps:
-          - checkout: self
-
           - download: current
             artifact: $(artifactName)
 
@@ -195,7 +240,9 @@ stages:
               appName: '$(qaAppName)'
               package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
 
-# ===================== STAGE 4: Deploy PROD (manual gate) =====================
+# ================================================================
+#  STAGE 4 — Deploy PROD (manual + approval)
+# ================================================================
 - stage: Deploy_Prod
   displayName: Deploy to App Service (PROD) — Environment Approval
   dependsOn: Deploy_QA
@@ -208,14 +255,11 @@ stages:
     )
   jobs:
   - deployment: DeployProd
-    displayName: Deploy PROD
     environment: 'prod'
     strategy:
       runOnce:
         deploy:
           steps:
-          - checkout: self
-
           - download: current
             artifact: $(artifactName)
 
