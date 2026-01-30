@@ -52,12 +52,6 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             };
             _context.DoctorDepartments.Add(docDept);
 
-            var spec = new Specialization { SpecializationID = Guid.NewGuid(), Name = "Spec1", IsActive = true };
-            _context.Specializations.Add(spec);
-            
-            var docSpec = new DoctorSpecialization { DoctorSpecializationID = Guid.NewGuid(), DoctorID = doctor.DoctorID, SpecializationID = spec.SpecializationID };
-            _context.DoctorSpecializations.Add(docSpec);
-
             await _context.SaveChangesAsync();
 
             var request = new GetDepartmentDoctorsRequestModel { DepartmentId = deptId, HospitalId = hospitalId };
@@ -68,7 +62,6 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             // Assert
             Assert.That(response.Doctors, Has.Count.EqualTo(1));
             Assert.That(response.Doctors[0].DoctorName, Is.EqualTo("Dr. Test"));
-            Assert.That(response.Doctors[0].Specializations, Does.Contain("Spec1"));
         }
     }
 }

@@ -36,7 +36,12 @@ namespace EasyHMSAPI.UnitTests
             {
                 var ps = modelBuilder.Entity<PrescriptionSetting>();
                 ps.Property(p => p.ValidDuration).IsRequired(false);
-                ps.Property(p => p.RowVersion).IsRequired(false);
+                // For RowVersion (timestamp), we need to make it not a concurrency token and not required
+                // Set a default empty byte array value
+                ps.Property(p => p.RowVersion)
+                    .IsRequired(false)
+                    .IsConcurrencyToken(false)
+                    .HasDefaultValue(new byte[0]);
             }
             catch
             {

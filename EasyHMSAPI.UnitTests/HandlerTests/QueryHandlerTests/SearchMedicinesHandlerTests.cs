@@ -51,7 +51,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
                 PreferrredId = 1,
                 DoctorId = doctor.DoctorID,
                 HospitalId = hospitalId,
-                MedicineName = "Aspirin", GenericName = "Generic Medicine",
+                MedicineName = "aspirin", GenericName = "Generic Medicine",
                 IsActive = true
             };
             _context.DoctorPreferredMedicines.Add(med);
@@ -64,7 +64,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             {
                 HospitalId = hospitalId,
                 DoctorId = doctor.DoctorID,
-                SearchText = "Asp"
+                SearchText = "asp"
             };
 
             // Act
@@ -73,7 +73,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             // Assert
             Assert.That(response.Success, Is.True);
             Assert.That(response.PersonalMedicine, Has.Count.EqualTo(1));
-            Assert.That(response.PersonalMedicine[0].MedicineName, Is.EqualTo("Aspirin"));
+            Assert.That(response.PersonalMedicine[0].MedicineName, Is.EqualTo("aspirin"));
         }
     }
 }

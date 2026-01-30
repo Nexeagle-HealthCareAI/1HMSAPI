@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.QueryHandlers;
@@ -40,13 +41,12 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             var user = TestDataFactory.SeedUser(_context, role: "Admin");
             user.UserStatusId = (int)UserStatusEnum.Active;
             
-            var role = new Role { RoleID = Guid.NewGuid(), RoleName = "Admin" };
-            _context.Roles.Add(role);
+            // Get the role that was created by SeedUser
+            var role = _context.Roles.First(r => r.RoleName == "Admin");
+            
+            // Add permissions to the role
             var perm = new RolePermission { RoleID = role.RoleID, PermissionKey = "Access" };
             _context.RolePermissions.Add(perm);
-            
-            var userRole = new UserRole { UserID = user.UserID, RoleID = role.RoleID };
-            _context.UserRoles.Add(userRole);
             await _context.SaveChangesAsync();
 
             var request = new UserPermissionsRequestModel { UserId = user.UserID };
