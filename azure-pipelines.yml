@@ -122,3 +122,33 @@ stages:
               appType: 'webAppLinux'
               appName: '$(qaAppName)'
               package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
+# ================================================================
+#  STAGE 4 — Deploy PROD (release-* + env approval, no time gate)
+#  NOTE: Configure approval in Pipelines → Environments → prod
+# ================================================================
+- stage: Deploy_Prod
+  displayName: Deploy to App Service (PROD) — Environment Approval
+  dependsOn: Deploy_QA
+  condition: >
+    and(
+      succeeded(),
+      startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'),
+      eq('${{ parameters.deployProd }}', 'true')
+    )
+  jobs:
+  - deployment: DeployProd
+    environment: 'prod'  # add Approvals & Checks to this Environment
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: current
+            artifact: $(artifactName)
+
+          - task: AzureWebApp@1
+            displayName: 'Deploy ZIP to PROD App Service'
+            inputs:
+              azureSubscription: '$(prodServiceConnection)'
+              appType: 'webAppLinux'
+              appName: '$(prodAppName)'
+              package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
