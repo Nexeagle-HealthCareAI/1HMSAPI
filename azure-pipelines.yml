@@ -1,5 +1,27 @@
+# ============================================
+#   Build & Deploy EasyHMS API (.NET 8)
+#   Dev deploy: release-* AND feature/*
+#   QA deploy: release-* only (recommended)
+#   Smoke tests: after Dev deploy
+#   PR: Build only (no deploy)
+# ============================================
+
+parameters:
+- name: deployProd
+  type: boolean
+  default: false
+
 trigger:
-- main
+  branches:
+    include:
+      - 'release-*'
+      - 'feature/*'
+
+pr:
+  branches:
+    include:
+      - 'release-*'
+      - 'feature/*'
 
 pool:
   vmImage: 'ubuntu-latest'
@@ -9,23 +31,35 @@ variables:
   publishDir: '$(Build.ArtifactStagingDirectory)/publish'
   artifactName: 'api-drop'
 
+  # Dev App Service
   devAppName: 'easyHMSAPIServices'
   devResourceGroup: 'website-dev-rg'
+  devServiceConnection: 'svc-conn-nexeagle-dev'
 
-  qaAppName: 'easyHMSAPISevices'
+  # QA App Service
+  qaAppName: 'easyHMSAPIServices'   # FIX if needed
   qaResourceGroup: 'website-qa-rg'
+  qaServiceConnection: 'svc-conn-nexeagle-qa'
 
-  # Smoke Test Config
+  # Smoke Test Config (Dev URL)
   smokeBaseUrl: 'https://easyhmsapiservices-bgasabd9ddbbdden.centralindia-01.azurewebsites.net'
+
+  # PROD
+  prodAppName: 'easyHMSAPIServicesProd'
+  prodResourceGroup: 'website-prod-rg'
+  prodServiceConnection: 'svc-conn-nexeagle-prod'
 
 stages:
 
-# ===================== Build =====================
+# ===================== STAGE 1: Build =====================
 - stage: Build
   displayName: Build & Package API
   jobs:
   - job: BuildJob
+    displayName: Build
     steps:
+    - checkout: self
+
     - task: UseDotNet@2
       displayName: 'Use .NET 8 SDK'
       inputs:
@@ -56,35 +90,66 @@ stages:
     - publish: $(publishDir)
       artifact: $(artifactName)
 
-# ===================== Deploy to Dev =====================
+# ===================== STAGE 2: Deploy DEV + Smoke =====================
 - stage: Deploy_Dev
-  displayName: Deploy to App Service (Dev)
+  displayName: Deploy to App Service (Dev) + Smoke Tests
   dependsOn: Build
+  condition: >
+    and(
+      succeeded(),
+      ne(variables['Build.Reason'], 'PullRequest'),
+      or(
+        startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'),
+        startsWith(variables['Build.SourceBranch'], 'refs/heads/feature/')
+      )
+    )
   jobs:
   - deployment: DeployDev
+    displayName: Deploy Dev
     environment: 'dev'
     strategy:
       runOnce:
         deploy:
           steps:
+          - checkout: self
+
           - download: current
             artifact: $(artifactName)
 
           - task: AzureWebApp@1
             displayName: 'Deploy ZIP to Dev App Service'
             inputs:
-              azureSubscription: 'svc-conn-nexeagle-dev'
+              azureSubscription: '$(devServiceConnection)'
               appType: 'webAppLinux'
               appName: '$(devAppName)'
               package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
 
-          # ================= SMOKE TEST START =================
+          # -------- Smoke Tests --------
           - task: UsePythonVersion@0
             displayName: 'Use Python 3.11'
             inputs:
               versionSpec: '3.11'
 
+          # Optional: wait a bit for warm-up (helps avoid false failures)
           - script: |
+              echo "Waiting for app warm-up..."
+              for i in {1..12}; do
+                echo "Attempt $i: $BASE_URL"
+                if curl -fsS "$BASE_URL" >/dev/null 2>&1; then
+                  echo "App is responding."
+                  exit 0
+                fi
+                sleep 10
+              done
+              echo "App did not respond in time."
+              exit 1
+            displayName: 'Warm-up check (DEV)'
+            env:
+              BASE_URL: $(smokeBaseUrl)
+
+          - script: |
+              set -e
+              python -m pip install --upgrade pip
               cd tests/smoking
               pip install -r requirements.txt
               pytest --junitxml=smoke-results.xml
@@ -95,30 +160,69 @@ stages:
           - task: PublishTestResults@2
             displayName: 'Publish Smoke Test Results'
             inputs:
-              testResultsFiles: 'tests/smoke/smoke-results.xml'
+              testResultsFiles: '$(System.DefaultWorkingDirectory)/tests/smoking/smoke-results.xml'
               testRunTitle: 'Smoke Tests - DEV'
             condition: succeededOrFailed()
-          # ================= SMOKE TEST END =================
 
-# ===================== Deploy to QA =====================
+# ===================== STAGE 3: Deploy QA (only if DEV + smoke succeeded) =====================
 - stage: Deploy_QA
   displayName: Deploy to App Service (QA)
   dependsOn: Deploy_Dev
-  condition: succeeded()   #  QA deploy tabhi hoga jab smoke pass
+  condition: >
+    and(
+      succeeded(),
+      ne(variables['Build.Reason'], 'PullRequest'),
+      startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')
+    )
   jobs:
   - deployment: DeployQA
+    displayName: Deploy QA
     environment: 'qa'
     strategy:
       runOnce:
         deploy:
           steps:
+          - checkout: self
+
           - download: current
             artifact: $(artifactName)
 
           - task: AzureWebApp@1
             displayName: 'Deploy ZIP to QA App Service'
             inputs:
-              azureSubscription: 'svc-conn-nexeagle-qa'
+              azureSubscription: '$(qaServiceConnection)'
               appType: 'webAppLinux'
               appName: '$(qaAppName)'
+              package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
+
+# ===================== STAGE 4: Deploy PROD (manual gate) =====================
+- stage: Deploy_Prod
+  displayName: Deploy to App Service (PROD) — Environment Approval
+  dependsOn: Deploy_QA
+  condition: >
+    and(
+      succeeded(),
+      ne(variables['Build.Reason'], 'PullRequest'),
+      startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'),
+      eq(${{ parameters.deployProd }}, true)
+    )
+  jobs:
+  - deployment: DeployProd
+    displayName: Deploy PROD
+    environment: 'prod'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+
+          - download: current
+            artifact: $(artifactName)
+
+          - task: AzureWebApp@1
+            displayName: 'Deploy ZIP to PROD App Service'
+            inputs:
+              azureSubscription: '$(prodServiceConnection)'
+              appType: 'webAppLinux'
+              appName: '$(prodAppName)'
               package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
