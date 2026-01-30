@@ -1,6 +1,11 @@
 # ============================================
-#   Build, Test (80% Coverage Gate) & Deploy
+#   Build, Unit Test (80% Coverage Gate) & Deploy
 #   EasyHMS API (.NET 8)
+#
+#   Dev deploy: release-* AND feature/*
+#   QA deploy : release-* only
+#   PROD deploy: release-* only + deployProd=true + env approval
+#   PR builds: Build + Tests only (no deploy)
 # ============================================
 
 parameters:
@@ -24,21 +29,24 @@ pool:
   vmImage: 'ubuntu-latest'
 
 variables:
+  # Projects
   apiProject: 'EasyHMSAPI.Api/EasyHMSAPI.Api.csproj'
-  testProjects: '**/*Tests/*.csproj'   # adjust if your test csproj naming differs
+  testProjects: '**/*Tests/*.csproj'   # adjust if your test project path differs
+
+  # Artifacts
   publishDir: '$(Build.ArtifactStagingDirectory)/publish'
   artifactName: 'api-drop'
 
   # Coverage
   coverageThreshold: '80'
   testResultsDir: '$(Build.SourcesDirectory)/TestResults'
-  coverageDir: '$(Build.SourcesDirectory)/TestResults/CoverageReport'
+  coverageReportDir: '$(Build.SourcesDirectory)/TestResults/CoverageReport'
 
   # Dev
   devAppName: 'easyHMSAPIServices'
   devServiceConnection: 'svc-conn-nexeagle-dev'
 
-  # QA
+  # QA (fix spelling if your Azure app is actually different)
   qaAppName: 'easyHMSAPIServices'
   qaServiceConnection: 'svc-conn-nexeagle-qa'
 
@@ -79,7 +87,7 @@ stages:
 
     # ---------- UNIT TESTS + COVERAGE ----------
     - task: DotNetCoreCLI@2
-      displayName: 'Test (with coverage)'
+      displayName: 'Unit Tests (with coverage)'
       inputs:
         command: 'test'
         projects: '$(testProjects)'
@@ -98,77 +106,60 @@ stages:
         testRunTitle: 'Unit Tests'
       condition: succeededOrFailed()
 
-    # Install ReportGenerator to convert coverage.cobertura.xml into nice report
+    # ---------- COVERAGE REPORT + GATE ----------
     - script: |
+        set -euo pipefail
+
+        # Install reportgenerator
         dotnet tool update --global dotnet-reportgenerator-globaltool || dotnet tool install --global dotnet-reportgenerator-globaltool
-        echo '##vso[task.prependpath]'"$HOME/.dotnet/tools"
-      displayName: 'Install ReportGenerator'
+        export PATH="$PATH:$HOME/.dotnet/tools"
 
-    # Generate report + enforce 80% line coverage
-    - script: |
-        set -e
+        RESULTS_DIR="$(testResultsDir)"
+        REPORT_DIR="$(coverageReportDir)"
+        THRESHOLD="$(coverageThreshold)"
 
-        echo "Finding cobertura files..."
-        files=$(find "$(testResultsDir)" -name "coverage.cobertura.xml" || true)
-
-        if [ -z "$files" ]; then
-          echo "No coverage.cobertura.xml found. Ensure coverlet.collector is added to test projects."
+        echo "Searching for cobertura coverage files in: $RESULTS_DIR"
+        if ! find "$RESULTS_DIR" -name "coverage.cobertura.xml" | grep -q .; then
+          echo "No coverage.cobertura.xml found."
+          echo "Fix: ensure each test project references coverlet.collector."
           exit 1
         fi
 
-        echo "Coverage files:"
-        echo "$files"
-
-        mkdir -p "$(coverageDir)"
+        mkdir -p "$REPORT_DIR"
 
         reportgenerator \
-          -reports:"$(testResultsDir)/**/coverage.cobertura.xml" \
-          -targetdir:"$(coverageDir)" \
-          -reporttypes:"HtmlInline_AzurePipelines;Cobertura"
+          "-reports:$RESULTS_DIR/**/coverage.cobertura.xml" \
+          "-targetdir:$REPORT_DIR" \
+          "-reporttypes:HtmlInline_AzurePipelines;Cobertura"
 
-        # Parse line-rate from Cobertura
-        cobertura="$(coverageDir)/Cobertura.xml"
-        if [ ! -f "$cobertura" ]; then
-          echo "Cobertura.xml not generated at $cobertura"
+        COBERTURA="$REPORT_DIR/Cobertura.xml"
+        if [ ! -f "$COBERTURA" ]; then
+          echo "Cobertura.xml not generated at $COBERTURA"
           exit 1
         fi
 
-        line_rate=$(python - << 'PY'
-import xml.etree.ElementTree as ET
-tree = ET.parse(r"$(coverageDir)/Cobertura.xml")
-root = tree.getroot()
-# Cobertura: line-rate is 0..1
-lr = root.attrib.get("line-rate")
-print(lr if lr else "0")
-PY
-        )
+        # Parse line-rate (0..1) from Cobertura.xml
+        LINE_RATE=$(python -c "import xml.etree.ElementTree as ET; r=ET.parse('$COBERTURA').getroot(); print(r.attrib.get('line-rate','0'))")
+        PCT=$(python -c "print(int(round(float('$LINE_RATE')*100)))")
 
-        pct=$(python - << 'PY'
-lr = float("$line_rate")
-print(int(round(lr * 100)))
-PY
-        )
-
-        echo "Line coverage: ${pct}%"
-        thr=$(coverageThreshold)
-
-        if [ "$pct" -lt "$thr" ]; then
-          echo "Coverage gate failed: ${pct}% < ${thr}%"
+        echo "Line coverage: ${PCT}% (threshold: ${THRESHOLD}%)"
+        if [ "$PCT" -lt "$THRESHOLD" ]; then
+          echo "Coverage gate failed: ${PCT}% < ${THRESHOLD}%"
           exit 1
         fi
 
-        echo "Coverage gate passed: ${pct}% >= ${thr}%"
+        echo "Coverage gate passed."
       displayName: 'Coverage Report + 80% Gate'
 
     - task: PublishCodeCoverageResults@2
-      displayName: 'Publish Coverage to Azure DevOps'
+      displayName: 'Publish Coverage'
       inputs:
         codeCoverageTool: 'Cobertura'
-        summaryFileLocation: '$(coverageDir)/Cobertura.xml'
-        reportDirectory: '$(coverageDir)'
+        summaryFileLocation: '$(coverageReportDir)/Cobertura.xml'
+        reportDirectory: '$(coverageReportDir)'
         failIfCoverageEmpty: true
 
-    # ---------- PUBLISH ARTIFACT FOR DEPLOY ----------
+    # ---------- PUBLISH API ZIP ARTIFACT FOR DEPLOY ----------
     - task: DotNetCoreCLI@2
       displayName: 'Publish API (zip)'
       inputs:
@@ -178,11 +169,11 @@ PY
         publishWebProjects: false
         zipAfterPublish: true
 
-    - publish: $(publishDir)
-      artifact: $(artifactName)
+    - publish: '$(publishDir)'
+      artifact: '$(artifactName)'
 
 # ================================================================
-#  STAGE 2 — Deploy DEV
+#  STAGE 2 — Deploy DEV (release-* and feature/*, NOT on PR)
 # ================================================================
 - stage: Deploy_Dev
   displayName: Deploy to App Service (Dev)
@@ -190,10 +181,15 @@ PY
   condition: >
     and(
       succeeded(),
-      ne(variables['Build.Reason'], 'PullRequest')
+      ne(variables['Build.Reason'], 'PullRequest'),
+      or(
+        startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'),
+        startsWith(variables['Build.SourceBranch'], 'refs/heads/feature/')
+      )
     )
   jobs:
   - deployment: DeployDev
+    displayName: Deploy Dev
     environment: 'dev'
     strategy:
       runOnce:
@@ -211,7 +207,7 @@ PY
               package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
 
 # ================================================================
-#  STAGE 3 — Deploy QA (release-* only)
+#  STAGE 3 — Deploy QA (release-* only, NOT on PR)
 # ================================================================
 - stage: Deploy_QA
   displayName: Deploy to App Service (QA)
@@ -224,6 +220,7 @@ PY
     )
   jobs:
   - deployment: DeployQA
+    displayName: Deploy QA
     environment: 'qa'
     strategy:
       runOnce:
@@ -241,7 +238,8 @@ PY
               package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
 
 # ================================================================
-#  STAGE 4 — Deploy PROD (manual + approval)
+#  STAGE 4 — Deploy PROD (release-* + deployProd=true + approval)
+#  Configure approvals in Pipelines → Environments → prod
 # ================================================================
 - stage: Deploy_Prod
   displayName: Deploy to App Service (PROD) — Environment Approval
@@ -255,6 +253,7 @@ PY
     )
   jobs:
   - deployment: DeployProd
+    displayName: Deploy PROD
     environment: 'prod'
     strategy:
       runOnce:
