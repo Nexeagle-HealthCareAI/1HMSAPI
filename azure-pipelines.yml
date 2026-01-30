@@ -1,52 +1,26 @@
-# ============================================
-#   Build & Deploy EasyHMS API (.NET 8)
-#   Dev deploy: release-* AND feature/*
-#   QA deploy: release-* only (recommended)
-# ============================================
-
-parameters:
-- name: deployProd
-  type: boolean
-  default: false     # set true at run time to enable PROD stage
-
 trigger:
-  branches:
-    include:
-      - 'release-*'
-      - 'feature/*'
-
-pr:
-  branches:
-    include:
-      - 'release-*'
-      - 'feature/*'
+- main
 
 pool:
   vmImage: 'ubuntu-latest'
 
-# ==== EDIT THESE VALUES ====
 variables:
   apiProject: 'EasyHMSAPI.Api/EasyHMSAPI.Api.csproj'
   publishDir: '$(Build.ArtifactStagingDirectory)/publish'
   artifactName: 'api-drop'
 
-  # Dev App Service
   devAppName: 'easyHMSAPIServices'
   devResourceGroup: 'website-dev-rg'
 
-  # QA App Service
   qaAppName: 'easyHMSAPISevices'
   qaResourceGroup: 'website-qa-rg'
 
-  # ======== PROD (add your values) ========
-  prodAppName: 'easyHMSAPISevicesProd'           # <— CHANGE to your PROD app name
-  prodResourceGroup: 'website-prod-rg'            # <— CHANGE to your PROD RG
-  prodServiceConnection: 'svc-conn-nexeagle-prod' # <— CHANGE to your PROD service connection
+  # Smoke Test Config
+  smokeBaseUrl: 'https://easyhmsapiservices-bgasabd9ddbbdden.centralindia-01.azurewebsites.net'
 
-# ================================================================
-#  STAGE 1 — Build Artifacts (Runs for both release-* & feature/*)
-# ================================================================
 stages:
+
+# ===================== Build =====================
 - stage: Build
   displayName: Build & Package API
   jobs:
@@ -82,21 +56,10 @@ stages:
     - publish: $(publishDir)
       artifact: $(artifactName)
 
-# ================================================================
-#  STAGE 2 — Deploy DEV
-#  Runs for release-* AND feature/*
-# ================================================================
+# ===================== Deploy to Dev =====================
 - stage: Deploy_Dev
   displayName: Deploy to App Service (Dev)
   dependsOn: Build
-  condition: >
-    and(
-      succeeded(),
-      or(
-        startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'),
-        startsWith(variables['Build.SourceBranch'], 'refs/heads/feature/')
-      )
-    )
   jobs:
   - deployment: DeployDev
     environment: 'dev'
@@ -115,18 +78,33 @@ stages:
               appName: '$(devAppName)'
               package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
 
-# ================================================================
-#  STAGE 3 — Deploy QA
-#  (Recommended: Only for release-*; feature/* should not go to QA)
-# ================================================================
+          # ================= SMOKE TEST START =================
+          - task: UsePythonVersion@0
+            displayName: 'Use Python 3.11'
+            inputs:
+              versionSpec: '3.11'
+
+          - script: |
+              cd tests/smoke
+              pip install -r requirements.txt
+              pytest --junitxml=smoke-results.xml
+            displayName: 'Run Smoke Tests (DEV)'
+            env:
+              BASE_URL: $(smokeBaseUrl)
+
+          - task: PublishTestResults@2
+            displayName: 'Publish Smoke Test Results'
+            inputs:
+              testResultsFiles: 'tests/smoke/smoke-results.xml'
+              testRunTitle: 'Smoke Tests - DEV'
+            condition: succeededOrFailed()
+          # ================= SMOKE TEST END =================
+
+# ===================== Deploy to QA =====================
 - stage: Deploy_QA
   displayName: Deploy to App Service (QA)
   dependsOn: Deploy_Dev
-  condition: >
-    and(
-      succeeded(),
-      startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')
-    )
+  condition: succeeded()   #  QA deploy tabhi hoga jab smoke pass
   jobs:
   - deployment: DeployQA
     environment: 'qa'
@@ -143,35 +121,4 @@ stages:
               azureSubscription: 'svc-conn-nexeagle-qa'
               appType: 'webAppLinux'
               appName: '$(qaAppName)'
-              package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
-
-# ================================================================
-#  STAGE 4 — Deploy PROD (release-* + env approval, no time gate)
-#  NOTE: Configure approval in Pipelines → Environments → prod
-# ================================================================
-- stage: Deploy_Prod
-  displayName: Deploy to App Service (PROD) — Environment Approval
-  dependsOn: Deploy_QA
-  condition: >
-    and(
-      succeeded(),
-      startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'),
-      eq('${{ parameters.deployProd }}', 'true')
-    )
-  jobs:
-  - deployment: DeployProd
-    environment: 'prod'  # add Approvals & Checks to this Environment
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - download: current
-            artifact: $(artifactName)
-
-          - task: AzureWebApp@1
-            displayName: 'Deploy ZIP to PROD App Service'
-            inputs:
-              azureSubscription: '$(prodServiceConnection)'
-              appType: 'webAppLinux'
-              appName: '$(prodAppName)'
               package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
