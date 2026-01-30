@@ -1,63 +1,68 @@
 using System;
-using Moq;
-using NUnit.Framework;
-using EasyHMSAPI.Domain.Context;
+using System.Threading;
+using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.CommandHandlers;
-using EasyHMSAPI.Application.Services.Interfaces;
+using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
+using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Domain.Entities;
+using EasyHMSAPI.UnitTests.TestUtils;
+using NUnit.Framework;
 
 namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 {
     [TestFixture]
     public class DoctorOverrideDeleteHandlerTests
     {
-        //private AppDbContext _context = null!;
-        //private Mock<IExceptionService> _exceptionServiceMock = null!;
+        private AppDbContext _context = null!;
+        private DoctorOverrideDeleteHandler _handler = null!;
 
-        //[SetUp]
-        //public void SetUp()
-        //{
-        //    _context = InMemoryDbContextFactory.CreateContext();
-        //    _exceptionServiceMock = new Mock<IExceptionService>();
-        //}
+        [SetUp]
+        public void SetUp()
+        {
+            _context = InMemoryDbContextFactory.CreateContext();
+            _handler = new DoctorOverrideDeleteHandler(_context);
+        }
 
-        //[TearDown]
-        //public void TearDown()
-        //{
-        //    _context?.Dispose();
-        //    InMemoryDbContextFactory.Destroy(_context);
-        //}
+        [TearDown]
+        public void TearDown()
+        {
+            
+            InMemoryDbContextFactory.Destroy(_context);
+            _context?.Dispose();
+        }
 
-        //[Test, Ignore("TODO: Implement test logic")]
-        //public void Constructor_Smoke()
-        //{
-        //    var handler = new DoctorOverrideDeleteHandler(_context, _exceptionServiceMock.Object);
-        //    Assert.That(handler, Is.Not.Null);
-        //}
+        [Test]
+        public async Task Handle_ValidId_DeletesOverride()
+        {
+            // Arrange
+            var overrideId = Guid.NewGuid();
+            var shiftOverride = new DoctorShiftOverride { OverrideID = overrideId, ShiftName = "Morning" };
+            _context.DoctorShiftOverrides.Add(shiftOverride);
+            await _context.SaveChangesAsync();
 
-        //[Test]
-        //public void Handle_ShouldDeleteDoctorOverride_WhenOverrideExists()
-        //{
-        //    // Arrange
-        //    var overrideId = Guid.NewGuid();
-        //    var handler = new DoctorOverrideDeleteHandler(_context, _exceptionServiceMock.Object);
+            var request = new DoctorOverrideDeleteRequestModel { OverrideId = overrideId };
 
-        //    // Act
-        //    var result = handler.Handle(new DoctorOverrideDeleteCommand { OverrideId = overrideId });
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
 
-        //    // Assert
-        //    Assert.That(result, Is.True, "Doctor override should be deleted successfully.");
-        //}
+            // Assert
+            Assert.That(response.Success, Is.True);
+            var deleted = await _context.DoctorShiftOverrides.FindAsync(overrideId);
+            Assert.That(deleted, Is.Null);
+        }
 
-        //[Test]
-        //public void Handle_ShouldThrowException_WhenOverrideDoesNotExist()
-        //{
-        //    // Arrange
-        //    var overrideId = Guid.NewGuid();
-        //    var handler = new DoctorOverrideDeleteHandler(_context, _exceptionServiceMock.Object);
+        [Test]
+        public async Task Handle_NotFound_ReturnsFailure()
+        {
+            // Arrange
+            var request = new DoctorOverrideDeleteRequestModel { OverrideId = Guid.NewGuid() };
 
-        //    // Act & Assert
-        //    Assert.Throws<Exception>(() => handler.Handle(new DoctorOverrideDeleteCommand { OverrideId = overrideId }),
-        //        "Expected exception when doctor override does not exist.");
-        //}
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("Override not found"));
+        }
     }
 }

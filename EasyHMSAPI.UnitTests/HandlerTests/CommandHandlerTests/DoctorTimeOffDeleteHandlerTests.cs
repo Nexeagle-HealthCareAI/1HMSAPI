@@ -1,63 +1,68 @@
 using System;
-using Moq;
-using NUnit.Framework;
-using EasyHMSAPI.Domain.Context;
+using System.Threading;
+using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.CommandHandlers;
-using EasyHMSAPI.Application.Services.Interfaces;
+using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
+using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Domain.Entities;
+using EasyHMSAPI.UnitTests.TestUtils;
+using NUnit.Framework;
 
 namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 {
     [TestFixture]
     public class DoctorTimeOffDeleteHandlerTests
     {
-        //private AppDbContext _context = null!;
-        //private Mock<IExceptionService> _exceptionServiceMock = null!;
+        private AppDbContext _context = null!;
+        private DoctorTimeOffDeleteHandler _handler = null!;
 
-        //[SetUp]
-        //public void SetUp()
-        //{
-        //    _context = InMemoryDbContextFactory.CreateContext();
-        //    _exceptionServiceMock = new Mock<IExceptionService>();
-        //}
+        [SetUp]
+        public void SetUp()
+        {
+            _context = InMemoryDbContextFactory.CreateContext();
+            _handler = new DoctorTimeOffDeleteHandler(_context);
+        }
 
-        //[TearDown]
-        //public void TearDown()
-        //{
-        //    _context?.Dispose();
-        //    InMemoryDbContextFactory.Destroy(_context);
-        //}
+        [TearDown]
+        public void TearDown()
+        {
+            
+            InMemoryDbContextFactory.Destroy(_context);
+            _context?.Dispose();
+        }
 
-        //[Test, Ignore("TODO: Implement test logic")]
-        //public void Constructor_Smoke()
-        //{
-        //    var handler = new DoctorTimeOffDeleteHandler(_context, _exceptionServiceMock.Object);
-        //    Assert.That(handler, Is.Not.Null);
-        //}
+        [Test]
+        public async Task Handle_ValidId_DeletesTimeOff()
+        {
+            // Arrange
+            var timeOffId = Guid.NewGuid();
+            var timeOff = new DoctorTimeOff { TimeOffID = timeOffId };
+            _context.DoctorTimeOffs.Add(timeOff);
+            await _context.SaveChangesAsync();
 
-        //[Test]
-        //public void Handle_ShouldDeleteDoctorTimeOff_WhenTimeOffExists()
-        //{
-        //    // Arrange
-        //    var timeOffId = Guid.NewGuid();
-        //    var handler = new DoctorTimeOffDeleteHandler(_context, _exceptionServiceMock.Object);
+            var request = new DoctorTimeOffDeleteRequestModel { TimeOffId = timeOffId };
 
-        //    // Act
-        //    var result = handler.Handle(new DoctorTimeOffDeleteCommand { TimeOffId = timeOffId });
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
 
-        //    // Assert
-        //    Assert.That(result, Is.True, "Doctor time off should be deleted successfully.");
-        //}
+            // Assert
+            Assert.That(response.Success, Is.True);
+            var deleted = await _context.DoctorTimeOffs.FindAsync(timeOffId);
+            Assert.That(deleted, Is.Null);
+        }
 
-        //[Test]
-        //public void Handle_ShouldThrowException_WhenTimeOffDoesNotExist()
-        //{
-        //    // Arrange
-        //    var timeOffId = Guid.NewGuid();
-        //    var handler = new DoctorTimeOffDeleteHandler(_context, _exceptionServiceMock.Object);
+        [Test]
+        public async Task Handle_NotFound_ReturnsFailure()
+        {
+            // Arrange
+            var request = new DoctorTimeOffDeleteRequestModel { TimeOffId = Guid.NewGuid() };
 
-        //    // Act & Assert
-        //    Assert.Throws<Exception>(() => handler.Handle(new DoctorTimeOffDeleteCommand { TimeOffId = timeOffId }),
-        //        "Expected exception when doctor time off does not exist.");
-        //}
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("Time-off not found"));
+        }
     }
 }

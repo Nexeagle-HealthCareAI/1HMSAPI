@@ -30,8 +30,9 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public void TearDown()
         {
 
-            _context?.Dispose();
+            
             InMemoryDbContextFactory.Destroy(_context);
+            _context?.Dispose();
         }
 
         private void SeedRole(string roleName)

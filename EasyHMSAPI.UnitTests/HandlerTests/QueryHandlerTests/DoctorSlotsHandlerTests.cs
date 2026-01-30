@@ -1,5 +1,12 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.QueryHandlers;
+using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
+using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Domain.Entities;
+using EasyHMSAPI.UnitTests.TestUtils;
 using NUnit.Framework;
 
 namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
@@ -8,50 +15,85 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
     public class DoctorSlotsHandlerTests
     {
         private AppDbContext _context = null!;
+        private DoctorSlotsHandler _handler = null!;
 
         [SetUp]
         public void SetUp()
         {
             _context = InMemoryDbContextFactory.CreateContext();
+            _handler = new DoctorSlotsHandler(_context);
         }
 
         [TearDown]
         public void TearDown()
         {
-            _context?.Dispose();
+            
             InMemoryDbContextFactory.Destroy(_context);
+            _context?.Dispose();
         }
 
-        [Test, Ignore("TODO: Implement test logic")]
-        public void Constructor_Smoke()
+        [Test]
+        public async Task Handle_ValidRequest_ReturnsSlots()
         {
-            var handler = new DoctorSlotsHandler(_context);
-            Assert.That(handler, Is.Not.Null);
+             // Arrange
+            var user = TestDataFactory.SeedUser(_context);
+            var doctor = TestDataFactory.SeedDoctor(_context, user);
+            var hospitalId = Guid.NewGuid();
+
+             var shiftTemplate = new DoctorShiftTemplate { TemplateID = Guid.NewGuid(), ShiftName = "Morning", IsActive = true };
+            _context.DoctorShiftTemplates.Add(shiftTemplate);
+            await _context.SaveChangesAsync();
+
+            var request = new DoctorSlotsRequestModel
+            {
+                DoctorId = doctor.DoctorID,
+                HospitalId = hospitalId,
+                SlotDate = DateTime.Today
+            };
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.ShiftInfo, Is.Not.Null);
+            Assert.That(response.ShiftInfo[0].DataSource, Is.EqualTo(AppConstants.ShiftDataSource_Default));
         }
 
-        //[Test]
-        //public void Handle_ShouldReturnSlots_WhenValidDoctorId()
-        //{
-        //    // Arrange
-        //    var doctorId = Guid.NewGuid();
-        //    var handler = new DoctorSlotsHandler(_context);
+        [Test]
+        public async Task Handle_TimeOff_ReturnsTimeOff()
+        {
+            // Arrange
+            var user = TestDataFactory.SeedUser(_context);
+            var doctor = TestDataFactory.SeedDoctor(_context, user);
+            var hospitalId = Guid.NewGuid();
+            var date = DateTime.Today;
 
-        //    // Act
-        //    var slots = handler.Handle(new DoctorSlotsQuery { DoctorId = doctorId });
+            var timeOff = new DoctorTimeOff 
+            { 
+                TimeOffID = Guid.NewGuid(),
+                DoctorID = doctor.DoctorID,
+                HospitalId = hospitalId,
+                FromDate = date,
+                ToDate = date,
+                Reason = "Vacation"
+            };
+            _context.DoctorTimeOffs.Add(timeOff);
+            await _context.SaveChangesAsync();
 
-        //    // Assert
-        //    Assert.That(slots, Is.Not.Empty, "Slots should be returned.");
-        //}
+            var request = new DoctorSlotsRequestModel
+            {
+                DoctorId = doctor.DoctorID,
+                HospitalId = hospitalId,
+                SlotDate = date
+            };
 
-        //[Test]
-        //public void Handle_ShouldThrowException_WhenInvalidDoctorId()
-        //{
-        //    // Arrange
-        //    var handler = new DoctorSlotsHandler(_context);
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
 
-        //    // Act & Assert
-        //    Assert.Throws<Exception>(() => handler.Handle(new DoctorSlotsQuery()),
-        //        "Expected exception when doctor ID is invalid.");
-        //}
+            // Assert
+            Assert.That(response.IsTimeOff, Is.True);
+            Assert.That(response.TimeOffReason, Is.EqualTo("Vacation"));
+            Assert.That(response.ShiftInfo, Is.Null);
+        }
     }
 }
