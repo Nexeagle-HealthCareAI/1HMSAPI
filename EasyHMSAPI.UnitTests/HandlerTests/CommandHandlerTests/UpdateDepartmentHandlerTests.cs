@@ -1,9 +1,12 @@
 using System;
-using Moq;
-using NUnit.Framework;
-using Microsoft.Extensions.Configuration;
-using EasyHMSAPI.Domain.Context;
+using System.Threading;
+using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.CommandHandlers;
+using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
+using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Domain.Entities;
+using EasyHMSAPI.UnitTests.TestUtils;
+using NUnit.Framework;
 
 namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 {
@@ -11,50 +14,62 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
     public class UpdateDepartmentHandlerTests
     {
         private AppDbContext _context = null!;
+        private UpdateDepartmentHandler _handler = null!;
 
         [SetUp]
         public void SetUp()
         {
             _context = InMemoryDbContextFactory.CreateContext();
+            _handler = new UpdateDepartmentHandler(_context);
         }
 
         [TearDown]
         public void TearDown()
         {
-            _context?.Dispose();
+            
             InMemoryDbContextFactory.Destroy(_context);
+            _context?.Dispose();
         }
 
-        [Test, Ignore("TODO: Implement test logic")]
-        public void Constructor_Smoke()
+        [Test]
+        public async Task Handle_ValidRequest_UpdatesDepartment()
         {
-            var handler = new UpdateDepartmentHandler(_context);
-            Assert.That(handler, Is.Not.Null);
+            // Arrange
+            var deptId = Guid.NewGuid();
+            var department = new Department { DepartmentID = deptId, Name = "Old Name", Description = "Old Desc" };
+            _context.Departments.Add(department);
+            await _context.SaveChangesAsync();
+
+            var request = new UpdateDepartmentRequestModel
+            {
+                DepartmentId = deptId,
+                Name = "New Name",
+                Description = "New Desc"
+            };
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.Success, Is.True);
+            
+            var updated = await _context.Departments.FindAsync(deptId);
+            Assert.That(updated!.Name, Is.EqualTo("New Name"));
+            Assert.That(updated.Description, Is.EqualTo("New Desc"));
         }
 
-        //[Test]
-        //public void Handle_ShouldUpdateDepartment_WhenValidInput()
-        //{
-        //    // Arrange
-        //    var departmentId = Guid.NewGuid();
-        //    var handler = new UpdateDepartmentHandler(_context);
+        [Test]
+        public async Task Handle_DepartmentNotFound_ReturnsFailure()
+        {
+            // Arrange
+            var request = new UpdateDepartmentRequestModel { DepartmentId = Guid.NewGuid() };
 
-        //    // Act
-        //    var result = handler.Handle(new UpdateDepartmentCommand { DepartmentId = departmentId });
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
 
-        //    // Assert
-        //    Assert.That(result, Is.True, "Department should be updated successfully.");
-        //}
-
-        //[Test]
-        //public void Handle_ShouldThrowException_WhenInvalidInput()
-        //{
-        //    // Arrange
-        //    var handler = new UpdateDepartmentHandler(_context);
-
-        //    // Act & Assert
-        //    Assert.Throws<Exception>(() => handler.Handle(new UpdateDepartmentCommand()),
-        //        "Expected exception when input is invalid.");
-        //}
+            // Assert
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("Department not found."));
+        }
     }
 }

@@ -17,8 +17,9 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         [TearDown]
         public void TearDown()
         {
-            _context?.Dispose();
+            
             InMemoryDbContextFactory.Destroy(_context);
+            _context?.Dispose();
         }
 
         //[Test, Ignore("TODO: Implement test logic")]

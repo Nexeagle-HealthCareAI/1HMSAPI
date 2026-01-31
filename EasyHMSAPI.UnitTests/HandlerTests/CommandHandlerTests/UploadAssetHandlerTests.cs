@@ -19,11 +19,12 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         //    _storageServiceMock = new Mock<IAssetStorageService>();
         //}
 
-        //[TearDown]
-        //public void TearDown()
-        //{
-        //    InMemoryDbContextFactory.Destroy(_context);
-        //}
+        [TearDown]
+        public void TearDown()
+        {
+            //    InMemoryDbContextFactory.Destroy(_context);
+            //_context?.Dispose();
+        }
 
         //[Test, Ignore("TODO: Implement test logic")]
         //public void Constructor_Smoke()

@@ -1,5 +1,12 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.CommandHandlers;
+using EasyHMSAPI.Application.RequestModels.CommandRequestModel;
 using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Domain.Entities;
+using EasyHMSAPI.UnitTests.TestUtils;
+using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
 
 namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
@@ -8,51 +15,62 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
     public class HospitalUpdateHandlerTests
     {
         private AppDbContext _context = null!;
+        private HospitalUpdateHandler _handler = null!;
 
         [SetUp]
         public void SetUp()
         {
             _context = InMemoryDbContextFactory.CreateContext();
+            _handler = new HospitalUpdateHandler(_context);
         }
 
         [TearDown]
         public void TearDown()
         {
-            _context?.Dispose();
+            
             InMemoryDbContextFactory.Destroy(_context);
+            _context?.Dispose();
         }
 
-        [Test, Ignore("TODO: Implement test logic")]
-        public void Constructor_Smoke()
+        [Test]
+        public async Task Handle_ValidUpdate_UpdatesHospital()
         {
-            var handler = new HospitalUpdateHandler(_context);
-            Assert.That(handler, Is.Not.Null);
+            // Arrange
+            var hospitalId = Guid.NewGuid();
+            var hospital = new Hospital { HospitalID = hospitalId, Name = "Old Name", Email = "old@h.com", Type = "General", RegistrationNumber = "REG001", Contact = "1234567890", Location = "Test Location", City = "Test City", State = "Test State", Country = "Test Country", Pincode = "123456", CreatedByUserID = Guid.NewGuid()  };
+            _context.Hospitals.Add(hospital);
+            await _context.SaveChangesAsync();
+
+            var request = new HospitalUpdateRequestModel
+            {
+                HospitalId = hospitalId,
+                Name = "New Name",
+                Email = "new@h.com"
+            };
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.Success, Is.True);
+            
+            var updatedHospital = await _context.Hospitals.FindAsync(hospitalId);
+            Assert.That(updatedHospital!.Name, Is.EqualTo("New Name"));
+            Assert.That(updatedHospital.Email, Is.EqualTo("new@h.com"));
         }
 
-        //[Test]
-        //public void Handle_ShouldUpdateHospital_WhenHospitalExists()
-        //{
-        //    // Arrange
-        //    var hospitalId = Guid.NewGuid();
-        //    var handler = new HospitalUpdateHandler(_context);
+        [Test]
+        public async Task Handle_HospitalNotFound_ReturnsFailure()
+        {
+            // Arrange
+            var request = new HospitalUpdateRequestModel { HospitalId = Guid.NewGuid() };
 
-        //    // Act
-        //    var result = handler.Handle(new HospitalUpdateCommand { HospitalId = hospitalId });
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
 
-        //    // Assert
-        //    Assert.That(result, Is.True, "Hospital should be updated successfully.");
-        //}
-
-        //[Test]
-        //public void Handle_ShouldThrowException_WhenHospitalDoesNotExist()
-        //{
-        //    // Arrange
-        //    var hospitalId = Guid.NewGuid();
-        //    var handler = new HospitalUpdateHandler(_context);
-
-        //    // Act & Assert
-        //    Assert.Throws<Exception>(() => handler.Handle(new HospitalUpdateCommand { HospitalId = hospitalId }),
-        //        "Expected exception when hospital does not exist.");
-        //}
+            // Assert
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("Hospital not found."));
+        }
     }
 }

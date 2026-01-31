@@ -1,9 +1,13 @@
 using System;
-using Moq;
-using NUnit.Framework;
-using Microsoft.Extensions.Configuration;
-using EasyHMSAPI.Domain.Context;
+using System.Threading;
+using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.CommandHandlers;
+using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
+using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Domain.Entities;
+using EasyHMSAPI.UnitTests.TestUtils;
+using Microsoft.EntityFrameworkCore;
+using NUnit.Framework;
 
 namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 {
@@ -11,75 +15,74 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
     public class UpdatePatientProfileHandlerTests
     {
         private AppDbContext _context = null!;
+        private UpdatePatientProfileHandler _handler = null!;
 
         [SetUp]
         public void SetUp()
         {
             _context = InMemoryDbContextFactory.CreateContext();
+            _handler = new UpdatePatientProfileHandler(_context);
         }
 
         [TearDown]
         public void TearDown()
         {
-            _context?.Dispose();
+            
             InMemoryDbContextFactory.Destroy(_context);
+            _context?.Dispose();
         }
 
-        [Test, Ignore("TODO: Implement test logic")]
-        public void Constructor_Smoke()
+        [Test]
+        public async Task Handle_ValidRequest_UpdatesProfile()
         {
-            var handler = new UpdatePatientProfileHandler(_context);
-            Assert.That(handler, Is.Not.Null);
+            // Arrange
+            var hospitalId = Guid.NewGuid();
+            var user = TestDataFactory.SeedUser(_context);
+            var patientId = "PAT123";
+            var patient = new PatientRegistration 
+            { 
+                PatientId = patientId, 
+                HospitalId = hospitalId, 
+                FullName = "Old Name" 
+            };
+            _context.PatientRegistrations.Add(patient);
+            await _context.SaveChangesAsync();
+
+            var request = new UpdatePatientProfileRequestModel
+            {
+                PatientId = patientId,
+                HospitalId = hospitalId,
+                FullName = "New Name",
+                AgeYears = 30
+            };
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.Success, Is.True);
+            
+            var updated = await _context.PatientRegistrations.FirstOrDefaultAsync(p => p.PatientId == patientId);
+            Assert.That(updated!.FullName, Is.EqualTo("New Name"));
+            Assert.That(updated.AgeYears, Is.EqualTo(30));
         }
 
-        //[Test]
-        //public void Handle_ShouldUpdatePatientProfile_WhenValidInput()
-        //{
-        //    // Arrange
-        //    var patientId = Guid.NewGuid();
-        //    var handler = new UpdatePatientProfileHandler(_context);
+        [Test]
+        public async Task Handle_PatientNotFound_ReturnsFailure()
+        {
+            // Arrange
+            var request = new UpdatePatientProfileRequestModel
+            {
+                PatientId = "UNKNOWN",
+                HospitalId = Guid.NewGuid()
+            };
 
-        //    // Act
-        //    var result = handler.Handle(new UpdatePatientProfileCommand { PatientId = patientId });
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
 
-        //    // Assert
-        //    Assert.That(result, Is.True, "Patient profile should be updated successfully.");
-        //}
-
-        //[Test]
-        //public void Handle_ShouldThrowException_WhenInvalidInput()
-        //{
-        //    // Arrange
-        //    var handler = new UpdatePatientProfileHandler(_context);
-
-        //    // Act & Assert
-        //    Assert.Throws<Exception>(() => handler.Handle(new UpdatePatientProfileCommand()),
-        //        "Expected exception when input is invalid.");
-        //}
-
-        //[Test]
-        //public void Handle_ShouldUpdatePatientProfile_WhenValidInput()
-        //{
-        //    // Arrange
-        //    var patientId = Guid.NewGuid();
-        //    var handler = new UpdatePatientProfileHandler(_context);
-
-        //    // Act
-        //    var result = handler.Handle(new UpdatePatientProfileCommand { PatientId = patientId });
-
-        //    // Assert
-        //    Assert.That(result, Is.True, "Patient profile should be updated successfully.");
-        //}
-
-        //[Test]
-        //public void Handle_ShouldThrowException_WhenInvalidInput()
-        //{
-        //    // Arrange
-        //    var handler = new UpdatePatientProfileHandler(_context);
-
-        //    // Act & Assert
-        //    Assert.Throws<Exception>(() => handler.Handle(new UpdatePatientProfileCommand()),
-        //        "Expected exception when input is invalid.");
-        //}
+            // Assert
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("Patient not found."));
+        }
     }
 }
