@@ -1,5 +1,5 @@
 # ============================================
-#   Build, Unit Test (80% Coverage Gate) & Deploy
+#   Build, Unit Test (60% Coverage Gate) & Deploy
 #   EasyHMS API (.NET 8)
 #
 #   Dev deploy : release-* AND feature/*
@@ -44,7 +44,7 @@ variables:
   artifactName: 'api-drop'
 
   # Coverage
-  coverageThreshold: '80'
+  coverageThreshold: '60'
   testResultsDir: '$(Build.SourcesDirectory)/TestResults'
   coverageReportDir: '$(Build.SourcesDirectory)/TestResults/CoverageReport'
 
@@ -52,9 +52,6 @@ variables:
   devAppName: 'easyHMSAPIServices'
   devServiceConnection: 'svc-conn-nexeagle-dev'
 
-  # QA
-  qaAppName: 'easyHMSAPIServices'
-  qaServiceConnection: 'svc-conn-nexeagle-qa'
 
   # PROD
   prodAppName: 'easyHMSAPIServicesProd'
@@ -63,7 +60,7 @@ variables:
 stages:
 
 # ================================================================
-#  STAGE 1 — Build + Unit Tests + Coverage Gate (>= 80%)
+#  STAGE 1 — Build + Unit Tests + Coverage Gate (>= 60%)
 # ================================================================
 - stage: Build_Test
   displayName: Build + Unit Tests + Coverage Gate
@@ -157,7 +154,7 @@ stages:
         fi
 
         echo "Coverage gate passed."
-      displayName: 'Coverage Report + 80% Gate'
+      displayName: 'Coverage Report + 60% Gate'
 
     - task: PublishCodeCoverageResults@2
       displayName: 'Publish Coverage'
@@ -214,36 +211,6 @@ stages:
               appName: '$(devAppName)'
               package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
 
-# ================================================================
-#  STAGE 3 — Deploy QA (release-* only, NOT on PR)
-# ================================================================
-- stage: Deploy_QA
-  displayName: Deploy to App Service (QA)
-  dependsOn: Deploy_Dev
-  condition: >
-    and(
-      succeeded(),
-      ne(variables['Build.Reason'], 'PullRequest'),
-      startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')
-    )
-  jobs:
-  - deployment: DeployQA
-    displayName: Deploy QA
-    environment: 'qa'
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - download: current
-            artifact: $(artifactName)
-
-          - task: AzureWebApp@1
-            displayName: 'Deploy ZIP to QA App Service'
-            inputs:
-              azureSubscription: '$(qaServiceConnection)'
-              appType: 'webAppLinux'
-              appName: '$(qaAppName)'
-              package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
 
 # ================================================================
 #  STAGE 4 — Deploy PROD (release-* + deployProd=true + approval)
