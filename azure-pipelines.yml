@@ -3,7 +3,6 @@
 #   EasyHMS API (.NET 8)
 #
 #   Dev deploy : release-* AND feature/*
-#   QA deploy  : release-* only
 #   PROD deploy: release-* only + deployProd=true + env approval
 #   PR builds  : Build + Tests only (no deploy)
 # ============================================
@@ -52,7 +51,6 @@ variables:
   devAppName: 'easyHMSAPIServices'
   devServiceConnection: 'svc-conn-nexeagle-dev'
 
-
   # PROD
   prodAppName: 'easyHMSAPIServicesProd'
   prodServiceConnection: 'svc-conn-nexeagle-prod'
@@ -76,13 +74,20 @@ stages:
         version: '8.x'
 
     - task: DotNetCoreCLI@2
-      displayName: 'Restore'
+      displayName: 'Restore API'
       inputs:
         command: 'restore'
         projects: '$(apiProject)'
 
+    # Optional but recommended: restore tests explicitly
     - task: DotNetCoreCLI@2
-      displayName: 'Build'
+      displayName: 'Restore Tests'
+      inputs:
+        command: 'restore'
+        projects: '$(testProjects)'
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Build API'
       inputs:
         command: 'build'
         projects: '$(apiProject)'
@@ -144,8 +149,8 @@ stages:
         fi
 
         # Cobertura line-rate is 0..1
-        LINE_RATE=$(python -c "import xml.etree.ElementTree as ET; r=ET.parse('$COBERTURA').getroot(); print(r.attrib.get('line-rate','0'))")
-        PCT=$(python -c "print(int(round(float('$LINE_RATE')*100)))")
+        LINE_RATE=$(python3 -c "import xml.etree.ElementTree as ET; r=ET.parse('$COBERTURA').getroot(); print(r.attrib.get('line-rate','0'))")
+        PCT=$(python3 -c "print(int(round(float('$LINE_RATE')*100)))")
 
         echo "Line coverage: ${PCT}% (threshold: ${THRESHOLD}%)"
         if [ "$PCT" -lt "$THRESHOLD" ]; then
@@ -211,14 +216,13 @@ stages:
               appName: '$(devAppName)'
               package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
 
-
 # ================================================================
-#  STAGE 4 — Deploy PROD (release-* + deployProd=true + approval)
+#  STAGE 3 — Deploy PROD (release-* + deployProd=true + approval)
 #  Configure approvals in Pipelines → Environments → prod
 # ================================================================
 - stage: Deploy_Prod
   displayName: Deploy to App Service (PROD) — Environment Approval
-  dependsOn: Deploy_QA
+  dependsOn: Deploy_Dev
   condition: >
     and(
       succeeded(),
