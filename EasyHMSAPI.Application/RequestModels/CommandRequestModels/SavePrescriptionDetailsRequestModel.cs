@@ -24,6 +24,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public List<MedicationModel>? Medications { get; set; }
         public List<NonPharmacologicalAdviceModel>? NonPharmacologicalAdvice { get; set; }
         public string? PrivateNotes { get; set; }
+        public bool? IsPrintablePrivateNotes { get; set; }
         public CertificateDataModel? Certificates { get; set; }
         public FollowUpModel? FollowUp { get; set; }
         public List<ImmunizationModel>? Immunizations { get; set; }
