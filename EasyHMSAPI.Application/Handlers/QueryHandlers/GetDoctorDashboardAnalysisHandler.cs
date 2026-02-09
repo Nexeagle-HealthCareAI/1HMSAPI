@@ -309,6 +309,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             var medicines = new Dictionary<string, int>();
             var complaints = new Dictionary<string, int>();
             var diagnoses = new Dictionary<string, int>();
+            var investigations = new Dictionary<string, int>();
+            var examinations = new Dictionary<string, int>();
 
             var topMedicines = await _context.DoctorPreferredMedicines
                 .AsNoTracking()
@@ -354,18 +356,55 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     else
                         complaints[key] = 1;
                 }
+
+                if (!string.IsNullOrEmpty(prescription.Examination))
+                {
+                    var key = prescription.Examination;
+                    if (examinations.ContainsKey(key))
+                        examinations[key]++;
+                    else
+                        examinations[key] = 1;
+                }
+            }
+
+            // Fetch investigations from PrescriptionInvestigation table
+            var investigationRecords = await _context.PrescriptionInvestigation
+                .AsNoTracking()
+                .Where(pi => pi.OrdersType == AppConstants.LookupType_Investigation)
+                .Join(_context.Prescription, pi => pi.PrescriptionId, p => p.PrescriptionId, (pi, p) => new { pi, p })
+                .Where(x => appointments.Contains(x.p.ApptId))
+                .Select(x => x.pi.Name)
+                .ToListAsync(cancellationToken);
+
+            foreach (var investigation in investigationRecords)
+            {
+                if (!string.IsNullOrEmpty(investigation))
+                {
+                    // Split multiple investigations separated by comma
+                    var investigationList = investigation.Split(new[] { ", " }, StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var inv in investigationList)
+                    {
+                        var key = inv.Trim();
+                        if (investigations.ContainsKey(key))
+                            investigations[key]++;
+                        else
+                            investigations[key] = 1;
+                    }
+                }
             }
 
             var sortedDiagnoses = diagnoses.OrderByDescending(x => x.Value).Take(5).ToDictionary(x => x.Key, x => x.Value);
             var sortedComplaints = complaints.OrderByDescending(x => x.Value).Take(5).ToDictionary(x => x.Key, x => x.Value);
+            var sortedInvestigations = investigations.OrderByDescending(x => x.Value).Take(5).ToDictionary(x => x.Key, x => x.Value);
+            var sortedExaminations = examinations.OrderByDescending(x => x.Value).Take(5).ToDictionary(x => x.Key, x => x.Value);
 
             return new MedicalStatsData
             {
                 Top5MedicineUse = medicines.Any() ? medicines : new Dictionary<string, int>(),
                 Top5Complain = sortedComplaints.Any() ? sortedComplaints : new Dictionary<string, int>(),
                 Top5Diagnosis = sortedDiagnoses.Any() ? sortedDiagnoses : new Dictionary<string, int>(),
-                Top5Investigation = new Dictionary<string, int>(),
-                Top5Examination = new Dictionary<string, int>()
+                Top5Investigation = sortedInvestigations.Any() ? sortedInvestigations : new Dictionary<string, int>(),
+                Top5Examination = sortedExaminations.Any() ? sortedExaminations : new Dictionary<string, int>()
             };
         }
 
