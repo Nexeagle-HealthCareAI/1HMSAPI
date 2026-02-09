@@ -1,10 +1,6 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.CommandHandlers;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.Services.Interfaces;
-using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using EasyHMSAPI.UnitTests.TestUtils;
@@ -12,6 +8,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Moq;
 using NUnit.Framework;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 {
@@ -23,6 +22,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         private Mock<IEmailService> _emailServiceMock = null!;
         private Mock<IWhatsAppMessagingService> _whatsAppServiceMock = null!;
         private Mock<IConfiguration> _configurationMock = null!;
+        private Mock<IMaskingService> _maskingServiceMock = null!;
         private OtpSendHandler _handler = null!;
 
         [SetUp]
@@ -33,15 +33,19 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             _emailServiceMock = new Mock<IEmailService>();
             _whatsAppServiceMock = new Mock<IWhatsAppMessagingService>();
             _configurationMock = new Mock<IConfiguration>();
+            _maskingServiceMock = new Mock<IMaskingService>();
 
             _configurationMock.SetupGet(x => x["Security:OtpPepper"]).Returns("test-pepper");
+            _maskingServiceMock.Setup(m => m.IsMaskingEnabled()).Returns(false);
+            _maskingServiceMock.Setup(m => m.Mask(It.IsAny<string>())).Returns((string s) => s);
 
             _handler = new OtpSendHandler(
                 _context, 
                 _smsServiceMock.Object, 
                 _emailServiceMock.Object, 
                 _whatsAppServiceMock.Object, 
-                _configurationMock.Object);
+                _configurationMock.Object,
+                _maskingServiceMock.Object);
         }
 
         [TearDown]

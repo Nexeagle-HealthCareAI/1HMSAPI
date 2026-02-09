@@ -19,6 +19,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
             _jwtIssuer = configuration["Jwt:Issuer"] ?? string.Empty;
             _jwtAudience = configuration["Jwt:Audience"] ?? string.Empty;
         }
+
         public string GenerateJwtToken(List<Claim> claims)
         {
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSecretKey));
