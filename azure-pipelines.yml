@@ -52,7 +52,7 @@ variables:
   devServiceConnection: 'svc-conn-nexeagle-dev'
 
   # PROD
-  prodAppName: 'easyHMSAPIServicesProd'
+ prodAppName: 'easyHMSAPISevicesProd'
   prodServiceConnection: 'svc-conn-nexeagle-prod'
 
 stages:
