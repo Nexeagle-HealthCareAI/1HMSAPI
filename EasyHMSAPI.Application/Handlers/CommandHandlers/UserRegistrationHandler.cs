@@ -8,7 +8,6 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using System.Security.Claims;
-using System.Threading;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {

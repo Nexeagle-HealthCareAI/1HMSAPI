@@ -149,6 +149,7 @@ builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(UserL
 // Custom Services
 // ------------------------------------------------------------
 builder.Services.AddScoped<IJwtAuthService, JwtAuthService>();
+builder.Services.AddScoped<IMaskingService, MaskingService>();
 builder.Services.AddScoped<IBlobStorageService, BlobStorageService>();
 builder.Services.AddScoped<ISmsService, SmsService>();
 builder.Services.AddScoped<IEmailService, EmailService>();

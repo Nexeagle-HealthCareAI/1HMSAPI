@@ -1,16 +1,16 @@
+using EasyHMSAPI.Application.Handlers.CommandHandlers;
+using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
+using EasyHMSAPI.Application.Services.Interfaces;
+using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.UnitTests.TestUtils;
+using Microsoft.EntityFrameworkCore;
+using Moq;
+using NUnit.Framework;
 using System;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using EasyHMSAPI.Application.Handlers.CommandHandlers;
-using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
-using EasyHMSAPI.Data.Enums;
-using EasyHMSAPI.Domain.Context;
-using EasyHMSAPI.Domain.Entities;
-using EasyHMSAPI.UnitTests.TestUtils;
-using Microsoft.EntityFrameworkCore;
-using NUnit.Framework;
 
 namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 {
@@ -18,13 +18,17 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
     public class SetOrResetPasswordHandlerTests
     {
         private AppDbContext _context = null!;
+        private Mock<IMaskingService> _maskingServiceMock = null!;
         private SetOrResetPasswordHandler _handler = null!;
 
         [SetUp]
         public void SetUp()
         {
             _context = InMemoryDbContextFactory.CreateContext();
-            _handler = new SetOrResetPasswordHandler(_context);
+            _maskingServiceMock = new Mock<IMaskingService>();
+            _maskingServiceMock.Setup(m => m.IsMaskingEnabled()).Returns(false);
+            _maskingServiceMock.Setup(m => m.Mask(It.IsAny<string>())).Returns((string s) => s);
+            _handler = new SetOrResetPasswordHandler(_context, _maskingServiceMock.Object);
         }
 
         [TearDown]

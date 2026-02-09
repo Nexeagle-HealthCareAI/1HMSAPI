@@ -1,18 +1,15 @@
-using System;
-using System.Collections.Generic;
-using System.Security.Claims;
-using System.Threading;
-using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.CommandHandlers;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
-using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
-using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.UnitTests.TestUtils;
 using Microsoft.Extensions.Configuration;
 using Moq;
 using NUnit.Framework;
+using System.Collections.Generic;
+using System.Security.Claims;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 {
@@ -22,6 +19,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         private AppDbContext _context = null!;
         private Mock<IJwtAuthService> _jwtAuthServiceMock = null!;
         private Mock<IConfiguration> _configurationMock = null!;
+        private Mock<IMaskingService> _maskingServiceMock = null!;
         private UserLoginHandler _handler = null!;
 
         [SetUp]
@@ -30,7 +28,9 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             _context = InMemoryDbContextFactory.CreateContext();
             _jwtAuthServiceMock = new Mock<IJwtAuthService>();
             _configurationMock = new Mock<IConfiguration>();
-            _handler = new UserLoginHandler(_context, _jwtAuthServiceMock.Object, _configurationMock.Object);
+            _maskingServiceMock = new Mock<IMaskingService>();
+            _maskingServiceMock.Setup(m => m.IsMaskingEnabled()).Returns(false);
+            _handler = new UserLoginHandler(_context, _jwtAuthServiceMock.Object, _configurationMock.Object, _maskingServiceMock.Object);
         }
 
         [TearDown]
