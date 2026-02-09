@@ -121,7 +121,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                                               Frequency = m.Frequency,
                                               Duration = m.Durations,
                                               Instructions = m.Instructions,
-                                              SaltName = m.SaltName
+                                              SaltName = m.SaltName,
+                                              DisplayOrder = m.DisplayOrder
                                           }).ToList()
                                           : null,
                             NonPharmacologicalAdvice = SafeDeserialize<List<NonPharmacologicalAdviceModel>>(prescriptionDetails.NonPharmacologicalAdvice),

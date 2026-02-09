@@ -407,7 +407,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                            ps.PrescriptionSettingId
                        })
                        .FirstOrDefaultAsync(cancellationToken);
-            var effectiveDate = DateTime.Now;
+            DateTime? effectiveDate = null;
 
             if (existingPatient is not null)
             {
@@ -435,7 +435,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     }
                     else
                     {
-                        if (prescriptionSettings is not null)
+                        if (prescriptionSettings is not null && prescriptionSettings.ValidDuration > 0)
                         {
                             effectiveDate = lastAppoitment.ApptDate.AddDays(prescriptionSettings.ValidDuration);
                             if (request.ApptDate <= effectiveDate)
@@ -447,6 +447,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 appointment.AppointmentType = AppConstants.AppointmentType_OldFee;
                             }
                         }
+                        else if (prescriptionSettings is not null && prescriptionSettings.ValidDuration == 0)
+                        {
+                            effectiveDate = null;
+                            appointment.AppointmentType = AppConstants.AppointmentType_OldNoFee;
+                        }
                         else
                         {
                             effectiveDate = lastAppoitment.ApptDate.AddDays(21);
@@ -456,8 +461,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
                 else
                 {
-                    if (prescriptionSettings is not null)
+                    if (prescriptionSettings is not null && prescriptionSettings.ValidDuration > 0)
                         effectiveDate = appointment.ApptDate.AddDays(prescriptionSettings.ValidDuration);
+                    else if (prescriptionSettings is not null && prescriptionSettings.ValidDuration == 0)
+                        effectiveDate = null;
                     else
                         effectiveDate = appointment.ApptDate.AddDays(21);
                     appointment.AppointmentType = AppConstants.AppointmentType_New;
@@ -465,8 +472,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
             else
             {
-                if(prescriptionSettings is not null)
+                if(prescriptionSettings is not null && prescriptionSettings.ValidDuration > 0)
                     effectiveDate = appointment.ApptDate.AddDays(prescriptionSettings.ValidDuration);
+                else if(prescriptionSettings is not null && prescriptionSettings.ValidDuration == 0)
+                    effectiveDate = null;
                 else
                     effectiveDate = appointment.ApptDate.AddDays(21);
 
