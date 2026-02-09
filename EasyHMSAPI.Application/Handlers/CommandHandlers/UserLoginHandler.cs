@@ -96,6 +96,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                                     userAuth.LastLoginTime = DateTime.UtcNow;
                                     userAuth.LoginMethod = "Password";
+                                    if (userAuth.FailedLoginAttempts > 0)
+                                    {
+                                        userAuth.FailedLoginAttempts = 0;
+                                    }
                                     await _context.SaveChangesAsync(cancellationToken);
 
                                     return new UserLoginResponseModel
@@ -214,6 +218,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                     // Clear OTP after successful verification
                                     userAuth.IsOtpUsed = true;
                                     userAuth.Otp = null;
+                                    if(userAuth.FailedLoginAttempts > 0)
+                                    {
+                                        userAuth.FailedLoginAttempts = 0;
+                                    }
                                     await _context.SaveChangesAsync(cancellationToken);
 
                                     return new UserLoginResponseModel
