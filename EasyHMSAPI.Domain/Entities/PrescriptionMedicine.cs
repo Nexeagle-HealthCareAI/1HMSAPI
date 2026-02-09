@@ -20,5 +20,6 @@ namespace EasyHMSAPI.Domain.Entities
         public DateTime UpdatedAt { get; set; }
         public string? UpdateBy { get; set; }
         public byte[]? RowVersion { get; set; }
+        public int? DisplayOrder { get; set; }
     }
 }

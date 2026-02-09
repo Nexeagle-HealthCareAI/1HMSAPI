@@ -240,6 +240,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                         CreatedAt = request.CurrentDateTime,
                                         UpdatedAt = request.CurrentDateTime,
                                         UpdateBy = request.LoggedInUserName,
+                                        DisplayOrder = med.DisplayOrder
                                     };
                                     _context.PrescriptionMedicine.Add(prescriptionMedicine);
                                 }
@@ -398,6 +399,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                     Instructions = med.Instructions,
                                     SaltName = med.SaltName,
                                     Route = med.Route,
+                                    DisplayOrder = med.DisplayOrder
                                 };
                                 _context.PrescriptionMedicine.Add(prescriptionMedicine);
                             }

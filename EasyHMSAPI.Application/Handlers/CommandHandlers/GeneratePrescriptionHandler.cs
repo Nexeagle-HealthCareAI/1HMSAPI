@@ -220,7 +220,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             Frequency = m.Frequency,
                             Duration = m.Durations,
                             Instructions = m.Instructions,
-                            SaltName = m.SaltName
+                            SaltName = m.SaltName,
+                            DisplayOrder = m.DisplayOrder
                         }).ToList();
                     }
 
