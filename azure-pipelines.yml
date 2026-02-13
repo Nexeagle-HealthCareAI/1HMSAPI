@@ -30,17 +30,13 @@ pool:
 variables:
   # Projects
   apiProject: 'EasyHMSAPI.Api/EasyHMSAPI.Api.csproj'
-
-  # Adjust this to match your repo naming:
-  # examples:
-  #   '**/*UnitTests/*.csproj'
-  #   '**/*UnitTests.csproj'
-  #   '**/*Test*.csproj'
   testProjects: '**/*UnitTests/*.csproj'
 
-  # Artifacts
+  # Build/Artifact
+  buildConfiguration: 'Release'
   publishDir: '$(Build.ArtifactStagingDirectory)/publish'
   artifactName: 'api-drop'
+  zipName: 'easyhmsapi.zip'
 
   # Coverage
   coverageThreshold: '60'
@@ -67,40 +63,35 @@ stages:
     displayName: Build/Test
     steps:
     - checkout: self
+      clean: true
 
     - task: UseDotNet@2
       displayName: 'Use .NET 8 SDK'
       inputs:
-        version: '8.x'
+        version: '8.0.x'
 
     - task: DotNetCoreCLI@2
-      displayName: 'Restore API'
+      displayName: 'Restore'
       inputs:
         command: 'restore'
-        projects: '$(apiProject)'
-
-    # Optional but recommended: restore tests explicitly
-    - task: DotNetCoreCLI@2
-      displayName: 'Restore Tests'
-      inputs:
-        command: 'restore'
-        projects: '$(testProjects)'
+        projects: |
+          $(apiProject)
+          $(testProjects)
 
     - task: DotNetCoreCLI@2
       displayName: 'Build API'
       inputs:
         command: 'build'
         projects: '$(apiProject)'
-        arguments: '--configuration Release --no-restore'
+        arguments: '--configuration $(buildConfiguration) --no-restore'
 
-    # ---------- UNIT TESTS + COVERAGE ----------
     - task: DotNetCoreCLI@2
       displayName: 'Unit Tests (with coverage)'
       inputs:
         command: 'test'
         projects: '$(testProjects)'
         arguments: >
-          --configuration Release
+          --configuration $(buildConfiguration)
           --collect:"XPlat Code Coverage"
           --logger "trx"
           --results-directory "$(testResultsDir)"
@@ -115,11 +106,10 @@ stages:
         testRunTitle: 'Unit Tests'
       condition: succeededOrFailed()
 
-    # ---------- COVERAGE REPORT + GATE ----------
     - script: |
         set -euo pipefail
 
-        # Install reportgenerator (global tool)
+        # Install reportgenerator
         dotnet tool update --global dotnet-reportgenerator-globaltool || dotnet tool install --global dotnet-reportgenerator-globaltool
         export PATH="$PATH:$HOME/.dotnet/tools"
 
@@ -130,13 +120,12 @@ stages:
         echo "Searching for cobertura coverage files in: $RESULTS_DIR"
         if ! find "$RESULTS_DIR" -name "coverage.cobertura.xml" | grep -q .; then
           echo "No coverage.cobertura.xml found."
-          echo "Fix: ensure each test project references coverlet.collector package."
+          echo "Fix: add package coverlet.collector to test projects."
           exit 1
         fi
 
         mkdir -p "$REPORT_DIR"
 
-        # IMPORTANT: quote args so YAML never mis-parses -reports: etc.
         reportgenerator \
           "-reports:$RESULTS_DIR/**/coverage.cobertura.xml" \
           "-targetdir:$REPORT_DIR" \
@@ -148,7 +137,6 @@ stages:
           exit 1
         fi
 
-        # Cobertura line-rate is 0..1
         LINE_RATE=$(python3 -c "import xml.etree.ElementTree as ET; r=ET.parse('$COBERTURA').getroot(); print(r.attrib.get('line-rate','0'))")
         PCT=$(python3 -c "print(int(round(float('$LINE_RATE')*100)))")
 
@@ -159,7 +147,7 @@ stages:
         fi
 
         echo "Coverage gate passed."
-      displayName: 'Coverage Report + 60% Gate'
+      displayName: 'Coverage Report + Gate'
 
     - task: PublishCodeCoverageResults@2
       displayName: 'Publish Coverage'
@@ -169,17 +157,26 @@ stages:
         reportDirectory: '$(coverageReportDir)'
         failIfCoverageEmpty: true
 
-    # ---------- PUBLISH API ZIP ARTIFACT FOR DEPLOY ----------
+    # Publish (folder) then zip ourselves (most reliable)
     - task: DotNetCoreCLI@2
-      displayName: 'Publish API (zip)'
+      displayName: 'Publish API'
       inputs:
         command: 'publish'
         projects: '$(apiProject)'
-        arguments: '--configuration Release --no-restore --output $(publishDir)'
+        arguments: '--configuration $(buildConfiguration) --no-restore --output $(publishDir)'
         publishWebProjects: false
-        zipAfterPublish: true
+        zipAfterPublish: false
 
-    - publish: '$(publishDir)'
+    - task: ArchiveFiles@2
+      displayName: 'Archive publish output (zip)'
+      inputs:
+        rootFolderOrFile: '$(publishDir)'
+        includeRootFolder: false
+        archiveType: 'zip'
+        archiveFile: '$(Build.ArtifactStagingDirectory)/$(zipName)'
+        replaceExistingArchive: true
+
+    - publish: '$(Build.ArtifactStagingDirectory)/$(zipName)'
       artifact: '$(artifactName)'
 
 # ================================================================
@@ -214,11 +211,11 @@ stages:
               azureSubscription: '$(devServiceConnection)'
               appType: 'webAppLinux'
               appName: '$(devAppName)'
-              package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
+              package: '$(Pipeline.Workspace)/$(artifactName)/$(zipName)'
+              deploymentMethod: 'zipDeploy'
 
 # ================================================================
 #  STAGE 3 — Deploy PROD (release-* + deployProd=true + approval)
-#  Configure approvals in Pipelines → Environments → prod
 # ================================================================
 - stage: Deploy_Prod
   displayName: Deploy to App Service (PROD) — Environment Approval
@@ -228,7 +225,7 @@ stages:
       succeeded(),
       ne(variables['Build.Reason'], 'PullRequest'),
       startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'),
-      eq(${{ parameters.deployProd }}, true)
+      eq('${{ parameters.deployProd }}', 'true')
     )
   jobs:
   - deployment: DeployProd
@@ -247,4 +244,5 @@ stages:
               azureSubscription: '$(prodServiceConnection)'
               appType: 'webAppLinux'
               appName: '$(prodAppName)'
-              package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
+              package: '$(Pipeline.Workspace)/$(artifactName)/$(zipName)'
+              deploymentMethod: 'zipDeploy'
