@@ -3,7 +3,6 @@ using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
-using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 
 namespace EasyHMSAPI.Application.Handlers.QueryHandlers
@@ -11,13 +10,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
     public class SearchPatientHandler : IRequestHandler<SearchPatientRequestModel, SearchPatientResponseModel>
     {
         private readonly AppDbContext _context;
-        private readonly IHttpContextAccessor _httpContextAccessor;
 
-        public SearchPatientHandler(AppDbContext context, IHttpContextAccessor httpContextAccessor)
+        public SearchPatientHandler(AppDbContext context)
         {
             _context = context;
-            _httpContextAccessor = httpContextAccessor;
-            HttpContextHelper.Configure(_httpContextAccessor);
         }
 
         public async Task<SearchPatientResponseModel> Handle(SearchPatientRequestModel request, CancellationToken cancellationToken)
@@ -25,59 +21,82 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             var response = new SearchPatientResponseModel();
             var today = DateTime.UtcNow.Date;
 
-            IQueryable<PatientRegistration> query = _context.PatientRegistrations;
-            switch (request.By?.ToLower())
-            {
-                case "patientid":
-                    if (!string.IsNullOrEmpty(request.Q))
-                        query = query.Where(p => p.PatientId != null && p.PatientId.Contains(request.Q));
-                    break;
-                case "name":
-                    if (!string.IsNullOrEmpty(request.Q))
-                        query = query.Where(p => p.FullName != null && p.FullName.Contains(request.Q));
-                    break;
-                case "contact":
-                case "mobile":
-                    if (!string.IsNullOrEmpty(request.Q))
-                        query = query.Where(p => p.Mobile != null && p.Mobile.Contains(request.Q));
-                    break;
-                case "appointmentid":
-                    var apptId = Guid.TryParse(request.Q, out var guid) ? guid : Guid.Empty;
-                    query = query.Where(p => _context.Appointments.Any(a => a.ApptId == apptId && a.PatientId == p.PatientId && a.HospitalId == request.HospitalId));
-                    break;
-                default:
-                    throw new ArgumentException("Invalid search type. Must be one of: patientId, name, contact, appointmentId");
-            }
-            // Always filter by hospitalId
-            query = query.Where(p => p.HospitalId == request.HospitalId);
+            // Build optimized query with all search criteria
+            IQueryable<PatientRegistration> query = _context.PatientRegistrations
+                .Where(p => p.HospitalId == request.HospitalId);
 
+            // Apply search text filter across multiple columns if provided
+            if (!string.IsNullOrEmpty(request.SearchText))
+            {
+                var searchTerm = request.SearchText.ToLower();
+                query = query.Where(p =>
+                    (p.FullName != null && p.FullName.ToLower().Contains(searchTerm)) ||
+                    (p.PatientId != null && p.PatientId.ToLower().Contains(searchTerm)) ||
+                    (p.Mobile != null && p.Mobile.Contains(searchTerm)) ||
+                    _context.Appointments.Any(a =>
+                        a.PatientId == p.PatientId &&
+                        a.HospitalId == request.HospitalId &&
+                        a.ApptId.ToString().Contains(searchTerm))
+                );
+            }
+
+            // Fetch patients with minimal database hits
             var patients = await query.ToListAsync(cancellationToken);
+
+            if (patients.Count == 0)
+                return response;
+
+            // Get all patient IDs for batch operations (exclude nulls)
+            var patientIds = patients.Where(p => p.PatientId != null).Select(p => p.PatientId!).ToList();
+
+            // Batch fetch upcoming appointments for all patients
+            var upcomingAppointments = await _context.Appointments
+                .Where(a => a.HospitalId == request.HospitalId &&
+                           a.ApptDate >= today &&
+                           a.PatientId != null &&
+                           patientIds.Contains(a.PatientId))
+                .OrderBy(a => a.ApptDate)
+                .GroupBy(a => a.PatientId)
+                .Select(g => g.First())
+                .ToListAsync(cancellationToken);
+
+            var appointmentIds = upcomingAppointments.Select(a => a.ApptId).ToList();
+
+            // Batch fetch appointment tokens
+            var appointmentTokens = await _context.AppointmentTokens
+                .Where(t => appointmentIds.Contains(t.ApptId))
+                .OrderByDescending(t => t.CreatedAt)
+                .GroupBy(t => t.ApptId)
+                .Select(g => g.First())
+                .ToListAsync(cancellationToken);
+
+            // Create lookup dictionaries for efficient access
+            var appointmentLookup = upcomingAppointments
+                .Where(a => a.PatientId != null)
+                .ToDictionary(a => a.PatientId!);
+            var tokenLookup = appointmentTokens.ToDictionary(t => t.ApptId);
+
+            // Build response
             foreach (var p in patients)
             {
-                var lastReg = p;
-                var upcomingAppt = await _context.Appointments
-                    .Where(a => a.PatientId == p.PatientId && a.HospitalId == request.HospitalId && a.ApptDate >= today)
-                    .OrderBy(a => a.ApptDate)
-                    .FirstOrDefaultAsync(cancellationToken);
                 string? tokenNo = null;
                 DateTime? apptDate = null;
                 Guid? appointmentId = null;
-                if (upcomingAppt != null)
+
+                if (p.PatientId != null && appointmentLookup.TryGetValue(p.PatientId, out var upcomingAppt))
                 {
-                    var token = await _context.AppointmentTokens
-                        .Where(t => t.ApptId == upcomingAppt.ApptId)
-                        .OrderByDescending(t => t.CreatedAt)
-                        .FirstOrDefaultAsync(cancellationToken);
-                    tokenNo = token?.TokenNo.ToString();
+                    if (tokenLookup.TryGetValue(upcomingAppt.ApptId, out var token))
+                    {
+                        tokenNo = token.TokenNo.ToString();
+                    }
                     apptDate = upcomingAppt.ApptDate;
                     appointmentId = upcomingAppt.ApptId;
                 }
-                // Calculate age and date of birth
-                DateTime? dateOfBirth = null;
-                if (p.AgeYears.HasValue && p.AgeYears.Value > 0)
-                {
-                    dateOfBirth = DateTime.UtcNow.AddYears(-p.AgeYears.Value);
-                }
+
+                // Calculate date of birth from age
+                DateTime? dateOfBirth = p.AgeYears.HasValue && p.AgeYears.Value > 0
+                    ? DateTime.UtcNow.AddYears(-p.AgeYears.Value)
+                    : null;
 
                 response.Items.Add(new PatientSearchResult
                 {
@@ -86,41 +105,18 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     Mobile = p.Mobile,
                     Sex = p.Sex,
                     Age = p.AgeYears,
-                    DateOfBirth = dateOfBirth ?? null,
+                    DateOfBirth = dateOfBirth,
                     Address = p.AddressLine,
                     City = p.City,
                     Pincode = p.Pincode,
                     LastRegistrationAt = p.RegisteredAt,
                     LastRegistrationId = p.RegistrationId,
-                    Matched = new MatchInfo { By = request.By, Value = request.Q },
                     AppointmentDate = apptDate,
                     AppointmentId = appointmentId,
                     TokenNumber = tokenNo
                 });
             }
             return response;
-        }
-    }
-
-    // Helper class to access HTTP context (you might already have this in your project)
-    public static class HttpContextHelper
-    {
-        private static IHttpContextAccessor? _httpContextAccessor;
-
-        public static void Configure(IHttpContextAccessor httpContextAccessor)
-        {
-            _httpContextAccessor = httpContextAccessor;
-        }
-
-        public static Guid? HospitalId
-        {
-            get
-            {
-                var hospitalId = _httpContextAccessor?.HttpContext?.User?.FindFirst("hospitalId")?.Value;
-                if (Guid.TryParse(hospitalId, out var id))
-                    return id;
-                return null;
-            }
         }
     }
 }

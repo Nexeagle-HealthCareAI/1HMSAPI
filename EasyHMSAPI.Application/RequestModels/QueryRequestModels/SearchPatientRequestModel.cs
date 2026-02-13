@@ -7,9 +7,7 @@ namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
     [ExcludeFromCodeCoverage]
     public class SearchPatientRequestModel : IRequest<SearchPatientResponseModel>
     {
-        public string? By { get; set; }
-        public string? Q { get; set; }
-        public string Scope { get; set; } = "local";
-        public Guid HospitalId { get; set; } // Added hospitalId
+        public string? SearchText { get; set; }
+        public Guid HospitalId { get; set; }
     }
 }

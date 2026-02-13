@@ -18,6 +18,36 @@ namespace EasyHMSAPI.Api.Controllers
             _logger = logger;
         }
 
+        [HttpGet("search")]
+        [Authorize]
+        public async Task<IActionResult> SearchPatient([FromQuery] string  searchText, [FromQuery] Guid hospitalId)
+        {
+            _logger.LogInformation("SearchPatient started a");
+            if(string.IsNullOrEmpty(searchText) || hospitalId == Guid.Empty)
+            {
+                throw new ArgumentException("Search text and HospitalId are required.");
+            }
+
+            try
+            {
+                var request = new SearchPatientRequestModel
+                {
+                   SearchText = searchText,
+                   HospitalId = hospitalId
+                };
+
+                var response = await _mediator.Send(request);
+                _logger.LogInformation("SearchPatient ended successfully for hospitalId: {HospitalId}", hospitalId);
+
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in SearchPatient, hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { ex.Message });
+            }
+        }
+
         [HttpGet]
         [Authorize]
         [Route("hospitalId={hospitalId}")]

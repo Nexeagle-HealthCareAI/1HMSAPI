@@ -1,5 +1,4 @@
 using System;
-using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.QueryHandlers;
@@ -7,8 +6,6 @@ using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using EasyHMSAPI.UnitTests.TestUtils;
-using Microsoft.AspNetCore.Http;
-using Moq;
 using NUnit.Framework;
 
 namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
@@ -17,23 +14,13 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
     public class SearchPatientHandlerTests
     {
          private AppDbContext _context = null!;
-        private Mock<IHttpContextAccessor> _httpContextAccessorMock = null!;
         private SearchPatientHandler _handler = null!;
 
         [SetUp]
         public void SetUp()
         {
             _context = InMemoryDbContextFactory.CreateContext();
-            _httpContextAccessorMock = new Mock<IHttpContextAccessor>();
-            
-            var context = new DefaultHttpContext();
-            context.User = new ClaimsPrincipal(new ClaimsIdentity(new[] 
-            {
-                new Claim("hospitalId", Guid.NewGuid().ToString())
-            }));
-            _httpContextAccessorMock.Setup(x => x.HttpContext).Returns(context);
-
-            _handler = new SearchPatientHandler(_context, _httpContextAccessorMock.Object);
+            _handler = new SearchPatientHandler(_context);
         }
 
         [TearDown]
@@ -62,8 +49,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             var request = new SearchPatientRequestModel
             {
                 HospitalId = hospitalId,
-                By = "mobile",
-                Q = "12345"
+                SearchText = "12345"
             };
 
             // Act
