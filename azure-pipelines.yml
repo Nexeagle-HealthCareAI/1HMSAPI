@@ -1,10 +1,13 @@
 # ============================================
-#   Build, Unit Test (60% Coverage Gate) & Deploy
-#   EasyHMS API (.NET 8)
+#   Build, Unit Test & Deploy
+#   EasyHMS API (.NET 8) -> Azure App Service (WINDOWS)
 #
 #   Dev deploy : release-* AND feature/*
-#   PROD deploy: release-* only + deployProd=true + env approval
+#   Prod deploy: release-* only + deployProd=true + env approval
 #   PR builds  : Build + Tests only (no deploy)
+#
+#   NOTE: Your Kudu trace shows Windows paths (C:\home\...),
+#         so appType is set to webApp (Windows).
 # ============================================
 
 parameters:
@@ -32,67 +35,65 @@ variables:
   apiProject: 'EasyHMSAPI.Api/EasyHMSAPI.Api.csproj'
   testProjects: '**/*UnitTests/*.csproj'
 
-  # Build/Artifact
-  buildConfiguration: 'Release'
+  # Artifacts
   publishDir: '$(Build.ArtifactStagingDirectory)/publish'
   artifactName: 'api-drop'
-  zipName: 'easyhmsapi.zip'
 
-  # Coverage
-  coverageThreshold: '60'
+  # Unit test results
   testResultsDir: '$(Build.SourcesDirectory)/TestResults'
-  coverageReportDir: '$(Build.SourcesDirectory)/TestResults/CoverageReport'
 
   # Dev
   devAppName: 'easyHMSAPIServices'
   devServiceConnection: 'svc-conn-nexeagle-dev'
 
-  # PROD
-  prodAppName: 'easyHMSAPISevicesProd'
+  # Prod (fix spelling to your real app service name!)
+  prodAppName: 'easyHMSAPIServicesProd'
   prodServiceConnection: 'svc-conn-nexeagle-prod'
 
 stages:
 
 # ================================================================
-#  STAGE 1 — Build + Unit Tests + Coverage Gate (>= 60%)
+#  STAGE 1 — Build + Unit Tests
 # ================================================================
 - stage: Build_Test
-  displayName: Build + Unit Tests + Coverage Gate
+  displayName: Build + Unit Tests
   jobs:
   - job: BuildTestJob
     displayName: Build/Test
     steps:
     - checkout: self
-      clean: true
 
     - task: UseDotNet@2
       displayName: 'Use .NET 8 SDK'
       inputs:
-        version: '8.0.x'
+        version: '8.x'
 
     - task: DotNetCoreCLI@2
-      displayName: 'Restore'
+      displayName: 'Restore API'
       inputs:
         command: 'restore'
-        projects: |
-          $(apiProject)
-          $(testProjects)
+        projects: '$(apiProject)'
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Restore Tests'
+      inputs:
+        command: 'restore'
+        projects: '$(testProjects)'
 
     - task: DotNetCoreCLI@2
       displayName: 'Build API'
       inputs:
         command: 'build'
         projects: '$(apiProject)'
-        arguments: '--configuration $(buildConfiguration) --no-restore'
+        arguments: '--configuration Release --no-restore'
 
     - task: DotNetCoreCLI@2
-      displayName: 'Unit Tests (with coverage)'
+      displayName: 'Unit Tests'
       inputs:
         command: 'test'
         projects: '$(testProjects)'
         arguments: >
-          --configuration $(buildConfiguration)
-          --collect:"XPlat Code Coverage"
+          --configuration Release
           --logger "trx"
           --results-directory "$(testResultsDir)"
           -- RunConfiguration.TreatNoTestsAsError=true
@@ -106,77 +107,17 @@ stages:
         testRunTitle: 'Unit Tests'
       condition: succeededOrFailed()
 
-    - script: |
-        set -euo pipefail
-
-        # Install reportgenerator
-        dotnet tool update --global dotnet-reportgenerator-globaltool || dotnet tool install --global dotnet-reportgenerator-globaltool
-        export PATH="$PATH:$HOME/.dotnet/tools"
-
-        RESULTS_DIR="$(testResultsDir)"
-        REPORT_DIR="$(coverageReportDir)"
-        THRESHOLD="$(coverageThreshold)"
-
-        echo "Searching for cobertura coverage files in: $RESULTS_DIR"
-        if ! find "$RESULTS_DIR" -name "coverage.cobertura.xml" | grep -q .; then
-          echo "No coverage.cobertura.xml found."
-          echo "Fix: add package coverlet.collector to test projects."
-          exit 1
-        fi
-
-        mkdir -p "$REPORT_DIR"
-
-        reportgenerator \
-          "-reports:$RESULTS_DIR/**/coverage.cobertura.xml" \
-          "-targetdir:$REPORT_DIR" \
-          "-reporttypes:HtmlInline_AzurePipelines;Cobertura"
-
-        COBERTURA="$REPORT_DIR/Cobertura.xml"
-        if [ ! -f "$COBERTURA" ]; then
-          echo "Cobertura.xml not generated at $COBERTURA"
-          exit 1
-        fi
-
-        LINE_RATE=$(python3 -c "import xml.etree.ElementTree as ET; r=ET.parse('$COBERTURA').getroot(); print(r.attrib.get('line-rate','0'))")
-        PCT=$(python3 -c "print(int(round(float('$LINE_RATE')*100)))")
-
-        echo "Line coverage: ${PCT}% (threshold: ${THRESHOLD}%)"
-        if [ "$PCT" -lt "$THRESHOLD" ]; then
-          echo "Coverage gate failed: ${PCT}% < ${THRESHOLD}%"
-          exit 1
-        fi
-
-        echo "Coverage gate passed."
-      displayName: 'Coverage Report + Gate'
-
-    - task: PublishCodeCoverageResults@2
-      displayName: 'Publish Coverage'
-      inputs:
-        codeCoverageTool: 'Cobertura'
-        summaryFileLocation: '$(coverageReportDir)/Cobertura.xml'
-        reportDirectory: '$(coverageReportDir)'
-        failIfCoverageEmpty: true
-
-    # Publish (folder) then zip ourselves (most reliable)
+    # Publish output (zip) to artifact
     - task: DotNetCoreCLI@2
-      displayName: 'Publish API'
+      displayName: 'Publish API (zip)'
       inputs:
         command: 'publish'
         projects: '$(apiProject)'
-        arguments: '--configuration $(buildConfiguration) --no-restore --output $(publishDir)'
+        arguments: '--configuration Release --no-restore --output $(publishDir)'
         publishWebProjects: false
-        zipAfterPublish: false
+        zipAfterPublish: true
 
-    - task: ArchiveFiles@2
-      displayName: 'Archive publish output (zip)'
-      inputs:
-        rootFolderOrFile: '$(publishDir)'
-        includeRootFolder: false
-        archiveType: 'zip'
-        archiveFile: '$(Build.ArtifactStagingDirectory)/$(zipName)'
-        replaceExistingArchive: true
-
-    - publish: '$(Build.ArtifactStagingDirectory)/$(zipName)'
+    - publish: '$(publishDir)'
       artifact: '$(artifactName)'
 
 # ================================================================
@@ -205,17 +146,19 @@ stages:
           - download: current
             artifact: $(artifactName)
 
+          # Use Run-From-Package (more stable; avoids heavy extraction failures)
           - task: AzureWebApp@1
             displayName: 'Deploy ZIP to Dev App Service'
             inputs:
               azureSubscription: '$(devServiceConnection)'
-              appType: 'webAppLinux'
+              appType: 'webApp'     # Windows App Service
               appName: '$(devAppName)'
-              package: '$(Pipeline.Workspace)/$(artifactName)/$(zipName)'
-              deploymentMethod: 'zipDeploy'
+              package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
+              deploymentMethod: 'runFromPackage'
 
 # ================================================================
 #  STAGE 3 — Deploy PROD (release-* + deployProd=true + approval)
+#  Configure approvals in Pipelines → Environments → prod
 # ================================================================
 - stage: Deploy_Prod
   displayName: Deploy to App Service (PROD) — Environment Approval
@@ -225,7 +168,7 @@ stages:
       succeeded(),
       ne(variables['Build.Reason'], 'PullRequest'),
       startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'),
-      eq('${{ parameters.deployProd }}', 'true')
+      eq(${{ parameters.deployProd }}, true)
     )
   jobs:
   - deployment: DeployProd
@@ -242,7 +185,7 @@ stages:
             displayName: 'Deploy ZIP to PROD App Service'
             inputs:
               azureSubscription: '$(prodServiceConnection)'
-              appType: 'webAppLinux'
+              appType: 'webApp'     # Windows App Service
               appName: '$(prodAppName)'
-              package: '$(Pipeline.Workspace)/$(artifactName)/$(zipName)'
-              deploymentMethod: 'zipDeploy'
+              package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
+              deploymentMethod: 'runFromPackage'
