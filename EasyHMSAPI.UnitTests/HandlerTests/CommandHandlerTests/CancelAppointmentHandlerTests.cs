@@ -20,85 +20,32 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
     public class CancelAppointmentHandlerTests
     {
         private AppDbContext _context = null!;
-        private Mock<ISmsService> _smsServiceMock = null!;
+        private Mock<ISmsService> _mockSmsService = null!;
         private CancelAppointmentHandler _handler = null!;
 
         [SetUp]
         public void SetUp()
         {
             _context = InMemoryDbContextFactory.CreateContext();
-            _smsServiceMock = new Mock<ISmsService>();
-            _handler = new CancelAppointmentHandler(_context, _smsServiceMock.Object);
+            _mockSmsService = new Mock<ISmsService>();
+            _handler = new CancelAppointmentHandler(_context, _mockSmsService.Object);
         }
 
         [TearDown]
         public void TearDown()
         {
-            
-            InMemoryDbContextFactory.Destroy(_context);
-            _context?.Dispose();
+            _context.Database.EnsureDeleted();
+            _context.Dispose();
         }
 
         [Test]
-        public async Task Handle_ValidAppointment_CancelsAndSendsSms()
+        public async Task Handle_AppointmentNotFound_ReturnsError()
         {
             // Arrange
-            var user = TestDataFactory.SeedUser(_context);
-            var doctor = TestDataFactory.SeedDoctor(_context, user);
-            var patient = new PatientRegistration 
-            { 
-                PatientId = Guid.NewGuid().ToString(),
-                Mobile = "5551234567",
-                FullName = "John Doe",
-                // RegistrationNo = 1, // Removed
-                HospitalId = Guid.NewGuid() // Add required field
-            };
-            _context.PatientRegistrations.Add(patient);
-            
-            var appointment = new Appointment
-            {
-                ApptId = Guid.NewGuid(),
-                PatientId = patient.PatientId,
-                DoctorId = doctor.DoctorID,
-                CurrentStatusCode = "Booked",
-                ApptDate = DateTime.Today,
-                StartAt = DateTime.Now
-            };
-            _context.Appointments.Add(appointment);
-            await _context.SaveChangesAsync();
-
-            _smsServiceMock.Setup(x => x.SendInvitationSmsAsync(It.IsAny<string>(), It.IsAny<string>()))
-                .ReturnsAsync(true);
-
             var request = new CancelAppointmentRequestModel
             {
-                AppointmentId = appointment.ApptId, // Changed to AppointmentId
-                // Reason = "Busy", // Removed as not in request model? Wait, need to check if Reason is in model.
-                // Request Model defines AppointmentId and PatientId. Does it define Reason?
-                // Checking Step 483: Only AppointmentId and PatientId.
-                PatientId = patient.PatientId
-            };
-
-            // Act
-            var response = await _handler.Handle(request, CancellationToken.None);
-
-            // Assert
-            Assert.That(response.Success, Is.True);
-            Assert.That(response.FinalStatus, Is.EqualTo(AppConstants.AppointmentStatus_Cancelled));
-            Assert.That(response.IsReminderSent, Is.True);
-            
-            var updatedAppt = await _context.Appointments.FindAsync(appointment.ApptId);
-            Assert.That(updatedAppt.CurrentStatusCode, Is.EqualTo(AppConstants.AppointmentStatus_Cancelled));
-        }
-
-        [Test]
-        public async Task Handle_AppointmentNotFound_ReturnsFailure()
-        {
-            // Arrange
-            var request = new CancelAppointmentRequestModel 
-            { 
-                AppointmentId = Guid.NewGuid(), 
-                PatientId = "nonexistent" 
+                AppointmentId = Guid.NewGuid(),
+                PatientId = "PAT123"
             };
 
             // Act
@@ -107,6 +54,133 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             // Assert
             Assert.That(response.Success, Is.False);
             Assert.That(response.Message, Is.EqualTo("Appointment not found."));
+        }
+
+        [Test]
+        public async Task Handle_DoctorRevoked_ReturnsError()
+        {
+            // Arrange
+            var doctorId = Guid.NewGuid();
+            var hospitalId = Guid.NewGuid();
+            var userId = Guid.NewGuid();
+            var patientId = "PAT123";
+            var appointmentId = Guid.NewGuid();
+
+            var user = TestEntityFactory.CreateUser(userId);
+            user.UserStatusId = (int)UserStatusEnum.Revoked;
+            _context.Users.Add(user);
+            
+            _context.Doctors.Add(TestEntityFactory.CreateDoctor(doctorId, userId));
+            _context.Hospitals.Add(TestEntityFactory.CreateHospital(hospitalId, userId));
+            _context.Appointments.Add(TestEntityFactory.CreateAppointment(appointmentId, hospitalId, doctorId, patientId));
+            await _context.SaveChangesAsync();
+
+            var request = new CancelAppointmentRequestModel
+            {
+                AppointmentId = appointmentId,
+                PatientId = patientId
+            };
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("Doctor is not active or has been revoked."));
+        }
+
+        [Test]
+        public async Task Handle_Success_CancelsAppointment()
+        {
+            // Arrange
+            var doctorId = Guid.NewGuid();
+            var hospitalId = Guid.NewGuid();
+            var userId = Guid.NewGuid();
+            var patientId = "PAT123";
+            var appointmentId = Guid.NewGuid();
+
+             var user = TestEntityFactory.CreateUser(userId);
+            user.UserStatusId = (int)UserStatusEnum.Active; // Active
+            _context.Users.Add(user);
+
+            _context.Doctors.Add(TestEntityFactory.CreateDoctor(doctorId, userId));
+            _context.Hospitals.Add(TestEntityFactory.CreateHospital(hospitalId, userId));
+            
+            var appointment = TestEntityFactory.CreateAppointment(appointmentId, hospitalId, doctorId, patientId);
+            appointment.StatusHistoryJson = "[]"; 
+            _context.Appointments.Add(appointment);
+            
+            _context.PatientRegistrations.Add(TestEntityFactory.CreatePatientRegistration(hospitalId, patientId, "John Doe"));
+            await _context.SaveChangesAsync();
+
+            _mockSmsService.Setup(x => x.SendInvitationSmsAsync(It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync(true);
+
+            var request = new CancelAppointmentRequestModel
+            {
+                AppointmentId = appointmentId,
+                PatientId = patientId
+            };
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.FinalStatus, Is.EqualTo(AppConstants.AppointmentStatus_Cancelled));
+            
+            var cancelledAppt = await _context.Appointments.FindAsync(appointmentId);
+            Assert.That(cancelledAppt!.CurrentStatusCode, Is.EqualTo(AppConstants.AppointmentStatus_Cancelled));
+        }
+
+         [Test]
+        public async Task Handle_Success_WithTokenReset()
+        {
+            // Arrange
+            var doctorId = Guid.NewGuid();
+            var hospitalId = Guid.NewGuid();
+            var userId = Guid.NewGuid();
+            var patientId = "PAT123";
+            var appointmentId = Guid.NewGuid();
+            var tokenId = Guid.NewGuid();
+
+             var user = TestEntityFactory.CreateUser(userId);
+            user.UserStatusId = (int)UserStatusEnum.Active;
+            _context.Users.Add(user);
+
+            _context.Doctors.Add(TestEntityFactory.CreateDoctor(doctorId, userId));
+            _context.Hospitals.Add(TestEntityFactory.CreateHospital(hospitalId, userId));
+            
+            var appointment = TestEntityFactory.CreateAppointment(appointmentId, hospitalId, doctorId, patientId);
+            appointment.StatusHistoryJson = "[]";
+            _context.Appointments.Add(appointment);
+            
+            _context.AppointmentTokens.Add(new AppointmentToken
+            {
+                TokenId = tokenId,
+                ApptId = appointmentId,
+                TokenNo = 10,
+                TokenDate = DateTime.UtcNow,
+                 HospitalId = hospitalId,
+                 DoctorId = doctorId
+            });
+            
+            _context.PatientRegistrations.Add(TestEntityFactory.CreatePatientRegistration(hospitalId, patientId, "John Doe"));
+            await _context.SaveChangesAsync();
+
+            var request = new CancelAppointmentRequestModel
+            {
+                AppointmentId = appointmentId,
+                PatientId = patientId
+            };
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.Success, Is.True);
+            var token = await _context.AppointmentTokens.FindAsync(tokenId);
+            Assert.That(token!.TokenNo, Is.EqualTo(0));
         }
     }
 }

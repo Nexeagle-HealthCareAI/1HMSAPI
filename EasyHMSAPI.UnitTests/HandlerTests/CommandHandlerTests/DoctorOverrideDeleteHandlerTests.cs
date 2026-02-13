@@ -6,6 +6,7 @@ using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using EasyHMSAPI.UnitTests.TestUtils;
+using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
 
 namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
@@ -26,36 +27,18 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [TearDown]
         public void TearDown()
         {
-            
-            InMemoryDbContextFactory.Destroy(_context);
-            _context?.Dispose();
+            _context.Database.EnsureDeleted();
+            _context.Dispose();
         }
 
         [Test]
-        public async Task Handle_ValidId_DeletesOverride()
+        public async Task Handle_OverrideNotFound_ReturnsError()
         {
             // Arrange
-            var overrideId = Guid.NewGuid();
-            var shiftOverride = new DoctorShiftOverride { OverrideID = overrideId, ShiftName = "Morning" };
-            _context.DoctorShiftOverrides.Add(shiftOverride);
-            await _context.SaveChangesAsync();
-
-            var request = new DoctorOverrideDeleteRequestModel { OverrideId = overrideId };
-
-            // Act
-            var response = await _handler.Handle(request, CancellationToken.None);
-
-            // Assert
-            Assert.That(response.Success, Is.True);
-            var deleted = await _context.DoctorShiftOverrides.FindAsync(overrideId);
-            Assert.That(deleted, Is.Null);
-        }
-
-        [Test]
-        public async Task Handle_NotFound_ReturnsFailure()
-        {
-            // Arrange
-            var request = new DoctorOverrideDeleteRequestModel { OverrideId = Guid.NewGuid() };
+            var request = new DoctorOverrideDeleteRequestModel
+            {
+                OverrideId = Guid.NewGuid()
+            };
 
             // Act
             var response = await _handler.Handle(request, CancellationToken.None);
@@ -63,6 +46,36 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             // Assert
             Assert.That(response.Success, Is.False);
             Assert.That(response.Message, Is.EqualTo("Override not found"));
+        }
+
+        [Test]
+        public async Task Handle_Success_DeletesOverride()
+        {
+            // Arrange
+            var overrideId = Guid.NewGuid();
+            var doctorId = Guid.NewGuid();
+            var hospitalId = Guid.NewGuid();
+            var userId = Guid.NewGuid();
+
+            _context.Users.Add(TestEntityFactory.CreateUser(userId));
+            _context.Doctors.Add(TestEntityFactory.CreateDoctor(doctorId, userId));
+            _context.DoctorShiftOverrides.Add(TestEntityFactory.CreateDoctorShiftOverride(overrideId, doctorId, hospitalId));
+            await _context.SaveChangesAsync();
+
+            var request = new DoctorOverrideDeleteRequestModel
+            {
+                OverrideId = overrideId
+            };
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.Message, Is.EqualTo("Override deleted"));
+
+            var deletedOverride = await _context.DoctorShiftOverrides.FindAsync(overrideId);
+            Assert.That(deletedOverride, Is.Null);
         }
     }
 }

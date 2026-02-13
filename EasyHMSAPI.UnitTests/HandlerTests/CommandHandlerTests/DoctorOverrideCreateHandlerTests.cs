@@ -1,17 +1,16 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.CommandHandlers;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
-using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using EasyHMSAPI.UnitTests.TestUtils;
 using Microsoft.EntityFrameworkCore;
+using Moq;
 using NUnit.Framework;
-using System.Linq;
-using EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests;
 
 namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 {
@@ -31,54 +30,18 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [TearDown]
         public void TearDown()
         {
-            
-            InMemoryDbContextFactory.Destroy(_context);
-            _context?.Dispose();
+            _context.Database.EnsureDeleted();
+            _context.Dispose();
         }
 
         [Test]
-        public async Task Handle_ValidRequest_CreatesOverride()
+        public async Task Handle_InvalidShiftName_ReturnsError()
         {
             // Arrange
-            var user = TestDataFactory.SeedUser(_context);
-            var doctor = TestDataFactory.SeedDoctor(_context, user);
-            var hospitalId = Guid.NewGuid();
-
             var request = new DoctorOverrideCreateRequestModel
             {
-                DoctorId = doctor.DoctorID,
-                HospitalId = hospitalId,
-                StartDate = DateTime.UtcNow,
-                EndDate = DateTime.UtcNow.AddDays(1),
-                OverrideDate = DateTime.UtcNow,
-                ShiftDetails = new List<ShiftDetails>
-                {
-                    new ShiftDetails
-                    {
-                        ShiftName = "Morning",
-                        StartTime = "09:00",
-                        EndTime = "13:00",
-                        SlotDurationInMinutes = 15
-                    }
-                }
-            };
-
-            // Act
-            var response = await _handler.Handle(request, CancellationToken.None);
-
-            // Assert
-            Assert.That(response.Success, Is.True);
-            var overrides = await _context.DoctorShiftOverrides.Where(o => o.DoctorID == doctor.DoctorID).ToListAsync();
-            Assert.That(overrides.Count, Is.EqualTo(1));
-            Assert.That(overrides[0].ShiftName, Is.EqualTo("Morning"));
-        }
-
-        [Test]
-        public async Task Handle_InvalidShiftName_ReturnsFailure()
-        {
-             // Arrange
-            var request = new DoctorOverrideCreateRequestModel
-            {
+                DoctorId = Guid.NewGuid(),
+                HospitalId = Guid.NewGuid(),
                 ShiftDetails = new List<ShiftDetails>
                 {
                     new ShiftDetails { ShiftName = "InvalidShift" }
@@ -90,47 +53,59 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 
             // Assert
             Assert.That(response.Success, Is.False);
-            Assert.That(response.Message, Does.Contain("Allowed values are"));
+            Assert.That(response.Message, Is.EqualTo("Allowed values are Morning, Afternoon, Evening"));
         }
 
         [Test]
-        public async Task Handle_ExistingOverride_UpdatesOverride()
+        public async Task Handle_DoctorNotFound_ReturnsError()
         {
-             // Arrange
-            var user = TestDataFactory.SeedUser(_context);
-            var doctor = TestDataFactory.SeedDoctor(_context, user);
-            var hospitalId = Guid.NewGuid();
-            var date = DateTime.Today;
-
-            var existingOverride = new DoctorShiftOverride
+            // Arrange
+            var request = new DoctorOverrideCreateRequestModel
             {
-                OverrideID = Guid.NewGuid(),
-                DoctorID = doctor.DoctorID,
-                HospitalId = hospitalId,
-                ShiftName = "Morning",
-                StartDate = date,
-                EndDate = date,
-                StartTime = TimeSpan.FromHours(9),
-                EndTime = TimeSpan.FromHours(12)
+                DoctorId = Guid.NewGuid(),
+                HospitalId = Guid.NewGuid(),
+                 ShiftDetails = new List<ShiftDetails>
+                {
+                    new ShiftDetails { ShiftName = "Morning" }
+                }
             };
-            _context.DoctorShiftOverrides.Add(existingOverride);
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("Invalid Doctor Id"));
+        }
+
+        [Test]
+        public async Task Handle_NewOverride_ReturnsSuccess()
+        {
+            // Arrange
+            var doctorId = Guid.NewGuid();
+            var hospitalId = Guid.NewGuid();
+            var userId = Guid.NewGuid();
+
+            _context.Users.Add(TestEntityFactory.CreateUser(userId));
+            _context.Doctors.Add(TestEntityFactory.CreateDoctor(doctorId, userId));
             await _context.SaveChangesAsync();
 
             var request = new DoctorOverrideCreateRequestModel
             {
-                DoctorId = doctor.DoctorID,
+                DoctorId = doctorId,
                 HospitalId = hospitalId,
-                StartDate = date,
-                EndDate = date,
-                OverrideDate = date,
+                StartDate = DateTime.UtcNow.Date,
+                EndDate = DateTime.UtcNow.Date.AddDays(7),
+                OverrideDate = DateTime.UtcNow.Date,
                 ShiftDetails = new List<ShiftDetails>
                 {
                     new ShiftDetails
                     {
                         ShiftName = "Morning",
-                        StartTime = "10:00",
-                        EndTime = "14:00",
-                        SlotDurationInMinutes = 30
+                        StartTime = "09:00",
+                        EndTime = "12:00",
+                        SlotDurationInMinutes = 30,
+                        RecurringDays = new List<string> { "Monday" }
                     }
                 }
             };
@@ -140,10 +115,123 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 
             // Assert
             Assert.That(response.Success, Is.True);
-            Assert.That(response.Message, Does.Contain("updated"));
+            Assert.That(response.Message, Is.EqualTo("Doctor Override(s) added: 1"));
+
+            var overrideRecord = await _context.DoctorShiftOverrides.FirstOrDefaultAsync(x => x.DoctorID == doctorId);
+            Assert.That(overrideRecord, Is.Not.Null);
+            Assert.That(overrideRecord!.ShiftName, Is.EqualTo("Morning"));
+        }
+
+        [Test]
+        public async Task Handle_UpdateExistingOverride_ReturnsSuccess()
+        {
+            // Arrange
+            var doctorId = Guid.NewGuid();
+            var hospitalId = Guid.NewGuid();
+            var userId = Guid.NewGuid();
+            var overrideId = Guid.NewGuid();
+            var startDate = DateTime.UtcNow.Date;
+            var endDate = DateTime.UtcNow.Date.AddDays(7);
+
+            _context.Users.Add(TestEntityFactory.CreateUser(userId));
+            _context.Doctors.Add(TestEntityFactory.CreateDoctor(doctorId, userId));
             
-            var updated = await _context.DoctorShiftOverrides.FindAsync(existingOverride.OverrideID);
-            Assert.That(updated!.StartTime, Is.EqualTo(TimeSpan.FromHours(10)));
+            var existingOverride = TestEntityFactory.CreateDoctorShiftOverride(overrideId, doctorId, hospitalId);
+            existingOverride.StartDate = startDate;
+            existingOverride.EndDate = endDate;
+            existingOverride.ShiftName = "Morning";
+            _context.DoctorShiftOverrides.Add(existingOverride);
+            
+            await _context.SaveChangesAsync();
+
+            var request = new DoctorOverrideCreateRequestModel
+            {
+                DoctorId = doctorId,
+                HospitalId = hospitalId,
+                StartDate = startDate,
+                EndDate = endDate,
+                OverrideDate = DateTime.UtcNow.Date,
+                ShiftDetails = new List<ShiftDetails>
+                {
+                    new ShiftDetails
+                    {
+                        ShiftName = "Morning",
+                        StartTime = "10:00",
+                        EndTime = "13:00",
+                        SlotDurationInMinutes = 45,
+                        RecurringDays = new List<string> { "Tuesday" }
+                    }
+                }
+            };
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.Message, Is.EqualTo("Doctor Override(s) updated: 1, added: 0"));
+
+            var overrideRecord = await _context.DoctorShiftOverrides.FirstOrDefaultAsync(x => x.OverrideID == overrideId);
+            Assert.That(overrideRecord!.StartTime, Is.EqualTo(new TimeSpan(10, 0, 0)));
+            Assert.That(overrideRecord.SlotDurationInMinutes, Is.EqualTo(45));
+        }
+
+        [Test]
+        public async Task Handle_MultipleOverrides_AddAndUpdate_ReturnsSuccess()
+        {
+             // Arrange
+            var doctorId = Guid.NewGuid();
+            var hospitalId = Guid.NewGuid();
+            var userId = Guid.NewGuid();
+            var overrideId = Guid.NewGuid();
+            var startDate = DateTime.UtcNow.Date;
+            var endDate = DateTime.UtcNow.Date.AddDays(7);
+
+            _context.Users.Add(TestEntityFactory.CreateUser(userId));
+            _context.Doctors.Add(TestEntityFactory.CreateDoctor(doctorId, userId));
+            
+            var existingOverride = TestEntityFactory.CreateDoctorShiftOverride(overrideId, doctorId, hospitalId);
+            existingOverride.StartDate = startDate;
+            existingOverride.EndDate = endDate;
+            existingOverride.ShiftName = "Morning";
+            _context.DoctorShiftOverrides.Add(existingOverride);
+            
+            await _context.SaveChangesAsync();
+
+            var request = new DoctorOverrideCreateRequestModel
+            {
+                DoctorId = doctorId,
+                HospitalId = hospitalId,
+                StartDate = startDate,
+                EndDate = endDate,
+                OverrideDate = DateTime.UtcNow.Date,
+                ShiftDetails = new List<ShiftDetails>
+                {
+                    new ShiftDetails
+                    {
+                        ShiftName = "Morning", // Should update
+                        StartTime = "10:00",
+                        EndTime = "13:00",
+                        SlotDurationInMinutes = 45,
+                        RecurringDays = new List<string> { "Tuesday" }
+                    },
+                     new ShiftDetails
+                    {
+                        ShiftName = "Evening", // Should add
+                        StartTime = "17:00",
+                        EndTime = "20:00",
+                        SlotDurationInMinutes = 30,
+                        RecurringDays = new List<string> { "Friday" }
+                    }
+                }
+            };
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.Message, Is.EqualTo("Doctor Override(s) updated: 1, added: 1"));
         }
     }
 }
