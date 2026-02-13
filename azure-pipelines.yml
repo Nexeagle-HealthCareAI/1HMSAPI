@@ -47,7 +47,7 @@ variables:
   devServiceConnection: 'svc-conn-nexeagle-dev'
 
   # Prod (fix spelling to your real app service name!)
-  prodAppName: 'easyHMSAPIServicesProd'
+  prodAppName: 'easyHMSAPISevicesProd'
   prodServiceConnection: 'svc-conn-nexeagle-prod'
 
 stages:
