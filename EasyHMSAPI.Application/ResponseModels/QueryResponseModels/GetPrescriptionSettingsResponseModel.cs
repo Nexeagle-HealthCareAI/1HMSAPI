@@ -9,6 +9,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? Message { get; set; }
         public PriscriptionSettingsDataModel? Data { get; set; }
     }
+
+    [ExcludeFromCodeCoverage]
     public class PriscriptionSettingsDataModel
     {
         public Guid? PrescriptionSettingsId { get; set; }

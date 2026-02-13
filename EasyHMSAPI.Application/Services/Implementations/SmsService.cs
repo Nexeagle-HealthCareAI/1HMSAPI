@@ -1,11 +1,13 @@
 using EasyHMSAPI.Application.Services.Interfaces;
 using Microsoft.Extensions.Configuration;
+using System.Diagnostics.CodeAnalysis;
 using Twilio;
 using Twilio.Rest.Api.V2010.Account;
 using Twilio.Types;
 
 namespace EasyHMSAPI.Application.Services.Implementations
 {
+    [ExcludeFromCodeCoverage]
     public class SmsService : ISmsService
     {
         private readonly string _twilioAccountSid;

@@ -18,6 +18,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public Guid RecordedBy { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class VitalsJson
     {
         public BloodPressure? Bp { get; set; }
@@ -30,6 +31,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public decimal? RespiratoryRate { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class BloodPressure
     {
         public decimal? Sys { get; set; }

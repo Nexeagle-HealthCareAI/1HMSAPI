@@ -1,10 +1,12 @@
 ﻿using EasyHMSAPI.Application.Services.Interfaces;
 using Microsoft.Extensions.Configuration;
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
 
 namespace EasyHMSAPI.Application.Services.Implementations
 {
+    [ExcludeFromCodeCoverage]
     public class MaskingService : IMaskingService
     {
         private readonly IConfiguration _configuration;

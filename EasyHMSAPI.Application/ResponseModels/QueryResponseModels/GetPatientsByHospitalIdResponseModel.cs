@@ -13,6 +13,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? Message { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class HospitalPatientStatisticsModel
     {
         public int TotalPatientCount { get; set; }
@@ -21,6 +22,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public NewPatientRegistrationModel? NewRegistrations { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class NewPatientRegistrationModel
     {
         public int Today { get; set; }
@@ -31,6 +33,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public int PreviousYear { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class DoctorDataModel
     {
         public string? DoctorName { get; set; }
