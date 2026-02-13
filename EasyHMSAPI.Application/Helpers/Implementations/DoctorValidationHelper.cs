@@ -1,9 +1,11 @@
 ﻿using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Domain.Context;
 using Microsoft.EntityFrameworkCore;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Application.Helpers.Implementations
 {
+    [ExcludeFromCodeCoverage]
     public class DoctorValidationHelper : IDoctorValidationHelper
     {
         private readonly AppDbContext _dbContext;

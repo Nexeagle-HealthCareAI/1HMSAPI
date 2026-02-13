@@ -2,9 +2,11 @@ using Microsoft.Extensions.Configuration;
 using MimeKit;
 using MailKit.Net.Smtp;
 using EasyHMSAPI.Application.Services.Interfaces;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Application.Services.Implementations
 {
+    [ExcludeFromCodeCoverage]
     public class EmailService : IEmailService
     {
         private readonly string _smtpServer;

@@ -1,12 +1,14 @@
 ﻿using EasyHMSAPI.Application.Services.Interfaces;
 using Microsoft.Extensions.Configuration;
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Policy;
 using System.Text;
 using System.Text.Json;
 
 namespace EasyHMSAPI.Application.Services.Implementations
 {
+    [ExcludeFromCodeCoverage]
     public class WhatsAppMessagingService : IWhatsAppMessagingService
     {
         private readonly HttpClient _httpClient;

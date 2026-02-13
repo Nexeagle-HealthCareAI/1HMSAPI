@@ -90,13 +90,14 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public ReferralModel? Referral { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class FollowupReasonModel
     {
         public string? Reason { get; set; }
         public string? PatientInstructions { get; set; }
     }
 
-[ExcludeFromCodeCoverage]
+    [ExcludeFromCodeCoverage]
     public class ReferralModel
     {
         public ReferredToModel? ReferredTo { get; set; }
