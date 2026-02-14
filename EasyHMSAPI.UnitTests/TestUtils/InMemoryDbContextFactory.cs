@@ -42,6 +42,29 @@ namespace EasyHMSAPI.UnitTests
                     .IsRequired(false)
                     .IsConcurrencyToken(false)
                     .HasDefaultValue(new byte[0]);
+
+                var doc = modelBuilder.Entity<Doctor>();
+                doc.Property(d => d.LicenseNumber).IsRequired(false);
+                doc.Navigation(d => d.User).IsRequired(false);
+                
+                var hosp = modelBuilder.Entity<Hospital>();
+                hosp.Property(h => h.Name).IsRequired(false);
+                hosp.Property(h => h.Type).IsRequired(false);
+                hosp.Property(h => h.RegistrationNumber).IsRequired(false);
+                hosp.Property(h => h.Contact).IsRequired(false);
+                hosp.Property(h => h.Location).IsRequired(false);
+                hosp.Property(h => h.City).IsRequired(false);
+                hosp.Property(h => h.State).IsRequired(false);
+                hosp.Property(h => h.Country).IsRequired(false);
+                hosp.Property(h => h.Pincode).IsRequired(false);
+                
+                hosp.Navigation(h => h.CreatedByUser).IsRequired(false);
+                hosp.Navigation(h => h.HospitalProfileStatus).IsRequired(false);
+                hosp.Navigation(h => h.PrescriptionHeaderFooter).IsRequired(false);
+                hosp.Navigation(h => h.HospitalSetting).IsRequired(false);
+                
+                var user = modelBuilder.Entity<User>();
+                user.Property(u => u.MobileNumber).IsRequired(false);
             }
             catch
             {

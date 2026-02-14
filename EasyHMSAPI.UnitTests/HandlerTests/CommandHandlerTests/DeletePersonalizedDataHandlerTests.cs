@@ -2,10 +2,10 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.CommandHandlers;
-using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
+using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.UnitTests.TestUtils;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -17,86 +17,120 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
     public class DeletePersonalizedDataHandlerTests
     {
         private AppDbContext _context = null!;
-        private Mock<IDoctorValidationHelper> _doctorValidationHelperMock = null!;
+        private Mock<IDoctorValidationHelper> _mockDoctorValidationHelper = null!;
         private DeletePersonalizedDataHandler _handler = null!;
 
         [SetUp]
         public void SetUp()
         {
             _context = InMemoryDbContextFactory.CreateContext();
-            _doctorValidationHelperMock = new Mock<IDoctorValidationHelper>();
-            _handler = new DeletePersonalizedDataHandler(_context, _doctorValidationHelperMock.Object);
+            _mockDoctorValidationHelper = new Mock<IDoctorValidationHelper>();
+            _handler = new DeletePersonalizedDataHandler(_context, _mockDoctorValidationHelper.Object);
         }
 
         [TearDown]
         public void TearDown()
         {
-            
-            InMemoryDbContextFactory.Destroy(_context);
-            _context?.Dispose();
+            _context.Database.EnsureDeleted();
+            _context.Dispose();
         }
 
         [Test]
-        public async Task Handle_ValidData_DeletesSuccessfully()
+        public async Task Handle_DoctorNotFound_ReturnsError()
         {
             // Arrange
-            var user = TestDataFactory.SeedUser(_context);
-            var doctor = TestDataFactory.SeedDoctor(_context, user);
-            var hospitalId = Guid.NewGuid(); // Changed to Guid
-            
-            var hospital = new Hospital { HospitalID = hospitalId, Name = "Test Hospital", Email = "test@hosp.com", Type = "General", RegistrationNumber = "REG001", Contact = "1234567890", Location = "Test Location", City = "Test City", State = "Test State", Country = "Test Country", Pincode = "123456", CreatedByUserID = Guid.NewGuid()  };
-            _context.Hospitals.Add(hospital);
-
-            var personalData = new LookupPersonal
+            var request = new DeletePersonalizedDataRequestModel
             {
-                PersonalId = Guid.NewGuid(),
-                DoctorID = doctor.DoctorID,
-                HospitalID = hospitalId,
-                LookupTypeId = 1,
-                Name = "Test Note"
-            };
-            _context.LookupPersonals.Add(personalData);
-            await _context.SaveChangesAsync();
-
-            _doctorValidationHelperMock.Setup(x => x.ValidateDoctorAsync(hospitalId, doctor.DoctorID, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(true);
-
-            var request = new DeletePersonalizedDataRequestModel 
-            { 
-                PersonalId = personalData.PersonalId, 
-                DoctorId = doctor.DoctorID, 
-                HospitalId = hospitalId 
+                DoctorId = Guid.NewGuid(),
+                HospitalId = Guid.NewGuid(),
+                PersonalId = Guid.NewGuid()
             };
 
             // Act
             var response = await _handler.Handle(request, CancellationToken.None);
 
             // Assert
-            Assert.That(response.Success, Is.True);
-            var deletedData = await _context.LookupPersonals.FindAsync(personalData.PersonalId);
-            Assert.That(deletedData, Is.Null);
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("Doctor not found."));
         }
 
         [Test]
-        public async Task Handle_DataNotFound_ReturnsFailure()
+        public async Task Handle_HospitalNotFound_ReturnsError()
+        {
+            // Arrange
+            var doctorId = Guid.NewGuid();
+            var userId = Guid.NewGuid();
+            _context.Users.Add(TestEntityFactory.CreateUser(userId));
+            _context.Doctors.Add(TestEntityFactory.CreateDoctor(doctorId, userId));
+            await _context.SaveChangesAsync();
+
+            var request = new DeletePersonalizedDataRequestModel
+            {
+                DoctorId = doctorId,
+                HospitalId = Guid.NewGuid(),
+                PersonalId = Guid.NewGuid()
+            };
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("Hospital not found."));
+        }
+
+        [Test]
+        public async Task Handle_ValidationFailed_ReturnsError()
         {
              // Arrange
-            var user = TestDataFactory.SeedUser(_context);
-            var doctor = TestDataFactory.SeedDoctor(_context, user);
+            var doctorId = Guid.NewGuid();
             var hospitalId = Guid.NewGuid();
+            var userId = Guid.NewGuid();
             
-            var hospital = new Hospital { HospitalID = hospitalId, Name = "Test Hospital", Email = "test@hosp.com", Type = "General", RegistrationNumber = "REG001", Contact = "1234567890", Location = "Test Location", City = "Test City", State = "Test State", Country = "Test Country", Pincode = "123456", CreatedByUserID = Guid.NewGuid()  };
-            _context.Hospitals.Add(hospital);
+            _context.Users.Add(TestEntityFactory.CreateUser(userId));
+            _context.Doctors.Add(TestEntityFactory.CreateDoctor(doctorId, userId));
+            _context.Hospitals.Add(TestEntityFactory.CreateHospital(hospitalId, userId));
             await _context.SaveChangesAsync();
             
-             _doctorValidationHelperMock.Setup(x => x.ValidateDoctorAsync(hospitalId, doctor.DoctorID, It.IsAny<CancellationToken>()))
+            _mockDoctorValidationHelper.Setup(x => x.ValidateDoctorAsync(hospitalId, doctorId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(false);
+
+            var request = new DeletePersonalizedDataRequestModel
+            {
+                DoctorId = doctorId,
+                HospitalId = hospitalId,
+                PersonalId = Guid.NewGuid()
+            };
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("Doctor is not associated with the specified hospital."));
+        }
+
+        [Test]
+        public async Task Handle_PersonalizedDataNotFound_ReturnsError()
+        {
+             // Arrange
+            var doctorId = Guid.NewGuid();
+            var hospitalId = Guid.NewGuid();
+            var userId = Guid.NewGuid();
+            
+            _context.Users.Add(TestEntityFactory.CreateUser(userId));
+            _context.Doctors.Add(TestEntityFactory.CreateDoctor(doctorId, userId));
+            _context.Hospitals.Add(TestEntityFactory.CreateHospital(hospitalId, userId));
+            await _context.SaveChangesAsync();
+
+            _mockDoctorValidationHelper.Setup(x => x.ValidateDoctorAsync(hospitalId, doctorId, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(true);
 
-            var request = new DeletePersonalizedDataRequestModel 
-            { 
-                PersonalId = Guid.NewGuid(),
-                DoctorId = doctor.DoctorID,
-                HospitalId = hospitalId
+            var request = new DeletePersonalizedDataRequestModel
+            {
+                DoctorId = doctorId,
+                HospitalId = hospitalId,
+                PersonalId = Guid.NewGuid()
             };
 
             // Act
@@ -105,6 +139,42 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             // Assert
             Assert.That(response.Success, Is.False);
             Assert.That(response.Message, Is.EqualTo("Personalized data not found."));
+        }
+
+        [Test]
+        public async Task Handle_Success_DeletesPersonalizedData()
+        {
+            // Arrange
+            var doctorId = Guid.NewGuid();
+            var hospitalId = Guid.NewGuid();
+            var userId = Guid.NewGuid();
+            var personalId = Guid.NewGuid();
+
+            _context.Users.Add(TestEntityFactory.CreateUser(userId));
+            _context.Doctors.Add(TestEntityFactory.CreateDoctor(doctorId, userId));
+            _context.Hospitals.Add(TestEntityFactory.CreateHospital(hospitalId, userId));
+            _context.LookupPersonals.Add(TestEntityFactory.CreateLookupPersonal(personalId, hospitalId, doctorId));
+            await _context.SaveChangesAsync();
+
+            _mockDoctorValidationHelper.Setup(x => x.ValidateDoctorAsync(hospitalId, doctorId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(true);
+
+            var request = new DeletePersonalizedDataRequestModel
+            {
+                DoctorId = doctorId,
+                HospitalId = hospitalId,
+                PersonalId = personalId
+            };
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.Message, Is.EqualTo("Personalized data deleted successfully."));
+            
+            var deletedData = await _context.LookupPersonals.FindAsync(personalId);
+            Assert.That(deletedData, Is.Null);
         }
     }
 }
