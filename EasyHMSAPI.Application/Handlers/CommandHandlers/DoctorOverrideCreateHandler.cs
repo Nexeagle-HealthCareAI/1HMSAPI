@@ -41,34 +41,32 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             if (doctorExists is not null)
             {
                 DoctorOverrideCreateResponseModel responseModel = new();
-                var startDateTime = request.StartDate;
-                var endDateTime = request.EndDate;
+                var startDateTime = request.StartDate.Date;
+                var endDateTime = request.EndDate.Date;
                 int updated = 0, added = 0;
 
-                var overrideRecords = await _context.DoctorShiftOverrides
-                    .Where(x => x.DoctorID == request.DoctorId &&
-                        x.EndDate == endDateTime.Date && x.StartDate == startDateTime.Date &&
-                        x.HospitalId == request.HospitalId)
-                    .ToListAsync(cancellationToken);
-                
-                if(overrideRecords.Count > 0)
+                if (request.ShiftDetails != null)
                 {
-                    if (request.ShiftDetails != null)
+                    var currentDate = startDateTime;
+                    while (currentDate <= endDateTime)
                     {
                         foreach (var item in request.ShiftDetails)
                         {
-                            var existing = overrideRecords.FirstOrDefault(x => x.ShiftName?.Trim().ToLower() == item.ShiftName?.Trim().ToLower());
+                            var shiftNameLower = item.ShiftName?.Trim().ToLower();
+                            var existing = await _context.DoctorShiftOverrides
+                                .FirstOrDefaultAsync(x => x.DoctorID == request.DoctorId &&
+                                    x.StartDate == currentDate &&
+                                    x.EndDate == currentDate &&
+                                    x.ShiftName != null && x.ShiftName.Trim().ToLower() == shiftNameLower &&
+                                    x.HospitalId == request.HospitalId, cancellationToken);
+
                             if (existing != null)
                             {
                                 existing.StartTime = TimeSpan.Parse(item.StartTime ?? string.Empty);
                                 existing.EndTime = TimeSpan.Parse(item.EndTime ?? string.Empty);
                                 existing.SlotDurationInMinutes = item.SlotDurationInMinutes;
                                 existing.RecurringDays = item.RecurringDays != null ? string.Join(",", item.RecurringDays) : null;
-                                existing.StartDate = startDateTime;
-                                existing.EndDate = endDateTime;
                                 existing.OverrideDate = request.OverrideDate;
-                                // Update hospitalId
-                                existing.HospitalId = request.HospitalId;
                                 updated++;
                             }
                             else
@@ -83,8 +81,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                     EndTime = TimeSpan.Parse(item.EndTime ?? string.Empty),
                                     SlotDurationInMinutes = item.SlotDurationInMinutes,
                                     RecurringDays = item.RecurringDays != null ? string.Join(",", item.RecurringDays) : null,
-                                    StartDate = startDateTime,
-                                    EndDate = endDateTime,
+                                    StartDate = currentDate,
+                                    EndDate = currentDate,
                                     CreatedAt = DateTime.UtcNow,
                                     OverrideDate = request.OverrideDate
                                 };
@@ -92,41 +90,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 added++;
                             }
                         }
-                        await _context.SaveChangesAsync(cancellationToken);
+                        currentDate = currentDate.AddDays(1);
                     }
-                    responseModel.Success = true;
-                    responseModel.Message = $"Doctor Override(s) updated: {updated}, added: {added}";
-                }
-                else
-                {
-                    if (request.ShiftDetails != null)
-                    {
-                        foreach (var item in request.ShiftDetails)
-                        {
-                            var newOverride = new DoctorShiftOverride
-                            {
-                                OverrideID = Guid.NewGuid(),
-                                DoctorID = request.DoctorId,
-                                HospitalId = request.HospitalId,
-                                ShiftName = item.ShiftName,
-                                StartTime = TimeSpan.Parse(item.StartTime ?? string.Empty),
-                                EndTime = TimeSpan.Parse(item.EndTime ?? string.Empty),
-                                SlotDurationInMinutes = item.SlotDurationInMinutes,
-                                RecurringDays = item.RecurringDays != null ? string.Join(",", item.RecurringDays) : null,
-                                StartDate = request.StartDate,
-                                EndDate = request.EndDate,
-                                CreatedAt = DateTime.UtcNow,
-                                OverrideDate = request.OverrideDate
-                            };
-                            _context.DoctorShiftOverrides.Add(newOverride);
-                            added++;
-                        }
-                        await _context.SaveChangesAsync(cancellationToken);
-                    }
-                    responseModel.Success = true;
-                    responseModel.Message = $"Doctor Override(s) added: {added}";
+                    await _context.SaveChangesAsync(cancellationToken);
                 }
 
+                responseModel.Success = true;
+                responseModel.Message = $"Doctor Override(s) updated: {updated}, added: {added}";
                 return responseModel;
             }
             else 

@@ -23,7 +23,6 @@
     <ProjectReference Include="..\EasyHMSAPI.Domain\EasyHMSAPI.Domain.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="HandlerTests\CommandHandlerTests\" />
     <Folder Include="HandlerTests\QueryHandlerTests\" />
   </ItemGroup>
 </Project>
