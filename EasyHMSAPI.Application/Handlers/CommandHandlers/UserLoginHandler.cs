@@ -17,12 +17,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         private readonly AppDbContext _context;
         private readonly IJwtAuthService _jwtAuthService;
         private readonly IConfiguration _configuration;
+        private readonly IMaskingService _maskingService;
 
-        public UserLoginHandler(AppDbContext context, IJwtAuthService jwtAuthService, IConfiguration configuration)
+        public UserLoginHandler(AppDbContext context, IJwtAuthService jwtAuthService, IConfiguration configuration, IMaskingService maskingService)
         {
             _context = context;
             _jwtAuthService = jwtAuthService;
             _configuration = configuration;
+            _maskingService = maskingService;
         }
 
         public async Task<UserLoginResponseModel> Handle(UserLoginRequestModel request, CancellationToken cancellationToken)
@@ -62,7 +64,22 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                     var hashedBytes = SHA256.HashData(Encoding.UTF8.GetBytes(request.Password));
                                     hashedInputPassword = BitConverter.ToString(hashedBytes).Replace("-", "").ToLower();
                                 }
-                                if (userAuth.HashedPassword == hashedInputPassword)
+                                
+                                // Compare passwords with masking consideration
+                                bool passwordMatch = false;
+                                if (_maskingService.IsMaskingEnabled())
+                                {
+                                    // Mask the hashed password and compare with stored masked password
+                                    var maskedInputPassword = _maskingService.Mask(hashedInputPassword);
+                                    passwordMatch = userAuth.HashedPassword == maskedInputPassword;
+                                }
+                                else
+                                {
+                                    // Direct comparison when masking is disabled
+                                    passwordMatch = userAuth.HashedPassword == hashedInputPassword;
+                                }
+                                
+                                if (passwordMatch)
                                 {
                                     claims.Add(new Claim(ClaimTypes.Email, user.Email ?? ""));
                                     claims.Add(new Claim(ClaimTypes.MobilePhone, user.MobileNumber ?? ""));
@@ -79,6 +96,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                                     userAuth.LastLoginTime = DateTime.UtcNow;
                                     userAuth.LoginMethod = "Password";
+                                    if (userAuth.FailedLoginAttempts > 0)
+                                    {
+                                        userAuth.FailedLoginAttempts = 0;
+                                    }
                                     await _context.SaveChangesAsync(cancellationToken);
 
                                     return new UserLoginResponseModel
@@ -141,22 +162,23 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                         AccessToken = accessToken
                                     };
                                 }
-                                // Verify OTP using HMAC-SHA256 with pepper
-                                var pepper = _configuration["Security:OtpPepper"] ?? string.Empty;
-                                var key = Encoding.UTF8.GetBytes(pepper);
-                                var data = Encoding.UTF8.GetBytes(request.Otp ?? string.Empty);
-                                var incomingHash = HMACSHA256.HashData(key, data);
+                                // Verify OTP using MaskingService if enabled, otherwise direct comparison
                                 bool isMatch = false;
 
                                 if (!string.IsNullOrEmpty(userAuth.Otp))
                                 {
                                     try
                                     {
-                                        //var storedHash = Convert.FromBase64String(userAuth.Otp);
-                                        //isMatch = CryptographicOperations.FixedTimeEquals(incomingHash, storedHash);
-                                        if (userAuth.Otp == request.Otp)
+                                        if (_maskingService.IsMaskingEnabled())
                                         {
-                                            isMatch = true;
+                                            // Mask the incoming OTP and compare with stored masked OTP
+                                            var incomingMaskedOtp = _maskingService.Mask(request.Otp ?? string.Empty);
+                                            isMatch = userAuth.Otp == incomingMaskedOtp;
+                                        }
+                                        else
+                                        {
+                                            // Direct comparison when masking is disabled
+                                            isMatch = userAuth.Otp == request.Otp;
                                         }
                                     }
                                     catch
@@ -196,6 +218,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                     // Clear OTP after successful verification
                                     userAuth.IsOtpUsed = true;
                                     userAuth.Otp = null;
+                                    if(userAuth.FailedLoginAttempts > 0)
+                                    {
+                                        userAuth.FailedLoginAttempts = 0;
+                                    }
                                     await _context.SaveChangesAsync(cancellationToken);
 
                                     return new UserLoginResponseModel

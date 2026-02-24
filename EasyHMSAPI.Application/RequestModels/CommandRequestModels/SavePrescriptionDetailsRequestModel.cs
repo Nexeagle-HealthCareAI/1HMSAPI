@@ -24,6 +24,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public List<MedicationModel>? Medications { get; set; }
         public List<NonPharmacologicalAdviceModel>? NonPharmacologicalAdvice { get; set; }
         public string? PrivateNotes { get; set; }
+        public bool? IsPrintablePrivateNotes { get; set; }
         public CertificateDataModel? Certificates { get; set; }
         public FollowUpModel? FollowUp { get; set; }
         public List<ImmunizationModel>? Immunizations { get; set; }
@@ -53,6 +54,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? Duration { get; set; }
         public string? Instructions { get; set; }
         public string? SaltName { get; set; }
+        public int? DisplayOrder { get; set; }
     }
 
     [ExcludeFromCodeCoverage]
@@ -88,13 +90,14 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public ReferralModel? Referral { get; set; }
     }
 
+    [ExcludeFromCodeCoverage]
     public class FollowupReasonModel
     {
         public string? Reason { get; set; }
         public string? PatientInstructions { get; set; }
     }
 
-[ExcludeFromCodeCoverage]
+    [ExcludeFromCodeCoverage]
     public class ReferralModel
     {
         public ReferredToModel? ReferredTo { get; set; }

@@ -1,3 +1,7 @@
+using System;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Domain.Context;
@@ -22,7 +26,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             {
                 foreach (var item in request.ShiftDetails)
                 {
-                    if (string.IsNullOrWhiteSpace(item.ShiftName) || !AppConstants.AllowedShiftNames.Contains(item.ShiftName.Trim().ToLower()))
+                    if (string.IsNullOrWhiteSpace(item.ShiftName) ||
+                        !AppConstants.AllowedShiftNames.Any(s => string.Equals(s, item.ShiftName?.Trim(), StringComparison.OrdinalIgnoreCase)))
                     {
                         return new DoctorOverrideCreateResponseModel
                         {

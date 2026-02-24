@@ -1,7 +1,13 @@
-using EasyHMSAPI.Application.Handlers.QueryHandlers;
-using EasyHMSAPI.Domain.Context;
-using NUnit.Framework;
 using System;
+using System.Threading;
+using System.Threading.Tasks;
+using EasyHMSAPI.Application.Handlers.QueryHandlers;
+using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
+using EasyHMSAPI.Data.Enums;
+using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Domain.Entities;
+using EasyHMSAPI.UnitTests.TestUtils;
+using NUnit.Framework;
 
 namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
 {
@@ -9,50 +15,57 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
     public class UserSearchHandlerTests
     {
         private AppDbContext _context = null!;
+        private UserSearchHandler _handler = null!;
 
         [SetUp]
         public void SetUp()
         {
             _context = InMemoryDbContextFactory.CreateContext();
+            _handler = new UserSearchHandler(_context);
         }
 
         [TearDown]
         public void TearDown()
         {
-            _context?.Dispose();
+            
             InMemoryDbContextFactory.Destroy(_context);
+            _context?.Dispose();
         }
 
-        [Test, Ignore("TODO: Implement test logic")]
-        public void Constructor_Smoke()
+        [Test]
+        public async Task Handle_ReturnsUserDetails()
         {
-            var handler = new UserSearchHandler(_context);
-            Assert.That(handler, Is.Not.Null);
+            // Arrange
+            var user = TestDataFactory.SeedUser(_context);
+            user.UserStatusId = (int)UserStatusEnum.Active;
+            var auth = new UserAuth { UserAuthID = Guid.NewGuid(), UserID = user.UserID, LoginMethod = "1" };
+            _context.UserAuths.Add(auth);
+            var profile = new UserProfile { UserProfileID = Guid.NewGuid(), UserID = user.UserID, FullName = "User Test" };
+            _context.UserProfiles.Add(profile);
+            await _context.SaveChangesAsync();
+
+            var request = new UserSearchRequestModel { UserId = user.UserID };
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response, Is.Not.Null);
+            Assert.That(response!.UserId, Is.EqualTo(user.UserID));
+            Assert.That(response.UserProfile!.FullName, Is.EqualTo("User Test"));
         }
 
-        //[Test]
-        //public void Handle_ShouldReturnResults_WhenValidSearchQuery()
-        //{
-        //    // Arrange
-        //    var query = "valid query";
-        //    var handler = new UserSearchHandler(_context);
+         [Test]
+        public async Task Handle_NotFound_ReturnsNull()
+        {
+            // Arrange
+            var request = new UserSearchRequestModel { UserId = Guid.NewGuid() };
 
-        //    // Act
-        //    var results = handler.Handle(new UserSearchHandler { Query = query });
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
 
-        //    // Assert
-        //    Assert.That(results, Is.Not.Empty, "Search should return results.");
-        //}
-
-        //[Test]
-        //public void Handle_ShouldThrowException_WhenInvalidSearchQuery()
-        //{
-        //    // Arrange
-        //    var handler = new UserSearchHandler(_context);
-
-        //    // Act & Assert
-        //    Assert.Throws<Exception>(() => handler.Handle(new UserSearchHandler()),
-        //        "Expected exception when search query is invalid.");
-        //}
+            // Assert
+            Assert.That(response, Is.Null);
+        }
     }
 }

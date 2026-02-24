@@ -23,16 +23,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? Pincode { get; set; }
         public DateTime? LastRegistrationAt { get; set; }
         public Guid LastRegistrationId { get; set; }
-        public MatchInfo? Matched { get; set; }
         public DateTime? AppointmentDate { get; set; }
         public Guid? AppointmentId { get; set; }
         public string? TokenNumber { get; set; }
-    }
-
-    [ExcludeFromCodeCoverage]
-    public class MatchInfo
-    {
-        public string? By { get; set; }
-        public string? Value { get; set; }
     }
 }

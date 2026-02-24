@@ -5,9 +5,11 @@ using Azure.Storage.Blobs.Models;
 using Azure.Storage.Sas;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Application.Services.Implementations
 {
+    [ExcludeFromCodeCoverage]
     public class BlobStorageService : IBlobStorageService
     {
         private readonly string _connectionString;

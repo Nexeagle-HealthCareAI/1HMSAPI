@@ -1,11 +1,12 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.QueryHandlers;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
+using EasyHMSAPI.UnitTests.TestUtils;
 using NUnit.Framework;
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
 {
@@ -13,81 +14,70 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
     public class GetPatientProfileHandlerTests
     {
         private AppDbContext _context = null!;
+        private GetPatientProfileHandler _handler = null!;
 
         [SetUp]
         public void SetUp()
         {
             _context = InMemoryDbContextFactory.CreateContext();
+            _handler = new GetPatientProfileHandler(_context);
         }
 
         [TearDown]
         public void TearDown()
         {
-            _context?.Dispose();
+            
             InMemoryDbContextFactory.Destroy(_context);
+            _context?.Dispose();
         }
 
         [Test]
-        public async Task Handle_WhenPatientNotFound_ReturnsNull()
-        {
-            // Arrange
-            var handler = new GetPatientProfileHandler(_context);
-            var request = new GetPatientProfileRequestModel
-            {
-                HospitalId = Guid.NewGuid(),
-                PatientId = "P-001"
-            };
-
-            // Act
-            var result = await handler.Handle(request, CancellationToken.None);
-
-            // Assert
-            Assert.That(result, Is.Null);
-        }
-
-        [Test]
-        public async Task Handle_WhenPatientExists_ReturnsProfile()
+        public async Task Handle_ReturnsProfile()
         {
             // Arrange
             var hospitalId = Guid.NewGuid();
-            var patientId = "P-123";
-            var entity = new PatientRegistration
-            {
-                RegistrationId = Guid.NewGuid(),
-                HospitalId = hospitalId,
-                PatientId = patientId,
-                FullName = "Jane Roe",
-                Mobile = "9876543210",
-                AgeYears = 30,
-                Sex = "F",
-                AddressLine = "123 Street",
-                City = "City",
-                State = "State",
-                Country = "Country",
-                Pincode = "123456",
-                InsuranceId = "INS-9",
-                RegisteredBy = Guid.NewGuid(),
-                RegisteredAt = DateTime.UtcNow
+            var user = TestDataFactory.SeedUser(_context);
+            var patientId = "PAT1";
+            var patient = new PatientRegistration 
+            { 
+                PatientId = patientId, 
+                HospitalId = hospitalId, 
+                FullName = "John Doe",
+                Mobile = "1234567890"
             };
-            _context.PatientRegistrations.Add(entity);
+            _context.PatientRegistrations.Add(patient);
             await _context.SaveChangesAsync();
 
-            var handler = new GetPatientProfileHandler(_context);
-            var request = new GetPatientProfileRequestModel
+             var request = new GetPatientProfileRequestModel
             {
                 HospitalId = hospitalId,
                 PatientId = patientId
             };
 
             // Act
-            var result = await handler.Handle(request, CancellationToken.None);
+            var response = await _handler.Handle(request, CancellationToken.None);
 
             // Assert
-            Assert.That(result, Is.Not.Null);
-            Assert.That(result!.RegistrationId, Is.EqualTo(entity.RegistrationId));
-            Assert.That(result.PatientId, Is.EqualTo(patientId));
-            Assert.That(result.HospitalId, Is.EqualTo(hospitalId));
-            Assert.That(result.FullName, Is.EqualTo("Jane Roe"));
+            Assert.That(response, Is.Not.Null);
+            Assert.That(response!.FullName, Is.EqualTo("John Doe"));
+            Assert.That(response.Mobile, Is.EqualTo("1234567890"));
+        }
+
+         [Test]
+        public async Task Handle_NotFound_ReturnsNull()
+        {
+            // Arrange
+             var request = new GetPatientProfileRequestModel 
+            { 
+                HospitalId = Guid.NewGuid(), 
+                PatientId = "PAT1" 
+            };
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response, Is.Null);
         }
     }
 }

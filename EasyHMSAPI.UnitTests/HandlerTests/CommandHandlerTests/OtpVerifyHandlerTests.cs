@@ -1,60 +1,95 @@
 using EasyHMSAPI.Application.Handlers.CommandHandlers;
+using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
+using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Domain.Entities;
+using EasyHMSAPI.UnitTests.TestUtils;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Moq;
 using NUnit.Framework;
 using System;
+using System.Collections.Generic;
+using System.Security.Claims;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 {
     [TestFixture]
     public class OtpVerifyHandlerTests
     {
-        //private AppDbContext _context = null!;
-        //private Mock<IOtpService> _otpServiceMock = null!;
+        private AppDbContext _context = null!;
+        private Mock<IJwtAuthService> _jwtAuthServiceMock = null!;
+        private Mock<IConfiguration> _configurationMock = null!;
+        private Mock<IMaskingService> _maskingServiceMock = null!;
+        private OtpVerifyHandler _handler = null!;
 
-        //[SetUp]
-        //public void SetUp()
-        //{
-        //    _context = InMemoryDbContextFactory.CreateContext();
-        //    _otpServiceMock = new Mock<IOtpService>();
-        //}
+        [SetUp]
+        public void SetUp()
+        {
+            _context = InMemoryDbContextFactory.CreateContext();
+            _jwtAuthServiceMock = new Mock<IJwtAuthService>();
+            _configurationMock = new Mock<IConfiguration>();
+            _maskingServiceMock = new Mock<IMaskingService>();
 
-        //[TearDown]
-        //public void TearDown()
-        //{
-        //    InMemoryDbContextFactory.Destroy(_context);
-        //}
+            _configurationMock.SetupGet(x => x["Security:OtpPepper"]).Returns("test-pepper");
+            _maskingServiceMock.Setup(m => m.IsMaskingEnabled()).Returns(false);
+            _maskingServiceMock.Setup(m => m.Mask(It.IsAny<string>())).Returns((string s) => s);
 
-        //[Test, Ignore("TODO: Implement test logic")]
-        //public void Constructor_Smoke()
-        //{
-        //    var handler = new OtpVerifyHandler(_context, _otpServiceMock.Object);
-        //    Assert.That(handler, Is.Not.Null);
-        //}
+            _handler = new OtpVerifyHandler(_context, _jwtAuthServiceMock.Object, _configurationMock.Object, _maskingServiceMock.Object);
+        }
 
-        //[Test]
-        //public void Handle_ShouldVerifyOtp_WhenValidInput()
-        //{
-        //    // Arrange
-        //    var otpId = Guid.NewGuid();
-        //    var handler = new OtpVerifyHandler(_context, _otpServiceMock.Object);
+        [TearDown]
+        public void TearDown()
+        {
+            
+            InMemoryDbContextFactory.Destroy(_context);
+            _context?.Dispose();
+        }
 
-        //    // Act
-        //    var result = handler.Handle(new OtpVerifyCommand { OtpId = otpId });
+        [Test]
+        public async Task Handle_ValidOtp_VerifiesSuccessfully()
+        {
+            // Arrange
+            var user = TestDataFactory.SeedUser(_context, phone: "1234567890");
+            var otp = "123456";
+            TestDataFactory.GetOrCreateUserAuth(_context, user, otp: otp, otpExpireAt: DateTime.Now.AddMinutes(10));
+            
+            var userProfile = new UserProfile { UserID = user.UserID, FullName = "Test User" };
+            _context.UserProfiles.Add(userProfile);
+            await _context.SaveChangesAsync();
 
-        //    // Assert
-        //    Assert.That(result, Is.True, "OTP should be verified successfully.");
-        //}
+            _jwtAuthServiceMock.Setup(x => x.GenerateJwtToken(It.IsAny<List<Claim>>())).Returns("fake-jwt-token");
 
-        //[Test]
-        //public void Handle_ShouldThrowException_WhenInvalidInput()
-        //{
-        //    // Arrange
-        //    var handler = new OtpVerifyHandler(_context, _otpServiceMock.Object);
+            var request = new OtpVerifyRequestModel { MobileNumber = "1234567890", Otp = otp };
 
-        //    // Act & Assert
-        //    Assert.Throws<Exception>(() => handler.Handle(new OtpVerifyCommand()),
-        //        "Expected exception when input is invalid.");
-        //}
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.AccessToken, Is.EqualTo("fake-jwt-token"));
+            
+            var updatedAuth = await _context.UserAuths.FirstOrDefaultAsync(ua => ua.UserID == user.UserID);
+            Assert.That(updatedAuth!.IsOtpUsed, Is.True);
+        }
+
+        [Test]
+        public async Task Handle_InvalidOtp_ReturnsFailure()
+        {
+            // Arrange
+            var user = TestDataFactory.SeedUser(_context, phone: "1234567890");
+            TestDataFactory.GetOrCreateUserAuth(_context, user, otp: "123456", otpExpireAt: DateTime.Now.AddMinutes(10));
+            
+            var request = new OtpVerifyRequestModel { MobileNumber = "1234567890", Otp = "999999" };
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Does.Contain("Invalid or already used OTP"));
+        }
     }
 }

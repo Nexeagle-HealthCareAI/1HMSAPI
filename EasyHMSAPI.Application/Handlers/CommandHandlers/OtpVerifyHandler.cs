@@ -8,8 +8,6 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using System.Security.Claims;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
@@ -18,12 +16,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         private readonly AppDbContext _context;
         private readonly IJwtAuthService _jwtAuthService;
         private readonly IConfiguration _configuration;
+        private readonly IMaskingService _maskingService;
 
-        public OtpVerifyHandler(AppDbContext context, IJwtAuthService jwtAuthService, IConfiguration configuration)
+        public OtpVerifyHandler(AppDbContext context, IJwtAuthService jwtAuthService, IConfiguration configuration, IMaskingService maskingService)
         {
             _context = context;
             _jwtAuthService = jwtAuthService;
             _configuration = configuration;
+            _maskingService = maskingService;
         }
 
         public async Task<OtpVerifyResponseModel> Handle(OtpVerifyRequestModel request, CancellationToken cancellationToken)
@@ -46,24 +46,24 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     if (userAuth != null)
                     {
                         var userProfile = await _context.UserProfiles.FirstOrDefaultAsync(up => up.UserID == user.UserID, cancellationToken);
-                        // Compute hash of incoming OTP with the same pepper and compare against stored Base64 hash
-                        var pepper = _configuration["Security:OtpPepper"] ?? string.Empty;
-                        var key = Encoding.UTF8.GetBytes(pepper);
-                        var data = Encoding.UTF8.GetBytes(request.Otp);
-                        var incomingHash = HMACSHA256.HashData(key, data);
-
+                        
+                        // Check if masking is enabled and compare accordingly
                         bool isMatch = false;
                         if (!string.IsNullOrEmpty(userAuth.Otp))
                         {
                             try
                             {
-                                //var storedHash = Convert.FromBase64String(userAuth.Otp);
-                                //isMatch = CryptographicOperations.FixedTimeEquals(incomingHash, storedHash);
-                                if(userAuth.Otp == request.Otp)
+                                if (_maskingService.IsMaskingEnabled())
                                 {
-                                    isMatch = true;
+                                    // Mask the incoming OTP and compare with stored masked OTP
+                                    var incomingMaskedOtp = _maskingService.Mask(request.Otp);
+                                    isMatch = userAuth.Otp == incomingMaskedOtp;
                                 }
-                                
+                                else
+                                {
+                                    // Direct comparison when masking is disabled
+                                    isMatch = userAuth.Otp == request.Otp;
+                                }
                             }
                             catch
                             {

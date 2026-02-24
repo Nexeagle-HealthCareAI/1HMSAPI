@@ -7,7 +7,6 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using System.Security.Cryptography;
-using System.Text;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
@@ -18,14 +17,16 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         private readonly IEmailService _emailService;
         private readonly IWhatsAppMessagingService _whatsAppMessagingService;
         private readonly IConfiguration _configuration;
+        private readonly IMaskingService _maskingService;
 
-        public OtpSendHandler(AppDbContext context, ISmsService smsService, IEmailService emailService, IWhatsAppMessagingService whatsAppMessagingService, IConfiguration configuration)
+        public OtpSendHandler(AppDbContext context, ISmsService smsService, IEmailService emailService, IWhatsAppMessagingService whatsAppMessagingService, IConfiguration configuration, IMaskingService maskingService)
         {
             _context = context;
             _smsService = smsService;
             _emailService = emailService;
             _whatsAppMessagingService = whatsAppMessagingService;
             _configuration = configuration;
+            _maskingService = maskingService;
         }
 
         public async Task<OtpSendResponseModel> Handle(OtpSendRequestModel request, CancellationToken cancellationToken)
@@ -59,12 +60,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             var otpInt = RandomNumberGenerator.GetInt32(100000, 1000000);
             var newGeneratedOtp = otpInt.ToString();
 
-            // Hash the OTP with a server-side pepper; store only the hash (Base64)
-            var pepper = _configuration["Security:OtpPepper"] ?? string.Empty;
-            var key = Encoding.UTF8.GetBytes(pepper);
-            var data = Encoding.UTF8.GetBytes(newGeneratedOtp);
-            var otpHash = HMACSHA256.HashData(key, data);
-            var otpHashB64 = Convert.ToBase64String(otpHash);
+            // Mask the OTP if masking is enabled, otherwise store plaintext
+            var otpToStore = _maskingService.Mask(newGeneratedOtp);
 
             //bool smsSent = await _smsService.SendOtpSmsAsync(user.MobileNumber, newGeneratedOtp);
             bool smsSent = false;
@@ -111,7 +108,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
             }
 
-            userAuth.Otp = newGeneratedOtp;
+            userAuth.Otp = otpToStore;
             userAuth.OtpSentDateTime = DateTime.UtcNow;
             userAuth.OtpExpireAt = DateTime.UtcNow.AddMinutes(3);
             userAuth.IsOtpUsed = false;

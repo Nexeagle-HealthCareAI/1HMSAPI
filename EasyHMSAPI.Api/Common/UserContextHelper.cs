@@ -1,9 +1,11 @@
 using EasyHMSAPI.Domain.Context;
 using Microsoft.EntityFrameworkCore;
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Claims;
 
 namespace EasyHMSAPI.Api.Common
 {
+    [ExcludeFromCodeCoverage]
     public static class UserContextHelper
     {
         public static Guid? GetUserId(ClaimsPrincipal? user)

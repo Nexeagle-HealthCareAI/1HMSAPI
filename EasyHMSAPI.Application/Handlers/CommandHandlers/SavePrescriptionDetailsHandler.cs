@@ -240,13 +240,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                         CreatedAt = request.CurrentDateTime,
                                         UpdatedAt = request.CurrentDateTime,
                                         UpdateBy = request.LoggedInUserName,
+                                        DisplayOrder = med.DisplayOrder
                                     };
                                     _context.PrescriptionMedicine.Add(prescriptionMedicine);
                                 }
                             }
                             if(request.NonPharmacologicalAdvice is not null) existingPrescription.NonPharmacologicalAdvice = JsonSerializer.Serialize(request.NonPharmacologicalAdvice);
                             if (!string.IsNullOrEmpty(request.PrivateNotes)) existingPrescription.PrivateNotes = request.PrivateNotes;
-                            if(request.Certificates is not null) existingPrescription.CertificatesAndNotes = JsonSerializer.Serialize(request.Certificates);
+                            if (request.IsPrintablePrivateNotes.HasValue) existingPrescription.PrivateNotes = request.PrivateNotes + " IsPrintablePrivateNotes: " + request.IsPrintablePrivateNotes.Value.ToString();
+                            if (request.Certificates is not null) existingPrescription.CertificatesAndNotes = JsonSerializer.Serialize(request.Certificates);
                             if(request.Immunizations is not null) existingPrescription.Immunizations = JsonSerializer.Serialize(request.Immunizations);
                             if(request.FollowUp is not null)
                             {
@@ -397,6 +399,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                     Instructions = med.Instructions,
                                     SaltName = med.SaltName,
                                     Route = med.Route,
+                                    DisplayOrder = med.DisplayOrder
                                 };
                                 _context.PrescriptionMedicine.Add(prescriptionMedicine);
                             }
@@ -424,7 +427,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             Comorbidity = request.Comorbidity,
                             Examination = request.Examination,
                             Diagnosis = request.Diagnosis,
-                            PrivateNotes = request.PrivateNotes,
+                            PrivateNotes = request.IsPrintablePrivateNotes.HasValue 
+                                ? request.PrivateNotes + " IsPrintablePrivateNotes: " + request.IsPrintablePrivateNotes.Value.ToString() 
+                                : request.PrivateNotes,
                             CreatedAt = request.CurrentDateTime,
                             UpdatedAt = request.CurrentDateTime,
                             UpdateBy = request.LoggedInUserName,

@@ -1,7 +1,12 @@
-using EasyHMSAPI.Application.Handlers.CommandHandlers;
-using EasyHMSAPI.Domain.Context;
-using NUnit.Framework;
 using System;
+using System.Threading;
+using System.Threading.Tasks;
+using EasyHMSAPI.Application.Handlers.CommandHandlers;
+using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
+using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Domain.Entities;
+using EasyHMSAPI.UnitTests.TestUtils;
+using NUnit.Framework;
 
 namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 {
@@ -9,50 +14,57 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
     public class ToggleDepartmentStatusHandlerTests
     {
         private AppDbContext _context = null!;
+        private ToggleDepartmentStatusHandler _handler = null!;
 
         [SetUp]
         public void SetUp()
         {
             _context = InMemoryDbContextFactory.CreateContext();
+            _handler = new ToggleDepartmentStatusHandler(_context);
         }
 
         [TearDown]
         public void TearDown()
         {
-            _context?.Dispose();
+            
             InMemoryDbContextFactory.Destroy(_context);
+            _context?.Dispose();
         }
 
-        [Test, Ignore("TODO: Implement test logic")]
-        public void Constructor_Smoke()
+        [Test]
+        public async Task Handle_ValidRequest_TogglesStatus()
         {
-            var handler = new ToggleDepartmentStatusHandler(_context);
-            Assert.That(handler, Is.Not.Null);
+            // Arrange
+            var deptId = Guid.NewGuid();
+            var department = new Department { DepartmentID = deptId, Name = "Dept", IsActive = true };
+            _context.Departments.Add(department);
+            await _context.SaveChangesAsync();
+
+            var request = new ToggleDepartmentStatusRequestModel { DepartmentId = deptId };
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.IsActive, Is.False);
+            
+            // Toggle back
+            var response2 = await _handler.Handle(request, CancellationToken.None);
+            Assert.That(response2.IsActive, Is.True);
         }
 
-        //[Test]
-        //public void Handle_ShouldToggleDepartmentStatus_WhenValidInput()
-        //{
-        //    // Arrange
-        //    var departmentId = Guid.NewGuid();
-        //    var handler = new ToggleDepartmentStatusHandler(_context);
+        [Test]
+        public async Task Handle_DepartmentNotFound_ReturnsFailure()
+        {
+            // Arrange
+            var request = new ToggleDepartmentStatusRequestModel { DepartmentId = Guid.NewGuid() };
 
-        //    // Act
-        //    var result = handler.Handle(new ToggleDepartmentStatusCommand { DepartmentId = departmentId });
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
 
-        //    // Assert
-        //    Assert.That(result, Is.True, "Department status should be toggled successfully.");
-        //}
-
-        //[Test]
-        //public void Handle_ShouldThrowException_WhenInvalidInput()
-        //{
-        //    // Arrange
-        //    var handler = new ToggleDepartmentStatusHandler(_context);
-
-        //    // Act & Assert
-        //    Assert.Throws<Exception>(() => handler.Handle(new ToggleDepartmentStatusCommand()),
-        //        "Expected exception when input is invalid.");
-        //}
+            // Assert
+            Assert.That(response.Message, Is.EqualTo("Department not found."));
+            Assert.That(response.IsActive, Is.False);
+        }
     }
 }

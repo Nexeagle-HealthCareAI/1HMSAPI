@@ -1,63 +1,81 @@
 using System;
-using Moq;
-using NUnit.Framework;
-using EasyHMSAPI.Domain.Context;
+using System.Threading;
+using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.CommandHandlers;
-using EasyHMSAPI.Application.Services.Interfaces;
+using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
+using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Domain.Entities;
+using EasyHMSAPI.UnitTests.TestUtils;
+using Microsoft.EntityFrameworkCore;
+using NUnit.Framework;
 
 namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 {
     [TestFixture]
     public class DoctorOverrideDeleteHandlerTests
     {
-        //private AppDbContext _context = null!;
-        //private Mock<IExceptionService> _exceptionServiceMock = null!;
+        private AppDbContext _context = null!;
+        private DoctorOverrideDeleteHandler _handler = null!;
 
-        //[SetUp]
-        //public void SetUp()
-        //{
-        //    _context = InMemoryDbContextFactory.CreateContext();
-        //    _exceptionServiceMock = new Mock<IExceptionService>();
-        //}
+        [SetUp]
+        public void SetUp()
+        {
+            _context = InMemoryDbContextFactory.CreateContext();
+            _handler = new DoctorOverrideDeleteHandler(_context);
+        }
 
-        //[TearDown]
-        //public void TearDown()
-        //{
-        //    _context?.Dispose();
-        //    InMemoryDbContextFactory.Destroy(_context);
-        //}
+        [TearDown]
+        public void TearDown()
+        {
+            _context.Database.EnsureDeleted();
+            _context.Dispose();
+        }
 
-        //[Test, Ignore("TODO: Implement test logic")]
-        //public void Constructor_Smoke()
-        //{
-        //    var handler = new DoctorOverrideDeleteHandler(_context, _exceptionServiceMock.Object);
-        //    Assert.That(handler, Is.Not.Null);
-        //}
+        [Test]
+        public async Task Handle_OverrideNotFound_ReturnsError()
+        {
+            // Arrange
+            var request = new DoctorOverrideDeleteRequestModel
+            {
+                OverrideId = Guid.NewGuid()
+            };
 
-        //[Test]
-        //public void Handle_ShouldDeleteDoctorOverride_WhenOverrideExists()
-        //{
-        //    // Arrange
-        //    var overrideId = Guid.NewGuid();
-        //    var handler = new DoctorOverrideDeleteHandler(_context, _exceptionServiceMock.Object);
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
 
-        //    // Act
-        //    var result = handler.Handle(new DoctorOverrideDeleteCommand { OverrideId = overrideId });
+            // Assert
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("Override not found"));
+        }
 
-        //    // Assert
-        //    Assert.That(result, Is.True, "Doctor override should be deleted successfully.");
-        //}
+        [Test]
+        public async Task Handle_Success_DeletesOverride()
+        {
+            // Arrange
+            var overrideId = Guid.NewGuid();
+            var doctorId = Guid.NewGuid();
+            var hospitalId = Guid.NewGuid();
+            var userId = Guid.NewGuid();
 
-        //[Test]
-        //public void Handle_ShouldThrowException_WhenOverrideDoesNotExist()
-        //{
-        //    // Arrange
-        //    var overrideId = Guid.NewGuid();
-        //    var handler = new DoctorOverrideDeleteHandler(_context, _exceptionServiceMock.Object);
+            _context.Users.Add(TestEntityFactory.CreateUser(userId));
+            _context.Doctors.Add(TestEntityFactory.CreateDoctor(doctorId, userId));
+            _context.DoctorShiftOverrides.Add(TestEntityFactory.CreateDoctorShiftOverride(overrideId, doctorId, hospitalId));
+            await _context.SaveChangesAsync();
 
-        //    // Act & Assert
-        //    Assert.Throws<Exception>(() => handler.Handle(new DoctorOverrideDeleteCommand { OverrideId = overrideId }),
-        //        "Expected exception when doctor override does not exist.");
-        //}
+            var request = new DoctorOverrideDeleteRequestModel
+            {
+                OverrideId = overrideId
+            };
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.Message, Is.EqualTo("Override deleted"));
+
+            var deletedOverride = await _context.DoctorShiftOverrides.FindAsync(overrideId);
+            Assert.That(deletedOverride, Is.Null);
+        }
     }
 }

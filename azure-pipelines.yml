@@ -1,13 +1,19 @@
 # ============================================
-#   Build & Deploy EasyHMS API (.NET 8)
-#   Dev deploy: release-* AND feature/*
-#   QA deploy: release-* only (recommended)
+#   Build, Unit Test & Deploy
+#   EasyHMS API (.NET 8) -> Azure App Service (WINDOWS)
+#
+#   Dev deploy : release-* AND feature/*
+#   Prod deploy: release-* only + deployProd=true + env approval
+#   PR builds  : Build + Tests only (no deploy)
+#
+#   NOTE: Your Kudu trace shows Windows paths (C:\home\...),
+#         so appType is set to webApp (Windows).
 # ============================================
 
 parameters:
 - name: deployProd
   type: boolean
-  default: false     # set true at run time to enable PROD stage
+  default: false
 
 trigger:
   branches:
@@ -24,54 +30,86 @@ pr:
 pool:
   vmImage: 'ubuntu-latest'
 
-# ==== EDIT THESE VALUES ====
 variables:
+  # Projects
   apiProject: 'EasyHMSAPI.Api/EasyHMSAPI.Api.csproj'
+  testProjects: '**/*UnitTests/*.csproj'
+
+  # Artifacts
   publishDir: '$(Build.ArtifactStagingDirectory)/publish'
   artifactName: 'api-drop'
 
-  # Dev App Service
+  # Unit test results
+  testResultsDir: '$(Build.SourcesDirectory)/TestResults'
+
+  # Dev
   devAppName: 'easyHMSAPIServices'
-  devResourceGroup: 'website-dev-rg'
+  devServiceConnection: 'svc-conn-nexeagle-dev'
 
-  # QA App Service
-  qaAppName: 'easyHMSAPISevices'
-  qaResourceGroup: 'website-qa-rg'
+  # Prod (fix spelling to your real app service name!)
+  prodAppName: 'easyHMSAPISevicesProd'
+  prodServiceConnection: 'svc-conn-nexeagle-prod'
 
-  # ======== PROD (add your values) ========
-  prodAppName: 'easyHMSAPISevicesProd'           # <— CHANGE to your PROD app name
-  prodResourceGroup: 'website-prod-rg'            # <— CHANGE to your PROD RG
-  prodServiceConnection: 'svc-conn-nexeagle-prod' # <— CHANGE to your PROD service connection
-
-# ================================================================
-#  STAGE 1 — Build Artifacts (Runs for both release-* & feature/*)
-# ================================================================
 stages:
-- stage: Build
-  displayName: Build & Package API
+
+# ================================================================
+#  STAGE 1 — Build + Unit Tests
+# ================================================================
+- stage: Build_Test
+  displayName: Build + Unit Tests
   jobs:
-  - job: BuildJob
+  - job: BuildTestJob
+    displayName: Build/Test
     steps:
+    - checkout: self
+
     - task: UseDotNet@2
       displayName: 'Use .NET 8 SDK'
       inputs:
         version: '8.x'
 
     - task: DotNetCoreCLI@2
-      displayName: 'Restore'
+      displayName: 'Restore API'
       inputs:
         command: 'restore'
         projects: '$(apiProject)'
 
     - task: DotNetCoreCLI@2
-      displayName: 'Build'
+      displayName: 'Restore Tests'
+      inputs:
+        command: 'restore'
+        projects: '$(testProjects)'
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Build API'
       inputs:
         command: 'build'
         projects: '$(apiProject)'
         arguments: '--configuration Release --no-restore'
 
     - task: DotNetCoreCLI@2
-      displayName: 'Publish (zip)'
+      displayName: 'Unit Tests'
+      inputs:
+        command: 'test'
+        projects: '$(testProjects)'
+        arguments: >
+          --configuration Release
+          --logger "trx"
+          --results-directory "$(testResultsDir)"
+          -- RunConfiguration.TreatNoTestsAsError=true
+        publishTestResults: false
+
+    - task: PublishTestResults@2
+      displayName: 'Publish Unit Test Results'
+      inputs:
+        testResultsFormat: 'VSTest'
+        testResultsFiles: '$(testResultsDir)/**/*.trx'
+        testRunTitle: 'Unit Tests'
+      condition: succeededOrFailed()
+
+    # Publish output (zip) to artifact
+    - task: DotNetCoreCLI@2
+      displayName: 'Publish API (zip)'
       inputs:
         command: 'publish'
         projects: '$(apiProject)'
@@ -79,19 +117,19 @@ stages:
         publishWebProjects: false
         zipAfterPublish: true
 
-    - publish: $(publishDir)
-      artifact: $(artifactName)
+    - publish: '$(publishDir)'
+      artifact: '$(artifactName)'
 
 # ================================================================
-#  STAGE 2 — Deploy DEV
-#  Runs for release-* AND feature/*
+#  STAGE 2 — Deploy DEV (release-* and feature/*, NOT on PR)
 # ================================================================
 - stage: Deploy_Dev
   displayName: Deploy to App Service (Dev)
-  dependsOn: Build
+  dependsOn: Build_Test
   condition: >
     and(
       succeeded(),
+      ne(variables['Build.Reason'], 'PullRequest'),
       or(
         startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'),
         startsWith(variables['Build.SourceBranch'], 'refs/heads/feature/')
@@ -99,6 +137,7 @@ stages:
     )
   jobs:
   - deployment: DeployDev
+    displayName: Deploy Dev
     environment: 'dev'
     strategy:
       runOnce:
@@ -107,60 +146,34 @@ stages:
           - download: current
             artifact: $(artifactName)
 
+          # Use Run-From-Package (more stable; avoids heavy extraction failures)
           - task: AzureWebApp@1
             displayName: 'Deploy ZIP to Dev App Service'
             inputs:
-              azureSubscription: 'svc-conn-nexeagle-dev'
-              appType: 'webAppLinux'
+              azureSubscription: '$(devServiceConnection)'
+              appType: 'webApp'     # Windows App Service
               appName: '$(devAppName)'
               package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
+              deploymentMethod: 'runFromPackage'
 
 # ================================================================
-#  STAGE 3 — Deploy QA
-#  (Recommended: Only for release-*; feature/* should not go to QA)
+#  STAGE 3 — Deploy PROD (release-* + deployProd=true + approval)
+#  Configure approvals in Pipelines → Environments → prod
 # ================================================================
-- stage: Deploy_QA
-  displayName: Deploy to App Service (QA)
+- stage: Deploy_Prod
+  displayName: Deploy to App Service (PROD) — Environment Approval
   dependsOn: Deploy_Dev
   condition: >
     and(
       succeeded(),
-      startsWith(variables['Build.SourceBranch'], 'refs/heads/release-')
-    )
-  jobs:
-  - deployment: DeployQA
-    environment: 'qa'
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - download: current
-            artifact: $(artifactName)
-
-          - task: AzureWebApp@1
-            displayName: 'Deploy ZIP to QA App Service'
-            inputs:
-              azureSubscription: 'svc-conn-nexeagle-qa'
-              appType: 'webAppLinux'
-              appName: '$(qaAppName)'
-              package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
-
-# ================================================================
-#  STAGE 4 — Deploy PROD (release-* + env approval, no time gate)
-#  NOTE: Configure approval in Pipelines → Environments → prod
-# ================================================================
-- stage: Deploy_Prod
-  displayName: Deploy to App Service (PROD) — Environment Approval
-  dependsOn: Deploy_QA
-  condition: >
-    and(
-      succeeded(),
+      ne(variables['Build.Reason'], 'PullRequest'),
       startsWith(variables['Build.SourceBranch'], 'refs/heads/release-'),
-      eq('${{ parameters.deployProd }}', 'true')
+      eq(${{ parameters.deployProd }}, true)
     )
   jobs:
   - deployment: DeployProd
-    environment: 'prod'  # add Approvals & Checks to this Environment
+    displayName: Deploy PROD
+    environment: 'prod'
     strategy:
       runOnce:
         deploy:
@@ -172,6 +185,7 @@ stages:
             displayName: 'Deploy ZIP to PROD App Service'
             inputs:
               azureSubscription: '$(prodServiceConnection)'
-              appType: 'webAppLinux'
+              appType: 'webApp'     # Windows App Service
               appName: '$(prodAppName)'
               package: '$(Pipeline.Workspace)/$(artifactName)/**/*.zip'
+              deploymentMethod: 'runFromPackage'

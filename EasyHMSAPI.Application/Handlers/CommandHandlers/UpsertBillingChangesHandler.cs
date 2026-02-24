@@ -24,7 +24,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 var existingHospital = await _context.Hospitals.AnyAsync(h => h.HospitalID == request.HospitalId, cancellationToken);
                 if(existingHospital)
                 {
-                    if (request.ChargeItemId == Guid.Empty)
+                    if (request.ChargeItemId == Guid.Empty || request.ChargeItemId is null)
                     {
                         var newGuid = Guid.NewGuid();
                         BillingChargeCatalog billingChargeCatalog = new()
@@ -39,7 +39,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             UpdatedAt = request.CurrentDateTime,
                             UpdatedBy = request.LoggedInUserName
                         };
-                        _context.BillingChargeCatalogs.Add(billingChargeCatalog);
+                        _context.BillingChargeCatalog.Add(billingChargeCatalog);
                         await _context.SaveChangesAsync(cancellationToken);
 
                         response.Success = true;
@@ -48,7 +48,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     }
                     else
                     {
-                        var existingItem = await _context.BillingChargeCatalogs
+                        var existingItem = await _context.BillingChargeCatalog
                             .Where(x => x.ChargeItemId == request.ChargeItemId)
                             .FirstOrDefaultAsync(cancellationToken);
                         if(existingItem is not null)
@@ -56,7 +56,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             if (!string.IsNullOrEmpty(request.DisplayName)) existingItem.DisplayName = request.DisplayName;
                             if (!string.IsNullOrEmpty(request.VisitType)) existingItem.VisitType = request.VisitType.Trim().ToUpper();
                             existingItem.DefaultRate = request.DefaultRate;
-                            existingItem.DefaultDiscountPercent = request.DefaultDiscountPercent;
+                            if (request.DefaultDiscountPercent.HasValue) existingItem.DefaultDiscountPercent = request.DefaultDiscountPercent;
                             existingItem.DefaultQty = request.DefaultQty;
                             existingItem.UpdatedAt = request.CurrentDateTime;
                             existingItem.UpdatedBy = request.LoggedInUserName;

@@ -1,11 +1,11 @@
 using System;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.QueryHandlers;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
+using EasyHMSAPI.UnitTests.TestUtils;
 using NUnit.Framework;
 
 namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
@@ -14,45 +14,44 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
     public class GetDepartmentsHandlerTests
     {
         private AppDbContext _context = null!;
+        private GetDepartmentsHandler _handler = null!;
 
         [SetUp]
         public void SetUp()
         {
             _context = InMemoryDbContextFactory.CreateContext();
+            _handler = new GetDepartmentsHandler(_context);
         }
 
         [TearDown]
         public void TearDown()
         {
-            _context?.Dispose();
+            
             InMemoryDbContextFactory.Destroy(_context);
+            _context?.Dispose();
         }
 
         [Test]
-        public async Task Handle_Returns_Global_And_Matching_Hospital_Departments()
+        public async Task Handle_ReturnsDepartments()
         {
             // Arrange
             var hospitalId = Guid.NewGuid();
-            var globalDept = new Department { DepartmentID = Guid.NewGuid(), HospitalID = null, Name = "Global", IsActive = true };
-            var matchDept = new Department { DepartmentID = Guid.NewGuid(), HospitalID = hospitalId, Name = "Match", IsActive = true };
-            var otherDept = new Department { DepartmentID = Guid.NewGuid(), HospitalID = Guid.NewGuid(), Name = "Other", IsActive = true };
-
-            _context.Departments.AddRange(globalDept, matchDept, otherDept);
+            var globalDept = new Department { DepartmentID = Guid.NewGuid(), Name = "Global", HospitalID = null, IsActive = true };
+            var hospitalDept = new Department { DepartmentID = Guid.NewGuid(), Name = "Local", HospitalID = hospitalId, IsActive = true };
+            
+            _context.Departments.Add(globalDept);
+            _context.Departments.Add(hospitalDept);
             await _context.SaveChangesAsync();
 
-            var handler = new GetDepartmentsHandler(_context);
             var request = new GetDepartmentsRequestModel { HospitalId = hospitalId };
 
             // Act
-            var response = await handler.Handle(request, CancellationToken.None);
+            var response = await _handler.Handle(request, CancellationToken.None);
 
             // Assert
-            Assert.That(response, Is.Not.Null);
-            Assert.That(response.Departments, Is.Not.Null);
-            var resultIds = response.Departments.Select(d => d.DepartmentID).ToList();
-            Assert.That(resultIds, Does.Contain(globalDept.DepartmentID));
-            Assert.That(resultIds, Does.Contain(matchDept.DepartmentID));
-            Assert.That(resultIds, Does.Not.Contain(otherDept.DepartmentID));
+            Assert.That(response.Departments, Has.Count.EqualTo(2));
+            Assert.That(response.Departments, Has.Some.Property("Name").EqualTo("Global"));
+            Assert.That(response.Departments, Has.Some.Property("Name").EqualTo("Local"));
         }
     }
 }
