@@ -47,13 +47,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     user.MobileNumber = request.MobileNumber;
                     updatedFields.Add("MobileNumber");
                 }
-
-                //if (request.IsActive.HasValue && request.IsActive.Value != user.IsActive)
-                //{
-                //    user.IsActive = request.IsActive.Value;
-                //    updatedFields.Add("IsActive");
-                //}
-
+                if (!string.IsNullOrEmpty(request.Email))
+                {
+                    user.Email = request.Email;
+                    updatedFields.Add("Email");
+                }
 
                 var userProfile = user.UserProfiles.FirstOrDefault();
                 if (userProfile != null)

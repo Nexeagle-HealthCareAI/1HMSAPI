@@ -35,41 +35,55 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return resp;
                 }
 
-                var existing = await _context.HospitalUsers
-                    .FirstOrDefaultAsync(hu => hu.HospitalID == invitation.HospitalID && hu.UserID == request.UserId, cancellationToken);
-
-                if (existing == null)
+                if (!string.IsNullOrEmpty(request.ActionType))
                 {
-                    var userEmpId = await _context.UserProfiles
-                        .Where(u => u.UserID == request.UserId && u.UserStatusId != (int)UserStatusEnum.Revoked)
-                        .Select(u => u.EmployeeID)
-                        .FirstOrDefaultAsync(cancellationToken);
-
-                    await _context.HospitalUsers.AddAsync(new HospitalUser
+                    if(request.ActionType.Trim().ToLower() == "invite")
                     {
-                        HospitalUserID = Guid.NewGuid(),
-                        HospitalID = invitation.HospitalID,
-                        UserID = request.UserId,
-                        IsPrimary = false,
-                        EmployeeID = userEmpId ?? string.Empty,
-                        CreatedAt = DateTime.UtcNow
-                    }, cancellationToken);
-                    resp.CreatedHospitalUserLink = true;
-                }
+                        var existing = await _context.HospitalUsers
+                                .FirstOrDefaultAsync(hu => hu.HospitalID == invitation.HospitalID && hu.UserID == request.UserId, cancellationToken);
 
-                var userRole = await _context.UserRoles
-                    .Include(ur => ur.Role)
-                    .FirstOrDefaultAsync(ur => ur.UserID == request.UserId, cancellationToken);
-                if (userRole != null && userRole.Role != null)
-                {
-                    if (userRole.Role.HospitalID == null || userRole.Role.HospitalID == Guid.Empty)
+                        if (existing == null)
+                        {
+                            var userEmpId = await _context.UserProfiles
+                                .Where(u => u.UserID == request.UserId && u.UserStatusId != (int)UserStatusEnum.Revoked)
+                                .Select(u => u.EmployeeID)
+                                .FirstOrDefaultAsync(cancellationToken);
+
+                            await _context.HospitalUsers.AddAsync(new HospitalUser
+                            {
+                                HospitalUserID = Guid.NewGuid(),
+                                HospitalID = invitation.HospitalID,
+                                UserID = request.UserId,
+                                IsPrimary = false,
+                                EmployeeID = userEmpId ?? string.Empty,
+                                CreatedAt = DateTime.UtcNow
+                            }, cancellationToken);
+                            resp.CreatedHospitalUserLink = true;
+                        }
+
+                        var userRole = await _context.UserRoles
+                            .Include(ur => ur.Role)
+                            .FirstOrDefaultAsync(ur => ur.UserID == request.UserId, cancellationToken);
+                        if (userRole != null && userRole.Role != null)
+                        {
+                            if (userRole.Role.HospitalID == null || userRole.Role.HospitalID == Guid.Empty)
+                            {
+                                userRole.Role.HospitalID = invitation.HospitalID;
+                            }
+                        }
+                    }
+                    else
                     {
-                        userRole.Role.HospitalID = invitation.HospitalID;
+                        resp.Success = false;
+                        resp.Message = "Invalid action type";
+                        return resp;
                     }
                 }
-
-                invitation.Status = "Accepted";
-                invitation.AcceptedAt = DateTime.UtcNow;
+                else
+                { 
+                    invitation.Status = "Accepted";
+                    invitation.AcceptedAt = DateTime.UtcNow;
+                }
 
                 await _context.SaveChangesAsync(cancellationToken);
 
