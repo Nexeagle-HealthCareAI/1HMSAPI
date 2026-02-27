@@ -21,7 +21,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             var resp = new InvitationMapUserResponseModel 
             { 
                 InvitationId = request.InvitationId, 
-                UserId = request.UserId 
+                UserId = request.UserId
             };
 
             try
@@ -71,6 +71,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 userRole.Role.HospitalID = invitation.HospitalID;
                             }
                         }
+
+                        resp.Message = "User mapped to hospital";
                     }
                     else
                     {
@@ -83,12 +85,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 { 
                     invitation.Status = "Accepted";
                     invitation.AcceptedAt = DateTime.UtcNow;
+                    resp.Message = "Invitation accepted.";
                 }
 
                 await _context.SaveChangesAsync(cancellationToken);
 
                 resp.Success = true;
-                resp.Message = "User mapped to hospital and invitation updated.";
                 resp.HospitalId = invitation.HospitalID;
                 resp.InvitationStatus = invitation.Status;
                 return resp;
