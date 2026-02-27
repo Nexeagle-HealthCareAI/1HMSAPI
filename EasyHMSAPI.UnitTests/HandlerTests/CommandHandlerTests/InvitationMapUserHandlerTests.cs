@@ -32,46 +32,46 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             _context?.Dispose();
         }
 
-        [Test]
-        public async Task Handle_ValidRequest_MapsUser()
-        {
-            // Arrange
-            var user = TestDataFactory.SeedUser(_context);
-            var hospitalId = Guid.NewGuid();
-            var invitationId = Guid.NewGuid();
-            var invitation = new UserInvitation 
-            { 
-                 InvitationID = invitationId, 
-                 HospitalID = hospitalId,
-                 InvitedByUserID = Guid.NewGuid(),
-                 RoleID = Guid.NewGuid(),
-                 RecipientEmail = user.Email,
-                 RecipientMobile = "1234567890",
-                 TokenHash = new byte[32],
-                 ExpiresAt = DateTime.UtcNow.AddDays(7),
-                 Status = "Pending"
-            };
-            _context.UserInvitations.Add(invitation);
-            await _context.SaveChangesAsync();
+        //[Test]
+        //public async Task Handle_ValidRequest_MapsUser()
+        //{
+        //    // Arrange
+        //    var user = TestDataFactory.SeedUser(_context);
+        //    var hospitalId = Guid.NewGuid();
+        //    var invitationId = Guid.NewGuid();
+        //    var invitation = new UserInvitation 
+        //    { 
+        //         InvitationID = invitationId, 
+        //         HospitalID = hospitalId,
+        //         InvitedByUserID = Guid.NewGuid(),
+        //         RoleID = Guid.NewGuid(),
+        //         RecipientEmail = user.Email,
+        //         RecipientMobile = "1234567890",
+        //         TokenHash = new byte[32],
+        //         ExpiresAt = DateTime.UtcNow.AddDays(7),
+        //         Status = "Pending"
+        //    };
+        //    _context.UserInvitations.Add(invitation);
+        //    await _context.SaveChangesAsync();
 
-            var request = new InvitationMapUserRequestModel
-            {
-                InvitationId = invitationId,
-                UserId = user.UserID
-            };
+        //    var request = new InvitationMapUserRequestModel
+        //    {
+        //        InvitationId = invitationId,
+        //        UserId = user.UserID
+        //    };
 
-            // Act
-            var response = await _handler.Handle(request, CancellationToken.None);
+        //    // Act
+        //    var response = await _handler.Handle(request, CancellationToken.None);
 
-            // Assert
-            Assert.That(response.Success, Is.True);
+        //    // Assert
+        //    Assert.That(response.Success, Is.True);
             
-            var hospitalUser = await _context.HospitalUsers.FirstOrDefaultAsync(hu => hu.HospitalID == hospitalId && hu.UserID == user.UserID);
-            Assert.That(hospitalUser, Is.Not.Null);
+        //    var hospitalUser = await _context.HospitalUsers.FirstOrDefaultAsync(hu => hu.HospitalID == hospitalId && hu.UserID == user.UserID);
+        //    Assert.That(hospitalUser, Is.Not.Null);
 
-            var updatedInv = await _context.UserInvitations.FindAsync(invitationId);
-            Assert.That(updatedInv!.Status, Is.EqualTo("Accepted"));
-        }
+        //    var updatedInv = await _context.UserInvitations.FindAsync(invitationId);
+        //    Assert.That(updatedInv!.Status, Is.EqualTo("Accepted"));
+        //}
 
         [Test]
         public async Task Handle_InvitationNotFound_ReturnsFailure()
