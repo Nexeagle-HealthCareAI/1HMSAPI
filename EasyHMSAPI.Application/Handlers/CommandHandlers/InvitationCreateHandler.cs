@@ -82,7 +82,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 RecipientMobile = request.Mobile,
                 RecipientEmail = request.Email,
                 TokenHash = tokenHash,
-                ExpiresAt = DateTime.UtcNow.AddDays(1),
+                ExpiresAt = DateTime.UtcNow.AddDays(7),
                 Status = "Pending",
                 CreatedAt = DateTime.UtcNow
             };
@@ -92,7 +92,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
             string registrationUrl = _registrationBaseUrl + Uri.EscapeDataString(rawToken);
 
-            //var smsMsg = $"You have been invited to easyHMS. Complete your registration: {registrationUrl} (valid for 24 hours)";
+            //var smsMsg = $"You have been invited to easyHMS. Complete your registration: {registrationUrl} (valid for 7 days)";
             //_ = _smsService.SendInvitationSmsAsync(request.Mobile, smsMsg);
             await _whatsAppMessagingService.SendInvitationAsync(request.Mobile, existingHospital.Name, existingRole.RoleName, registrationUrl);
 
@@ -110,7 +110,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                           <div style='text-align:center; margin:24px 0;'>
                             <a href='{registrationUrl}' style='display:inline-block; background:#007bff; color:#ffffff; text-decoration:none; padding:12px 20px; border-radius:6px; font-weight:600;'>Complete Registration</a>
                           </div>
-                          <p style='margin:0 0 8px 0; color:#666; font-size:14px;'>This link is valid for <strong>24 hours</strong>. If the button doesn't work, copy and paste this URL into your browser:</p>
+                          <p style='margin:0 0 8px 0; color:#666; font-size:14px;'>This link is valid for <strong>7 days</strong>. If the button doesn't work, copy and paste this URL into your browser:</p>
                           <p style='word-break:break-all; color:#007bff; font-size:13px; margin:6px 0 0 0;'>
                             {registrationUrl}
                           </p>

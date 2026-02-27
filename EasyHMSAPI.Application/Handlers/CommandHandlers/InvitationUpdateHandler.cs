@@ -55,7 +55,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 byte[] tokenHash = SHA256.HashData(Encoding.UTF8.GetBytes(rawToken));
 
                 invitation.TokenHash = tokenHash;
-                invitation.ExpiresAt = DateTime.UtcNow.AddDays(1);
+                invitation.ExpiresAt = DateTime.UtcNow.AddDays(7);
                 invitation.AcceptedAt = null;
                 invitation.RevokedAt = null;
                 invitation.Status = "Pending";
@@ -72,7 +72,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     .Select(r => r.RoleName)
                     .FirstOrDefaultAsync(cancellationToken);
 
-                //var smsMsg = $"Your easyHMS registration link has been reissued: {registrationUrl} (valid 24 hours)";
+                //var smsMsg = $"Your easyHMS registration link has been reissued: {registrationUrl} (valid for 7 days)";
                 //_ = _smsService.SendInvitationSmsAsync(invitation.RecipientMobile, smsMsg);
                 await _whatsAppMessagingService.SendInvitationAsync(invitation.RecipientMobile, hospitalName ?? string.Empty
                     , roleName ?? string.Empty, registrationUrl);
@@ -91,7 +91,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                               <div style='text-align:center; margin:24px 0;'>
                                 <a href='{registrationUrl}' style='display:inline-block; background:#007bff; color:#ffffff; text-decoration:none; padding:12px 20px; border-radius:6px; font-weight:600;'>Continue Registration</a>
                               </div>
-                              <p style='margin:0 0 8px 0; color:#666; font-size:14px;'>This link is valid for <strong>24 hours</strong>. If the button doesn't work, copy and paste this URL into your browser:</p>
+                              <p style='margin:0 0 8px 0; color:#666; font-size:14px;'>This link is valid for <strong>7 days</strong>. If the button doesn't work, copy and paste this URL into your browser:</p>
                               <p style='word-break:break-all; color:#007bff; font-size:13px; margin:6px 0 0 0;'>
                                 {registrationUrl}
                               </p>
