@@ -11,3 +11,4 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public Guid UserId { get; set; }
     }
 }
+
