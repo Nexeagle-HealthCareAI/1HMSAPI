@@ -1,11 +1,11 @@
+using EasyHMSAPI.Api.Common;
+using EasyHMSAPI.Application.RequestModels.CommandRequestModel;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
+using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using MediatR;
-using Microsoft.AspNetCore.Mvc;
-using EasyHMSAPI.Application.RequestModels.CommandRequestModel;
 using Microsoft.AspNetCore.Authorization;
-using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
-using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Mvc;
 using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Api.Controllers
@@ -31,6 +31,7 @@ namespace EasyHMSAPI.Api.Controllers
             _logger.LogInformation("RegisterHospital started at {Time}", DateTime.UtcNow);
             try
             {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
                 var response = await _mediator.Send(request);
                 _logger.LogInformation("RegisterHospital ended");
 

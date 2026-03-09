@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json.Serialization;
 
 namespace EasyHMSAPI.Application.RequestModels.CommandRequestModel
 {
@@ -20,6 +21,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModel
         public string Country { get; set; } = null!;
         public string Pincode { get; set; } = null!;
         public string? TimeZone { get; set; }
-        
+        [JsonIgnore]
+        public string? LoggedInUserName { get; set; }
     }
 } 

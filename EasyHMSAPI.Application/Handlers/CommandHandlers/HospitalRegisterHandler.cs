@@ -99,6 +99,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 };
                 _context.InvoicePrintSettings.Add(invoiceSetting);
 
+                var billingPolicy = new BillingPolicy
+                {
+                    BillingPolicyId = Guid.NewGuid(),
+                    HospitalId = hospitalId,
+                    RequirePostBeforeInvoice = false,
+                    MaxAutoDiscountPercent = 0,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = request.LoggedInUserName,
+                    UpdatedAt = DateTime.UtcNow,
+                    UpdatedBy = request.LoggedInUserName
+                };
+                _context.BillingPolicy.Add(billingPolicy);
+
                 // --- Add/Update UserRoles with hospitalId ---
                 // Find the user's current role (if any)
                 var userRole = await _context.UserRoles
