@@ -13,7 +13,7 @@ namespace EasyHMSAPI.Domain.Entities
         public decimal MaxAutoDiscountPercent { get; set; }
         public string? LabPathTrigger { get; set; }
         public string? LabRadTrigger { get; set; }
-        public string? PharmecyIpdTrigger { get; set; }
+        public string? PharmacyIpdTrigger { get; set; }
         public string? OpdConsultTrigger { get; set; }
         public string? IpdBedChargeMode { get; set; }
         public DateTime CreatedAt { get; set; }
