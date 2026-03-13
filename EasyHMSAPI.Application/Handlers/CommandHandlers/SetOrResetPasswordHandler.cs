@@ -77,22 +77,24 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                         if (!string.IsNullOrEmpty(request.Password))
                         {
-                            var incomingHashed = BitConverter.ToString(SHA256.HashData(Encoding.UTF8.GetBytes(request.Password))).Replace("-", "").ToLower();
-                            
+                            // Hash the incoming password once
+                            var hashedBytes = SHA256.HashData(Encoding.UTF8.GetBytes(request.Password));
+                            var hashedPassword = BitConverter.ToString(hashedBytes).Replace("-", "").ToLower();
+
                             // Compare stored password (which may be masked) with incoming password
                             bool passwordMatch = false;
                             if (_maskingService.IsMaskingEnabled())
                             {
                                 // Mask the incoming password and compare with stored masked password
-                                var maskedIncomingPassword = _maskingService.Mask(incomingHashed);
+                                var maskedIncomingPassword = _maskingService.Mask(hashedPassword);
                                 passwordMatch = userAuth.HashedPassword == maskedIncomingPassword;
                             }
                             else
                             {
                                 // Direct comparison when masking is disabled
-                                passwordMatch = userAuth.HashedPassword == incomingHashed;
+                                passwordMatch = userAuth.HashedPassword == hashedPassword;
                             }
-                            
+
                             if (passwordMatch)
                             {
                                 return new SetOrResetPasswordResponseModel
@@ -103,11 +105,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             }
                             else
                             {
-                                var hashedBytes = SHA256.HashData(Encoding.UTF8.GetBytes(request.Password));
-                                var hashedPassword = BitConverter.ToString(hashedBytes).Replace("-", "").ToLower();
-                                
                                 // Apply masking if enabled
-                                userAuth.HashedPassword = _maskingService.Mask(hashedPassword);
+                                if (_maskingService.IsMaskingEnabled())
+                                {
+                                    userAuth.HashedPassword = _maskingService.Mask(hashedPassword);
+                                }
+                                else
+                                {
+                                    userAuth.HashedPassword = hashedPassword;
+                                }
 
                                 await _context.SaveChangesAsync(cancellationToken);
 
@@ -129,48 +135,57 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     }
                     else if (scope?.ToLower() == "reset-password")
                     {
-                        if (!string.IsNullOrEmpty(userAuth.HashedPassword))
+                        if (!string.IsNullOrEmpty(request.Password))
                         {
-                            var incomingHashed = BitConverter.ToString(SHA256.HashData(Encoding.UTF8.GetBytes(request.Password))).Replace("-", "").ToLower();
-                            
-                            // Compare stored password (which may be masked) with incoming password
-                            bool passwordMatch = false;
+                            // Hash the incoming password once
+                            var hashedBytes = SHA256.HashData(Encoding.UTF8.GetBytes(request.Password));
+                            var hashedPassword = BitConverter.ToString(hashedBytes).Replace("-", "").ToLower();
+
+                            // Only compare passwords if there's an existing stored password
+                            if (!string.IsNullOrEmpty(userAuth.HashedPassword))
+                            {
+                                // Compare stored password (which may be masked) with incoming password
+                                bool passwordMatch = false;
+                                if (_maskingService.IsMaskingEnabled())
+                                {
+                                    // Mask the incoming password and compare with stored masked password
+                                    var maskedIncomingPassword = _maskingService.Mask(hashedPassword);
+                                    passwordMatch = userAuth.HashedPassword == maskedIncomingPassword;
+                                }
+                                else
+                                {
+                                    // Direct comparison when masking is disabled
+                                    passwordMatch = userAuth.HashedPassword == hashedPassword;
+                                }
+
+                                if (passwordMatch)
+                                {
+                                    return new SetOrResetPasswordResponseModel
+                                    {
+                                        Success = false,
+                                        Message = "New password cannot be same as the current password."
+                                    };
+                                }
+                            }
+
+                            // Update password (whether stored password was empty or different)
+                            // Apply masking if enabled
                             if (_maskingService.IsMaskingEnabled())
                             {
-                                // Mask the incoming password and compare with stored masked password
-                                var maskedIncomingPassword = _maskingService.Mask(incomingHashed);
-                                passwordMatch = userAuth.HashedPassword == maskedIncomingPassword;
-                            }
-                            else
-                            {
-                                // Direct comparison when masking is disabled
-                                passwordMatch = userAuth.HashedPassword == incomingHashed;
-                            }
-                            
-                            if (passwordMatch)
-                            {
-                                return new SetOrResetPasswordResponseModel
-                                {
-                                    Success = false,
-                                    Message = "New password cannot be same as the current password."
-                                };
-                            }
-                            else
-                            {
-                                var hashedBytes = SHA256.HashData(Encoding.UTF8.GetBytes(request.Password));
-                                var hashedPassword = BitConverter.ToString(hashedBytes).Replace("-", "").ToLower();
-                                
-                                // Apply masking if enabled
                                 userAuth.HashedPassword = _maskingService.Mask(hashedPassword);
-
-                                await _context.SaveChangesAsync(cancellationToken);
-
-                                return new SetOrResetPasswordResponseModel
-                                {
-                                    Success = true,
-                                    Message = "Password successfully reset."
-                                };
                             }
+                            else
+                            {
+                                userAuth.HashedPassword = hashedPassword;
+                            }
+
+                            await _context.SaveChangesAsync(cancellationToken);
+
+                            return new SetOrResetPasswordResponseModel
+                            {
+                                Success = true,
+                                Message = "Password successfully reset."
+                            };
                         }
                         else
                         {
