@@ -25,6 +25,9 @@ namespace EasyHMSAPI.Domain.Entities
         public Guid CreatedByUserID { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime LastUpdatedAt { get; set; } = DateTime.UtcNow;
+        public string? GSTIN { get; set; }
+        public string? PAN { get; set; }
+        public string? NABH_NABL { get; set; }
         public User CreatedByUser { get; set; } = null!;
         public ICollection<HospitalUser> HospitalUsers { get; set; } = new List<HospitalUser>();
         public ICollection<Role> Roles { get; set; } = new List<Role>();

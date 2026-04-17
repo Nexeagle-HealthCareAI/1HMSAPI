@@ -51,7 +51,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     CreatedByUserID = request.UserId,
                     CreatedAt = DateTime.UtcNow,
                     LastUpdatedAt = DateTime.UtcNow,
-                    TimeZone = request.TimeZone ?? string.Empty
+                    TimeZone = request.TimeZone ?? string.Empty,
+                    GSTIN = request.GstIn ?? string.Empty,
+                    PAN = request.PanNumber ?? string.Empty,
+                    NABH_NABL = request.NabhNabl ?? string.Empty
                 };
                 _context.Hospitals.Add(hospital);
 

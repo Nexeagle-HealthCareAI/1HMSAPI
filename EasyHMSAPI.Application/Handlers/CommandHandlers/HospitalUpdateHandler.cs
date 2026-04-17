@@ -51,6 +51,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 hospital.Country = !string.IsNullOrEmpty(request.Country) ? request.Country : hospital.Country;
                 hospital.Pincode = !string.IsNullOrEmpty(request.Pincode) ? request.Pincode : hospital.Pincode;
                 hospital.TimeZone = !string.IsNullOrEmpty(request.TimeZone) ? request.TimeZone : hospital.TimeZone;
+                hospital.GSTIN = !string.IsNullOrEmpty(request.GstIn) ? request.GstIn : hospital.GSTIN;
+                hospital.PAN = !string.IsNullOrEmpty(request.PanNumber) ? request.PanNumber : hospital.PAN;
+                hospital.NABH_NABL = !string.IsNullOrEmpty(request.NabhNabl) ? request.NabhNabl : hospital.NABH_NABL;
 
                 var hospitalProfileStatus = await _context.HospitalProfileStatuses.FirstOrDefaultAsync(hps => hps.HospitalID == hospital.HospitalID, cancellationToken);
                 if (hospitalProfileStatus != null)

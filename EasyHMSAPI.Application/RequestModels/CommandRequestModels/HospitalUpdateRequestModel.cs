@@ -22,6 +22,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModel
         public string? Pincode { get; set; }
         public string? RegistrationNumber { get; set; }
         public string? TimeZone { get; set; }
+        public string? GstIn { get; set; }
+        public string? PanNumber { get; set; }
+        public string? NabhNabl { get; set; }
     }
-
 } 
