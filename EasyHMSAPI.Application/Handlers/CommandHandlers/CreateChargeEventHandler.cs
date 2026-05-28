@@ -66,6 +66,59 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 };
 
                 _context.Encounter.Add(encounter);
+
+                // ── Auto-post OPD consultation fee ─────────────────────────────
+                // When the billing policy's OPD consult trigger is AUTO and the visit is
+                // chargeable (New / Old-with-fee, not Old/No-Fee), post the attending
+                // doctor's OPD_CONSULT fee as a CONSULT charge line on this encounter.
+                if (encounterTypeCode == BillingConstants.EncounterType.Opd)
+                {
+                    var policy = await _context.BillingPolicy
+                        .FirstOrDefaultAsync(p => p.HospitalId == request.HospitalId, cancellationToken);
+                    var triggerOn = string.Equals(policy?.OpdConsultTrigger, "AUTO", StringComparison.OrdinalIgnoreCase);
+                    var chargeable = !string.Equals(lastAppointment.AppointmentType, AppConstants.AppointmentType_OldNoFee, StringComparison.OrdinalIgnoreCase);
+
+                    if (triggerOn && chargeable)
+                    {
+                        var fee = await _context.DoctorFees
+                            .Where(f => f.HospitalId == request.HospitalId
+                                     && f.DoctorId == lastAppointment.DoctorId
+                                     && f.FeeType == "OPD_CONSULT"
+                                     && f.IsActive)
+                            .Select(f => (decimal?)f.Amount)
+                            .FirstOrDefaultAsync(cancellationToken);
+
+                        if (fee.HasValue && fee.Value > 0)
+                        {
+                            var at = DateTime.UtcNow;
+                            _context.BillingChargeEvent.Add(new BillingChargeEvent
+                            {
+                                ChargeEventId = Guid.NewGuid(),
+                                HospitalId = request.HospitalId,
+                                PatientId = request.PatientId,
+                                EncounterId = encounter.EncounterId,
+                                SourceModule = BillingConstants.SourceModule.Opd,
+                                CategoryCode = "CONSULT",
+                                DisplayName = $"Consultation — {doctorName ?? "Doctor"}",
+                                Qty = 1,
+                                UnitPrice = fee.Value,
+                                DiscountAmount = 0,
+                                NetAmount = fee.Value,
+                                IsTaxInclusive = false,
+                                IsInterState = false,
+                                StatusCode = BillingConstants.ChargeEventStatus.Posted,
+                                ServiceDate = at,
+                                PostedAt = at,
+                                PostedBy = request.LoggedInUserName,
+                                CreatedAt = at,
+                                CreatedBy = request.LoggedInUserName,
+                                UpdatedAt = at,
+                                UpdatedBy = request.LoggedInUserName
+                            });
+                        }
+                    }
+                }
+
                 await _context.SaveChangesAsync(cancellationToken);
 
                 return new CreateChargeEventResponseModel

@@ -59,6 +59,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<BillingChargeEvent> BillingChargeEvent { get; set; }
         public DbSet<DiscountApproval> DiscountApproval { get; set; }
         public DbSet<Expense> Expenses { get; set; }
+        public DbSet<DoctorFee> DoctorFees { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {   
@@ -544,6 +545,18 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)");
                 entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)");
                 entity.Property(e => e.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<DoctorFee>(entity =>
+            {
+                entity.ToTable("DoctorFee");
+                entity.HasKey(d => d.DoctorFeeId);
+                entity.Property(d => d.FeeType).HasMaxLength(30).IsRequired();
+                entity.Property(d => d.Amount).HasPrecision(18, 2);
+                entity.Property(d => d.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(d => d.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(d => d.RowVersion).IsRowVersion();
+                entity.HasIndex(d => new { d.HospitalId, d.DoctorId, d.FeeType }).IsUnique();
             });
 
             base.OnModelCreating(modelBuilder);
