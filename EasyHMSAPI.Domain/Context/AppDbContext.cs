@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using EasyHMSAPI.Domain.Entities;
 using System.Diagnostics.CodeAnalysis;
 
@@ -50,6 +51,14 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<PrescriptionInvestigation> PrescriptionInvestigation { get; set; }
         public DbSet<InvoicePrintSettings> InvoicePrintSettings { get; set; }
         public DbSet<BillingPolicy> BillingPolicy { get; set; }
+        public DbSet<Referrer> Referrers { get; set; }
+        public DbSet<NumberSeries> NumberSeries { get; set; }
+        public DbSet<ChargeMaster> ChargeMaster { get; set; }
+        public DbSet<BedMaster> BedMaster { get; set; }
+        public DbSet<Encounter> Encounter { get; set; }
+        public DbSet<BillingChargeEvent> BillingChargeEvent { get; set; }
+        public DbSet<DiscountApproval> DiscountApproval { get; set; }
+        public DbSet<Expense> Expenses { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {   
@@ -419,6 +428,123 @@ namespace EasyHMSAPI.Domain.Context
                 .HasOne(uh => uh.UserStatus)
                 .WithMany(us => us.UserHistories)
                 .HasForeignKey(uh => uh.UserStatusId);
+
+            modelBuilder.Entity<Referrer>(entity =>
+            {
+                entity.ToTable("Referrer");
+                entity.HasKey(r => r.ReferrerId);
+                entity.Property(r => r.ReferrerName).HasMaxLength(200).IsRequired();
+                entity.Property(r => r.ReferrerType).HasMaxLength(20).IsRequired();
+                entity.Property(r => r.Phone).HasMaxLength(20);
+                entity.Property(r => r.Email).HasMaxLength(120);
+                entity.Property(r => r.Address).HasMaxLength(500);
+                entity.Property(r => r.Pan).HasMaxLength(10);
+                entity.Property(r => r.DefaultRatePercent).HasPrecision(5, 2);
+                entity.Property(r => r.Notes).HasMaxLength(300);
+                entity.Property(r => r.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<NumberSeries>(entity =>
+            {
+                entity.ToTable("NumberSeries");
+                entity.HasKey(n => n.SeriesId);
+                entity.Property(n => n.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(n => n.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<ChargeMaster>(entity =>
+            {
+                entity.ToTable("ChargeMaster");
+                entity.HasKey(c => c.ChargeId);
+                entity.Property(c => c.DefaultRate).HasPrecision(18, 2);
+                entity.Property(c => c.DefaultQty).HasPrecision(10, 2);
+                entity.Property(c => c.MaxDiscountPercent).HasPrecision(5, 2);
+                entity.Property(c => c.IncentiveAmount).HasPrecision(18, 2);
+                entity.Property(c => c.GstSlabPercent).HasPrecision(5, 2);
+                entity.Property(c => c.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.UpdatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<BedMaster>(entity =>
+            {
+                entity.ToTable("BedMaster");
+                entity.HasKey(b => b.BedId);
+                entity.Property(b => b.WardRoomDailyRate).HasPrecision(18, 2);
+                entity.Property(b => b.BedDailyRateOverride).HasPrecision(18, 2);
+                entity.Property(b => b.IncentiveAmount).HasPrecision(18, 2);
+                entity.Property(b => b.LastStatusAt).HasColumnType("datetime2(3)");
+                entity.Property(b => b.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(b => b.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(b => b.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<Encounter>(entity =>
+            {
+                entity.ToTable("Encounter");
+                entity.HasKey(e => e.EncounterId);
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<BillingChargeEvent>(entity =>
+            {
+                entity.ToTable("BillingChargeEvent");
+                entity.HasKey(e => e.ChargeEventId);
+                // GrossAmount is a computed PERSISTED column in the DB.
+                entity.Property(e => e.GrossAmount)
+                      .ValueGeneratedOnAddOrUpdate()
+                      .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
+                entity.Property(e => e.DiscountAmount).HasPrecision(18, 2);
+                entity.Property(e => e.NetAmount).HasPrecision(18, 2);
+                entity.Property(e => e.IncentiveAmount).HasPrecision(18, 2);
+                entity.Property(e => e.UnitPrice).HasPrecision(18, 2);
+                entity.Property(e => e.Qty).HasPrecision(10, 2);
+                entity.Property(e => e.HsnSacCode).HasMaxLength(10);
+                entity.Property(e => e.GstRate).HasPrecision(5, 2);
+                entity.Property(e => e.TaxableAmount).HasPrecision(18, 2);
+                entity.Property(e => e.CgstAmount).HasPrecision(18, 2);
+                entity.Property(e => e.SgstAmount).HasPrecision(18, 2);
+                entity.Property(e => e.IgstAmount).HasPrecision(18, 2);
+                entity.Property(e => e.TaxAmount).HasPrecision(18, 2);
+                entity.Property(e => e.ServiceDate).HasColumnType("datetime2(3)");
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<DiscountApproval>(entity =>
+            {
+                entity.ToTable("DiscountApproval");
+                entity.HasKey(d => d.DiscountApprovalId);
+                entity.Property(d => d.GrossAmount).HasPrecision(18, 2);
+                entity.Property(d => d.RequestedDiscountAmount).HasPrecision(18, 2);
+                entity.Property(d => d.RequestedDiscountPercent).HasPrecision(5, 2);
+                entity.Property(d => d.CapPercent).HasPrecision(5, 2);
+                entity.Property(d => d.OverByPercent).HasPrecision(5, 2);
+                entity.Property(d => d.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(d => d.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(d => d.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<Expense>(entity =>
+            {
+                entity.ToTable("Expense");
+                entity.HasKey(e => e.ExpenseId);
+                entity.Property(e => e.ExpenseDate).HasColumnType("date");
+                entity.Property(e => e.CategoryCode).HasMaxLength(50).IsRequired();
+                entity.Property(e => e.Vendor).HasMaxLength(200);
+                entity.Property(e => e.Description).HasMaxLength(500);
+                entity.Property(e => e.Amount).HasPrecision(18, 2);
+                entity.Property(e => e.PaymentMode).HasMaxLength(20);
+                entity.Property(e => e.StatusCode).HasMaxLength(20);
+                entity.Property(e => e.ReferenceNo).HasMaxLength(100);
+                entity.Property(e => e.Notes).HasMaxLength(500);
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.RowVersion).IsRowVersion();
+            });
 
             base.OnModelCreating(modelBuilder);
         }

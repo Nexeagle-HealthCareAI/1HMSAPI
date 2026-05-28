@@ -240,6 +240,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     {
                         existingAppointment.DoctorId = request.DoctorId;
                     }
+                    if(request.ReferredByReferrerId is not null)
+                    {
+                        existingAppointment.ReferredByReferrerId = request.ReferredByReferrerId;
+                        existingAppointment.ReferrerRelation = string.IsNullOrWhiteSpace(request.ReferrerRelation) ? null : request.ReferrerRelation;
+                    }
                     if(existingAppointment.ApptDate.Date != request.ApptDate.Date)
                     {
                         existingAppointment.ApptDate = request.ApptDate;
@@ -354,7 +359,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     LastStatusCodeAt = DateTime.UtcNow,
                     CreatedAt = DateTime.UtcNow,
                     CreatedBy = request?.UserId,
-                    AppointmentType = null
+                    AppointmentType = null,
+                    ReferredByReferrerId = request?.ReferredByReferrerId,
+                    ReferrerRelation = string.IsNullOrWhiteSpace(request?.ReferrerRelation) ? null : request!.ReferrerRelation
                 };
                 _context.Appointments.Add(appointment);
                 isNew = true;

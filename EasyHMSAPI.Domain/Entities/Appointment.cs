@@ -27,5 +27,7 @@ namespace EasyHMSAPI.Domain.Entities
         public string? AppointmentType { get; set; }
         public string? PdfUrl { get; set; }
         public DateTime? ValidUptoDate { get; set; }
+        public Guid? ReferredByReferrerId { get; set; }
+        public string? ReferrerRelation { get; set; }
     }
 }

@@ -20,6 +20,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? Reason { get; set; }
         public int? SlotTimeInMinutes { get; set; }
         public Guid? UserId { get; set; }
+        public Guid? ReferredByReferrerId { get; set; }
+        public string? ReferrerRelation { get; set; }
     }
 
     [ExcludeFromCodeCoverage]
