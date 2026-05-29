@@ -40,7 +40,14 @@ namespace EasyHMSAPI.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in GetChargeMasters for hospitalId: {HospitalId}", hospitalId);
-                return StatusCode(500, new { Message = "An error occurred." });
+                // TEMP diagnostic: surface the real error so we can see the root cause in the response.
+                return StatusCode(500, new
+                {
+                    Message = "An error occurred.",
+                    Detail = ex.Message,
+                    Inner = ex.InnerException?.Message,
+                    Type = ex.GetType().Name
+                });
             }
         }
 

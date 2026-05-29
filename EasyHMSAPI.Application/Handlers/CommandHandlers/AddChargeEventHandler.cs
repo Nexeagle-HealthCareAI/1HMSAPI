@@ -63,9 +63,29 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 decimal totalGross = 0, totalDiscount = 0, totalNet = 0, totalIncentive = 0;
                 decimal totalTaxable = 0, totalCgst = 0, totalSgst = 0, totalIgst = 0, totalTax = 0;
 
+                // Per-doctor consult fee is the source of truth for CONSULT lines: load it once
+                // for the encounter's attending doctor so manual consult charges use the right rate.
+                decimal? doctorConsultFee = null;
+                if (encounter.PrimaryDoctorId.HasValue
+                    && request.Charges.Any(c => string.Equals(c.CategoryCode, "CONSULT", StringComparison.OrdinalIgnoreCase)))
+                {
+                    doctorConsultFee = await _context.DoctorFees
+                        .Where(f => f.HospitalId == request.HospitalId
+                                 && f.DoctorId == encounter.PrimaryDoctorId.Value
+                                 && f.FeeType == "OPD_CONSULT"
+                                 && f.IsActive)
+                        .Select(f => (decimal?)f.Amount)
+                        .FirstOrDefaultAsync(cancellationToken);
+                }
+
                 foreach (var charge in request.Charges)
                 {
-                    var gross = charge.Qty * charge.Rate;
+                    var isConsult = string.Equals(charge.CategoryCode, "CONSULT", StringComparison.OrdinalIgnoreCase);
+                    var rate = (isConsult && doctorConsultFee.HasValue && doctorConsultFee.Value > 0)
+                        ? doctorConsultFee.Value
+                        : charge.Rate;
+
+                    var gross = charge.Qty * rate;
                     var discount = Math.Round(gross * (charge.DiscountPercent / 100m), 2);
                     var net = gross - discount;
 
@@ -93,7 +113,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         CategoryCode = charge.CategoryCode,
                         DisplayName = charge.DisplayName,
                         Qty = charge.Qty,
-                        UnitPrice = charge.Rate,
+                        UnitPrice = rate,
                         DiscountAmount = discount,
                         NetAmount = net,
                         IncentiveAmount = incentive,
@@ -159,7 +179,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         ChargeEventId = chargeEvent.ChargeEventId,
                         DisplayName = charge.DisplayName,
                         Qty = charge.Qty,
-                        UnitPrice = charge.Rate,
+                        UnitPrice = rate,
                         GrossAmount = gross,
                         DiscountAmount = discount,
                         NetAmount = net,
