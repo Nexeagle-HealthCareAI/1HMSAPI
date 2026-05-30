@@ -58,6 +58,9 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<Encounter> Encounter { get; set; }
         public DbSet<BillingChargeEvent> BillingChargeEvent { get; set; }
         public DbSet<BillingPayment> BillingPayment { get; set; }
+        public DbSet<BillingInvoice> BillingInvoice { get; set; }
+        public DbSet<BillingInvoiceChargeEvent> BillingInvoiceChargeEvent { get; set; }
+        public DbSet<BillingPaymentAllocation> BillingPaymentAllocation { get; set; }
         public DbSet<DiscountApproval> DiscountApproval { get; set; }
         public DbSet<Expense> Expenses { get; set; }
         public DbSet<DoctorFee> DoctorFees { get; set; }
@@ -514,6 +517,47 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(e => e.ServiceDate).HasColumnType("datetime2(3)");
                 entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)");
                 entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<BillingInvoice>(entity =>
+            {
+                entity.ToTable("BillingInvoice");
+                entity.HasKey(e => e.InvoiceId);
+                entity.Property(e => e.GrossAmount).HasPrecision(18, 2);
+                entity.Property(e => e.DiscountAmount).HasPrecision(18, 2);
+                entity.Property(e => e.NetAmount).HasPrecision(18, 2);
+                entity.Property(e => e.TaxableAmount).HasPrecision(18, 2);
+                entity.Property(e => e.CgstAmount).HasPrecision(18, 2);
+                entity.Property(e => e.SgstAmount).HasPrecision(18, 2);
+                entity.Property(e => e.IgstAmount).HasPrecision(18, 2);
+                entity.Property(e => e.TaxAmount).HasPrecision(18, 2);
+                entity.Property(e => e.InvoiceDate).HasColumnType("datetime2(3)");
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<BillingInvoiceChargeEvent>(entity =>
+            {
+                entity.ToTable("BillingInvoiceChargeEvent");
+                entity.HasKey(e => new { e.InvoiceId, e.ChargeEventId });
+            });
+
+            modelBuilder.Entity<BillingPayment>(entity =>
+            {
+                entity.ToTable("BillingPayment");
+                entity.HasKey(e => e.PaymentId);
+                entity.Property(e => e.Amount).HasPrecision(18, 2);
+                entity.Property(e => e.PaidAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<BillingPaymentAllocation>(entity =>
+            {
+                entity.ToTable("BillingPaymentAllocation");
+                entity.HasKey(e => e.AllocationId);
+                entity.Property(e => e.AllocatedAmount).HasPrecision(18, 2);
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)");
             });
 
             modelBuilder.Entity<DiscountApproval>(entity =>

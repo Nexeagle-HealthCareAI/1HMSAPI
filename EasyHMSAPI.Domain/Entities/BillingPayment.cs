@@ -4,8 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Domain.Entities
 {
-    // Read model for dbo.BillingPayment (payments are written by the billing/IPD service;
-    // here we only read them to show paid status on the consult timeline).
+    // Maps dbo.BillingPayment (read on the consult timeline; written by the payment handler).
     [ExcludeFromCodeCoverage]
     [Table("BillingPayment")]
     public class BillingPayment
@@ -18,8 +17,14 @@ namespace EasyHMSAPI.Domain.Entities
         public string? ReceiptNo { get; set; }
         public string? PaymentType { get; set; }   // PAYMENT / ADVANCE / REFUND
         public string? PaymentMode { get; set; }
+        public string? PaymentDescription { get; set; }
+        public string? TransactionId { get; set; }
         public decimal Amount { get; set; }
         public DateTime PaidAt { get; set; }
+        public Guid? ReferencePaymentId { get; set; }
         public DateTime CreatedAt { get; set; }
+        public string? CreatedBy { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        public string? UpdatedBy { get; set; }
     }
 }

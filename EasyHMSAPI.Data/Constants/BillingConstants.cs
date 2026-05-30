@@ -46,5 +46,33 @@ namespace EasyHMSAPI.Data.Constants
             public const string Lab = "LAB";
             public const string Pharmacy = "PHARMACY";
         }
+
+        public static class PaymentType
+        {
+            public const string Payment = "PAYMENT";
+            public const string Advance = "ADVANCE";
+            public const string Refund = "REFUND";
+        }
+
+        public static class NumberSeriesCode
+        {
+            public const string Invoice = "INV";
+            public const string Receipt = "RCPT";
+            public const string Encounter = "ENC";
+            public const string LabAccession = "LABACC";
+            public const string RadStudy = "RADSTUDY";
+            public const string Admission = "ADM";
+            public const string PcpndtFormF = "PCPNDT";
+            public const string Mlc = "MLC";
+            public const string VisitorPass = "VIS";
+        }
+
+        public static class BillingActionType
+        {
+            public const string Finalize = "finalize";
+            public const string Reopen = "reopen";
+            public const string Charges = "Charges";
+            public const string Payment = "Payment";
+        }
     }
 }
