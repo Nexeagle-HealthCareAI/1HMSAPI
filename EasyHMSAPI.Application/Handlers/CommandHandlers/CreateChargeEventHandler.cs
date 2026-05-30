@@ -71,6 +71,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                     if (existingConsult != null)
                     {
+                        // Already charged — also report whether it's already PAID (and the receipt),
+                        // so the client never collects a second time.
+                        var payments = await _context.BillingPayment.AsNoTracking()
+                            .Where(p => p.EncounterId == encounter.EncounterId && p.PaymentType == "PAYMENT")
+                            .Select(p => new { p.Amount, p.ReceiptNo, p.PaidAt })
+                            .ToListAsync(cancellationToken);
+                        var paidTotal = payments.Sum(p => p.Amount);
+                        var isPaid = existingConsult.NetAmount > 0 && paidTotal >= existingConsult.NetAmount;
+                        var receiptNo = isPaid
+                            ? payments.OrderByDescending(p => p.PaidAt).Select(p => p.ReceiptNo).FirstOrDefault()
+                            : null;
+
                         // Consultation already charged for this appointment — return idempotently.
                         return new CreateChargeEventResponseModel
                         {
@@ -83,7 +95,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 ConsultChargePosted = false,
                                 ConsultAlreadyCharged = true,
                                 ConsultFee = existingConsult.NetAmount,
-                                ConsultChargeEventId = existingConsult.ChargeEventId
+                                ConsultChargeEventId = existingConsult.ChargeEventId,
+                                ConsultPaid = isPaid,
+                                ReceiptNo = receiptNo
                             }
                         };
                     }

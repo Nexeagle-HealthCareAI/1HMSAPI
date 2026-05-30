@@ -7,6 +7,7 @@ using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using EasyHMSAPI.UnitTests.TestUtils;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using NUnit.Framework;
@@ -19,6 +20,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         private AppDbContext _context = null!;
         private Mock<ISmsService> _smsServiceMock = null!;
         private Mock<IWhatsAppMessagingService> _whatsAppServiceMock = null!;
+        private Mock<IMediator> _mediatorMock = null!;
         private RegisterAppointmentHandler _handler = null!;
 
         [SetUp]
@@ -27,8 +29,9 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             _context = InMemoryDbContextFactory.CreateContext();
             _smsServiceMock = new Mock<ISmsService>();
             _whatsAppServiceMock = new Mock<IWhatsAppMessagingService>();
-            
-            _handler = new RegisterAppointmentHandler(_context, _smsServiceMock.Object, _whatsAppServiceMock.Object);
+            _mediatorMock = new Mock<IMediator>();
+
+            _handler = new RegisterAppointmentHandler(_context, _smsServiceMock.Object, _whatsAppServiceMock.Object, _mediatorMock.Object);
         }
 
         [TearDown]
