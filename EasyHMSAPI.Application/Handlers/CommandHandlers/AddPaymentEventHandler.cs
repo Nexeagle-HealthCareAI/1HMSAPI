@@ -48,19 +48,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
                 request.Payment.PaymentType = normalizedPaymentType;
 
-                // Use the hospital's receipt series, auto-creating it with platform defaults
-                // (RCPT-YYYY-000001) when not yet configured — so receipts work for any hospital.
-                var numberSeries = await NumberSeriesDefaults.GetOrCreateAsync(
-                    _context, request.HospitalId, BillingConstants.NumberSeriesCode.Receipt, request.LoggedInUserName, cancellationToken);
-
-                numberSeries.CurrentValue++;
-                var receiptNo = NumberSeriesFormatter.Format(
-                    numberSeries.Prefix,
-                    numberSeries.YearFormat,
-                    numberSeries.Separator,
-                    numberSeries.PadLength,
-                    numberSeries.CurrentValue);
-
                 var billingInvoice = await _context.BillingInvoice
                     .Where(bi => bi.EncounterId == request.EncounterId)
                     .FirstOrDefaultAsync(cancellationToken);
@@ -80,12 +67,30 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 if (normalizedPaymentType == BillingConstants.PaymentType.Payment)
                 {
-                    if (request.Payment.Amount > netAmount)
+                    // Backstop against double/over payment: measure against the REMAINING due
+                    // (net − already-allocated), not the full invoice total, so a payment can never
+                    // exceed what's owed regardless of which client sends it.
+                    var totalPastPayments = await _context.BillingPaymentAllocation
+                        .Where(bpa => bpa.InvoiceId == billingInvoice.InvoiceId)
+                        .SumAsync(bpa => bpa.AllocatedAmount, cancellationToken);
+
+                    decimal remainingDue = netAmount - totalPastPayments;
+
+                    if (remainingDue <= 0)
                     {
                         return new AddPaymentEventResponseModel
                         {
                             Success = false,
-                            Message = $"Payment amount ({request.Payment.Amount}) cannot exceed invoice net amount ({netAmount})."
+                            Message = "This invoice is already fully paid."
+                        };
+                    }
+
+                    if (request.Payment.Amount > remainingDue)
+                    {
+                        return new AddPaymentEventResponseModel
+                        {
+                            Success = false,
+                            Message = $"Payment amount ({request.Payment.Amount}) cannot exceed the remaining due ({remainingDue})."
                         };
                     }
 
@@ -128,6 +133,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                     allocatedAmount = request.Payment.Amount;
                 }
+
+                // Allocate the receipt number only after validation passes, so a rejected
+                // (over/double) payment never burns a number in the series.
+                var numberSeries = await NumberSeriesDefaults.GetOrCreateAsync(
+                    _context, request.HospitalId, BillingConstants.NumberSeriesCode.Receipt, request.LoggedInUserName, cancellationToken);
+                numberSeries.CurrentValue++;
+                var receiptNo = NumberSeriesFormatter.Format(
+                    numberSeries.Prefix,
+                    numberSeries.YearFormat,
+                    numberSeries.Separator,
+                    numberSeries.PadLength,
+                    numberSeries.CurrentValue);
 
                 var billingPayment = new BillingPayment
                 {
