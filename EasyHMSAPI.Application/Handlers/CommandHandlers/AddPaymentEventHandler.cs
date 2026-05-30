@@ -48,18 +48,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
                 request.Payment.PaymentType = normalizedPaymentType;
 
-                var numberSeries = await _context.NumberSeries
-                    .Where(ns => ns.SeriesCode == BillingConstants.NumberSeriesCode.Receipt && ns.HospitalId == request.HospitalId)
-                    .FirstOrDefaultAsync(cancellationToken);
-
-                if (numberSeries == null)
-                {
-                    return new AddPaymentEventResponseModel
-                    {
-                        Success = false,
-                        Message = "Receipt Number Series not configured for this hospital."
-                    };
-                }
+                // Use the hospital's receipt series, auto-creating it with platform defaults
+                // (RCPT-YYYY-000001) when not yet configured — so receipts work for any hospital.
+                var numberSeries = await NumberSeriesDefaults.GetOrCreateAsync(
+                    _context, request.HospitalId, BillingConstants.NumberSeriesCode.Receipt, request.LoggedInUserName, cancellationToken);
 
                 numberSeries.CurrentValue++;
                 var receiptNo = NumberSeriesFormatter.Format(
@@ -176,7 +168,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 numberSeries.UpdatedAt = DateTime.UtcNow;
                 numberSeries.UpdatedBy = request.LoggedInUserName;
-                _context.NumberSeries.Update(numberSeries);
+                // No explicit Update(): the entity is already tracked (modified if it existed, or
+                // Added by the get-or-create helper) — an explicit Update would break the INSERT.
 
                 await _context.SaveChangesAsync(cancellationToken);
 

@@ -128,17 +128,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     };
                 }
 
-                var numberSeries = await _context.NumberSeries
-                    .FirstOrDefaultAsync(ns => ns.HospitalId == request.HospitalId
-                                            && ns.SeriesCode == BillingConstants.NumberSeriesCode.Invoice, cancellationToken);
-                if (numberSeries == null)
-                {
-                    return new CreateDraftInvoiceResponseModel
-                    {
-                        Success = false,
-                        Message = "Invoice Number Series not configured for this hospital."
-                    };
-                }
+                // Use the hospital's invoice series, auto-creating it with platform defaults
+                // (INV-YYYY-000001) when not yet configured — so numbering works for any hospital.
+                var numberSeries = await NumberSeriesDefaults.GetOrCreateAsync(
+                    _context, request.HospitalId, BillingConstants.NumberSeriesCode.Invoice, request.LoggedInUserName, cancellationToken);
 
                 numberSeries.CurrentValue++;
                 invoiceNo = NumberSeriesFormatter.Format(
