@@ -119,6 +119,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
                 if (apptToEncounter.TryGetValue(a.ApptId, out var encId))
                 {
+                    visit.EncounterId = encId;
                     if (consultByEncounter.TryGetValue(encId, out var amount))
                     {
                         visit.ConsultCharged = true;

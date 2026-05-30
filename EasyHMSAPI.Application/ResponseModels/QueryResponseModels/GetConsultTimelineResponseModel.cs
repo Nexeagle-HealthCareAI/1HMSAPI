@@ -37,6 +37,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public bool ConsultPaid { get; set; }
         public decimal Amount { get; set; }
         public string? ReceiptNo { get; set; }
+        public Guid? EncounterId { get; set; }
     }
 
     [ExcludeFromCodeCoverage]
