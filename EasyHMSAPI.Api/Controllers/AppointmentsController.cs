@@ -54,6 +54,28 @@ namespace EasyHMSAPI.Api.Controllers
             return Ok(response);
         }
 
+        [HttpGet("consult-timeline")]
+        [Authorize]
+        public async Task<IActionResult> GetConsultTimeline([FromQuery] Guid hospitalId, [FromQuery] string patientId, [FromQuery] Guid doctorId, [FromQuery] DateTime? targetDate)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+            if (string.IsNullOrWhiteSpace(patientId))
+                return BadRequest(new { Message = "patientId is required." });
+            if (doctorId == Guid.Empty)
+                return BadRequest(new { Message = "doctorId is required." });
+
+            var request = new GetConsultTimelineRequestModel
+            {
+                HospitalId = hospitalId,
+                PatientId = patientId,
+                DoctorId = doctorId,
+                TargetDate = targetDate,
+            };
+            var response = await _mediator.Send(request);
+            return Ok(response);
+        }
+
         [HttpPost("register/{hospitalId}")]
         [Authorize]
         public async Task<IActionResult> RegisterAppointment([FromRoute] Guid hospitalId, [FromQuery] bool allocateToken, [FromBody] RegisterAppointmentRequestModel request)

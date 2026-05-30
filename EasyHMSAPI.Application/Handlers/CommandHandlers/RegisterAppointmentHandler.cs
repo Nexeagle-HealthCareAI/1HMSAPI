@@ -1,6 +1,7 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Data.Enums;
@@ -372,110 +373,20 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
         private async Task SetAppointmentType(Appointment appointment, PatientRegistration patient, RegisterAppointmentRequestModel request, bool isNewAppointment, CancellationToken cancellationToken)
         {
-            // Step 1: Find existing patient by ID or name
-            var patientIdToSearch = (request.Patient?.PatientId is null && request.AppointmentId is not null)
-                ? patient.PatientId ?? string.Empty
-                : request.Patient?.PatientId?.ToUpper() ?? string.Empty;
+            // Delegated to the shared resolver so the booking decision and the consult-timeline
+            // preview always agree. Inputs mirror the previous inline logic exactly.
+            var result = await AppointmentTypeResolver.ResolveAsync(
+                _context,
+                request.Patient?.PatientId,
+                patient.PatientId,
+                request.Patient?.FullName,
+                request.DoctorId,
+                appointment.ApptDate,
+                request.AppointmentId,
+                cancellationToken);
 
-            var existingPatient = await _context.PatientRegistrations
-                .Where(p => p.PatientId != null && p.PatientId.ToUpper() == patientIdToSearch)
-                .Select(x => new { x.PatientId, x.FullName })
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (existingPatient is null && !string.IsNullOrWhiteSpace(request.Patient?.FullName))
-            {
-                var requestFullName = request.Patient.FullName.Trim().ToLower();
-                existingPatient = await _context.PatientRegistrations
-                    .Where(p => p.FullName != null && p.FullName.Trim().ToLower() == requestFullName)
-                    .Select(x => new { x.PatientId, x.FullName })
-                    .FirstOrDefaultAsync(cancellationToken);
-            }
-
-            // Step 2: Get prescription settings for the doctor
-            var prescriptionSettings = await _context.PrescriptionSettings
-                .Where(ps => ps.DoctorId == request.DoctorId)
-                .Select(ps => new { ps.ValidDuration, ps.PrescriptionSettingId })
-                .FirstOrDefaultAsync(cancellationToken);
-
-            // Step 3: Determine appointment type based on patient history
-            DateTime? effectiveDate = null;
-
-            if (existingPatient is null)
-            {
-                // New patient - set as new appointment type
-                appointment.AppointmentType = AppConstants.AppointmentType_New;
-                effectiveDate = CalculateValidUptoDate(prescriptionSettings, appointment.ApptDate);
-            }
-            else
-            {
-                // Existing patient - check appointment history
-                var lastAppointment = await _context.Appointments
-                    .Where(a => a.PatientId == existingPatient.PatientId
-                        && a.CurrentStatusCode != AppConstants.AppointmentStatus_VitalsRequired
-                        && a.CurrentStatusCode != AppConstants.AppointmentStatus_Cancelled
-                        && a.AppointmentType != AppConstants.AppointmentType_OldNoFee
-                        && a.DoctorId == request.DoctorId)
-                    .Select(x => new { x.ApptDate, x.ApptId, x.DoctorId, x.AppointmentType })
-                    .OrderByDescending(a => a.ApptDate)
-                    .FirstOrDefaultAsync(cancellationToken);
-
-                if (lastAppointment is null)
-                {
-                    // No previous appointment - new patient for this doctor
-                    appointment.AppointmentType = AppConstants.AppointmentType_New;
-                    effectiveDate = CalculateValidUptoDate(prescriptionSettings, appointment.ApptDate);
-                }
-                else
-                {
-                    // Previous appointment exists - determine follow-up type
-                    if (request.AppointmentId is not null && lastAppointment.AppointmentType == AppConstants.AppointmentType_New)
-                    {
-                        // Updating appointment where last was new
-                        appointment.AppointmentType = AppConstants.AppointmentType_New;
-                        effectiveDate = CalculateValidUptoDate(prescriptionSettings, appointment.ApptDate);
-                    }
-                    else
-                    {
-                        // Check if within prescription validity period
-                        var lastPrescriptionExpiry = GetPrescriptionExpiry(lastAppointment.ApptDate, prescriptionSettings);
-
-                        if (lastPrescriptionExpiry is null || request.ApptDate <= lastPrescriptionExpiry)
-                        {
-                            // Within validity (or prescription never expires) - old appointment no fee
-                            appointment.AppointmentType = AppConstants.AppointmentType_OldNoFee;
-                            effectiveDate = lastPrescriptionExpiry;
-                        }
-                        else
-                        {
-                            // Outside validity - old appointment with fee
-                            appointment.AppointmentType = AppConstants.AppointmentType_OldFee;
-                            effectiveDate = CalculateValidUptoDate(prescriptionSettings, request.ApptDate);
-                        }
-                    }
-                }
-            }
-
-            appointment.ValidUptoDate = effectiveDate;
-        }
-
-        private static DateTime? GetPrescriptionExpiry(DateTime lastApptDate, dynamic? prescriptionSettings)
-        {
-            if (prescriptionSettings is null)
-                return null;
-
-            return prescriptionSettings.ValidDuration == 0
-                ? null
-                : lastApptDate.AddDays(prescriptionSettings.ValidDuration);
-        }
-
-        private static DateTime? CalculateValidUptoDate(dynamic? prescriptionSettings, DateTime appointmentDate)
-        {
-            if (prescriptionSettings is null)
-                return null;
-
-            return prescriptionSettings.ValidDuration == 0
-                ? null
-                : appointmentDate.AddDays(prescriptionSettings.ValidDuration);
+            appointment.AppointmentType = result.AppointmentType;
+            appointment.ValidUptoDate = result.ValidUptoDate;
         }
 
         private string GenerateNewPatientId()

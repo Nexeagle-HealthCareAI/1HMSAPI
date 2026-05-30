@@ -57,6 +57,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<BedMaster> BedMaster { get; set; }
         public DbSet<Encounter> Encounter { get; set; }
         public DbSet<BillingChargeEvent> BillingChargeEvent { get; set; }
+        public DbSet<BillingPayment> BillingPayment { get; set; }
         public DbSet<DiscountApproval> DiscountApproval { get; set; }
         public DbSet<Expense> Expenses { get; set; }
         public DbSet<DoctorFee> DoctorFees { get; set; }
