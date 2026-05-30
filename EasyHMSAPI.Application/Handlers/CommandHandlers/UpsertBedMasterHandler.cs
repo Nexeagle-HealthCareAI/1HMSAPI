@@ -32,7 +32,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (!string.IsNullOrEmpty(request.FloorNo)) existingBed.FloorNo = request.FloorNo;
                 if (!string.IsNullOrEmpty(request.RoomCode)) existingBed.RoomCode = request.RoomCode;
                 if (!string.IsNullOrEmpty(request.RoomType)) existingBed.RoomType = request.RoomType;
-                if (request.CapacityInRoom > 0) existingBed.CapacityInRoom = request.CapacityInRoom;
+                // Capacity is optional: store a positive value, otherwise NULL (DB CHECK forbids 0).
+                existingBed.CapacityInRoom = request.CapacityInRoom > 0 ? request.CapacityInRoom : null;
                 if (request.WardRoomDailyRate > 0) existingBed.WardRoomDailyRate = request.WardRoomDailyRate;
                 existingBed.BedDailyRateOverride = request.BedDailyRateOverride;
                 existingBed.IncentiveAmount = request.IncentiveAmount;
@@ -66,7 +67,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 FloorNo = request.FloorNo,
                 RoomCode = request.RoomCode,
                 RoomType = request.RoomType,
-                CapacityInRoom = request.CapacityInRoom,
+                CapacityInRoom = request.CapacityInRoom > 0 ? request.CapacityInRoom : null,
                 WardRoomDailyRate = request.WardRoomDailyRate,
                 BedDailyRateOverride = request.BedDailyRateOverride,
                 IncentiveAmount = request.IncentiveAmount,

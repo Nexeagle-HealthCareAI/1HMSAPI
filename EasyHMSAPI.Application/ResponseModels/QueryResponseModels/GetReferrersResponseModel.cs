@@ -20,5 +20,6 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? Pan { get; set; }
         public decimal DefaultRatePercent { get; set; }
         public bool IsActive { get; set; }
+        public int ReferredPatientCount { get; set; }   // distinct patients referred by this referrer
     }
 }

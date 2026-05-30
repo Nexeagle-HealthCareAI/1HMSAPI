@@ -18,7 +18,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? FloorNo { get; set; }
         public string? RoomCode { get; set; }
         public string? RoomType { get; set; }
-        public int CapacityInRoom { get; set; }
+        public int? CapacityInRoom { get; set; }
         public decimal WardRoomDailyRate { get; set; }
         public decimal? BedDailyRateOverride { get; set; }
         public decimal? IncentiveAmount { get; set; }

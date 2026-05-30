@@ -21,7 +21,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? FloorNo { get; set; }
         public string? RoomCode { get; set; }
         public string? RoomType { get; set; }
-        public int CapacityInRoom { get; set; }
+        public int? CapacityInRoom { get; set; }
         public decimal WardRoomDailyRate { get; set; }
         public decimal? BedDailyRateOverride { get; set; }
         public decimal EffectiveDailyRate { get; set; }

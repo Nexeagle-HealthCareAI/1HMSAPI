@@ -66,5 +66,41 @@ namespace EasyHMSAPI.Api.Controllers
                 return StatusCode(500, new { ex.Message });
             }
         }
+
+        [HttpPut]
+        [Authorize]
+        public async Task<IActionResult> UpdateReferrer([FromQuery] Guid hospitalId, [FromBody] UpdateReferrerRequestModel request)
+        {
+            _logger.LogInformation("UpdateReferrer started at {Time} for hospitalId: {HospitalId}", DateTime.UtcNow, hospitalId);
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+            if (request.ReferrerId == Guid.Empty)
+                return BadRequest(new { Message = "referrerId is required." });
+            if (string.IsNullOrWhiteSpace(request.ReferrerName))
+                return BadRequest(new { Message = "Referrer name is required." });
+
+            var userIdClaim = User.FindFirst("userId")?.Value;
+            if (Guid.TryParse(userIdClaim, out var userId))
+                request.UserId = userId;
+
+            try
+            {
+                request.HospitalId = hospitalId;
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return NotFound(new { response.Message });
+                _logger.LogInformation("UpdateReferrer successful for ReferrerId: {ReferrerId}", response.ReferrerId);
+                return Ok(response);
+            }
+            catch (ArgumentException aex)
+            {
+                return BadRequest(new { aex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in UpdateReferrer for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { ex.Message });
+            }
+        }
     }
 }

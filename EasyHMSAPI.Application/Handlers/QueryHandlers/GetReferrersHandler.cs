@@ -46,6 +46,27 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 })
                 .ToListAsync(cancellationToken);
 
+            // Distinct patients referred by each referrer (computed in memory to avoid a fragile
+            // distinct-count-within-group SQL translation).
+            var referrerIds = referrers.Select(r => r.ReferrerId).ToList();
+            if (referrerIds.Count > 0)
+            {
+                var pairs = await _context.Appointments
+                    .Where(a => a.ReferredByReferrerId != null
+                        && referrerIds.Contains(a.ReferredByReferrerId.Value)
+                        && a.PatientId != null)
+                    .Select(a => new { RefId = a.ReferredByReferrerId!.Value, a.PatientId })
+                    .Distinct()
+                    .ToListAsync(cancellationToken);
+
+                var countByReferrer = pairs
+                    .GroupBy(p => p.RefId)
+                    .ToDictionary(g => g.Key, g => g.Count());
+
+                foreach (var r in referrers)
+                    r.ReferredPatientCount = countByReferrer.TryGetValue(r.ReferrerId, out var c) ? c : 0;
+            }
+
             return new GetReferrersResponseModel { Referrers = referrers };
         }
     }
