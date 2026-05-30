@@ -40,58 +40,86 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     .Where(bi => encounterIds.Contains(bi.EncounterId))
                     .ToListAsync(cancellationToken);
 
-                var groupedByPatient = encounters.GroupBy(e => e.PatientId);
+                // Batch-load the lookups so we avoid a per-encounter query (N+1):
+                //  - patient names by PatientId
+                //  - doctor names by DoctorID (Doctors -> UserProfiles)
+                //  - paid totals by InvoiceId (sum of allocations)
+                var patientIds = encounters
+                    .Select(e => e.PatientId)
+                    .Where(id => !string.IsNullOrEmpty(id))
+                    .Distinct()
+                    .ToList();
+
+                var patientNames = (await _context.PatientRegistrations
+                        .Where(p => p.PatientId != null && patientIds.Contains(p.PatientId))
+                        .Select(p => new { p.PatientId, p.FullName })
+                        .ToListAsync(cancellationToken))
+                    .GroupBy(x => x.PatientId!)
+                    .ToDictionary(g => g.Key, g => g.Select(x => x.FullName).FirstOrDefault());
+
+                var doctorIds = encounters
+                    .Where(e => e.PrimaryDoctorId.HasValue)
+                    .Select(e => e.PrimaryDoctorId!.Value)
+                    .Distinct()
+                    .ToList();
+
+                var doctorNames = await _context.Doctors
+                    .Where(d => doctorIds.Contains(d.DoctorID))
+                    .Join(_context.UserProfiles, d => d.UserID, u => u.UserID, (d, u) => new { d.DoctorID, u.FullName })
+                    .ToDictionaryAsync(x => x.DoctorID, x => x.FullName, cancellationToken);
+
+                var invoiceIds = invoices.Select(i => i.InvoiceId).ToList();
+
+                var paidByInvoice = (await _context.BillingPaymentAllocation
+                        .Where(bpa => invoiceIds.Contains(bpa.InvoiceId))
+                        .GroupBy(bpa => bpa.InvoiceId)
+                        .Select(g => new { InvoiceId = g.Key, Total = g.Sum(x => x.AllocatedAmount) })
+                        .ToListAsync(cancellationToken))
+                    .ToDictionary(x => x.InvoiceId, x => x.Total);
+
+                var invoiceByEncounter = invoices
+                    .GroupBy(bi => bi.EncounterId)
+                    .ToDictionary(g => g.Key, g => g.First());
 
                 var dashboardData = new List<HospitalBillingDashboardData>();
 
-                foreach (var patientGroup in groupedByPatient)
+                foreach (var patientGroup in encounters.GroupBy(e => e.PatientId))
                 {
                     var patientId = patientGroup.Key;
-                    var patientEncounters = patientGroup.ToList();
-
                     var encounterDetails = new List<DashboardEncounterDetail>();
 
-                    foreach (var encounter in patientEncounters)
+                    foreach (var encounter in patientGroup)
                     {
-                        var invoice = invoices.FirstOrDefault(bi => bi.EncounterId == encounter.EncounterId);
+                        if (!invoiceByEncounter.TryGetValue(encounter.EncounterId, out var invoice))
+                            continue;
 
-                        if (invoice != null)
+                        var doctorName = encounter.PrimaryDoctorId.HasValue
+                            && doctorNames.TryGetValue(encounter.PrimaryDoctorId.Value, out var dn) ? dn : null;
+
+                        var totalPaid = paidByInvoice.TryGetValue(invoice.InvoiceId, out var paid) ? paid : 0m;
+
+                        decimal netAmount = invoice.NetAmount ?? 0;
+                        decimal dueAmount = netAmount - totalPaid;
+
+                        bool isCancelled = invoice.StatusCode == BillingConstants.InvoiceStatus.Cancelled;
+
+                        encounterDetails.Add(new DashboardEncounterDetail
                         {
-                            var doctorName = await _context.Doctors
-                                .Where(d => d.DoctorID == encounter.PrimaryDoctorId)
-                                .Join(_context.UserProfiles,
-                                      d => d.UserID,
-                                      u => u.UserID,
-                                      (d, u) => u.FullName)
-                                .FirstOrDefaultAsync(cancellationToken);
-
-                            var totalPaid = await _context.BillingPaymentAllocation
-                                .Where(bpa => bpa.InvoiceId == invoice.InvoiceId)
-                                .SumAsync(bpa => bpa.AllocatedAmount, cancellationToken);
-
-                            decimal netAmount = invoice.NetAmount ?? 0;
-                            decimal dueAmount = netAmount - totalPaid;
-
-                            bool isCancelled = invoice.StatusCode == BillingConstants.InvoiceStatus.Cancelled;
-
-                            encounterDetails.Add(new DashboardEncounterDetail
-                            {
-                                EncounterId = encounter.EncounterId,
-                                VisitType = encounter.EncounterTypeCode,
-                                InvoiceNo = invoice.InvoiceNo,
-                                InvoiceId = invoice.InvoiceId,
-                                InvoiceDate = invoice.InvoiceDate,
-                                DoctorName = doctorName,
-                                NetAmount = netAmount,
-                                DueAmount = dueAmount,
-                                PaidAmount = totalPaid,
-                                Status = invoice.StatusCode,
-                                UpdatedAt = invoice.UpdatedAt,
-                                UpdatedBy = invoice.UpdatedBy,
-                                IsCancelled = isCancelled,
-                                CancelReason = isCancelled ? invoice.CancelReason : null
-                            });
-                        }
+                            EncounterId = encounter.EncounterId,
+                            VisitType = encounter.EncounterTypeCode,
+                            InvoiceNo = invoice.InvoiceNo,
+                            InvoiceId = invoice.InvoiceId,
+                            InvoiceDate = invoice.InvoiceDate,
+                            DoctorName = doctorName,
+                            NetAmount = netAmount,
+                            DueAmount = dueAmount,
+                            PaidAmount = totalPaid,
+                            Status = invoice.StatusCode,
+                            UpdatedAt = invoice.UpdatedAt,
+                            UpdatedBy = invoice.UpdatedBy,
+                            IsCancelled = isCancelled,
+                            CancelReason = isCancelled ? invoice.CancelReason : null
+                        });
                     }
 
                     if (encounterDetails.Count > 0)
@@ -99,7 +127,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         dashboardData.Add(new HospitalBillingDashboardData
                         {
                             PatientId = patientId,
-                            PatientName = "",
+                            PatientName = (patientId != null && patientNames.TryGetValue(patientId, out var name)) ? name : "",
                             Encounters = encounterDetails
                         });
                     }
