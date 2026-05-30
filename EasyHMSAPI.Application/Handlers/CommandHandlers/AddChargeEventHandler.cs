@@ -48,7 +48,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 var supplierState = policy?.PlaceOfSupplyStateCode;
                 var buyerState = string.IsNullOrWhiteSpace(request.PlaceOfSupplyStateCode) ? supplierState : request.PlaceOfSupplyStateCode;
                 var isInterState = GstTaxComputer.IsInterState(supplierState, buyerState);
-                var policyMaxDiscount = policy?.MaxAutoDiscountPercent ?? 100m;
 
                 // Pre-load referenced ChargeMaster rows (rate/HSN/GST/incentive snapshot source).
                 var chargeIds = request.Charges.Where(c => c.ChargeId.HasValue).Select(c => c.ChargeId!.Value).Distinct().ToList();
@@ -100,7 +99,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     // Incentive: per-line override → ChargeMaster default → none.
                     var incentive = charge.IncentiveAmount ?? master?.IncentiveAmount;
 
-                    var effectiveCap = master?.MaxDiscountPercent ?? policyMaxDiscount;
+                    // Discount cap: per-charge ChargeMaster cap, else no cap (100%).
+                    var effectiveCap = master?.MaxDiscountPercent ?? 100m;
                     var needsApproval = charge.DiscountPercent > effectiveCap;
 
                     var chargeEvent = new BillingChargeEvent

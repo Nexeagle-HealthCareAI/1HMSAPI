@@ -38,8 +38,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 _context.BillingPolicy.Add(policy);
             }
 
-            policy.RequirePostBeforeInvoice = request.RequirePostBeforeInvoice;
-            policy.MaxAutoDiscountPercent = request.MaxAutoDiscountPercent;
             policy.LabPathTrigger = request.LabPathTrigger;
             policy.LabRadTrigger = request.LabRadTrigger;
             policy.PharmacyIpdTrigger = request.PharmacyIpdTrigger;

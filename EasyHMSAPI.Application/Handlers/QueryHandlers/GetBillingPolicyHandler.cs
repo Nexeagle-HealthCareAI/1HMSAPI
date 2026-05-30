@@ -37,8 +37,6 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             {
                 BillingPolicyId = policy.BillingPolicyId,
                 HospitalId = policy.HospitalId,
-                RequirePostBeforeInvoice = policy.RequirePostBeforeInvoice,
-                MaxAutoDiscountPercent = policy.MaxAutoDiscountPercent,
                 LabPathTrigger = policy.LabPathTrigger,
                 LabRadTrigger = policy.LabRadTrigger,
                 PharmacyIpdTrigger = policy.PharmacyIpdTrigger,

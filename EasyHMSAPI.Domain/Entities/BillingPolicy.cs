@@ -9,8 +9,6 @@ namespace EasyHMSAPI.Domain.Entities
         [Key]
         public Guid BillingPolicyId { get; set; }
         public Guid HospitalId { get; set; }
-        public bool RequirePostBeforeInvoice { get; set; }
-        public decimal MaxAutoDiscountPercent { get; set; }
         public string? LabPathTrigger { get; set; }
         public string? LabRadTrigger { get; set; }
         public string? PharmacyIpdTrigger { get; set; }

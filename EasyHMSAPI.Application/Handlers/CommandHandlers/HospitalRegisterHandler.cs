@@ -106,8 +106,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 {
                     BillingPolicyId = Guid.NewGuid(),
                     HospitalId = hospitalId,
-                    RequirePostBeforeInvoice = false,
-                    MaxAutoDiscountPercent = 0,
                     CreatedAt = DateTime.UtcNow,
                     CreatedBy = request.LoggedInUserName,
                     UpdatedAt = DateTime.UtcNow,
