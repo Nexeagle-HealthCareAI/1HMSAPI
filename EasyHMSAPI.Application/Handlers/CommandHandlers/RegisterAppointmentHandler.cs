@@ -19,12 +19,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         private readonly AppDbContext _context;
         private readonly ISmsService _smsService;
         private readonly IWhatsAppMessagingService _whatsAppMessagingService;
+        private readonly IMediator _mediator;
 
-        public RegisterAppointmentHandler(AppDbContext context, ISmsService smsService, IWhatsAppMessagingService whatsAppMessagingService)
+        public RegisterAppointmentHandler(AppDbContext context, ISmsService smsService, IWhatsAppMessagingService whatsAppMessagingService, IMediator mediator)
         {
             _context = context;
             _smsService = smsService;
             _whatsAppMessagingService = whatsAppMessagingService;
+            _mediator = mediator;
         }
 
         public async Task<RegisterAppointmentResponseModel> Handle(RegisterAppointmentRequestModel request, CancellationToken cancellationToken)
@@ -67,9 +69,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
 
                 // Determine appointment type based on patient history and prescription settings
+                AppointmentTypeResolver.Result? typeResult = null;
                 if(patient is not null)
                 {
-                    await SetAppointmentType(appointment, patient, request, isNewAppointment, cancellationToken);
+                    typeResult = await SetAppointmentType(appointment, patient, request, isNewAppointment, cancellationToken);
                 }
                 else
                 {
@@ -78,6 +81,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 // Save appointment first to ensure ApptId exists in DB
                 await _context.SaveChangesAsync(cancellationToken);
+
+                // Auto OPD billing: when the visit is chargeable (New / Old-Fee) and the billing
+                // policy's OPD consult trigger is AUTO, create the encounter + consult charge and a
+                // DRAFT invoice in the ledger at booking time. Best-effort — never fail the booking.
+                if (isNewAppointment && typeResult?.FeeApplies == true)
+                {
+                    await TryAutoCreateOpdInvoice(appointment, patient, request, cancellationToken);
+                }
 
                 int? tokenNumber = null;
                 if (request.AllocateToken && isNewAppointment)
@@ -371,7 +382,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
         }
 
-        private async Task SetAppointmentType(Appointment appointment, PatientRegistration patient, RegisterAppointmentRequestModel request, bool isNewAppointment, CancellationToken cancellationToken)
+        private async Task<AppointmentTypeResolver.Result> SetAppointmentType(Appointment appointment, PatientRegistration patient, RegisterAppointmentRequestModel request, bool isNewAppointment, CancellationToken cancellationToken)
         {
             // Delegated to the shared resolver so the booking decision and the consult-timeline
             // preview always agree. Inputs mirror the previous inline logic exactly.
@@ -387,6 +398,49 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
             appointment.AppointmentType = result.AppointmentType;
             appointment.ValidUptoDate = result.ValidUptoDate;
+            return result;
+        }
+
+        // Creates the OPD encounter + consult charge (CreateChargeEventHandler self-gates on the
+        // AUTO policy and skips Old/No-Fee), then a DRAFT invoice for the posted charge. Best-effort:
+        // any failure (e.g. number series not configured) is swallowed so the booking still succeeds.
+        private async Task TryAutoCreateOpdInvoice(Appointment appointment, PatientRegistration patient, RegisterAppointmentRequestModel request, CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(patient.PatientId)) return;
+
+                var policy = await _context.BillingPolicy
+                    .FirstOrDefaultAsync(p => p.HospitalId == request.HospitalId, cancellationToken);
+                if (!string.Equals(policy?.OpdConsultTrigger, "AUTO", StringComparison.OrdinalIgnoreCase))
+                    return;
+
+                var charge = await _mediator.Send(new CreateChargeEventRequestModel
+                {
+                    PatientId = patient.PatientId,
+                    HospitalId = request.HospitalId,
+                    EncounterType = "OPD",
+                    AppointmentId = appointment.ApptId,
+                    LoggedInUserName = request.UserId?.ToString(),
+                }, cancellationToken);
+
+                var data = charge?.Data;
+                var hasCharge = data != null && (data.ConsultChargePosted || data.ConsultAlreadyCharged) && data.ConsultFee > 0;
+                if (charge?.Success != true || data == null || !hasCharge)
+                    return;
+
+                await _mediator.Send(new CreateDraftInvoiceRequestModel
+                {
+                    PatientId = patient.PatientId,
+                    HospitalId = request.HospitalId,
+                    EncounterId = data.EncounterId,
+                    LoggedInUserName = request.UserId?.ToString(),
+                }, cancellationToken);
+            }
+            catch
+            {
+                // Non-fatal: the bill can still be created later from the Add Bill popup.
+            }
         }
 
         private string GenerateNewPatientId()

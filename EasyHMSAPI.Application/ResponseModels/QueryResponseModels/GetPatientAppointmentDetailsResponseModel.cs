@@ -34,6 +34,13 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public DateTime CreatedAt { get; set; }
         public TokenDetail? Token { get; set; }
         public List<StatusHistoryModel>? StatusJsonHistory { get; set; }
+
+        // OPD consult billing status for this appointment (drives the Bill button + success modal).
+        public Guid? EncounterId { get; set; }
+        public bool ConsultCharged { get; set; }
+        public bool ConsultPaid { get; set; }
+        public decimal ConsultAmount { get; set; }
+        public string? ConsultReceiptNo { get; set; }
     }
 
     [ExcludeFromCodeCoverage]

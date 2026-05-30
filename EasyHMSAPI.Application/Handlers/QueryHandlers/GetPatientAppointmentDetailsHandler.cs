@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
@@ -21,6 +22,14 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
         public GetPatientAppointmentDetailsHandler(AppDbContext context)
         {
             _context = context;
+        }
+
+        private sealed class PaymentProjection
+        {
+            public Guid EncounterId { get; set; }
+            public decimal Amount { get; set; }
+            public string? ReceiptNo { get; set; }
+            public DateTime PaidAt { get; set; }
         }
 
         public async Task<GetPatientAppointmentDetailsResponseModel> Handle(GetPatientAppointmentDetailsRequestModel request, CancellationToken cancellationToken)
@@ -73,6 +82,42 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                                     where appts.Select(x => x.ApptId).Contains(a.ApptId)
                                     select new { a.ApptId, DoctorName = u.FullName, DepartmentId = d.PrimaryDepartmentID, DepartmentName = dept.Name }).ToListAsync(cancellationToken);
 
+            // ── OPD consult billing status per appointment (mirrors GetConsultTimelineHandler) ──
+            var opdEncounters = await _context.Encounter.AsNoTracking()
+                .Where(e => e.HospitalId == request.HospitalId
+                    && e.SourceType == "Appointments"
+                    && e.SourceId != null && apptIds.Contains(e.SourceId.Value)
+                    && e.EncounterTypeCode == BillingConstants.EncounterType.Opd)
+                .Select(e => new { ApptId = e.SourceId!.Value, e.EncounterId })
+                .ToListAsync(cancellationToken);
+
+            var apptToEncounter = opdEncounters
+                .GroupBy(e => e.ApptId)
+                .ToDictionary(g => g.Key, g => g.First().EncounterId);
+            var encIds = opdEncounters.Select(e => e.EncounterId).Distinct().ToList();
+
+            var consultByEncounter = encIds.Count == 0
+                ? new Dictionary<Guid, decimal>()
+                : await _context.BillingChargeEvent.AsNoTracking()
+                    .Where(c => encIds.Contains(c.EncounterId) && c.CategoryCode == "CONSULT")
+                    .GroupBy(c => c.EncounterId)
+                    .Select(g => new { EncounterId = g.Key, Amount = g.Sum(x => x.NetAmount) })
+                    .ToDictionaryAsync(x => x.EncounterId, x => x.Amount, cancellationToken);
+
+            var consultPayments = encIds.Count == 0
+                ? new List<PaymentProjection>()
+                : await _context.BillingPayment.AsNoTracking()
+                    .Where(p => encIds.Contains(p.EncounterId) && p.PaymentType == "PAYMENT")
+                    .Select(p => new PaymentProjection { EncounterId = p.EncounterId, Amount = p.Amount, ReceiptNo = p.ReceiptNo, PaidAt = p.PaidAt })
+                    .ToListAsync(cancellationToken);
+
+            var paidByEncounter = consultPayments
+                .GroupBy(p => p.EncounterId)
+                .ToDictionary(g => g.Key, g => g.Sum(x => x.Amount));
+            var receiptByEncounter = consultPayments
+                .GroupBy(p => p.EncounterId)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.PaidAt).Select(x => x.ReceiptNo).FirstOrDefault());
+
             foreach (var a in appts)
             {
                 PatientRegistration? p = null;
@@ -85,6 +130,20 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 string? doctorName = doctorInfo?.DoctorName;
                 Guid? departmentId = doctorInfo?.DepartmentId;
                 string? departmentName = doctorInfo?.DepartmentName;
+
+                // OPD consult billing status for this appointment.
+                Guid? encId = apptToEncounter.TryGetValue(a.ApptId, out var ce) ? ce : (Guid?)null;
+                bool consultCharged = false, consultPaid = false;
+                decimal consultAmount = 0m;
+                string? consultReceiptNo = null;
+                if (encId.HasValue && consultByEncounter.TryGetValue(encId.Value, out var chAmt))
+                {
+                    consultCharged = true;
+                    consultAmount = chAmt;
+                    var paid = paidByEncounter.TryGetValue(encId.Value, out var pp) ? pp : 0m;
+                    consultPaid = chAmt > 0 && paid >= chAmt;
+                    if (consultPaid) receiptByEncounter.TryGetValue(encId.Value, out consultReceiptNo);
+                }
 
                 response.Items.Add(new AppointmentDetail
                 {
@@ -108,6 +167,11 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     LastStatusAt = a.LastStatusCodeAt,
                     CreatedAt = a.CreatedAt,
                     AppointmentType = a.AppointmentType,
+                    EncounterId = encId,
+                    ConsultCharged = consultCharged,
+                    ConsultPaid = consultPaid,
+                    ConsultAmount = consultAmount,
+                    ConsultReceiptNo = consultReceiptNo,
                     Token = token == null ? null : new TokenDetail
                     {
                         TokenId = token.TokenId,
