@@ -44,6 +44,25 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        [HttpGet("dashboard")]
+        public async Task<ActionResult<GetHospitalBillingDashboardResponseModel>> GetBillingDashboard([FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var request = new GetHospitalBillingDashboardRequestModel { HospitalId = hospitalId };
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetBillingDashboard for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching the billing dashboard." });
+            }
+        }
+
         [HttpPut("policy")]
         public async Task<ActionResult<UpsertBillingPolicyResponseModel>> UpdateBillingPolicy([FromBody] UpsertBillingPolicyRequestModel request)
         {

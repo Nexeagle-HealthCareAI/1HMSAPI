@@ -64,6 +64,9 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<DiscountApproval> DiscountApproval { get; set; }
         public DbSet<Expense> Expenses { get; set; }
         public DbSet<DoctorFee> DoctorFees { get; set; }
+        public DbSet<Alert> Alert { get; set; }
+        public DbSet<Admission> Admission { get; set; }
+        public DbSet<ConsentRecord> ConsentRecord { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {   
@@ -492,6 +495,40 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)");
                 entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)");
                 entity.Property(e => e.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<Alert>(entity =>
+            {
+                entity.ToTable("Alert");
+                entity.HasKey(a => a.AlertId);
+                entity.Property(a => a.RaisedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.DispatchedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.AcknowledgedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.DismissedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.SnoozedUntil).HasColumnType("datetime2(3)");
+                entity.Property(a => a.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<Admission>(entity =>
+            {
+                entity.ToTable("Admission");
+                entity.HasKey(a => a.AdmissionId);
+                entity.Property(a => a.AdmittedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.ExpectedDischargeAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.DischargedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.CancelledAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<ConsentRecord>(entity =>
+            {
+                entity.ToTable("ConsentRecord");
+                entity.HasKey(c => c.ConsentRecordId);
+                entity.Property(c => c.SignedAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.CreatedAt).HasColumnType("datetime2(3)");
             });
 
             modelBuilder.Entity<BillingChargeEvent>(entity =>
