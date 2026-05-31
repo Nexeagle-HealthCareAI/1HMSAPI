@@ -1,9 +1,11 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
@@ -32,7 +34,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return new CancelAppointmentResponseModel { Success = false, Message = "Appointment not found." };
 
                 bool billVoided = false;
-                bool billRetainedDueToPayment = false;
+                bool billRefunded = false;
+                decimal refundAmount = 0m;
+                string? refundReceiptNo = null;
 
                 // Check doctor status before proceeding
                 if (appt != null)
@@ -68,9 +72,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 // ── Billing cleanup ────────────────────────────────────────────
                 // Booking may have auto-created an OPD encounter with a posted consult
-                // charge + draft invoice. On cancellation, void that bill so it doesn't
-                // linger in the ledger — but ONLY when nothing has been collected yet.
-                // If a payment was already taken, leave it for a manual refund.
+                // charge + draft invoice. On cancellation we always tear that bill down so
+                // it doesn't linger in the ledger:
+                //   • unpaid  → void the charge + cancel the draft invoice + encounter.
+                //   • paid    → additionally auto-issue a REFUND receipt for the collected
+                //               amount and drop the payment allocations, so collected/outstanding
+                //               net to zero with a full paid → refunded audit trail.
                 var billEncounter = await _context.Encounter
                     .FirstOrDefaultAsync(e => e.SourceType == "Appointments"
                                            && e.SourceId == appt.ApptId
@@ -79,50 +86,99 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 if (billEncounter != null)
                 {
+                    var billNow = DateTime.UtcNow;
+
                     var paidTotal = await _context.BillingPayment
                         .Where(p => p.EncounterId == billEncounter.EncounterId
                                  && p.PaymentType == BillingConstants.PaymentType.Payment)
                         .SumAsync(p => (decimal?)p.Amount, cancellationToken) ?? 0m;
 
-                    if (paidTotal > 0)
+                    var refundedAlready = await _context.BillingPayment
+                        .Where(p => p.EncounterId == billEncounter.EncounterId
+                                 && p.PaymentType == BillingConstants.PaymentType.Refund)
+                        .SumAsync(p => (decimal?)p.Amount, cancellationToken) ?? 0m;
+
+                    var netCollected = paidTotal - refundedAlready;
+
+                    // Auto-refund any net cash still held against this encounter.
+                    if (netCollected > 0)
                     {
-                        // Money already collected — don't silently wipe a receipt.
-                        billRetainedDueToPayment = true;
+                        // Mirror the original payment mode where we can, for a sensible receipt.
+                        var lastMode = await _context.BillingPayment
+                            .Where(p => p.EncounterId == billEncounter.EncounterId
+                                     && p.PaymentType == BillingConstants.PaymentType.Payment)
+                            .OrderByDescending(p => p.PaidAt)
+                            .Select(p => p.PaymentMode)
+                            .FirstOrDefaultAsync(cancellationToken);
+
+                        var rcptSeries = await NumberSeriesDefaults.GetOrCreateAsync(
+                            _context, appt.HospitalId, BillingConstants.NumberSeriesCode.Receipt, "SYSTEM", cancellationToken);
+                        rcptSeries.CurrentValue++;
+                        refundReceiptNo = NumberSeriesFormatter.Format(
+                            rcptSeries.Prefix, rcptSeries.YearFormat, rcptSeries.Separator, rcptSeries.PadLength, rcptSeries.CurrentValue);
+                        rcptSeries.UpdatedAt = billNow;
+                        rcptSeries.UpdatedBy = "SYSTEM";
+
+                        _context.BillingPayment.Add(new BillingPayment
+                        {
+                            PaymentId = Guid.NewGuid(),
+                            HospitalId = appt.HospitalId,
+                            PatientId = billEncounter.PatientId,
+                            EncounterId = billEncounter.EncounterId,
+                            ReceiptNo = refundReceiptNo,
+                            PaymentType = BillingConstants.PaymentType.Refund,
+                            PaymentMode = lastMode,
+                            PaymentDescription = "Auto refund — appointment cancelled",
+                            Amount = netCollected,
+                            PaidAt = billNow,
+                            CreatedAt = billNow,
+                            CreatedBy = "SYSTEM",
+                            UpdatedAt = billNow,
+                            UpdatedBy = "SYSTEM"
+                        });
+
+                        // Drop the allocations so the cancelled invoice's paid total returns to zero.
+                        var allocations = await _context.BillingPaymentAllocation
+                            .Where(a => a.EncounterId == billEncounter.EncounterId)
+                            .ToListAsync(cancellationToken);
+                        if (allocations.Count > 0)
+                            _context.BillingPaymentAllocation.RemoveRange(allocations);
+
+                        billRefunded = true;
+                        refundAmount = netCollected;
                     }
-                    else
+
+                    // Void the charge lines.
+                    var charges = await _context.BillingChargeEvent
+                        .Where(c => c.EncounterId == billEncounter.EncounterId
+                                 && c.StatusCode != BillingConstants.ChargeEventStatus.Void)
+                        .ToListAsync(cancellationToken);
+                    foreach (var c in charges)
                     {
-                        var billNow = DateTime.UtcNow;
-
-                        var charges = await _context.BillingChargeEvent
-                            .Where(c => c.EncounterId == billEncounter.EncounterId
-                                     && c.StatusCode != BillingConstants.ChargeEventStatus.Void)
-                            .ToListAsync(cancellationToken);
-                        foreach (var c in charges)
-                        {
-                            c.StatusCode = BillingConstants.ChargeEventStatus.Void;
-                            c.VoidedAt = billNow;
-                            c.VoidedBy = "SYSTEM";
-                            c.VoidReason = "Appointment cancelled";
-                            c.UpdatedAt = billNow;
-                            c.UpdatedBy = "SYSTEM";
-                        }
-
-                        var draftInvoices = await _context.BillingInvoice
-                            .Where(i => i.EncounterId == billEncounter.EncounterId
-                                     && i.StatusCode == BillingConstants.InvoiceStatus.Draft)
-                            .ToListAsync(cancellationToken);
-                        foreach (var inv in draftInvoices)
-                        {
-                            inv.StatusCode = BillingConstants.InvoiceStatus.Cancelled;
-                            inv.UpdatedAt = billNow;
-                            inv.UpdatedBy = "SYSTEM";
-                        }
-
-                        billEncounter.StatusCode = BillingConstants.EncounterStatus.Cancelled;
-                        billEncounter.UpdatedAt = billNow;
-                        billEncounter.UpdatedBy = "SYSTEM";
-                        billVoided = true;
+                        c.StatusCode = BillingConstants.ChargeEventStatus.Void;
+                        c.VoidedAt = billNow;
+                        c.VoidedBy = "SYSTEM";
+                        c.VoidReason = "Appointment cancelled";
+                        c.UpdatedAt = billNow;
+                        c.UpdatedBy = "SYSTEM";
                     }
+
+                    // Cancel any invoice on this encounter (draft or finalized).
+                    var invoices = await _context.BillingInvoice
+                        .Where(i => i.EncounterId == billEncounter.EncounterId
+                                 && i.StatusCode != BillingConstants.InvoiceStatus.Cancelled)
+                        .ToListAsync(cancellationToken);
+                    foreach (var inv in invoices)
+                    {
+                        inv.StatusCode = BillingConstants.InvoiceStatus.Cancelled;
+                        inv.UpdatedAt = billNow;
+                        inv.UpdatedBy = "SYSTEM";
+                    }
+
+                    billEncounter.StatusCode = BillingConstants.EncounterStatus.Cancelled;
+                    billEncounter.UpdatedAt = billNow;
+                    billEncounter.UpdatedBy = "SYSTEM";
+                    billVoided = true;
                 }
 
                 await _context.SaveChangesAsync(cancellationToken);
@@ -138,8 +194,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
 
                 var message = "Appointment cancelled successfully.";
-                if (billRetainedDueToPayment)
-                    message += " A payment was already collected — the consultation bill was kept for a manual refund.";
+                if (billRefunded)
+                    message += $" ₹{refundAmount:0.##} was refunded (receipt {refundReceiptNo}) and the consultation bill was voided.";
                 else if (billVoided)
                     message += " The unpaid consultation charge was voided.";
 
