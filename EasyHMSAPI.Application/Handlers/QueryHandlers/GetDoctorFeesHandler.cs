@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -21,7 +22,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
         public async Task<GetDoctorFeesResponseModel> Handle(GetDoctorFeesRequestModel request, CancellationToken cancellationToken)
         {
             var doctors = await _context.Doctors
-                .Where(d => d.HospitalId == request.HospitalId)
+                .Where(d => d.HospitalId == request.HospitalId
+                         && _context.Users.Any(u => u.UserID == d.UserID
+                                                 && u.UserStatusId != (int)UserStatusEnum.Revoked))
                 .Select(d => new
                 {
                     d.DoctorID,
