@@ -81,5 +81,28 @@ namespace EasyHMSAPI.Api.Controllers
                 return StatusCode(500, new { Message = "An error occurred." });
             }
         }
+
+        [HttpPost("master/bulk")]
+        public async Task<ActionResult<BulkCreateBedMasterResponseModel>> BulkCreateBedMaster([FromBody] BulkCreateBedMasterRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+            if (request.Count <= 0)
+                return BadRequest(new { Message = "Number of beds must be greater than 0." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in BulkCreateBedMaster for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
     }
 }
