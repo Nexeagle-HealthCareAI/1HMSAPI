@@ -42,6 +42,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? PlaceOfSupplyStateCode { get; set; }
 
         public bool? IsReopened { get; set; }
+        public string? ReopenedReason { get; set; }
     }
 
     public class BillingChargeDetail

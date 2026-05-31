@@ -123,7 +123,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     TaxAmount = currentInvoice.TaxAmount,
                     BuyerGstin = currentInvoice.BuyerGstin,
                     PlaceOfSupplyStateCode = currentInvoice.PlaceOfSupplyStateCode,
-                    IsReopened = currentInvoice.IsReopened
+                    IsReopened = currentInvoice.IsReopened,
+                    ReopenedReason = currentInvoice.ReopenedReason
                 };
 
                 return new GetBillingEventsResponseModel

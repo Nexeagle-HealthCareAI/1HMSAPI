@@ -180,7 +180,28 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
             decimal gross = linkedChargeEvents.Sum(ce => ce.Qty * ce.UnitPrice);
             decimal lineDiscount = linkedChargeEvents.Sum(ce => ce.DiscountAmount ?? 0);
-            decimal invoiceLevelDiscount = request.InvoiceDiscountAmount ?? 0;
+
+            // Invoice-level (overall) discount. When the caller doesn't specify one, preserve any
+            // previously-applied invoice-level discount on the existing draft — i.e. its prior total
+            // discount minus the line discounts of the charges that were already on it. This keeps the
+            // overall discount intact when the draft is rebuilt to add a charge, record a payment, or
+            // finalize, instead of silently resetting it to zero.
+            decimal invoiceLevelDiscount;
+            if (request.InvoiceDiscountAmount.HasValue)
+            {
+                invoiceLevelDiscount = request.InvoiceDiscountAmount.Value;
+            }
+            else if (existingDraft != null)
+            {
+                decimal priorLineDiscount = allChargeEvents
+                    .Where(ce => alreadyLinkedSet.Contains(ce.ChargeEventId))
+                    .Sum(ce => ce.DiscountAmount ?? 0);
+                invoiceLevelDiscount = Math.Max(0, (existingDraft.DiscountAmount ?? 0) - priorLineDiscount);
+            }
+            else
+            {
+                invoiceLevelDiscount = 0;
+            }
             if (invoiceLevelDiscount < 0) invoiceLevelDiscount = 0;
             decimal totalDiscount = lineDiscount + invoiceLevelDiscount;
             if (totalDiscount > gross) totalDiscount = gross;
