@@ -31,6 +31,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (appt == null)
                     return new CancelAppointmentResponseModel { Success = false, Message = "Appointment not found." };
 
+                bool billVoided = false;
+                bool billRetainedDueToPayment = false;
+
                 // Check doctor status before proceeding
                 if (appt != null)
                 {
@@ -62,6 +65,66 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         _context.Appointments.Update(appt);
                     }
                 }
+
+                // ── Billing cleanup ────────────────────────────────────────────
+                // Booking may have auto-created an OPD encounter with a posted consult
+                // charge + draft invoice. On cancellation, void that bill so it doesn't
+                // linger in the ledger — but ONLY when nothing has been collected yet.
+                // If a payment was already taken, leave it for a manual refund.
+                var billEncounter = await _context.Encounter
+                    .FirstOrDefaultAsync(e => e.SourceType == "Appointments"
+                                           && e.SourceId == appt.ApptId
+                                           && e.StatusCode == BillingConstants.EncounterStatus.Open,
+                                           cancellationToken);
+
+                if (billEncounter != null)
+                {
+                    var paidTotal = await _context.BillingPayment
+                        .Where(p => p.EncounterId == billEncounter.EncounterId
+                                 && p.PaymentType == BillingConstants.PaymentType.Payment)
+                        .SumAsync(p => (decimal?)p.Amount, cancellationToken) ?? 0m;
+
+                    if (paidTotal > 0)
+                    {
+                        // Money already collected — don't silently wipe a receipt.
+                        billRetainedDueToPayment = true;
+                    }
+                    else
+                    {
+                        var billNow = DateTime.UtcNow;
+
+                        var charges = await _context.BillingChargeEvent
+                            .Where(c => c.EncounterId == billEncounter.EncounterId
+                                     && c.StatusCode != BillingConstants.ChargeEventStatus.Void)
+                            .ToListAsync(cancellationToken);
+                        foreach (var c in charges)
+                        {
+                            c.StatusCode = BillingConstants.ChargeEventStatus.Void;
+                            c.VoidedAt = billNow;
+                            c.VoidedBy = "SYSTEM";
+                            c.VoidReason = "Appointment cancelled";
+                            c.UpdatedAt = billNow;
+                            c.UpdatedBy = "SYSTEM";
+                        }
+
+                        var draftInvoices = await _context.BillingInvoice
+                            .Where(i => i.EncounterId == billEncounter.EncounterId
+                                     && i.StatusCode == BillingConstants.InvoiceStatus.Draft)
+                            .ToListAsync(cancellationToken);
+                        foreach (var inv in draftInvoices)
+                        {
+                            inv.StatusCode = BillingConstants.InvoiceStatus.Cancelled;
+                            inv.UpdatedAt = billNow;
+                            inv.UpdatedBy = "SYSTEM";
+                        }
+
+                        billEncounter.StatusCode = BillingConstants.EncounterStatus.Cancelled;
+                        billEncounter.UpdatedAt = billNow;
+                        billEncounter.UpdatedBy = "SYSTEM";
+                        billVoided = true;
+                    }
+                }
+
                 await _context.SaveChangesAsync(cancellationToken);
 
                 // Send SMS to patient
@@ -74,11 +137,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     isSmsSent = await _smsService.SendInvitationSmsAsync(patient.Mobile, smsMsg);
                 }
 
+                var message = "Appointment cancelled successfully.";
+                if (billRetainedDueToPayment)
+                    message += " A payment was already collected — the consultation bill was kept for a manual refund.";
+                else if (billVoided)
+                    message += " The unpaid consultation charge was voided.";
+
                 return new CancelAppointmentResponseModel {
                     Success = true,
                     FinalStatus = AppConstants.AppointmentStatus_Cancelled,
                     IsReminderSent = isSmsSent,
-                    Message = "Appointment cancelled successfully."
+                    Message = message
                 };
             }
             catch (Exception ex)
