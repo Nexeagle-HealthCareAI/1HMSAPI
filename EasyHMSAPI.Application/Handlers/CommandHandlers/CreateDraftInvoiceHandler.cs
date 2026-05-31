@@ -21,11 +21,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
         public async Task<CreateDraftInvoiceResponseModel> Handle(CreateDraftInvoiceRequestModel request, CancellationToken cancellationToken)
         {
+            // The DbContext is configured with EnableRetryOnFailure, so any user-initiated
+            // transaction must run inside an execution strategy (as a retriable unit).
+            var strategy = _context.Database.CreateExecutionStrategy();
+
             for (var attempt = 0; attempt < MaxConcurrencyRetries; attempt++)
             {
                 try
                 {
-                    return await TryCreateAsync(request, cancellationToken);
+                    return await strategy.ExecuteAsync(() => TryCreateAsync(request, cancellationToken));
                 }
                 catch (DbUpdateConcurrencyException)
                 {
