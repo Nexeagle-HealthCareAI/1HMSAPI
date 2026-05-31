@@ -12,10 +12,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     public class AddPaymentEventHandler : IRequestHandler<AddPaymentEventRequestModel, AddPaymentEventResponseModel>
     {
         private readonly AppDbContext _context;
+        private readonly IMediator _mediator;
 
-        public AddPaymentEventHandler(AppDbContext context)
+        public AddPaymentEventHandler(AppDbContext context, IMediator mediator)
         {
             _context = context;
+            _mediator = mediator;
         }
 
         public async Task<AddPaymentEventResponseModel> Handle(AddPaymentEventRequestModel request, CancellationToken cancellationToken)
@@ -52,12 +54,30 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     .Where(bi => bi.EncounterId == request.EncounterId)
                     .FirstOrDefaultAsync(cancellationToken);
 
+                // Recording a payment implies the encounter's posted charges are being billed.
+                // If no invoice exists yet, auto-create a DRAFT invoice (draft still accepts payment)
+                // so callers don't have to invoice separately first.
+                if (billingInvoice == null)
+                {
+                    await _mediator.Send(new CreateDraftInvoiceRequestModel
+                    {
+                        PatientId = request.PatientId,
+                        EncounterId = request.EncounterId,
+                        HospitalId = request.HospitalId,
+                        LoggedInUserName = request.LoggedInUserName,
+                    }, cancellationToken);
+
+                    billingInvoice = await _context.BillingInvoice
+                        .Where(bi => bi.EncounterId == request.EncounterId)
+                        .FirstOrDefaultAsync(cancellationToken);
+                }
+
                 if (billingInvoice == null)
                 {
                     return new AddPaymentEventResponseModel
                     {
                         Success = false,
-                        Message = "No billing invoice found for this encounter."
+                        Message = "No invoice could be created — there are no posted charges on this encounter to bill."
                     };
                 }
 
