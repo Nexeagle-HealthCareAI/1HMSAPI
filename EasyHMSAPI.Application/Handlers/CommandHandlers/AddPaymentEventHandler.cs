@@ -50,14 +50,22 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
                 request.Payment.PaymentType = normalizedPaymentType;
 
-                var billingInvoice = await _context.BillingInvoice
+                // Prefer the DRAFT invoice (still mutable); fall back to the latest invoice.
+                async Task<BillingInvoice?> LoadInvoiceAsync() => await _context.BillingInvoice
                     .Where(bi => bi.EncounterId == request.EncounterId)
+                    .OrderByDescending(bi => bi.StatusCode == BillingConstants.InvoiceStatus.Draft)
+                    .ThenByDescending(bi => bi.CreatedAt)
                     .FirstOrDefaultAsync(cancellationToken);
 
+                var billingInvoice = await LoadInvoiceAsync();
+
                 // Recording a payment implies the encounter's posted charges are being billed.
-                // If no invoice exists yet, auto-create a DRAFT invoice (draft still accepts payment)
-                // so callers don't have to invoice separately first.
-                if (billingInvoice == null)
+                // Run the draft-invoice builder when there's no invoice yet OR when the current
+                // invoice is still a DRAFT: CreateDraftInvoice reuses the draft and links any
+                // newly posted charges (e.g. a lab added after the consult was already paid),
+                // recomputing the total so the payment validates against the up-to-date due.
+                // A FINALIZED invoice is left untouched (locked).
+                if (billingInvoice == null || billingInvoice.StatusCode == BillingConstants.InvoiceStatus.Draft)
                 {
                     await _mediator.Send(new CreateDraftInvoiceRequestModel
                     {
@@ -67,9 +75,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         LoggedInUserName = request.LoggedInUserName,
                     }, cancellationToken);
 
-                    billingInvoice = await _context.BillingInvoice
-                        .Where(bi => bi.EncounterId == request.EncounterId)
-                        .FirstOrDefaultAsync(cancellationToken);
+                    billingInvoice = await LoadInvoiceAsync();
                 }
 
                 if (billingInvoice == null)
