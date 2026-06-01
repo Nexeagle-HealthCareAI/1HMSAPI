@@ -16,9 +16,13 @@ namespace EasyHMSAPI.Application.Services
     {
         public static (string Prefix, string YearFormat, string Separator, int PadLength) For(string? seriesCode)
         {
-            return string.Equals(seriesCode, BillingConstants.NumberSeriesCode.Receipt, StringComparison.OrdinalIgnoreCase)
-                ? ("RCPT", "YYYY", "-", 6)
-                : ("INV", "YYYY", "-", 6);
+            if (string.Equals(seriesCode, BillingConstants.NumberSeriesCode.Receipt, StringComparison.OrdinalIgnoreCase))
+                return ("RCPT", "YYYY", "-", 6);
+            if (string.Equals(seriesCode, BillingConstants.NumberSeriesCode.Admission, StringComparison.OrdinalIgnoreCase))
+                return ("ADM", "YYYY", "-", 6);
+            if (string.Equals(seriesCode, BillingConstants.NumberSeriesCode.InterimBill, StringComparison.OrdinalIgnoreCase))
+                return ("IB", "YYYY", "-", 6);
+            return ("INV", "YYYY", "-", 6);
         }
 
         /// <summary>

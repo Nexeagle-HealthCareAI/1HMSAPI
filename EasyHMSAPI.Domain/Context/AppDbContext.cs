@@ -66,6 +66,8 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<DoctorFee> DoctorFees { get; set; }
         public DbSet<Alert> Alert { get; set; }
         public DbSet<Admission> Admission { get; set; }
+        public DbSet<AdmissionDayBill> AdmissionDayBill { get; set; }
+        public DbSet<AdmissionDayBillLine> AdmissionDayBillLine { get; set; }
         public DbSet<ConsentRecord> ConsentRecord { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)

@@ -62,6 +62,7 @@ namespace EasyHMSAPI.Data.Constants
             public const string LabAccession = "LABACC";
             public const string RadStudy = "RADSTUDY";
             public const string Admission = "ADM";
+            public const string InterimBill = "IB";
             public const string PcpndtFormF = "PCPNDT";
             public const string Mlc = "MLC";
             public const string VisitorPass = "VIS";
@@ -73,6 +74,12 @@ namespace EasyHMSAPI.Data.Constants
             public const string Reopen = "reopen";
             public const string Charges = "Charges";
             public const string Payment = "Payment";
+        }
+
+        public static class DayBillStatus
+        {
+            public const string Closed = "CLOSED";
+            public const string Reopened = "REOPENED";
         }
     }
 }

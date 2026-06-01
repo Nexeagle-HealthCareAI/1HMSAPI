@@ -224,5 +224,65 @@ namespace EasyHMSAPI.Api.Controllers
                 return StatusCode(500, new { Message = "An error occurred while updating billing policy." });
             }
         }
+
+        // ── Admission day-wise interim billing ──────────────────────────────
+        [HttpGet("admission-day-bills")]
+        public async Task<ActionResult<GetAdmissionDayBillsResponseModel>> GetAdmissionDayBills(
+            [FromQuery] Guid hospitalId,
+            [FromQuery] Guid admissionId)
+        {
+            if (hospitalId == Guid.Empty || admissionId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and admissionId are required." });
+
+            try
+            {
+                var request = new GetAdmissionDayBillsRequestModel { HospitalId = hospitalId, AdmissionId = admissionId };
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetAdmissionDayBills for admissionId: {AdmissionId}", admissionId);
+                return StatusCode(500, new { Message = "An error occurred while fetching admission day bills." });
+            }
+        }
+
+        [HttpPost("admission-day/close")]
+        public async Task<ActionResult<CloseAdmissionDayResponseModel>> CloseAdmissionDay([FromBody] CloseAdmissionDayRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and admissionId are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in CloseAdmissionDay for admissionId: {AdmissionId}", request.AdmissionId);
+                return StatusCode(500, new { Message = "An error occurred while closing the admission day." });
+            }
+        }
+
+        [HttpPost("admission-day/reopen")]
+        public async Task<ActionResult<ReopenAdmissionDayResponseModel>> ReopenAdmissionDay([FromBody] ReopenAdmissionDayRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.AdmissionDayBillId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and admissionDayBillId are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in ReopenAdmissionDay for billId: {BillId}", request.AdmissionDayBillId);
+                return StatusCode(500, new { Message = "An error occurred while reopening the interim bill." });
+            }
+        }
     }
 }
