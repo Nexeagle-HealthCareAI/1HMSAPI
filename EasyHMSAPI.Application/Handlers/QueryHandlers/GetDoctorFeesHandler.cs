@@ -21,8 +21,18 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
         public async Task<GetDoctorFeesResponseModel> Handle(GetDoctorFeesRequestModel request, CancellationToken cancellationToken)
         {
+            // Doctors registered at THIS hospital are defined by the DoctorDepartment mapping
+            // (a doctor is a global identity attached to one or more hospitals), NOT the single
+            // retrofitted Doctor.HospitalId field. Distinct by DoctorID — a doctor may have several
+            // department rows at the same hospital.
+            var hospitalDoctorIds = await _context.DoctorDepartments
+                .Where(dd => dd.HospitalId == request.HospitalId)
+                .Select(dd => dd.DoctorID)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
             var doctors = await _context.Doctors
-                .Where(d => d.HospitalId == request.HospitalId
+                .Where(d => hospitalDoctorIds.Contains(d.DoctorID)
                          && _context.Users.Any(u => u.UserID == d.UserID
                                                  && u.UserStatusId != (int)UserStatusEnum.Revoked))
                 .Select(d => new
