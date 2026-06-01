@@ -24,5 +24,14 @@ namespace EasyHMSAPI.Domain.Entities
         public string? Country { get; set; }
         public string? Pincode { get; set; }
         public string? InsuranceId { get; set; }
+
+        // Additional demographics captured at booking (all optional).
+        public string? BloodGroup { get; set; }
+        public string? Block { get; set; }
+        public string? AlternateMobile { get; set; }
+        public string? Email { get; set; }
+        public string? EmergencyContactName { get; set; }
+        public string? EmergencyContactRelation { get; set; }
+        public string? EmergencyContactPhone { get; set; }
     }
 }

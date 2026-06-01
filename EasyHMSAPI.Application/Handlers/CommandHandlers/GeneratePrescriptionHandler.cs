@@ -117,6 +117,16 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     .AsNoTracking()
                     .FirstOrDefaultAsync(pr => pr.PatientId == request.PatientId && pr.HospitalId == request.HospitalId, cancellationToken);
 
+                // Referrer ("Referred By") for the prescription header (shown under the patient name).
+                string? referrerName = null;
+                if (existingAppointment.ReferredByReferrerId.HasValue)
+                {
+                    referrerName = await _context.Referrers
+                        .Where(r => r.ReferrerId == existingAppointment.ReferredByReferrerId.Value)
+                        .Select(r => r.ReferrerName)
+                        .FirstOrDefaultAsync(cancellationToken);
+                }
+
                 var patientDetails = new List<PatientDetailsModel>();
                 if (patientRegistration != null)
                 {
@@ -132,7 +142,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         State = patientRegistration.State,
                         Country = patientRegistration.Country,
                         Pincode = patientRegistration.Pincode,
-                        InsuranceId = patientRegistration.InsuranceId
+                        InsuranceId = patientRegistration.InsuranceId,
+                        ReferrerName = referrerName,
+                        ReferrerRelation = existingAppointment.ReferrerRelation
                     });
                 }
 

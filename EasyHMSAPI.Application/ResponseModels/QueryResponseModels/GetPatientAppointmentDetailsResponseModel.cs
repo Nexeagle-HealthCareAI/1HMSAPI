@@ -30,6 +30,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? InsuranceId { get; set; }
         public string? PaymentMode { get; set; }
         public string? AppointmentType { get; set; }
+        public string? ReferrerName { get; set; }
+        public string? ReferrerRelation { get; set; }
         public DateTime LastStatusAt { get; set; }
         public DateTime CreatedAt { get; set; }
         public TokenDetail? Token { get; set; }

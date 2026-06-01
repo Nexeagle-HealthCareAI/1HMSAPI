@@ -82,6 +82,14 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                                     where appts.Select(x => x.ApptId).Contains(a.ApptId)
                                     select new { a.ApptId, DoctorName = u.FullName, DepartmentId = d.PrimaryDepartmentID, DepartmentName = dept.Name }).ToListAsync(cancellationToken);
 
+            // Referrer ("Referred By") names for appointments that carry one.
+            var referrerIds = appts.Where(a => a.ReferredByReferrerId.HasValue).Select(a => a.ReferredByReferrerId!.Value).Distinct().ToList();
+            var referrerNames = referrerIds.Count == 0
+                ? new Dictionary<Guid, string>()
+                : await _context.Referrers
+                    .Where(r => referrerIds.Contains(r.ReferrerId))
+                    .ToDictionaryAsync(r => r.ReferrerId, r => r.ReferrerName, cancellationToken);
+
             // ── OPD consult billing status per appointment (mirrors GetConsultTimelineHandler) ──
             var opdEncounters = await _context.Encounter.AsNoTracking()
                 .Where(e => e.HospitalId == request.HospitalId
@@ -167,6 +175,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     LastStatusAt = a.LastStatusCodeAt,
                     CreatedAt = a.CreatedAt,
                     AppointmentType = a.AppointmentType,
+                    ReferrerName = a.ReferredByReferrerId.HasValue && referrerNames.TryGetValue(a.ReferredByReferrerId.Value, out var rn) ? rn : null,
+                    ReferrerRelation = a.ReferrerRelation,
                     EncounterId = encId,
                     ConsultCharged = consultCharged,
                     ConsultPaid = consultPaid,

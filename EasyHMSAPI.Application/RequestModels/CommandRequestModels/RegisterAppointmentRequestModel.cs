@@ -39,5 +39,14 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? InsuranceId { get; set; }
         public string? PaymentMode { get; set; }
         public string? PatientId { get; set; }
+
+        // Optional extra demographics from the booking popup.
+        public string? BloodGroup { get; set; }
+        public string? Block { get; set; }
+        public string? AlternateMobile { get; set; }
+        public string? Email { get; set; }
+        public string? EmergencyContactName { get; set; }
+        public string? EmergencyContactRelation { get; set; }
+        public string? EmergencyContactPhone { get; set; }
     }
 }

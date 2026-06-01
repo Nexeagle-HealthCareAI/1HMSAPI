@@ -76,6 +76,8 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public string? Country { get; set; }
         public string? Pincode { get; set; }
         public string? InsuranceId { get; set; }
+        public string? ReferrerName { get; set; }
+        public string? ReferrerRelation { get; set; }
     }
 
     [ExcludeFromCodeCoverage]

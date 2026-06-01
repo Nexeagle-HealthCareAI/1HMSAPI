@@ -205,6 +205,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     patient.InsuranceId = request.Patient?.InsuranceId ?? patient.InsuranceId;
                 if (!string.IsNullOrEmpty(request.Patient?.Country) && request.Patient?.Country != patient.Country)
                     patient.Country = request.Patient?.Country ?? patient.Country;
+                if (!string.IsNullOrEmpty(request.Patient?.BloodGroup)) patient.BloodGroup = request.Patient?.BloodGroup;
+                if (!string.IsNullOrEmpty(request.Patient?.Block)) patient.Block = request.Patient?.Block;
+                if (!string.IsNullOrEmpty(request.Patient?.AlternateMobile)) patient.AlternateMobile = request.Patient?.AlternateMobile;
+                if (!string.IsNullOrEmpty(request.Patient?.Email)) patient.Email = request.Patient?.Email;
+                if (!string.IsNullOrEmpty(request.Patient?.EmergencyContactName)) patient.EmergencyContactName = request.Patient?.EmergencyContactName;
+                if (!string.IsNullOrEmpty(request.Patient?.EmergencyContactRelation)) patient.EmergencyContactRelation = request.Patient?.EmergencyContactRelation;
+                if (!string.IsNullOrEmpty(request.Patient?.EmergencyContactPhone)) patient.EmergencyContactPhone = request.Patient?.EmergencyContactPhone;
                 patient.HospitalId = request.HospitalId;
                 return patient;
             }
@@ -228,7 +235,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     State = request.Patient?.State,
                     Pincode = request.Patient?.Pincode,
                     InsuranceId = !string.IsNullOrWhiteSpace(request.Patient?.InsuranceId) ? request.Patient?.InsuranceId : null,
-                    Country = request.Patient?.Country ?? string.Empty
+                    Country = request.Patient?.Country ?? string.Empty,
+                    BloodGroup = request.Patient?.BloodGroup,
+                    Block = request.Patient?.Block,
+                    AlternateMobile = request.Patient?.AlternateMobile,
+                    Email = request.Patient?.Email,
+                    EmergencyContactName = request.Patient?.EmergencyContactName,
+                    EmergencyContactRelation = request.Patient?.EmergencyContactRelation,
+                    EmergencyContactPhone = request.Patient?.EmergencyContactPhone,
                 };
                 _context.PatientRegistrations.Add(newPatient);
                 return newPatient;
