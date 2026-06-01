@@ -9,11 +9,11 @@ using Microsoft.EntityFrameworkCore;
 namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 {
     /// <summary>
-    /// Builds the day-wise view of an admission's bill. Billing days are admission-anchored
-    /// 24h windows from <see cref="Admission.AdmittedAt"/>. Closed days return their frozen
-    /// snapshot; the open (current) day and any not-yet-closed days are computed live from
-    /// the un-billed posted charges. Late charges whose natural day is already closed roll
-    /// forward into the first open day.
+    /// Day-wise view of a billing visit (Encounter) — opt-in, no admission required.
+    /// Billing days are 24h windows anchored to the visit's start (the earliest charge's
+    /// service date). Closed days return their frozen snapshot; the open day and any
+    /// not-yet-closed days are computed live from the un-billed posted charges, with late
+    /// charges rolling forward into the first open day.
     /// </summary>
     public class GetAdmissionDayBillsHandler : IRequestHandler<GetAdmissionDayBillsRequestModel, GetAdmissionDayBillsResponseModel>
     {
@@ -28,19 +28,22 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
         {
             try
             {
-                if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty)
-                    return new GetAdmissionDayBillsResponseModel { Success = false, Message = "HospitalId and AdmissionId are required." };
+                if (request.HospitalId == Guid.Empty || request.EncounterId == Guid.Empty)
+                    return new GetAdmissionDayBillsResponseModel { Success = false, Message = "HospitalId and EncounterId are required." };
 
-                var adm = await _context.Admission
-                    .FirstOrDefaultAsync(a => a.AdmissionId == request.AdmissionId && a.HospitalId == request.HospitalId, cancellationToken);
-                if (adm == null)
-                    return new GetAdmissionDayBillsResponseModel { Success = false, Message = "Admission not found." };
+                var charges = await _context.BillingChargeEvent
+                    .Where(c => c.EncounterId == request.EncounterId && c.HospitalId == request.HospitalId
+                                && c.StatusCode != BillingConstants.ChargeEventStatus.Void)
+                    .ToListAsync(cancellationToken);
 
-                var admittedAt = DateTime.SpecifyKind(adm.AdmittedAt, DateTimeKind.Utc);
                 var now = DateTime.UtcNow;
+                // Anchor Day 1 on the earliest charge's service date; fall back to now when empty.
+                var anchor = charges.Count > 0
+                    ? DateTime.SpecifyKind(charges.Min(c => c.ServiceDate), DateTimeKind.Utc)
+                    : now;
 
                 var closedBills = await _context.AdmissionDayBill
-                    .Where(b => b.AdmissionId == adm.AdmissionId && b.HospitalId == request.HospitalId
+                    .Where(b => b.EncounterId == request.EncounterId && b.HospitalId == request.HospitalId
                                 && b.StatusCode == BillingConstants.DayBillStatus.Closed)
                     .OrderBy(b => b.DayNumber)
                     .ToListAsync(cancellationToken);
@@ -53,33 +56,28 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         .ToListAsync(cancellationToken);
                 var billedChargeIds = closedLines.Select(l => l.ChargeEventId).ToHashSet();
 
-                var charges = await _context.BillingChargeEvent
-                    .Where(c => c.EncounterId == adm.EncounterId && c.HospitalId == request.HospitalId
-                                && c.StatusCode != BillingConstants.ChargeEventStatus.Void)
-                    .ToListAsync(cancellationToken);
-
                 var payments = await _context.BillingPayment
-                    .Where(p => p.EncounterId == adm.EncounterId && p.HospitalId == request.HospitalId)
+                    .Where(p => p.EncounterId == request.EncounterId && p.HospitalId == request.HospitalId)
                     .Select(p => new { p.PaymentType, p.Amount })
                     .ToListAsync(cancellationToken);
                 var received = payments.Sum(p => IsRefund(p.PaymentType) ? -p.Amount : p.Amount);
 
                 var totalCharged = charges.Sum(c => c.NetAmount);
+                var patientId = charges.FirstOrDefault()?.PatientId;
 
                 var maxClosedDay = closedBills.Count > 0 ? closedBills.Max(b => b.DayNumber) : 0;
                 var firstOpenDay = maxClosedDay + 1;
 
-                // Bucket un-billed charges into their assigned day (rolling forward past closed days).
                 var liveByDay = new Dictionary<int, List<BillingChargeEvent>>();
                 foreach (var c in charges.Where(c => !billedChargeIds.Contains(c.ChargeEventId)))
                 {
-                    var natural = DayIndexOf(c.ServiceDate, admittedAt);
+                    var natural = DayIndexOf(c.ServiceDate, anchor);
                     var assigned = Math.Max(natural, firstOpenDay);
                     if (!liveByDay.TryGetValue(assigned, out var list)) { list = new List<BillingChargeEvent>(); liveByDay[assigned] = list; }
                     list.Add(c);
                 }
 
-                var elapsedDays = DayIndexOf(now, admittedAt);
+                var elapsedDays = DayIndexOf(now, anchor);
                 var totalDays = Math.Max(Math.Max(elapsedDays, maxClosedDay), liveByDay.Count > 0 ? liveByDay.Keys.Max() : 0);
                 if (totalDays < 1) totalDays = 1;
 
@@ -91,7 +89,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 decimal cumulative = 0;
                 for (var d = 1; d <= totalDays; d++)
                 {
-                    var from = admittedAt.AddDays(d - 1);
+                    var from = anchor.AddDays(d - 1);
                     var to = from.AddDays(1);
                     var view = new AdmissionDayView
                     {
@@ -127,10 +125,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     Success = true,
                     Data = new AdmissionDayBillsData
                     {
-                        AdmissionId = adm.AdmissionId,
-                        EncounterId = adm.EncounterId,
-                        PatientId = adm.PatientId,
-                        AdmittedAt = admittedAt,
+                        AdmissionId = Guid.Empty,
+                        EncounterId = request.EncounterId,
+                        PatientId = patientId,
+                        AdmittedAt = anchor,
                         TotalDays = totalDays,
                         TotalCharged = totalCharged,
                         TotalReceived = received,
@@ -141,14 +139,14 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             }
             catch (Exception)
             {
-                return new GetAdmissionDayBillsResponseModel { Success = false, Message = "Error loading admission day bills." };
+                return new GetAdmissionDayBillsResponseModel { Success = false, Message = "Error loading day bills." };
             }
         }
 
-        // 1-based admission-anchored day index for a timestamp (charges before admit -> day 1).
-        private static int DayIndexOf(DateTime ts, DateTime admittedAt)
+        // 1-based day index for a timestamp relative to the visit anchor (charges before anchor -> day 1).
+        private static int DayIndexOf(DateTime ts, DateTime anchor)
         {
-            var hours = (DateTime.SpecifyKind(ts, DateTimeKind.Utc) - admittedAt).TotalHours;
+            var hours = (DateTime.SpecifyKind(ts, DateTimeKind.Utc) - anchor).TotalHours;
             var idx = (int)Math.Floor(hours / 24.0) + 1;
             return idx < 1 ? 1 : idx;
         }

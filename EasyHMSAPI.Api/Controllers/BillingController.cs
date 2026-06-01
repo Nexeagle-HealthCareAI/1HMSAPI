@@ -225,33 +225,33 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
-        // ── Admission day-wise interim billing ──────────────────────────────
-        [HttpGet("admission-day-bills")]
-        public async Task<ActionResult<GetAdmissionDayBillsResponseModel>> GetAdmissionDayBills(
+        // ── Visit day-wise interim billing (opt-in, anchored to the visit; no admission) ─────
+        [HttpGet("visit-day-bills")]
+        public async Task<ActionResult<GetAdmissionDayBillsResponseModel>> GetVisitDayBills(
             [FromQuery] Guid hospitalId,
-            [FromQuery] Guid admissionId)
+            [FromQuery] Guid encounterId)
         {
-            if (hospitalId == Guid.Empty || admissionId == Guid.Empty)
-                return BadRequest(new { Message = "hospitalId and admissionId are required." });
+            if (hospitalId == Guid.Empty || encounterId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and encounterId are required." });
 
             try
             {
-                var request = new GetAdmissionDayBillsRequestModel { HospitalId = hospitalId, AdmissionId = admissionId };
+                var request = new GetAdmissionDayBillsRequestModel { HospitalId = hospitalId, EncounterId = encounterId };
                 var response = await _mediator.Send(request);
                 return Ok(response);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error in GetAdmissionDayBills for admissionId: {AdmissionId}", admissionId);
-                return StatusCode(500, new { Message = "An error occurred while fetching admission day bills." });
+                _logger.LogError(ex, "Error in GetVisitDayBills for encounterId: {EncounterId}", encounterId);
+                return StatusCode(500, new { Message = "An error occurred while fetching day bills." });
             }
         }
 
-        [HttpPost("admission-day/close")]
-        public async Task<ActionResult<CloseAdmissionDayResponseModel>> CloseAdmissionDay([FromBody] CloseAdmissionDayRequestModel request)
+        [HttpPost("visit-day/close")]
+        public async Task<ActionResult<CloseAdmissionDayResponseModel>> CloseVisitDay([FromBody] CloseAdmissionDayRequestModel request)
         {
-            if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty)
-                return BadRequest(new { Message = "hospitalId and admissionId are required." });
+            if (request.HospitalId == Guid.Empty || request.EncounterId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and encounterId are required." });
 
             try
             {
@@ -261,13 +261,13 @@ namespace EasyHMSAPI.Api.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error in CloseAdmissionDay for admissionId: {AdmissionId}", request.AdmissionId);
-                return StatusCode(500, new { Message = "An error occurred while closing the admission day." });
+                _logger.LogError(ex, "Error in CloseVisitDay for encounterId: {EncounterId}", request.EncounterId);
+                return StatusCode(500, new { Message = "An error occurred while closing the day." });
             }
         }
 
-        [HttpPost("admission-day/reopen")]
-        public async Task<ActionResult<ReopenAdmissionDayResponseModel>> ReopenAdmissionDay([FromBody] ReopenAdmissionDayRequestModel request)
+        [HttpPost("visit-day/reopen")]
+        public async Task<ActionResult<ReopenAdmissionDayResponseModel>> ReopenVisitDay([FromBody] ReopenAdmissionDayRequestModel request)
         {
             if (request.HospitalId == Guid.Empty || request.AdmissionDayBillId == Guid.Empty)
                 return BadRequest(new { Message = "hospitalId and admissionDayBillId are required." });

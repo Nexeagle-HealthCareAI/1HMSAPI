@@ -41,7 +41,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return new ReopenAdmissionDayResponseModel { Success = false, Message = "This interim bill is not closed." };
 
                 var maxClosedDay = await _context.AdmissionDayBill
-                    .Where(b => b.AdmissionId == bill.AdmissionId && b.HospitalId == request.HospitalId
+                    .Where(b => b.EncounterId == bill.EncounterId && b.HospitalId == request.HospitalId
                                 && b.StatusCode == BillingConstants.DayBillStatus.Closed)
                     .MaxAsync(b => (int?)b.DayNumber, cancellationToken) ?? 0;
 

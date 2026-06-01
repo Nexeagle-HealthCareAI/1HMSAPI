@@ -8,6 +8,6 @@ namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
     public class GetAdmissionDayBillsRequestModel : IRequest<GetAdmissionDayBillsResponseModel>
     {
         public Guid HospitalId { get; set; }
-        public Guid AdmissionId { get; set; }
+        public Guid EncounterId { get; set; }
     }
 }

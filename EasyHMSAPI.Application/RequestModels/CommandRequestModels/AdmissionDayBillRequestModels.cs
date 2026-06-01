@@ -8,7 +8,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     public class CloseAdmissionDayRequestModel : IRequest<CloseAdmissionDayResponseModel>
     {
         public Guid HospitalId { get; set; }
-        public Guid AdmissionId { get; set; }
+        public Guid EncounterId { get; set; }
         public string? LoggedInUserName { get; set; }
     }
 

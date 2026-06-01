@@ -20,7 +20,9 @@ namespace EasyHMSAPI.Domain.Entities
         public Guid AdmissionDayBillId { get; set; }
 
         public Guid HospitalId { get; set; }
-        public Guid AdmissionId { get; set; }
+        // Day-wise billing is anchored to the billing visit (Encounter). AdmissionId is optional —
+        // populated only if a real IPD admission is ever linked; null for plain manual day-wise bills.
+        public Guid? AdmissionId { get; set; }
         public Guid EncounterId { get; set; }
         public string? PatientId { get; set; }
 

@@ -28,5 +28,11 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? UpdatedBy { get; set; }
         public bool IsCancelled { get; set; }
         public string? CancelReason { get; set; }
+
+        // Per-invoice financial position, so the visit board can show the money + status at a glance.
+        public decimal TotalBilled { get; set; }
+        public decimal AmountReceived { get; set; }
+        public decimal Balance { get; set; }
+        public string PaymentStatus { get; set; } = "UNPAID";   // PAID / PART / UNPAID
     }
 }
