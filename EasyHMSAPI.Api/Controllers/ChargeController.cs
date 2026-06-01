@@ -152,6 +152,25 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        [HttpPost("encounter")]
+        public async Task<ActionResult<CreateManualEncounterResponseModel>> CreateManualEncounter([FromBody] CreateManualEncounterRequestModel request)
+        {
+            if (string.IsNullOrEmpty(request.PatientId) || request.HospitalId == Guid.Empty)
+                return BadRequest(new { Message = "PatientId and HospitalId are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in CreateManualEncounter for patientId: {PatientId}", request.PatientId);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
         [HttpPost("add-event")]
         public async Task<ActionResult<AddChargeEventResponseModel>> AddChargeEvents([FromBody] AddChargeEventRequestModel request)
         {
