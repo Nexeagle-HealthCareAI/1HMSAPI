@@ -47,12 +47,35 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
-        // Admit a patient for an existing billing encounter (starts the IPD stay).
+        // Returning-patient detail: full demographics (for re-admit pre-fill) + admission history.
+        [HttpGet("patient")]
+        public async Task<ActionResult<GetPatientAdmissionsResponseModel>> GetPatientAdmissions(
+            [FromQuery] Guid hospitalId,
+            [FromQuery] string patientId)
+        {
+            if (hospitalId == Guid.Empty || string.IsNullOrWhiteSpace(patientId))
+                return BadRequest(new { Message = "hospitalId and patientId are required." });
+
+            try
+            {
+                var request = new GetPatientAdmissionsRequestModel { HospitalId = hospitalId, PatientId = patientId };
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetPatientAdmissions for patientId: {PatientId}", patientId);
+                return StatusCode(500, new { Message = "An error occurred while fetching patient admissions." });
+            }
+        }
+
+        // Admit a patient (new IPD admission). Registers a new patient (auto UHID) or reuses an
+        // existing one by UHID, then opens an admission with its own IPD number.
         [HttpPost]
         public async Task<ActionResult<AdmitPatientResponseModel>> Admit([FromBody] AdmitPatientRequestModel request)
         {
-            if (request.HospitalId == Guid.Empty || request.EncounterId == Guid.Empty || string.IsNullOrWhiteSpace(request.PatientId))
-                return BadRequest(new { Message = "hospitalId, patientId and encounterId are required." });
+            if (request.HospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
 
             try
             {
@@ -62,7 +85,7 @@ namespace EasyHMSAPI.Api.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error in Admit for encounterId: {EncounterId}", request.EncounterId);
+                _logger.LogError(ex, "Error in Admit for hospitalId: {HospitalId}", request.HospitalId);
                 return StatusCode(500, new { Message = "An error occurred while admitting the patient." });
             }
         }

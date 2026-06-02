@@ -13,10 +13,18 @@ namespace EasyHMSAPI.Domain.Entities
 
         public Guid HospitalId { get; set; }
         public string PatientId { get; set; } = null!;
-        public Guid EncounterId { get; set; }
+        // Optional — a standalone admission doesn't require a billing encounter.
+        public Guid? EncounterId { get; set; }
         public Guid? PrimaryDoctorId { get; set; }
 
         public string AdmissionNo { get; set; } = null!;
+
+        // EMERGENCY / ELECTIVE / DAYCARE / LAMA
+        public string? AdmissionType { get; set; }
+        // Referral source for MIS: SELF / DOCTOR / HOSPITAL (+ free-text name + optional Referrer link)
+        public string? ReferralSource { get; set; }
+        public string? ReferralName { get; set; }
+        public Guid? ReferredByReferrerId { get; set; }
 
         public DateTime AdmittedAt { get; set; }
         public string? AdmittedBy { get; set; }

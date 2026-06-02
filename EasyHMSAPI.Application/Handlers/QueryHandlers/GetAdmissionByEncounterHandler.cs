@@ -43,7 +43,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         AdmissionId = admission.AdmissionId,
                         AdmissionNo = admission.AdmissionNo,
                         PatientId = admission.PatientId,
-                        EncounterId = admission.EncounterId,
+                        EncounterId = admission.EncounterId ?? Guid.Empty,
                         AdmittedAt = admission.AdmittedAt,
                         DischargedAt = admission.DischargedAt,
                         StatusCode = admission.StatusCode,

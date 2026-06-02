@@ -98,7 +98,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     // Deposit low (only when a threshold is provided)
                     if (threshold.HasValue && threshold.Value > 0)
                     {
-                        var deposit = advanceByEncounter.TryGetValue(adm.EncounterId, out var d) ? d : 0m;
+                        var deposit = adm.EncounterId.HasValue && advanceByEncounter.TryGetValue(adm.EncounterId.Value, out var d) ? d : 0m;
                         if (deposit < threshold.Value)
                         {
                             if (TryRaise(adm, DepositLowCode, "Advance deposit low",

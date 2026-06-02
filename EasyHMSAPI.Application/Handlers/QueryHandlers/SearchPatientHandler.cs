@@ -23,7 +23,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
             // Build optimized query with all search criteria
             IQueryable<PatientRegistration> query = _context.PatientRegistrations
-                .Where(p => p.HospitalId == request.HospitalId);
+                .Where(p => p.HospitalId == request.HospitalId && p.MergedIntoPatientId == null);
 
             // Apply search text filter across multiple columns if provided
             if (!string.IsNullOrEmpty(request.SearchText))
@@ -33,6 +33,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     (p.FullName != null && p.FullName.ToLower().Contains(searchTerm)) ||
                     (p.PatientId != null && p.PatientId.ToLower().Contains(searchTerm)) ||
                     (p.Mobile != null && p.Mobile.Contains(searchTerm)) ||
+                    (p.AlternateMobile != null && p.AlternateMobile.Contains(searchTerm)) ||
+                    (p.AadhaarNumber != null && p.AadhaarNumber.Contains(searchTerm)) ||
+                    (p.AbhaId != null && p.AbhaId.ToLower().Contains(searchTerm)) ||
                     _context.Appointments.Any(a =>
                         a.PatientId == p.PatientId &&
                         a.HospitalId == request.HospitalId &&

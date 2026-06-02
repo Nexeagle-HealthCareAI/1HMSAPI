@@ -33,5 +33,22 @@ namespace EasyHMSAPI.Domain.Entities
         public string? EmergencyContactName { get; set; }
         public string? EmergencyContactRelation { get; set; }
         public string? EmergencyContactPhone { get; set; }
+
+        // Admission-module demographics, government IDs & granular address (all optional).
+        public DateTime? DateOfBirth { get; set; }
+        public string? Religion { get; set; }
+        public string? Nationality { get; set; }
+        public string? AadhaarNumber { get; set; }
+        public string? PanNumber { get; set; }
+        public string? AbhaId { get; set; }
+        public string? FlatHouse { get; set; }
+        public string? Street { get; set; }
+        public string? District { get; set; }
+
+        // Duplicate-merge audit: when set, this record was merged into the canonical UHID and is
+        // hidden from pickers; kept so old printed UHIDs still resolve. [[admission-module]]
+        public string? MergedIntoPatientId { get; set; }
+        public DateTime? MergedAt { get; set; }
+        public string? MergedBy { get; set; }
     }
 }

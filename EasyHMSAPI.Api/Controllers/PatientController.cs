@@ -1,4 +1,7 @@
-﻿using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
+﻿using EasyHMSAPI.Api.Common;
+using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
+using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
+using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -45,6 +48,65 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 _logger.LogError(ex, "Error in SearchPatient, hospitalId: {HospitalId}", hospitalId);
                 return StatusCode(500, new { ex.Message });
+            }
+        }
+
+        // Advisory duplicate detection before a new UHID is created (admission + appointment).
+        [HttpPost("check-duplicates")]
+        [Authorize]
+        public async Task<ActionResult<CheckPatientDuplicatesResponseModel>> CheckDuplicates([FromBody] CheckPatientDuplicatesRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+            try
+            {
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in CheckDuplicates for hospitalId: {HospitalId}", request.HospitalId);
+                // Advisory — never surface as an error that blocks registration.
+                return Ok(new CheckPatientDuplicatesResponseModel { Success = false, Message = "Error checking duplicates." });
+            }
+        }
+
+        // Linked-record counts for one UHID — powers the merge preview.
+        [HttpGet("record-counts")]
+        [Authorize]
+        public async Task<ActionResult<GetPatientRecordCountsResponseModel>> GetRecordCounts([FromQuery] Guid hospitalId, [FromQuery] string patientId)
+        {
+            if (hospitalId == Guid.Empty || string.IsNullOrWhiteSpace(patientId))
+                return BadRequest(new { Message = "hospitalId and patientId are required." });
+            try
+            {
+                var response = await _mediator.Send(new GetPatientRecordCountsRequestModel { HospitalId = hospitalId, PatientId = patientId });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetRecordCounts for patientId: {PatientId}", patientId);
+                return StatusCode(500, new { Message = "An error occurred while fetching record counts." });
+            }
+        }
+
+        // Admin: merge a duplicate UHID into a canonical one (repoints all linked records).
+        [HttpPost("merge")]
+        [Authorize]
+        public async Task<ActionResult<MergePatientsResponseModel>> Merge([FromBody] MergePatientsRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in Merge canonical={Canonical} duplicate={Duplicate}", request.CanonicalPatientId, request.DuplicatePatientId);
+                return StatusCode(500, new { Message = "An error occurred while merging patients." });
             }
         }
 
