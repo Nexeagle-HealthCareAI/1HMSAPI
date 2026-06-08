@@ -33,5 +33,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public CertificateDataModel? Certificates { get; set; }
         public FollowUpModel? FollowUp { get; set; }
         public List<ImmunizationModel>? Immunizations { get; set; }
+        // Doctor's custom fields — self-describing (key + label + value).
+        public List<PrescriptionCustomFieldModel>? CustomFields { get; set; }
     }
 }

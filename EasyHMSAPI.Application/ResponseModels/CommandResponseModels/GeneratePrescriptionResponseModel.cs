@@ -30,6 +30,7 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public CertificateDataModel? Certificates { get; set; }
         public FollowUpModel? FollowUp { get; set; }
         public List<ImmunizationModel>? Immunizations { get; set; }
+        public List<PrescriptionCustomFieldModel>? CustomFields { get; set; }
     }
 
     [ExcludeFromCodeCoverage]

@@ -17,8 +17,12 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
         public async Task<GetHospitalUsersResponseModel?> Handle(GetHospitalUsersRequestModel request, CancellationToken cancellationToken)
         {
+            // Prefer the user's primary hospital so this legacy single-hospital endpoint is deterministic
+            // (multi-hospital users get the full list via /hospitals/mine for the switcher).
             var hospitalUser = await _context.HospitalUsers
-                .FirstOrDefaultAsync(hu => hu.UserID == request.UserId, cancellationToken);
+                .Where(hu => hu.UserID == request.UserId)
+                .OrderByDescending(hu => hu.IsPrimary)
+                .FirstOrDefaultAsync(cancellationToken);
 
             if (hospitalUser == null)
             {

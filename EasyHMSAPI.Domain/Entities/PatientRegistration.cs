@@ -27,6 +27,7 @@ namespace EasyHMSAPI.Domain.Entities
 
         // Additional demographics captured at booking (all optional).
         public string? BloodGroup { get; set; }
+        public string? Allergies { get; set; }
         public string? Block { get; set; }
         public string? AlternateMobile { get; set; }
         public string? Email { get; set; }

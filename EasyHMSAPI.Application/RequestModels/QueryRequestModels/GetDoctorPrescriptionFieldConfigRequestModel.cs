@@ -5,8 +5,8 @@ using System.Diagnostics.CodeAnalysis;
 namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
 {
     [ExcludeFromCodeCoverage]
-    public class InvitationValidateRequestModel : IRequest<InvitationValidateResponseModel>
+    public class GetDoctorPrescriptionFieldConfigRequestModel : IRequest<GetDoctorPrescriptionFieldConfigResponseModel>
     {
-        public string Token { get; set; } = null!;
+        public Guid DoctorId { get; set; }
     }
 }

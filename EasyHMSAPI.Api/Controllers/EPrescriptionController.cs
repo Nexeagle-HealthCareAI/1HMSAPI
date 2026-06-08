@@ -195,6 +195,33 @@ namespace EasyHMSAPI.Api.Controllers
             return Ok(result);
         }
 
+        // Personalized prescription field layout (global per doctor): rename / reorder / show-hide
+        // built-in fields and add custom fields.
+        [HttpGet("configuration/field-layout/doctorId={doctorId}")]
+        [Authorize]
+        public async Task<ActionResult<GetDoctorPrescriptionFieldConfigResponseModel>> GetFieldLayout(Guid doctorId)
+        {
+            if (doctorId == Guid.Empty)
+                return BadRequest(new { Message = "Invalid doctorId." });
+
+            var result = await _mediator.Send(new GetDoctorPrescriptionFieldConfigRequestModel { DoctorId = doctorId });
+            return Ok(result);
+        }
+
+        [HttpPut("configuration/field-layout/doctorId={doctorId}")]
+        [Authorize]
+        public async Task<ActionResult<UpdateDoctorPrescriptionFieldConfigResponseModel>> UpdateFieldLayout(Guid doctorId, [FromBody] UpdateDoctorPrescriptionFieldConfigRequestModel model)
+        {
+            if (model == null)
+                return BadRequest(new { Message = "Invalid request body." });
+            if (doctorId == Guid.Empty)
+                return BadRequest(new { Message = "Invalid doctorId." });
+
+            model.DoctorId = doctorId;
+            var result = await _mediator.Send(model);
+            return Ok(result);
+        }
+
         [HttpPut("configuration/personalized-data")]
         [Authorize]
         public async Task<IActionResult> UpsertPersonalizedData([FromQuery] Guid hospitalId, [FromQuery] Guid doctorId, [FromQuery] string lookupType, [FromQuery] string? source, [FromBody] PersonalizedLookupDataModel model)

@@ -282,7 +282,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     PrivateNotes = prescriptionDetails?.PrivateNotes,
                     Certificates = certificatesModel,
                     FollowUp = followUpModel,
-                    Immunizations = immunizationsModel
+                    Immunizations = immunizationsModel,
+                    CustomFields = ExtractCustomFields(prescriptionDetails?.MetaJson)
                 };
 
                 response.Success = true;
@@ -296,6 +297,23 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
 
             return response;
+        }
+
+        // Pulls the doctor's custom fields out of MetaJson (shape: { "customFields": [ {key,label,value} ] }).
+        private static List<PrescriptionCustomFieldModel>? ExtractCustomFields(string? metaJson)
+        {
+            if (string.IsNullOrWhiteSpace(metaJson)) return null;
+            try
+            {
+                var wrapper = JsonSerializer.Deserialize<MetaJsonWrapper>(metaJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                return wrapper?.CustomFields != null && wrapper.CustomFields.Count > 0 ? wrapper.CustomFields : null;
+            }
+            catch { return null; }
+        }
+
+        private class MetaJsonWrapper
+        {
+            public List<PrescriptionCustomFieldModel>? CustomFields { get; set; }
         }
 
         private PatientVitalsModel ParseVitalsFromJson(JsonElement vitalsJson)

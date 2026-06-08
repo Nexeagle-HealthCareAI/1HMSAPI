@@ -11,6 +11,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ExcludeFromCodeCoverage]
     [Route("auth")]
     [ApiController]
+    [EasyHMSAPI.Api.Common.SkipHospitalAccessCheck]
     public class AuthServicesController : ControllerBase
     {
         private readonly IMediator _mediator;

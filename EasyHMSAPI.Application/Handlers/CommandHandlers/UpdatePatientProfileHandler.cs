@@ -34,6 +34,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             if (!string.IsNullOrWhiteSpace(request.Country)) patient.Country = request.Country;
             if (!string.IsNullOrWhiteSpace(request.Pincode)) patient.Pincode = request.Pincode;
             if (!string.IsNullOrWhiteSpace(request.InsuranceId)) patient.InsuranceId = request.InsuranceId;
+            // Clinical/contact fields — null = leave unchanged, "" = explicitly clear (e.g. correcting allergies).
+            if (request.BloodGroup != null) patient.BloodGroup = request.BloodGroup;
+            if (request.Allergies != null) patient.Allergies = request.Allergies;
+            if (request.Email != null) patient.Email = request.Email;
+            if (request.EmergencyContactName != null) patient.EmergencyContactName = request.EmergencyContactName;
+            if (request.EmergencyContactPhone != null) patient.EmergencyContactPhone = request.EmergencyContactPhone;
 
             await _context.SaveChangesAsync(cancellationToken);
             return new UpdatePatientProfileResponseModel { Success = true, Message = "Patient profile updated successfully." };

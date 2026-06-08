@@ -34,9 +34,20 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
             else
             {
+                // Chain onboarding: only the chain owner may add a hospital into their chain.
+                if (request.ChainId.HasValue)
+                {
+                    var chain = await _context.HospitalChains
+                        .FirstOrDefaultAsync(c => c.ChainId == request.ChainId.Value, cancellationToken);
+                    if (chain == null)
+                        return new HospitalRegisterResponseModel { Success = false, Message = "Chain not found.", HospitalId = null, HospitalUserId = null };
+                    if (chain.OwnerUserId != request.UserId)
+                        return new HospitalRegisterResponseModel { Success = false, Message = "You are not the owner of this chain.", HospitalId = null, HospitalUserId = null };
+                }
                 var hospitalId = Guid.NewGuid();
                 var hospital = new Hospital
                 {
+                    ChainId = request.ChainId,
                     HospitalID = hospitalId,
                     Name = request.Name ?? string.Empty,
                     Type = request.Type ?? string.Empty,
@@ -69,7 +80,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     HospitalID = hospitalId,
                     UserID = request.UserId,
                     EmployeeID = employeeId ?? string.Empty,
-                    IsPrimary = true,
+                    // The owner's first hospital is primary; hospitals onboarded into a chain are not.
+                    IsPrimary = !request.ChainId.HasValue,
                     CreatedAt = DateTime.UtcNow
                 };
                 _context.HospitalUsers.Add(hospitalUser);
@@ -114,19 +126,22 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 _context.BillingPolicy.Add(billingPolicy);
 
                 // --- Add/Update UserRoles with hospitalId ---
-                // Find the user's current role (if any)
-                var userRole = await _context.UserRoles
-                    .Include(ur => ur.Role)
-                    .FirstOrDefaultAsync(ur => ur.UserID == request.UserId, cancellationToken);
-                if (userRole != null && userRole.Role != null)
+                // Only for a first/standalone hospital. For a chain onboarding we must NOT move the
+                // owner's existing role onto the new hospital (per-hospital roles arrive in a later phase).
+                if (!request.ChainId.HasValue)
                 {
-                    // If the role is not already associated with a hospital, associate it
-                    if (userRole.Role.HospitalID == null || userRole.Role.HospitalID == Guid.Empty)
+                    var userRole = await _context.UserRoles
+                        .Include(ur => ur.Role)
+                        .FirstOrDefaultAsync(ur => ur.UserID == request.UserId, cancellationToken);
+                    if (userRole != null && userRole.Role != null)
                     {
-                        userRole.Role.HospitalID = hospitalId;
+                        // If the role is not already associated with a hospital, associate it
+                        if (userRole.Role.HospitalID == null || userRole.Role.HospitalID == Guid.Empty)
+                        {
+                            userRole.Role.HospitalID = hospitalId;
+                        }
                     }
                 }
-                // If no user role exists, you may want to assign a default role here (optional)
                 // --- End UserRoles update ---
 
                 await _context.SaveChangesAsync(cancellationToken);

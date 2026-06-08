@@ -27,6 +27,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public Guid? ApptID { get; set; }
         public DateTime? AppDate { get; set; }
         public string? Status { get; set; }
+        public Guid? DoctorId { get; set; }
+        public string? DoctorName { get; set; }
         public List<StatusHistoryModel>? StatusJsonHistory { get; set; }
         public PatientVitalsModel? VitalsJson { get; set; }
         public string? ChiefComplaint { get; set; }
@@ -42,6 +44,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public FollowUpModel? FollowUp { get; set; }
         public List<ImmunizationModel>? Immunizations { get; set; }
         public List<AttachmentModel>? Attachments { get; set; }
+        public List<PrescriptionCustomFieldModel>? CustomFields { get; set; }
     }
 
     [ExcludeFromCodeCoverage]

@@ -23,5 +23,10 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? Pincode { get; set; }
         public string? InsuranceId { get; set; }
         public string? PaymentMode { get; set; }
+        public string? BloodGroup { get; set; }
+        public string? Allergies { get; set; }
+        public string? Email { get; set; }
+        public string? EmergencyContactName { get; set; }
+        public string? EmergencyContactPhone { get; set; }
     }
 }

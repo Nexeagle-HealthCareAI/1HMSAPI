@@ -48,7 +48,13 @@ builder.Services.ConfigureTelemetryModule<DependencyTrackingTelemetryModule>((mo
 // ------------------------------------------------------------
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient();
-builder.Services.AddControllers();
+builder.Services.AddMemoryCache();
+// Multi-tenant guard: blocks a signed-in user from acting on a hospital they don't belong to.
+builder.Services.AddScoped<EasyHMSAPI.Api.Common.HospitalAccessFilter>();
+builder.Services.AddControllers(options =>
+{
+    options.Filters.Add<EasyHMSAPI.Api.Common.HospitalAccessFilter>();
+});
 
 // ------------------------------------------------------------
 // Swagger

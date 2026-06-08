@@ -21,6 +21,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<RolePermission> RolePermissions { get; set; }
         public DbSet<UserRole> UserRoles { get; set; }
         public DbSet<Hospital> Hospitals { get; set; }
+        public DbSet<HospitalChain> HospitalChains { get; set; }
         public DbSet<HospitalUser> HospitalUsers { get; set; }
         public DbSet<HospitalProfileStatus> HospitalProfileStatuses { get; set; }
         public DbSet<HospitalSetting> HospitalSettings { get; set; }
@@ -43,6 +44,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<StatusMaster> StatusMasters { get; set; }
         public DbSet<PrescriptionSetting> PrescriptionSettings { get; set; }
         public DbSet<DoctorSectionPreference> DoctorSectionPreferences { get; set; }
+        public DbSet<DoctorPrescriptionFieldConfig> DoctorPrescriptionFieldConfigs { get; set; }
         public DbSet<UserStatus> UserStatuses { get; set; }
         public DbSet<UserHistory> UserHistories { get; set; }
         public DbSet<PrescriptionAttachment> PrescriptionAttachments { get; set; }
@@ -81,6 +83,7 @@ namespace EasyHMSAPI.Domain.Context
             modelBuilder.Entity<UserRole>().ToTable("UserRoles");
 
             modelBuilder.Entity<Hospital>().ToTable("Hospitals");
+            modelBuilder.Entity<HospitalChain>().ToTable("HospitalChains");
             modelBuilder.Entity<HospitalUser>().ToTable("HospitalUsers");
             modelBuilder.Entity<HospitalProfileStatus>().ToTable("HospitalProfileStatus");
             modelBuilder.Entity<HospitalSetting>().ToTable("HospitalSettings");
@@ -278,6 +281,13 @@ namespace EasyHMSAPI.Domain.Context
                 .HasOne(h => h.CreatedByUser)
                 .WithMany(u => u.CreatedHospitals)
                 .HasForeignKey(h => h.CreatedByUserID);
+
+            modelBuilder.Entity<HospitalChain>().HasKey(c => c.ChainId);
+            modelBuilder.Entity<Hospital>()
+                .HasOne(h => h.Chain)
+                .WithMany(c => c.Hospitals)
+                .HasForeignKey(h => h.ChainId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             modelBuilder.Entity<HospitalUser>()
                 .HasOne(hu => hu.Hospital)

@@ -64,10 +64,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     return response;
                 }
 
-                // Get all appointments for the patient with the doctor
+                // Get all appointments for the patient at this hospital — across ALL doctors,
+                // so a doctor sees the patient's full clinical history (not just their own visits).
                 var appointments = await _context.Appointments
-                    .Where(a => a.PatientId == request.PatientId 
-                        && a.DoctorId == request.DoctorId 
+                    .Where(a => a.PatientId == request.PatientId
                         && a.HospitalId == request.HospitalId)
                     .AsNoTracking()
                     .OrderByDescending(a => a.ApptDate)
@@ -79,6 +79,16 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     response.Message = "No appointments found for the patient.";
                     return response;
                 }
+
+                // Resolve the treating doctor's name for each visit (so the timeline can label who saw them).
+                var doctorIds = appointments.Select(a => a.DoctorId).Distinct().ToList();
+                var doctorNames = await (from d in _context.Doctors
+                                         where doctorIds.Contains(d.DoctorID)
+                                         join up in _context.UserProfiles on d.UserID equals up.UserID into ups
+                                         from up in ups.DefaultIfEmpty()
+                                         select new { d.DoctorID, up.FullName })
+                                        .AsNoTracking()
+                                        .ToDictionaryAsync(x => x.DoctorID, x => x.FullName, cancellationToken);
 
                 var timelineDataModel = new PatientTimelineDataModel
                 {
@@ -95,6 +105,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         ApptID = appointment.ApptId,
                         AppDate = appointment.ApptDate,
                         Status = appointment.CurrentStatusCode,
+                        DoctorId = appointment.DoctorId,
+                        DoctorName = doctorNames.TryGetValue(appointment.DoctorId, out var dName) ? dName : null,
                         StatusJsonHistory = new List<StatusHistoryModel>()
                     };
 
@@ -130,11 +142,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         }
                     }
 
-                    // Fetch prescription details
+                    // Fetch prescription details for this visit (any doctor — the appointment is doctor-specific).
                     var prescriptionDetails = await _context.Prescription
                         .AsNoTracking()
                         .FirstOrDefaultAsync(p => p.ApptId == appointment.ApptId
-                            && p.DoctorId == request.DoctorId
                             && p.HospitalId == request.HospitalId
                             && p.PatientId == request.PatientId, cancellationToken);
 
@@ -222,6 +233,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         {
                             timelineAppointment.Immunizations = SafeDeserialize<List<ImmunizationModel>>(prescriptionDetails.Immunizations);
                         }
+
+                        // Parse the doctor's custom fields (stored in MetaJson).
+                        timelineAppointment.CustomFields = SafeDeserialize<TimelineMetaJson>(prescriptionDetails.MetaJson)?.CustomFields;
                     }
 
                     // Fetch attachments
@@ -324,6 +338,11 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             {
                 return default;
             }
+        }
+
+        private class TimelineMetaJson
+        {
+            public List<PrescriptionCustomFieldModel>? CustomFields { get; set; }
         }
     }
 }

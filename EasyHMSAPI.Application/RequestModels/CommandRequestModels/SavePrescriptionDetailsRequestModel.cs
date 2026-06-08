@@ -28,6 +28,9 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public CertificateDataModel? Certificates { get; set; }
         public FollowUpModel? FollowUp { get; set; }
         public List<ImmunizationModel>? Immunizations { get; set; }
+        // Doctor's custom fields — stored self-describingly (key + label + value) so the historical
+        // record / print show the field's name even if the doctor later renames or removes it.
+        public List<PrescriptionCustomFieldModel>? CustomFields { get; set; }
         [JsonIgnore]
         public string? ActionType { get; set; }
         public DateTime CurrentDateTime { get; set; }
@@ -42,6 +45,14 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     {
         public List<string>? Investigations { get; set; }
         public List<string>? Procedures { get; set; }
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class PrescriptionCustomFieldModel
+    {
+        public string Key { get; set; } = string.Empty;
+        public string? Label { get; set; }
+        public string? Value { get; set; }
     }
 
     [ExcludeFromCodeCoverage]

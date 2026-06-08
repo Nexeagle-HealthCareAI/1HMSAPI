@@ -21,5 +21,11 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? PaymentMode { get; set; }
         public DateTime RegisteredAt { get; set; }
         public Guid? RegisteredBy { get; set; }
+        // Clinical / contact fields (already stored on registration, now surfaced for the doctor view).
+        public string? BloodGroup { get; set; }
+        public string? Allergies { get; set; }
+        public string? Email { get; set; }
+        public string? EmergencyContactName { get; set; }
+        public string? EmergencyContactPhone { get; set; }
     }
 }

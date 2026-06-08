@@ -171,6 +171,83 @@ namespace EasyHMSAPI.Application.Services.Implementations
             }
         }
 
+        // Sends login details (login id + password) to a newly added team member.
+        // Requires a pre-approved WhatsApp template named "login_details" (language en) with three
+        // named body variables: hosp_name, login_id, password. Until that template is approved in the
+        // Meta WhatsApp Business Manager, this returns false (the caller falls back to copy/email).
+        public async Task<bool> SendLoginDetailsAsync(string mobileNumber, string hospitalName, string loginId, string password)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(_isEnabled) && _isEnabled.Trim().ToLower() == "true")
+                {
+                    var payload = new
+                    {
+                        messaging_product = "whatsapp",
+                        to = mobileNumber,
+                        type = "template",
+                        template = new
+                        {
+                            name = "login_details",
+                            language = new
+                            {
+                                code = "en"
+                            },
+                            components = new object[]
+                        {
+                            new
+                            {
+                                type = "body",
+                                parameters = new object[]
+                                {
+                                    new
+                                    {
+                                        type = "text",
+                                        text = hospitalName,
+                                        parameter_name = "hosp_name"
+                                    },
+                                    new
+                                    {
+                                        type = "text",
+                                        text = loginId,
+                                        parameter_name = "login_id"
+                                    },
+                                    new
+                                    {
+                                        type = "text",
+                                        text = password,
+                                        parameter_name = "password"
+                                    }
+                                }
+                            }
+                        }
+                        }
+                    };
+
+                    var json = JsonSerializer.Serialize(payload);
+                    var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                    var request = new HttpRequestMessage(HttpMethod.Post, _apiUrl)
+                    {
+                        Content = content
+                    };
+                    request.Headers.Add("Authorization", $"Bearer {_accessToken}");
+
+                    var response = await _httpClient.SendAsync(request);
+
+                    return response.IsSuccessStatusCode;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
         public async Task<bool> SendAppointmentConfirmationAsync(string mobileNumber, string patientName, string hospitalName, string doctorName, string tokenNumber, string appointmentDate, string appointmentTime)
         {
             try

@@ -24,6 +24,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModel
         public string? GstIn { get; set; }
         public string? PanNumber { get; set; }
         public string? NabhNabl { get; set; }
+        // When set, onboard this hospital into an existing chain (caller must be the chain owner).
+        public Guid? ChainId { get; set; }
         [JsonIgnore]
         public string? LoggedInUserName { get; set; }
     }

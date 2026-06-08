@@ -134,7 +134,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                                 Reason = SafeDeserialize<FollowupReasonModel>(prescriptionDetails.FollowUpNotes),
                                 Referral = SafeDeserialize<ReferralModel>(prescriptionDetails.Referral)
                             },
-                            Immunizations = SafeDeserialize<List<ImmunizationModel>>(prescriptionDetails.Immunizations)
+                            Immunizations = SafeDeserialize<List<ImmunizationModel>>(prescriptionDetails.Immunizations),
+                            CustomFields = ExtractCustomFields(prescriptionDetails.MetaJson)
                         };
 
                         response.Data = prescriptionDetailsDataModel;
@@ -187,6 +188,24 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             {
                 return default;
             }
+        }
+
+        // Pulls the doctor's custom fields out of MetaJson (shape: { "customFields": [ {key,label,value} ] }).
+        private static List<PrescriptionCustomFieldModel>? ExtractCustomFields(string? metaJson)
+        {
+            if (string.IsNullOrWhiteSpace(metaJson)) return null;
+            try
+            {
+                var wrapper = JsonSerializer.Deserialize<MetaJsonWrapper>(metaJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                return wrapper?.CustomFields != null && wrapper.CustomFields.Count > 0 ? wrapper.CustomFields : null;
+            }
+            catch { /* ignore malformed MetaJson */ }
+            return null;
+        }
+
+        private class MetaJsonWrapper
+        {
+            public List<PrescriptionCustomFieldModel>? CustomFields { get; set; }
         }
     }
 }

@@ -28,6 +28,11 @@ namespace EasyHMSAPI.Domain.Entities
         public string? GSTIN { get; set; }
         public string? PAN { get; set; }
         public string? NABH_NABL { get; set; }
+
+        // Chain grouping: null = standalone hospital; set = member of an owner's hospital chain.
+        public Guid? ChainId { get; set; }
+        public HospitalChain? Chain { get; set; }
+
         public User CreatedByUser { get; set; } = null!;
         public ICollection<HospitalUser> HospitalUsers { get; set; } = new List<HospitalUser>();
         public ICollection<Role> Roles { get; set; } = new List<Role>();

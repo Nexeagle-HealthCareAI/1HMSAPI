@@ -95,6 +95,26 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // All hospitals the signed-in user belongs to (across any chain) — powers the switcher.
+        [HttpGet("mine")]
+        [Authorize]
+        public async Task<ActionResult<GetMyHospitalsResponseModel>> GetMyHospitals()
+        {
+            var userId = UserContextHelper.GetUserId(HttpContext.User);
+            if (userId == null)
+                return Unauthorized(new { Message = "Could not resolve the signed-in user." });
+            try
+            {
+                var response = await _mediator.Send(new GetMyHospitalsRequestModel { UserId = userId.Value });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetMyHospitals for userId: {UserId}", userId);
+                return StatusCode(500, new { Message = "An error occurred while retrieving your hospitals." });
+            }
+        }
+
         [HttpGet("users/{userId}")]
         [Authorize]
         public async Task<ActionResult<GetHospitalUsersResponseModel>> GetHospitalUserById(Guid userId)

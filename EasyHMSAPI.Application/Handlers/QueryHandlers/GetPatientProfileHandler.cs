@@ -36,7 +36,12 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 Country = patient.Country,
                 Pincode = patient.Pincode,
                 InsuranceId = patient.InsuranceId,
-                RegisteredBy = patient.RegisteredBy
+                RegisteredBy = patient.RegisteredBy,
+                BloodGroup = patient.BloodGroup,
+                Allergies = patient.Allergies,
+                Email = patient.Email,
+                EmergencyContactName = patient.EmergencyContactName,
+                EmergencyContactPhone = patient.EmergencyContactPhone
             };
         }
     }

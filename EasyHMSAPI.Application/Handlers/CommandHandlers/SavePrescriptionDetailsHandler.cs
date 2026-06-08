@@ -250,6 +250,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             if (request.IsPrintablePrivateNotes.HasValue) existingPrescription.PrivateNotes = request.PrivateNotes + " IsPrintablePrivateNotes: " + request.IsPrintablePrivateNotes.Value.ToString();
                             if (request.Certificates is not null) existingPrescription.CertificatesAndNotes = JsonSerializer.Serialize(request.Certificates);
                             if(request.Immunizations is not null) existingPrescription.Immunizations = JsonSerializer.Serialize(request.Immunizations);
+                            if(request.CustomFields is not null) existingPrescription.MetaJson = JsonSerializer.Serialize(new { customFields = request.CustomFields });
                             if(request.FollowUp is not null)
                             {
                                 existingPrescription.FollowUpDate = request.FollowUp.FollowUpOn;
@@ -436,6 +437,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             Status = status,
                             CertificatesAndNotes = request.Certificates is not null ? JsonSerializer.Serialize(request.Certificates) : null,
                             Immunizations = request.Immunizations is not null ? JsonSerializer.Serialize(request.Immunizations) : null,
+                            MetaJson = request.CustomFields is not null ? JsonSerializer.Serialize(new { customFields = request.CustomFields }) : null,
                             FollowUpDate = request.FollowUp?.FollowUpOn,
                             FollowUpNotes = request.FollowUp?.Reason is not null ? JsonSerializer.Serialize(request.FollowUp.Reason) : null,
                             Referral = request.FollowUp?.Referral is not null ? JsonSerializer.Serialize(request.FollowUp.Referral) : null,
