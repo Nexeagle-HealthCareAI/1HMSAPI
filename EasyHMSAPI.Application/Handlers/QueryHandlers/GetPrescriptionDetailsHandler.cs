@@ -102,6 +102,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                             History = prescriptionDetails.History,
                             Comorbidity = prescriptionDetails.Comorbidity,
                             Examination = prescriptionDetails.Examination,
+                            SystemicExamination = prescriptionDetails.SystemicExamination,
                             Diagnosis = prescriptionDetails.Diagnosis,
                             Orders = new OrdersModel
                             {

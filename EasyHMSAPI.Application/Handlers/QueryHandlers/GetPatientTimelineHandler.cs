@@ -155,6 +155,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         timelineAppointment.History = prescriptionDetails.History;
                         timelineAppointment.Comorbidity = prescriptionDetails.Comorbidity;
                         timelineAppointment.Examination = prescriptionDetails.Examination;
+                        timelineAppointment.SystemicExamination = prescriptionDetails.SystemicExamination;
                         timelineAppointment.Diagnosis = prescriptionDetails.Diagnosis;
                         timelineAppointment.PrivateNotes = prescriptionDetails.PrivateNotes;
 

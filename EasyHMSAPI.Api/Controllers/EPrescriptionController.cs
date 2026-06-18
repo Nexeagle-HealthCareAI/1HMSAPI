@@ -222,6 +222,26 @@ namespace EasyHMSAPI.Api.Controllers
             return Ok(result);
         }
 
+        // Voice Rx: transcribe + structure a dictation into prescription fields (for the doctor to review).
+        [HttpPost("voice/parse")]
+        [Authorize]
+        public async Task<ActionResult<ParseVoiceRxResponseModel>> ParseVoiceRx([FromForm] ParseVoiceRxRequestModel request)
+        {
+            var userId = UserContextHelper.GetUserId(HttpContext.User);
+            if (userId == null) return Unauthorized(new { Message = "Could not resolve the signed-in user." });
+            try
+            {
+                request.CallerUserId = userId.Value;
+                var result = await _mediator.Send(request);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in ParseVoiceRx for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred while processing the dictation." });
+            }
+        }
+
         [HttpPut("configuration/personalized-data")]
         [Authorize]
         public async Task<IActionResult> UpsertPersonalizedData([FromQuery] Guid hospitalId, [FromQuery] Guid doctorId, [FromQuery] string lookupType, [FromQuery] string? source, [FromBody] PersonalizedLookupDataModel model)

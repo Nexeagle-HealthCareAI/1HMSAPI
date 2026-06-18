@@ -275,6 +275,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     History = prescriptionDetails?.History,
                     Comorbidity = prescriptionDetails?.Comorbidity,
                     Examination = prescriptionDetails?.Examination,
+                    SystemicExamination = prescriptionDetails?.SystemicExamination,
                     Diagnosis = prescriptionDetails?.Diagnosis,
                     Orders = ordersModel,
                     Medications = medicationsModel,

@@ -18,6 +18,7 @@ namespace EasyHMSAPI.Domain.Entities
         public string? History { get; set; }
         public string? Comorbidity { get; set; }
         public string? Examination { get; set; }
+        public string? SystemicExamination { get; set; }
         public string? Diagnosis { get; set; }
         public string? PrivateNotes { get; set; }
         public string? CertificatesAndNotes { get; set; }

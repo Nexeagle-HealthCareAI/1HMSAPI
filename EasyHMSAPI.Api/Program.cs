@@ -160,6 +160,7 @@ builder.Services.AddScoped<IBlobStorageService, BlobStorageService>();
 builder.Services.AddScoped<ISmsService, SmsService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IWhatsAppMessagingService, WhatsAppMessagingService>();
+builder.Services.AddScoped<IVoiceRxService, VoiceRxService>();
 builder.Services.AddScoped<IDoctorValidationHelper, DoctorValidationHelper>();
 
 // ------------------------------------------------------------

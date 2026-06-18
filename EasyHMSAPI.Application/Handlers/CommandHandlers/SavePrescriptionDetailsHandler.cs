@@ -111,6 +111,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             if (!string.IsNullOrEmpty(request.History)) existingPrescription.History = request.History;
                             if (!string.IsNullOrEmpty(request.Comorbidity)) existingPrescription.Comorbidity = request.Comorbidity;
                             if (!string.IsNullOrEmpty(request.Examination)) existingPrescription.Examination = request.Examination;
+                            if (!string.IsNullOrEmpty(request.SystemicExamination)) existingPrescription.SystemicExamination = request.SystemicExamination;
                             if (!string.IsNullOrEmpty(request.Diagnosis)) existingPrescription.Diagnosis = request.Diagnosis;
                             if (request.Orders is null)
                             {
@@ -427,6 +428,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             History = request.History,
                             Comorbidity = request.Comorbidity,
                             Examination = request.Examination,
+                            SystemicExamination = request.SystemicExamination,
                             Diagnosis = request.Diagnosis,
                             PrivateNotes = request.IsPrintablePrivateNotes.HasValue 
                                 ? request.PrivateNotes + " IsPrintablePrivateNotes: " + request.IsPrintablePrivateNotes.Value.ToString() 
