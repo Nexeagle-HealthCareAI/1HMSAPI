@@ -4,10 +4,8 @@ using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.Services.Implementations;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
-using Microsoft.ApplicationInsights.DependencyCollector;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.AzureAppServices;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
@@ -24,24 +22,11 @@ builder.Configuration
     .AddEnvironmentVariables();
 
 // ------------------------------------------------------------
-// Logging setup (console + Azure + App Insights)
+// Logging setup (console + debug; container stdout is collected on the VM)
 // ------------------------------------------------------------
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Logging.AddDebug();
-builder.Logging.AddAzureWebAppDiagnostics();
-
-// Add Application Insights Logging & Telemetry
-builder.Services.AddApplicationInsightsTelemetry(options =>
-{
-    options.ConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"];
-});
-
-// configure adaptive sampling and dependency tracking
-builder.Services.ConfigureTelemetryModule<DependencyTrackingTelemetryModule>((module, o) =>
-{
-    module.EnableSqlCommandTextInstrumentation = true; // capture SQL queries
-});
 
 // ------------------------------------------------------------
 // Add services
@@ -156,25 +141,13 @@ builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(UserL
 // ------------------------------------------------------------
 builder.Services.AddScoped<IJwtAuthService, JwtAuthService>();
 builder.Services.AddScoped<IMaskingService, MaskingService>();
-// Object storage provider: "S3" (MinIO / S3-compatible bucket) or "Azure" (Azure Blob, default).
-if (string.Equals(builder.Configuration["Storage:Provider"], "S3", StringComparison.OrdinalIgnoreCase))
-    builder.Services.AddScoped<IBlobStorageService, S3StorageService>();
-else
-    builder.Services.AddScoped<IBlobStorageService, BlobStorageService>();
+// Object storage: S3-compatible (MinIO) bucket.
+builder.Services.AddScoped<IBlobStorageService, S3StorageService>();
 builder.Services.AddScoped<ISmsService, SmsService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IWhatsAppMessagingService, WhatsAppMessagingService>();
 builder.Services.AddScoped<IVoiceRxService, VoiceRxService>();
 builder.Services.AddScoped<IDoctorValidationHelper, DoctorValidationHelper>();
-
-// ------------------------------------------------------------
-// Azure App Service File Logger Options (optional)
-// ------------------------------------------------------------
-builder.Services.Configure<AzureFileLoggerOptions>(options =>
-{
-    options.FileName = "apnahospital-log-";
-    options.RetainedFileCountLimit = 5;
-});
 
 // ------------------------------------------------------------
 // Rate Limiting

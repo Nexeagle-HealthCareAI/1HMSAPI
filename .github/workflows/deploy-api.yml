@@ -39,9 +39,6 @@
 #                           var WHATSAPP_API_URL if the phone-number-id differs)
 #     OPENAI_API_KEY        OpenAI:ApiKey         (Voice Rx)
 #     DEEPGRAM_API_KEY      Deepgram:ApiKey       (diarized transcription)
-#     BLOB_STORAGE_CONNECTION  BlobStorage:StorageConnectionString (legacy Azure Blob)
-#     BLOB_ACCOUNT_KEY         BlobStorage:AccountKey               (legacy Azure Blob)
-#     APPINSIGHTS_CONNECTION   ApplicationInsights:ConnectionString
 #     S3 object storage (MinIO) — separate per environment:
 #       DEV_S3_SERVICE_URL  / DEV_S3_ACCESS_KEY  / DEV_S3_SECRET_KEY
 #       PROD_S3_SERVICE_URL / PROD_S3_ACCESS_KEY / PROD_S3_SECRET_KEY
@@ -170,9 +167,6 @@ jobs:
           WHATSAPP_API_URL: ${{ vars.WHATSAPP_API_URL || 'https://graph.facebook.com/v22.0/917702338094533/messages' }}
           OPENAI_KEY:      ${{ secrets.OPENAI_API_KEY }}
           DEEPGRAM_KEY:    ${{ secrets.DEEPGRAM_API_KEY }}
-          BLOB_CONN:       ${{ secrets.BLOB_STORAGE_CONNECTION }}
-          BLOB_KEY:        ${{ secrets.BLOB_ACCOUNT_KEY }}
-          APPINSIGHTS:     ${{ secrets.APPINSIGHTS_CONNECTION }}
           INVITATION_URL:  ${{ vars.DEV_INVITATION_URL || 'http://151.185.45.77/user-onboarding?token=' }}
           STORAGE_PROVIDER: ${{ vars.STORAGE_PROVIDER || 'S3' }}
           S3_SERVICE_URL:  ${{ secrets.DEV_S3_SERVICE_URL }}
@@ -186,7 +180,7 @@ jobs:
           password: ${{ secrets.DEV_SSH_PASSWORD }}
           port: 22
           command_timeout: 10m
-          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,OTP_PEPPER,SMTP_PW,TWILIO_SID,TWILIO_TOKEN,TWILIO_PHONE,WHATSAPP_TOKEN,WHATSAPP_ENABLED,WHATSAPP_API_URL,OPENAI_KEY,DEEPGRAM_KEY,BLOB_CONN,BLOB_KEY,APPINSIGHTS,INVITATION_URL,STORAGE_PROVIDER,S3_SERVICE_URL,S3_ACCESS_KEY,S3_SECRET_KEY,S3_BUCKET,S3_PREFIX
+          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,OTP_PEPPER,SMTP_PW,TWILIO_SID,TWILIO_TOKEN,TWILIO_PHONE,WHATSAPP_TOKEN,WHATSAPP_ENABLED,WHATSAPP_API_URL,OPENAI_KEY,DEEPGRAM_KEY,INVITATION_URL,STORAGE_PROVIDER,S3_SERVICE_URL,S3_ACCESS_KEY,S3_SECRET_KEY,S3_BUCKET,S3_PREFIX
           script: |
             set -e
             : "${DB_CONN:?DEV_DB_CONNECTION is empty}"
@@ -211,9 +205,6 @@ jobs:
             add 'WhatsApp__ApiUrl'                      "$WHATSAPP_API_URL"
             add 'OpenAI__ApiKey'                        "$OPENAI_KEY"
             add 'Deepgram__ApiKey'                      "$DEEPGRAM_KEY"
-            add 'BlobStorage__StorageConnectionString'  "$BLOB_CONN"
-            add 'BlobStorage__AccountKey'               "$BLOB_KEY"
-            add 'ApplicationInsights__ConnectionString' "$APPINSIGHTS"
             add 'Invitation__RegistrationBaseUrl'       "$INVITATION_URL"
             add 'Storage__Provider'                     "$STORAGE_PROVIDER"
             add 'Storage__S3__ServiceUrl'               "$S3_SERVICE_URL"
@@ -271,9 +262,6 @@ jobs:
           WHATSAPP_API_URL: ${{ vars.WHATSAPP_API_URL || 'https://graph.facebook.com/v22.0/917702338094533/messages' }}
           OPENAI_KEY:      ${{ secrets.OPENAI_API_KEY }}
           DEEPGRAM_KEY:    ${{ secrets.DEEPGRAM_API_KEY }}
-          BLOB_CONN:       ${{ secrets.BLOB_STORAGE_CONNECTION }}
-          BLOB_KEY:        ${{ secrets.BLOB_ACCOUNT_KEY }}
-          APPINSIGHTS:     ${{ secrets.APPINSIGHTS_CONNECTION }}
           INVITATION_URL:  ${{ vars.PROD_INVITATION_URL || 'http://151.185.45.67/user-onboarding?token=' }}
           STORAGE_PROVIDER: ${{ vars.STORAGE_PROVIDER || 'S3' }}
           S3_SERVICE_URL:  ${{ secrets.PROD_S3_SERVICE_URL }}
@@ -302,9 +290,6 @@ jobs:
           add 'WhatsApp__ApiUrl'                      "$WHATSAPP_API_URL"
           add 'OpenAI__ApiKey'                        "$OPENAI_KEY"
           add 'Deepgram__ApiKey'                      "$DEEPGRAM_KEY"
-          add 'BlobStorage__StorageConnectionString'  "$BLOB_CONN"
-          add 'BlobStorage__AccountKey'               "$BLOB_KEY"
-          add 'ApplicationInsights__ConnectionString' "$APPINSIGHTS"
           add 'Invitation__RegistrationBaseUrl'       "$INVITATION_URL"
           add 'Storage__Provider'                     "$STORAGE_PROVIDER"
           add 'Storage__S3__ServiceUrl'               "$S3_SERVICE_URL"

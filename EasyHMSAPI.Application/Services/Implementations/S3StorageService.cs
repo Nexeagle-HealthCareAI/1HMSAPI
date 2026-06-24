@@ -9,7 +9,7 @@ using System.Diagnostics.CodeAnalysis;
 namespace EasyHMSAPI.Application.Services.Implementations
 {
     /// <summary>
-    /// S3-compatible (MinIO) object storage. Drop-in replacement for <see cref="BlobStorageService"/>
+    /// S3-compatible (MinIO) object storage. Drop-in replacement for the former Azure BlobStorageService
     /// selected via config (Storage:Provider = "S3").
     ///
     /// LAYOUT: a single shared bucket per environment (Storage:S3:Bucket, e.g. "nexeagle-dev" /
@@ -21,7 +21,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
     /// The bucket is pre-created out of band — this service never creates buckets (folders are
     /// implicit in the object key).
     ///
-    /// Blob naming and the pipe-delimited attachment return value match <see cref="BlobStorageService"/>
+    /// Blob naming and the pipe-delimited attachment return value match the former Azure BlobStorageService
     /// so call sites are unchanged. NOTE: S3/MinIO presigned URLs cannot exceed 7 days (SigV4); read
     /// paths call <see cref="RefreshUrlAsync"/> to re-sign from the persisted key on every read.
     /// </summary>
