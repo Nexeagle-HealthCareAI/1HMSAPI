@@ -34,12 +34,18 @@
 #     TWILIO_ACCOUNT_SID    Twilio:AccountSid
 #     TWILIO_AUTH_TOKEN     Twilio:AuthToken      (SMS / OTP)
 #     TWILIO_PHONE_NUMBER   Twilio:PhoneNumber
-#     WHATSAPP_ACCESS_TOKEN WhatsApp:AccessToken  (also set var WHATSAPP_ENABLED=true)
+#     WHATSAPP_ACCESS_TOKEN WhatsApp:AccessToken  (also set var WHATSAPP_ENABLED=true;
+#                           WhatsApp:ApiUrl defaults to the Meta graph URL, override via
+#                           var WHATSAPP_API_URL if the phone-number-id differs)
 #     OPENAI_API_KEY        OpenAI:ApiKey         (Voice Rx)
 #     DEEPGRAM_API_KEY      Deepgram:ApiKey       (diarized transcription)
-#     BLOB_STORAGE_CONNECTION  BlobStorage:StorageConnectionString (file uploads)
-#     BLOB_ACCOUNT_KEY         BlobStorage:AccountKey
+#     BLOB_STORAGE_CONNECTION  BlobStorage:StorageConnectionString (legacy Azure Blob)
+#     BLOB_ACCOUNT_KEY         BlobStorage:AccountKey               (legacy Azure Blob)
 #     APPINSIGHTS_CONNECTION   ApplicationInsights:ConnectionString
+#     S3 object storage (MinIO) — separate per environment:
+#       DEV_S3_SERVICE_URL  / DEV_S3_ACCESS_KEY  / DEV_S3_SECRET_KEY
+#       PROD_S3_SERVICE_URL / PROD_S3_ACCESS_KEY / PROD_S3_SECRET_KEY
+#       (S3_SERVICE_URL must be the BROWSER-reachable MinIO URL, e.g. http://<vm>:9000)
 #
 #   OPTIONAL repo VARIABLES (Settings → Variables) for environment URLs:
 #     DEV_INVITATION_URL    default http://151.185.45.77/user-onboarding?token=
@@ -161,19 +167,26 @@ jobs:
           TWILIO_PHONE:    ${{ secrets.TWILIO_PHONE_NUMBER }}
           WHATSAPP_TOKEN:  ${{ secrets.WHATSAPP_ACCESS_TOKEN }}
           WHATSAPP_ENABLED: ${{ vars.WHATSAPP_ENABLED }}
+          WHATSAPP_API_URL: ${{ vars.WHATSAPP_API_URL || 'https://graph.facebook.com/v22.0/917702338094533/messages' }}
           OPENAI_KEY:      ${{ secrets.OPENAI_API_KEY }}
           DEEPGRAM_KEY:    ${{ secrets.DEEPGRAM_API_KEY }}
           BLOB_CONN:       ${{ secrets.BLOB_STORAGE_CONNECTION }}
           BLOB_KEY:        ${{ secrets.BLOB_ACCOUNT_KEY }}
           APPINSIGHTS:     ${{ secrets.APPINSIGHTS_CONNECTION }}
           INVITATION_URL:  ${{ vars.DEV_INVITATION_URL || 'http://151.185.45.77/user-onboarding?token=' }}
+          STORAGE_PROVIDER: ${{ vars.STORAGE_PROVIDER || 'S3' }}
+          S3_SERVICE_URL:  ${{ secrets.DEV_S3_SERVICE_URL }}
+          S3_ACCESS_KEY:   ${{ secrets.DEV_S3_ACCESS_KEY }}
+          S3_SECRET_KEY:   ${{ secrets.DEV_S3_SECRET_KEY }}
+          S3_BUCKET:       ${{ vars.DEV_S3_BUCKET || 'nexeagle-dev' }}
+          S3_PREFIX:       ${{ vars.S3_PREFIX || '1HMS' }}
         with:
           host: ${{ secrets.DEV_SSH_HOST }}
           username: ${{ secrets.DEV_SSH_USER }}
           password: ${{ secrets.DEV_SSH_PASSWORD }}
           port: 22
           command_timeout: 10m
-          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,OTP_PEPPER,SMTP_PW,TWILIO_SID,TWILIO_TOKEN,TWILIO_PHONE,WHATSAPP_TOKEN,WHATSAPP_ENABLED,OPENAI_KEY,DEEPGRAM_KEY,BLOB_CONN,BLOB_KEY,APPINSIGHTS,INVITATION_URL
+          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,OTP_PEPPER,SMTP_PW,TWILIO_SID,TWILIO_TOKEN,TWILIO_PHONE,WHATSAPP_TOKEN,WHATSAPP_ENABLED,WHATSAPP_API_URL,OPENAI_KEY,DEEPGRAM_KEY,BLOB_CONN,BLOB_KEY,APPINSIGHTS,INVITATION_URL,STORAGE_PROVIDER,S3_SERVICE_URL,S3_ACCESS_KEY,S3_SECRET_KEY,S3_BUCKET,S3_PREFIX
           script: |
             set -e
             : "${DB_CONN:?DEV_DB_CONNECTION is empty}"
@@ -195,12 +208,19 @@ jobs:
             add 'Twilio__PhoneNumber'                   "$TWILIO_PHONE"
             add 'WhatsApp__AccessToken'                 "$WHATSAPP_TOKEN"
             add 'WhatsApp__IsEnabled'                   "$WHATSAPP_ENABLED"
+            add 'WhatsApp__ApiUrl'                      "$WHATSAPP_API_URL"
             add 'OpenAI__ApiKey'                        "$OPENAI_KEY"
             add 'Deepgram__ApiKey'                      "$DEEPGRAM_KEY"
             add 'BlobStorage__StorageConnectionString'  "$BLOB_CONN"
             add 'BlobStorage__AccountKey'               "$BLOB_KEY"
             add 'ApplicationInsights__ConnectionString' "$APPINSIGHTS"
             add 'Invitation__RegistrationBaseUrl'       "$INVITATION_URL"
+            add 'Storage__Provider'                     "$STORAGE_PROVIDER"
+            add 'Storage__S3__ServiceUrl'               "$S3_SERVICE_URL"
+            add 'Storage__S3__AccessKey'                "$S3_ACCESS_KEY"
+            add 'Storage__S3__SecretKey'                "$S3_SECRET_KEY"
+            add 'Storage__S3__Bucket'                   "$S3_BUCKET"
+            add 'Storage__S3__Prefix'                   "$S3_PREFIX"
 
             IMAGE_LC=$(printf '%s' "$IMAGE" | tr '[:upper:]' '[:lower:]')
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
@@ -248,12 +268,19 @@ jobs:
           TWILIO_PHONE:    ${{ secrets.TWILIO_PHONE_NUMBER }}
           WHATSAPP_TOKEN:  ${{ secrets.WHATSAPP_ACCESS_TOKEN }}
           WHATSAPP_ENABLED: ${{ vars.WHATSAPP_ENABLED }}
+          WHATSAPP_API_URL: ${{ vars.WHATSAPP_API_URL || 'https://graph.facebook.com/v22.0/917702338094533/messages' }}
           OPENAI_KEY:      ${{ secrets.OPENAI_API_KEY }}
           DEEPGRAM_KEY:    ${{ secrets.DEEPGRAM_API_KEY }}
           BLOB_CONN:       ${{ secrets.BLOB_STORAGE_CONNECTION }}
           BLOB_KEY:        ${{ secrets.BLOB_ACCOUNT_KEY }}
           APPINSIGHTS:     ${{ secrets.APPINSIGHTS_CONNECTION }}
           INVITATION_URL:  ${{ vars.PROD_INVITATION_URL || 'http://151.185.45.67/user-onboarding?token=' }}
+          STORAGE_PROVIDER: ${{ vars.STORAGE_PROVIDER || 'S3' }}
+          S3_SERVICE_URL:  ${{ secrets.PROD_S3_SERVICE_URL }}
+          S3_ACCESS_KEY:   ${{ secrets.PROD_S3_ACCESS_KEY }}
+          S3_SECRET_KEY:   ${{ secrets.PROD_S3_SECRET_KEY }}
+          S3_BUCKET:       ${{ vars.PROD_S3_BUCKET || 'nexeagle-prod' }}
+          S3_PREFIX:       ${{ vars.S3_PREFIX || '1HMS' }}
         run: |
           : "${DB_CONN:?PROD_DB_CONNECTION is empty}"
           : "${JWT_SECRET:?JWT_SECRET is empty}"
@@ -272,12 +299,19 @@ jobs:
           add 'Twilio__PhoneNumber'                   "$TWILIO_PHONE"
           add 'WhatsApp__AccessToken'                 "$WHATSAPP_TOKEN"
           add 'WhatsApp__IsEnabled'                   "$WHATSAPP_ENABLED"
+          add 'WhatsApp__ApiUrl'                      "$WHATSAPP_API_URL"
           add 'OpenAI__ApiKey'                        "$OPENAI_KEY"
           add 'Deepgram__ApiKey'                      "$DEEPGRAM_KEY"
           add 'BlobStorage__StorageConnectionString'  "$BLOB_CONN"
           add 'BlobStorage__AccountKey'               "$BLOB_KEY"
           add 'ApplicationInsights__ConnectionString' "$APPINSIGHTS"
           add 'Invitation__RegistrationBaseUrl'       "$INVITATION_URL"
+          add 'Storage__Provider'                     "$STORAGE_PROVIDER"
+          add 'Storage__S3__ServiceUrl'               "$S3_SERVICE_URL"
+          add 'Storage__S3__AccessKey'                "$S3_ACCESS_KEY"
+          add 'Storage__S3__SecretKey'                "$S3_SECRET_KEY"
+          add 'Storage__S3__Bucket'                   "$S3_BUCKET"
+          add 'Storage__S3__Prefix'                   "$S3_PREFIX"
 
       - name: Copy prod.env to Prod VM
         run: |

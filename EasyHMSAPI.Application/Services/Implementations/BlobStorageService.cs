@@ -156,6 +156,12 @@ namespace EasyHMSAPI.Application.Services.Implementations
             }
         }
 
+        // Azure SAS URLs are minted with a 365-day lifetime, so the URL already persisted in the DB
+        // is still valid — return it unchanged (no extra round-trip). The S3 implementation overrides
+        // this to re-sign, because S3/MinIO presigned URLs cannot exceed 7 days.
+        public Task<string?> RefreshUrlAsync(string containerName, string objectKeyPrefix, string? storedUrl, CancellationToken cancellationToken)
+            => Task.FromResult(storedUrl);
+
         private string GenerateSasUrl(BlobContainerClient containerClient, string blobName, TimeSpan expiryDuration)
         {
             var blobClient = containerClient.GetBlobClient(blobName);

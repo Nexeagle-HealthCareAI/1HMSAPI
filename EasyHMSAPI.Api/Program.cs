@@ -156,7 +156,11 @@ builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(UserL
 // ------------------------------------------------------------
 builder.Services.AddScoped<IJwtAuthService, JwtAuthService>();
 builder.Services.AddScoped<IMaskingService, MaskingService>();
-builder.Services.AddScoped<IBlobStorageService, BlobStorageService>();
+// Object storage provider: "S3" (MinIO / S3-compatible bucket) or "Azure" (Azure Blob, default).
+if (string.Equals(builder.Configuration["Storage:Provider"], "S3", StringComparison.OrdinalIgnoreCase))
+    builder.Services.AddScoped<IBlobStorageService, S3StorageService>();
+else
+    builder.Services.AddScoped<IBlobStorageService, BlobStorageService>();
 builder.Services.AddScoped<ISmsService, SmsService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IWhatsAppMessagingService, WhatsAppMessagingService>();

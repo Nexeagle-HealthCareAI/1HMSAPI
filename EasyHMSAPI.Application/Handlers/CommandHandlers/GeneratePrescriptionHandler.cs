@@ -1,10 +1,12 @@
 using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using System.Text.Json;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
@@ -13,11 +15,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     {
         private readonly AppDbContext _context;
         private readonly IDoctorValidationHelper _doctorValidationHelper;
+        private readonly IBlobStorageService _blobStorageService;
+        private readonly string _templatesContainer;
 
-        public GeneratePrescriptionHandler(AppDbContext context, IDoctorValidationHelper doctorValidationHelper)
+        public GeneratePrescriptionHandler(AppDbContext context, IDoctorValidationHelper doctorValidationHelper, IBlobStorageService blobStorageService, IConfiguration configuration)
         {
             _context = context;
             _doctorValidationHelper = doctorValidationHelper;
+            _blobStorageService = blobStorageService;
+            _templatesContainer = configuration["BlobStorage:PrescriptionTemplatesContainer"] ?? string.Empty;
         }
 
         public async Task<GeneratePrescriptionResponseModel> Handle(GeneratePrescriptionRequestModel request, CancellationToken cancellationToken)
@@ -111,6 +117,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         UpdatedAtUtc = prescriptionSettings.UpdatedAt,
 
                     };
+
+                    // Re-sign the template URL from its object key so the prescription view can
+                    // always fetch it (S3/MinIO presigned URLs expire within 7 days; Azure unchanged).
+                    templateModel.Uri = await _blobStorageService.RefreshUrlAsync(
+                        _templatesContainer,
+                        $"{prescriptionSettings.DoctorId}_{prescriptionSettings.HospitalId}_{_templatesContainer}",
+                        prescriptionSettings.URI,
+                        cancellationToken);
                 }
 
                 var patientRegistration = await _context.PatientRegistrations
