@@ -1,0 +1,24 @@
+# Build artifacts
+**/bin/
+**/obj/
+**/out/
+**/publish/
+
+# IDE / VCS
+.git/
+.github/
+.vs/
+.vscode/
+.idea/
+
+# Secrets MUST NOT be baked into the image.
+# appsettings.Development.json holds live credentials and is loaded only when
+# ASPNETCORE_ENVIRONMENT=Development; the container injects all secrets via env vars
+# at deploy time instead. Keep it out of the build context entirely.
+**/appsettings.Development.json
+
+# Misc
+**/*.user
+**/.env
+**/*.md
+**/TestResults/
