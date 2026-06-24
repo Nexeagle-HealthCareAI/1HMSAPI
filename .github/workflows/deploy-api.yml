@@ -1,0 +1,331 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# EASYHMS API — CI/CD Pipeline
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# STAGES:
+#   Stage 1 — Build        restore + build
+#   Stage 2 — Docker       build & push image to GHCR
+#   Stage 3 — Deploy Dev   pull image → run on Dev VM  (develop branch, port 5001)
+#   Stage 4 — Deploy Prod  pull image → run on Prod VM (main branch, port 5001)
+#
+# The image is SECRET-FREE: appsettings.Development.json is excluded via .dockerignore.
+# All secrets are injected into the container at deploy time via an --env-file written
+# on the VM from GitHub secrets. Non-secret prod config lives in appsettings.Production.json.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# SECRETS
+# ─────────────────────────────────────────────────────────────────────────────
+#   REQUIRED (already set):
+#     GHCR_TOKEN            GitHub PAT (write:packages + repo)
+#     DEV_SSH_HOST          151.185.45.77
+#     DEV_SSH_USER          root
+#     DEV_SSH_PASSWORD      Dev VM root password
+#     DEV_DB_CONNECTION     SQL Server connection string for Dev  (Server=localhost,1433;...)
+#     PROD_SSH_HOST         151.185.45.67
+#     PROD_SSH_USER         root
+#     PROD_SSH_KEY_B64      base64-encoded SSH private key for Prod App VM
+#     PROD_DB_CONNECTION    SQL Server connection string for Prod (Server=10.110.228.8,1433;...)
+#     JWT_SECRET            >= 32 chars; signs/validates JWTs
+#     SMTP_APP_PASSWORD     Gmail app password (OTP / invitation email)
+#
+#   OPTIONAL (add to enable that integration; if unset the feature stays off and the
+#             app still boots — these services fail gracefully at call time):
+#     OTP_PEPPER            Security:OtpPepper (OTP hashing salt)
+#     TWILIO_ACCOUNT_SID    Twilio:AccountSid
+#     TWILIO_AUTH_TOKEN     Twilio:AuthToken      (SMS / OTP)
+#     TWILIO_PHONE_NUMBER   Twilio:PhoneNumber
+#     WHATSAPP_ACCESS_TOKEN WhatsApp:AccessToken  (also set var WHATSAPP_ENABLED=true)
+#     OPENAI_API_KEY        OpenAI:ApiKey         (Voice Rx)
+#     DEEPGRAM_API_KEY      Deepgram:ApiKey       (diarized transcription)
+#     BLOB_STORAGE_CONNECTION  BlobStorage:StorageConnectionString (file uploads)
+#     BLOB_ACCOUNT_KEY         BlobStorage:AccountKey
+#     APPINSIGHTS_CONNECTION   ApplicationInsights:ConnectionString
+#
+#   OPTIONAL repo VARIABLES (Settings → Variables) for environment URLs:
+#     DEV_INVITATION_URL    default http://151.185.45.77/user-onboarding?token=
+#     PROD_INVITATION_URL   default http://151.185.45.67/user-onboarding?token=
+#     WHATSAPP_ENABLED      "true" to turn WhatsApp on (default false)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: EasyHMS API — CI/CD
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+  pull_request:
+    branches:
+      - develop
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: easyhms-api-cicd-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/easyhms-api
+  DOTNET_VERSION: '8.0'
+  API_PROJECT: 'EasyHMSAPI.Api/EasyHMSAPI.Api.csproj'
+  DOCKERFILE: 'EasyHMSAPI.Api/Dockerfile'
+
+# ═══════════════════════════════════════════════════════════════════════════════
+jobs:
+  build:
+    name: "Stage 1 — Build"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-easyhms-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-easyhms-${{ runner.os }}-
+
+      - name: Restore & Build
+        run: |
+          dotnet restore ${{ env.API_PROJECT }}
+          dotnet build ${{ env.API_PROJECT }} --configuration Release --no-restore
+
+# ═══════════════════════════════════════════════════════════════════════════════
+  docker:
+    name: "Stage 2 — Docker Build & Push"
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request'
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=,suffix=,format=short
+            type=ref,event=branch
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ env.DOCKERFILE }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+# ═══════════════════════════════════════════════════════════════════════════════
+  deploy-dev:
+    name: "Stage 3 — Deploy → Dev"
+    runs-on: ubuntu-latest
+    needs: docker
+    if: github.ref == 'refs/heads/develop'
+    environment: development
+
+    steps:
+      - name: Deploy to Dev VM
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          IMAGE: ${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.image_tag }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          ACTOR: ${{ github.actor }}
+          DB_CONN:         ${{ secrets.DEV_DB_CONNECTION }}
+          JWT_SECRET:      ${{ secrets.JWT_SECRET }}
+          OTP_PEPPER:      ${{ secrets.OTP_PEPPER }}
+          SMTP_PW:         ${{ secrets.SMTP_APP_PASSWORD }}
+          TWILIO_SID:      ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_TOKEN:    ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_PHONE:    ${{ secrets.TWILIO_PHONE_NUMBER }}
+          WHATSAPP_TOKEN:  ${{ secrets.WHATSAPP_ACCESS_TOKEN }}
+          WHATSAPP_ENABLED: ${{ vars.WHATSAPP_ENABLED }}
+          OPENAI_KEY:      ${{ secrets.OPENAI_API_KEY }}
+          DEEPGRAM_KEY:    ${{ secrets.DEEPGRAM_API_KEY }}
+          BLOB_CONN:       ${{ secrets.BLOB_STORAGE_CONNECTION }}
+          BLOB_KEY:        ${{ secrets.BLOB_ACCOUNT_KEY }}
+          APPINSIGHTS:     ${{ secrets.APPINSIGHTS_CONNECTION }}
+          INVITATION_URL:  ${{ vars.DEV_INVITATION_URL || 'http://151.185.45.77/user-onboarding?token=' }}
+        with:
+          host: ${{ secrets.DEV_SSH_HOST }}
+          username: ${{ secrets.DEV_SSH_USER }}
+          password: ${{ secrets.DEV_SSH_PASSWORD }}
+          port: 22
+          command_timeout: 10m
+          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,OTP_PEPPER,SMTP_PW,TWILIO_SID,TWILIO_TOKEN,TWILIO_PHONE,WHATSAPP_TOKEN,WHATSAPP_ENABLED,OPENAI_KEY,DEEPGRAM_KEY,BLOB_CONN,BLOB_KEY,APPINSIGHTS,INVITATION_URL
+          script: |
+            set -e
+            : "${DB_CONN:?DEV_DB_CONNECTION is empty}"
+            : "${JWT_SECRET:?JWT_SECRET is empty}"
+
+            mkdir -p /opt/easyhms
+            ENVFILE=/opt/easyhms/dev.env
+            {
+              printf 'ASPNETCORE_ENVIRONMENT=%s\n' 'Development'
+              printf 'ASPNETCORE_URLS=%s\n'         'http://+:5001'
+            } > "$ENVFILE"
+            add(){ if [ -n "$2" ]; then printf '%s=%s\n' "$1" "$2" >> "$ENVFILE"; fi; }
+            add 'ConnectionStrings__DefaultConnection'  "$DB_CONN"
+            add 'Jwt__SecretKey'                        "$JWT_SECRET"
+            add 'Security__OtpPepper'                   "$OTP_PEPPER"
+            add 'Smtp__AppPassword'                     "$SMTP_PW"
+            add 'Twilio__AccountSid'                    "$TWILIO_SID"
+            add 'Twilio__AuthToken'                     "$TWILIO_TOKEN"
+            add 'Twilio__PhoneNumber'                   "$TWILIO_PHONE"
+            add 'WhatsApp__AccessToken'                 "$WHATSAPP_TOKEN"
+            add 'WhatsApp__IsEnabled'                   "$WHATSAPP_ENABLED"
+            add 'OpenAI__ApiKey'                        "$OPENAI_KEY"
+            add 'Deepgram__ApiKey'                      "$DEEPGRAM_KEY"
+            add 'BlobStorage__StorageConnectionString'  "$BLOB_CONN"
+            add 'BlobStorage__AccountKey'               "$BLOB_KEY"
+            add 'ApplicationInsights__ConnectionString' "$APPINSIGHTS"
+            add 'Invitation__RegistrationBaseUrl'       "$INVITATION_URL"
+
+            IMAGE_LC=$(printf '%s' "$IMAGE" | tr '[:upper:]' '[:lower:]')
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+            docker pull "$IMAGE_LC"
+            docker rm -f easyhms-api-dev 2>/dev/null || true
+            docker run -d --name easyhms-api-dev --restart unless-stopped \
+              --network host --env-file "$ENVFILE" "$IMAGE_LC"
+            docker image prune -f || true
+
+      - name: Health check
+        run: |
+          sleep 10
+          for i in 1 2 3 4 5; do
+            S=$(curl -s -o /dev/null -w '%{http_code}' \
+                http://${{ secrets.DEV_SSH_HOST }}:5001/health 2>/dev/null || echo 000)
+            echo "Attempt $i — HTTP $S"
+            [ "$S" = "200" ] && echo "✅ EasyHMS API is up" && exit 0
+            sleep 10
+          done
+          echo "⚠️ Health check inconclusive — check: docker logs easyhms-api-dev"
+          exit 0
+
+# ═══════════════════════════════════════════════════════════════════════════════
+  deploy-prod:
+    name: "Stage 4 — Deploy → Prod"
+    runs-on: ubuntu-latest
+    needs: docker
+    if: github.ref == 'refs/heads/main'
+    environment: production
+
+    steps:
+      - name: Prepare SSH key
+        run: |
+          echo "${{ secrets.PROD_SSH_KEY_B64 }}" | base64 -d > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+
+      - name: Write prod.env
+        env:
+          DB_CONN:         ${{ secrets.PROD_DB_CONNECTION }}
+          JWT_SECRET:      ${{ secrets.JWT_SECRET }}
+          OTP_PEPPER:      ${{ secrets.OTP_PEPPER }}
+          SMTP_PW:         ${{ secrets.SMTP_APP_PASSWORD }}
+          TWILIO_SID:      ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_TOKEN:    ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_PHONE:    ${{ secrets.TWILIO_PHONE_NUMBER }}
+          WHATSAPP_TOKEN:  ${{ secrets.WHATSAPP_ACCESS_TOKEN }}
+          WHATSAPP_ENABLED: ${{ vars.WHATSAPP_ENABLED }}
+          OPENAI_KEY:      ${{ secrets.OPENAI_API_KEY }}
+          DEEPGRAM_KEY:    ${{ secrets.DEEPGRAM_API_KEY }}
+          BLOB_CONN:       ${{ secrets.BLOB_STORAGE_CONNECTION }}
+          BLOB_KEY:        ${{ secrets.BLOB_ACCOUNT_KEY }}
+          APPINSIGHTS:     ${{ secrets.APPINSIGHTS_CONNECTION }}
+          INVITATION_URL:  ${{ vars.PROD_INVITATION_URL || 'http://151.185.45.67/user-onboarding?token=' }}
+        run: |
+          : "${DB_CONN:?PROD_DB_CONNECTION is empty}"
+          : "${JWT_SECRET:?JWT_SECRET is empty}"
+          ENVFILE=/tmp/prod.env
+          {
+            printf 'ASPNETCORE_ENVIRONMENT=%s\n' 'Production'
+            printf 'ASPNETCORE_URLS=%s\n'         'http://+:5001'
+          } > "$ENVFILE"
+          add(){ if [ -n "$2" ]; then printf '%s=%s\n' "$1" "$2" >> "$ENVFILE"; fi; }
+          add 'ConnectionStrings__DefaultConnection'  "$DB_CONN"
+          add 'Jwt__SecretKey'                        "$JWT_SECRET"
+          add 'Security__OtpPepper'                   "$OTP_PEPPER"
+          add 'Smtp__AppPassword'                     "$SMTP_PW"
+          add 'Twilio__AccountSid'                    "$TWILIO_SID"
+          add 'Twilio__AuthToken'                     "$TWILIO_TOKEN"
+          add 'Twilio__PhoneNumber'                   "$TWILIO_PHONE"
+          add 'WhatsApp__AccessToken'                 "$WHATSAPP_TOKEN"
+          add 'WhatsApp__IsEnabled'                   "$WHATSAPP_ENABLED"
+          add 'OpenAI__ApiKey'                        "$OPENAI_KEY"
+          add 'Deepgram__ApiKey'                      "$DEEPGRAM_KEY"
+          add 'BlobStorage__StorageConnectionString'  "$BLOB_CONN"
+          add 'BlobStorage__AccountKey'               "$BLOB_KEY"
+          add 'ApplicationInsights__ConnectionString' "$APPINSIGHTS"
+          add 'Invitation__RegistrationBaseUrl'       "$INVITATION_URL"
+
+      - name: Copy prod.env to Prod VM
+        run: |
+          ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              ${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }} 'mkdir -p /opt/easyhms-prod'
+          scp -i /tmp/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              /tmp/prod.env ${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}:/opt/easyhms-prod/prod.env
+
+      - name: Login to GHCR on Prod VM
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              ${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }} \
+              "echo '$GHCR_TOKEN' | docker login ghcr.io -u '$ACTOR' --password-stdin"
+
+      - name: Pull & restart container
+        env:
+          IMAGE: "${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.image_tag }}"
+        run: |
+          IMAGE_LC=$(printf '%s' "$IMAGE" | tr '[:upper:]' '[:lower:]')
+          ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              ${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }} \
+              "docker pull '$IMAGE_LC' && docker rm -f easyhms-api-prod 2>/dev/null; \
+               docker run -d --name easyhms-api-prod --restart unless-stopped \
+               --network host --env-file /opt/easyhms-prod/prod.env '$IMAGE_LC' && \
+               docker image prune -f"
+
+      - name: Health check
+        run: |
+          sleep 15
+          for i in 1 2 3 4 5; do
+            S=$(curl -s -o /dev/null -w '%{http_code}' \
+                http://${{ secrets.PROD_SSH_HOST }}:5001/health 2>/dev/null || echo 000)
+            echo "Attempt $i — HTTP $S"
+            [ "$S" = "200" ] && echo "✅ EasyHMS Prod API is up" && exit 0
+            sleep 10
+          done
+          echo "⚠️ Health check inconclusive — check: docker logs easyhms-api-prod"
+          exit 0
+
+      - name: Write summary
+        if: always()
+        run: |
+          echo "## 🚀 EasyHMS Deploy — Prod" >> $GITHUB_STEP_SUMMARY
+          [ "${{ job.status }}" = "success" ] \
+            && echo "**Status:** ✅ Deployed" >> $GITHUB_STEP_SUMMARY \
+            || echo "**Status:** ❌ Failed" >> $GITHUB_STEP_SUMMARY
+          echo "| VM | \`${{ secrets.PROD_SSH_HOST }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image tag | \`${{ needs.docker.outputs.image_tag }}\` |" >> $GITHUB_STEP_SUMMARY
