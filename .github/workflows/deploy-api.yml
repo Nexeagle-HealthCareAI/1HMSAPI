@@ -45,8 +45,8 @@
 #       (S3_SERVICE_URL must be the BROWSER-reachable MinIO URL, e.g. http://<vm>:9000)
 #
 #   OPTIONAL repo VARIABLES (Settings → Variables) for environment URLs:
-#     DEV_INVITATION_URL    default http://151.185.45.77/user-onboarding?token=
-#     PROD_INVITATION_URL   default http://151.185.45.67/user-onboarding?token=
+#     DEV_INVITATION_URL    default http://151.185.45.77:81/user-onboarding?token=
+#     PROD_INVITATION_URL   default http://151.185.45.67:81/user-onboarding?token=
 #     WHATSAPP_ENABLED      "true" to turn WhatsApp on (default false)
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -167,7 +167,7 @@ jobs:
           WHATSAPP_API_URL: ${{ vars.WHATSAPP_API_URL || 'https://graph.facebook.com/v22.0/917702338094533/messages' }}
           OPENAI_KEY:      ${{ secrets.OPENAI_API_KEY }}
           DEEPGRAM_KEY:    ${{ secrets.DEEPGRAM_API_KEY }}
-          INVITATION_URL:  ${{ vars.DEV_INVITATION_URL || 'http://151.185.45.77/user-onboarding?token=' }}
+          INVITATION_URL:  ${{ vars.DEV_INVITATION_URL || 'http://151.185.45.77:81/user-onboarding?token=' }}
           STORAGE_PROVIDER: ${{ vars.STORAGE_PROVIDER || 'S3' }}
           S3_SERVICE_URL:  ${{ secrets.DEV_S3_SERVICE_URL }}
           S3_ACCESS_KEY:   ${{ secrets.DEV_S3_ACCESS_KEY }}
@@ -262,7 +262,7 @@ jobs:
           WHATSAPP_API_URL: ${{ vars.WHATSAPP_API_URL || 'https://graph.facebook.com/v22.0/917702338094533/messages' }}
           OPENAI_KEY:      ${{ secrets.OPENAI_API_KEY }}
           DEEPGRAM_KEY:    ${{ secrets.DEEPGRAM_API_KEY }}
-          INVITATION_URL:  ${{ vars.PROD_INVITATION_URL || 'http://151.185.45.67/user-onboarding?token=' }}
+          INVITATION_URL:  ${{ vars.PROD_INVITATION_URL || 'http://151.185.45.67:81/user-onboarding?token=' }}
           STORAGE_PROVIDER: ${{ vars.STORAGE_PROVIDER || 'S3' }}
           S3_SERVICE_URL:  ${{ secrets.PROD_S3_SERVICE_URL }}
           S3_ACCESS_KEY:   ${{ secrets.PROD_S3_ACCESS_KEY }}
