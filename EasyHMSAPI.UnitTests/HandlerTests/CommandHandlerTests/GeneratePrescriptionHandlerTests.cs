@@ -8,7 +8,9 @@ using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using EasyHMSAPI.Application.Helpers.Interfaces;
+using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.UnitTests.TestUtils;
+using Microsoft.Extensions.Configuration;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using NUnit.Framework;
@@ -20,6 +22,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
     {
         private AppDbContext _context = null!;
         private Mock<IDoctorValidationHelper> _mockDoctorValidationHelper = null!;
+        private Mock<IBlobStorageService> _mockBlobStorageService = null!;
         private GeneratePrescriptionHandler _handler = null!;
 
         [SetUp]
@@ -27,7 +30,11 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         {
             _context = InMemoryDbContextFactory.CreateContext();
             _mockDoctorValidationHelper = new Mock<IDoctorValidationHelper>();
-            _handler = new GeneratePrescriptionHandler(_context, _mockDoctorValidationHelper.Object);
+            _mockBlobStorageService = new Mock<IBlobStorageService>();
+            _mockBlobStorageService
+                .Setup(b => b.RefreshUrlAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((string container, string prefix, string? storedUrl, CancellationToken ct) => storedUrl);
+            _handler = new GeneratePrescriptionHandler(_context, _mockDoctorValidationHelper.Object, _mockBlobStorageService.Object, new Mock<IConfiguration>().Object);
         }
 
         [TearDown]

@@ -1,9 +1,11 @@
 using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 {
@@ -11,11 +13,15 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
     {
         private readonly AppDbContext _context;
         private readonly IDoctorValidationHelper _doctorValidationHelper;
+        private readonly IBlobStorageService _blobStorageService;
+        private readonly string _templatesContainer;
 
-        public GetPrescriptionSettingsHandler(AppDbContext context, IDoctorValidationHelper doctorValidationHelper)
+        public GetPrescriptionSettingsHandler(AppDbContext context, IDoctorValidationHelper doctorValidationHelper, IBlobStorageService blobStorageService, IConfiguration configuration)
         {
             _context = context;
             _doctorValidationHelper = doctorValidationHelper;
+            _blobStorageService = blobStorageService;
+            _templatesContainer = configuration["BlobStorage:PrescriptionTemplatesContainer"] ?? string.Empty;
         }
 
         public async Task<GetPrescriptionSettingsResponseModel> Handle(GetPrescriptionSettingsRequestModel request, CancellationToken cancellationToken)
@@ -76,6 +82,14 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         UpdatedAtUtc = prescriptionSettings.UpdatedAt,
                         ValidUpto = prescriptionSettings.ValidDuration,
                     };
+
+                    // Re-sign the template URL from its object key so it never goes stale
+                    // (S3/MinIO presigned URLs expire within 7 days; Azure returns it unchanged).
+                    data.URI = await _blobStorageService.RefreshUrlAsync(
+                        _templatesContainer,
+                        $"{prescriptionSettings.DoctorId}_{prescriptionSettings.HospitalId}_{_templatesContainer}",
+                        prescriptionSettings.URI,
+                        cancellationToken);
 
                     response.Success = true;
                     response.Message = "Prescription settings retrieved successfully.";

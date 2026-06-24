@@ -4,6 +4,8 @@ using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.QueryHandlers;
 using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
+using EasyHMSAPI.Application.Services.Interfaces;
+using Microsoft.Extensions.Configuration;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using EasyHMSAPI.UnitTests.TestUtils;
@@ -17,6 +19,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
     {
         private AppDbContext _context = null!;
         private Mock<IDoctorValidationHelper> _doctorValidationHelperMock = null!;
+        private Mock<IBlobStorageService> _blobStorageServiceMock = null!;
         private GetPrescriptionSettingsHandler _handler = null!;
 
         [SetUp]
@@ -24,7 +27,11 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         {
              _context = InMemoryDbContextFactory.CreateContext();
             _doctorValidationHelperMock = new Mock<IDoctorValidationHelper>();
-            _handler = new GetPrescriptionSettingsHandler(_context, _doctorValidationHelperMock.Object);
+            _blobStorageServiceMock = new Mock<IBlobStorageService>();
+            _blobStorageServiceMock
+                .Setup(b => b.RefreshUrlAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((string container, string prefix, string? storedUrl, CancellationToken ct) => storedUrl);
+            _handler = new GetPrescriptionSettingsHandler(_context, _doctorValidationHelperMock.Object, _blobStorageServiceMock.Object, new Mock<IConfiguration>().Object);
         }
 
         [TearDown]
