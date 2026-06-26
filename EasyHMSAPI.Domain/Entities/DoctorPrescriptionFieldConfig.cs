@@ -10,6 +10,7 @@ namespace EasyHMSAPI.Domain.Entities
     [ExcludeFromCodeCoverage]
     public class DoctorPrescriptionFieldConfig
     {
+        [System.ComponentModel.DataAnnotations.Key]
         public Guid ConfigId { get; set; }
         public Guid DoctorId { get; set; }
         public string? ConfigJson { get; set; }
