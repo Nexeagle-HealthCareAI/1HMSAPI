@@ -7,8 +7,7 @@ using Microsoft.EntityFrameworkCore;
 namespace EasyHMSAPI.Api.Controllers.V1
 {
     [ApiController]
-    [ApiVersion("1.0")]
-    [Route("api/v{version:apiVersion}/[controller]")]
+    [Route("api/v1/[controller]")]
     [Authorize]
     public class SubscriptionController : ControllerBase
     {
