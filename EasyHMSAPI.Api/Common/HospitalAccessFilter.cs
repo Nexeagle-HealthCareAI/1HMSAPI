@@ -64,6 +64,56 @@ namespace EasyHMSAPI.Api.Common
                 return;
             }
 
+            // --- Subscription Check ---
+            var subKey = $"sub:{hospitalId}";
+            string? subStatus;
+            if (_cache.TryGetValue(subKey, out string? cachedStatus))
+            {
+                subStatus = cachedStatus;
+            }
+            else
+            {
+                var sub = await _db.HospitalSubscriptions
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(s => s.HospitalId == hospitalId.Value);
+                
+                subStatus = sub?.Status ?? "Trial"; // Default if missing
+                _cache.Set(subKey, subStatus, CacheTtl);
+            }
+
+            if (subStatus.Equals("Expired", StringComparison.OrdinalIgnoreCase) || 
+                subStatus.Equals("Blocked", StringComparison.OrdinalIgnoreCase))
+            {
+                // Check if user is Admin or AdminDoctor
+                var roles = await _db.UserRoles
+                    .AsNoTracking()
+                    .Include(ur => ur.Role)
+                    .Where(ur => ur.UserID == userId.Value && (ur.Role.HospitalID == null || ur.Role.HospitalID == hospitalId.Value))
+                    .Select(ur => ur.Role.RoleName)
+                    .ToListAsync();
+
+                bool isAdmin = roles.Contains("Admin") || roles.Contains("AdminDoctor");
+
+                if (isAdmin)
+                {
+                    context.Result = new ObjectResult(new { 
+                        message = "Your hospital subscription has expired. Please renew to continue.",
+                        subscriptionExpired = true 
+                    })
+                    {
+                        StatusCode = StatusCodes.Status402PaymentRequired,
+                    };
+                }
+                else
+                {
+                    context.Result = new ObjectResult(new { message = "Hospital subscription is inactive. Please contact your administrator." })
+                    {
+                        StatusCode = StatusCodes.Status403Forbidden,
+                    };
+                }
+                return;
+            }
+
             await next();
         }
 
