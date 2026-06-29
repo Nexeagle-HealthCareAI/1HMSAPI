@@ -1,4 +1,4 @@
-﻿using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
+using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
@@ -33,7 +33,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     .FirstOrDefaultAsync(cancellationToken);
                 if(existingAppointment is not null)
                 {
-                    var fileUrl = await _blobStorageService.UploadAsync(existingAppointment.ApptId.ToString(), request.File, _containerName, cancellationToken);
+                    string fileIdentifier = $"Appt_{existingAppointment.ApptId}_Doc_{existingAppointment.DoctorId}_Pat_{existingAppointment.PatientId}";
+                    var fileUrl = await _blobStorageService.UploadAsync(fileIdentifier, request.File, _containerName, cancellationToken);
                     if(!string.IsNullOrEmpty(fileUrl))
                     {
                         existingAppointment.PdfUrl = fileUrl;
