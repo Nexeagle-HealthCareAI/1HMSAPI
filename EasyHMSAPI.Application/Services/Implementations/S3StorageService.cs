@@ -174,7 +174,8 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 InputStream = stream,
                 ContentType = file.ContentType,
                 AutoCloseStream = false,
-                DisablePayloadSigning = true, // MinIO over HTTP: avoids streaming-signature mismatches
+                // DisablePayloadSigning was removed: it was a MinIO-over-HTTP workaround only.
+                // E2E Networks uses HTTPS and requires proper payload signing (default behaviour).
             };
             request.Headers.ContentLength = file.Length;
             await _client.PutObjectAsync(request, cancellationToken);
