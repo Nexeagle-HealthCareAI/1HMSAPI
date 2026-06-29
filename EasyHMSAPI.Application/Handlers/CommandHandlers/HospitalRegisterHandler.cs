@@ -144,6 +144,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
                 // --- End UserRoles update ---
 
+                // --- Initialize 14-Day Trial Subscription ---
+                var trialSub = new HospitalSubscription
+                {
+                    HospitalSubscriptionId = Guid.NewGuid(),
+                    HospitalId = hospitalId,
+                    Status = "Trial",
+                    TrialStartDate = DateTime.UtcNow,
+                    TrialEndDate = DateTime.UtcNow.AddDays(14),
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _context.HospitalSubscriptions.Add(trialSub);
+
                 await _context.SaveChangesAsync(cancellationToken);
 
                 return new HospitalRegisterResponseModel

@@ -41,7 +41,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
             var accessKey = configuration["Storage:S3:AccessKey"] ?? string.Empty;
             var secretKey = configuration["Storage:S3:SecretKey"] ?? string.Empty;
             var region = configuration["Storage:S3:Region"] ?? "us-east-1";
-            var forcePathStyle = !bool.TryParse(configuration["Storage:S3:ForcePathStyle"], out var fps) || fps; // MinIO needs path-style; default true
+            var forcePathStyle = !bool.TryParse(configuration["Storage:S3:ForcePathStyle"], out var fps) || fps;
             _bucket = configuration["Storage:S3:Bucket"] ?? string.Empty;
             _prefix = (configuration["Storage:S3:Prefix"] ?? "1HMS").Trim();
             _urlExpiry = TimeSpan.FromHours(double.TryParse(configuration["Storage:S3:UrlExpiryHours"], out var h) && h > 0 ? h : 24);
@@ -49,6 +49,31 @@ namespace EasyHMSAPI.Application.Services.Implementations
             // Match BlobStorageService's container fields (used only for upload/get branching).
             _prescriptionAssestsContainer = configuration["BlobStorage:PrescriptionAssetsContainer"] ?? string.Empty;
             _prescriptionAttachmentsContainer = configuration["BlobStorage:PrescriptionAttachmentsContainer"] ?? string.Empty;
+
+            // Auto-detect bucket-specific virtual-hosted endpoint.
+            // E2E Networks (and some other providers) give a per-bucket URL like:
+            //   https://nexeagle-dev.in-south1-objectstore.e2enetworks.net
+            // If the ServiceURL hostname already starts with "{bucket}.", strip the bucket
+            // prefix and switch to virtual-hosted style (ForcePathStyle = false).
+            // The AWS SDK will then prepend the bucket back to the host, producing the
+            // correct URL:  https://nexeagle-dev.in-south1-objectstore.e2enetworks.net/{key}
+            // instead of:   https://nexeagle-dev.in-south1-objectstore.e2enetworks.net/nexeagle-dev/{key}
+            if (!string.IsNullOrWhiteSpace(serviceUrl) && !string.IsNullOrWhiteSpace(_bucket))
+            {
+                try
+                {
+                    var serviceUri = new Uri(serviceUrl);
+                    var bucketPrefix = _bucket + ".";
+                    if (serviceUri.Host.StartsWith(bucketPrefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Strip bucket subdomain → base host (e.g. in-south1-objectstore.e2enetworks.net)
+                        var baseHost = serviceUri.Host.Substring(bucketPrefix.Length);
+                        serviceUrl = $"{serviceUri.Scheme}://{baseHost}";
+                        forcePathStyle = false; // virtual-hosted: SDK prepends bucket → nexeagle-dev.in-south1-...
+                    }
+                }
+                catch { /* malformed URL — fall through with original config */ }
+            }
 
             var config = new AmazonS3Config
             {
@@ -174,7 +199,8 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 InputStream = stream,
                 ContentType = file.ContentType,
                 AutoCloseStream = false,
-                DisablePayloadSigning = true, // MinIO over HTTP: avoids streaming-signature mismatches
+                // DisablePayloadSigning was removed: it was a MinIO-over-HTTP workaround only.
+                // E2E Networks uses HTTPS and requires proper payload signing (default behaviour).
             };
             request.Headers.ContentLength = file.Length;
             await _client.PutObjectAsync(request, cancellationToken);

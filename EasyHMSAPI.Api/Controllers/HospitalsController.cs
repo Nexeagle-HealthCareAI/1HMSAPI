@@ -40,7 +40,8 @@ namespace EasyHMSAPI.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in RegisterHospital");
-                return StatusCode(500, new { Message = "An error occurred while registering hospital", Error = ex.Message });
+                var errorMsg = ex.InnerException != null ? $"{ex.Message} Inner: {ex.InnerException.Message}" : ex.Message;
+                return StatusCode(500, new { Message = "An error occurred while registering hospital", Error = errorMsg });
             }
         }
 

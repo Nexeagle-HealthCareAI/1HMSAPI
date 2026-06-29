@@ -71,6 +71,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<AdmissionDayBill> AdmissionDayBill { get; set; }
         public DbSet<AdmissionDayBillLine> AdmissionDayBillLine { get; set; }
         public DbSet<ConsentRecord> ConsentRecord { get; set; }
+        public DbSet<HospitalSubscription> HospitalSubscriptions { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {   
@@ -651,6 +652,25 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(d => d.UpdatedAt).HasColumnType("datetime2(3)");
                 entity.Property(d => d.RowVersion).IsRowVersion();
                 entity.HasIndex(d => new { d.HospitalId, d.DoctorId, d.FeeType }).IsUnique();
+            });
+
+            modelBuilder.Entity<HospitalSubscription>(entity =>
+            {
+                entity.ToTable("HospitalSubscriptions");
+                entity.HasKey(e => e.HospitalSubscriptionId);
+                entity.Property(e => e.HospitalSubscriptionId).HasDefaultValueSql("newid()");
+                entity.Property(e => e.Status).HasMaxLength(50).IsRequired();
+                entity.Property(e => e.TrialStartDate).HasColumnType("datetime2(3)").IsRequired(false);
+                entity.Property(e => e.TrialEndDate).HasColumnType("datetime2(3)").IsRequired(false);
+                entity.Property(e => e.SubscriptionStartDate).HasColumnType("datetime2(3)").IsRequired(false);
+                entity.Property(e => e.SubscriptionEndDate).HasColumnType("datetime2(3)").IsRequired(false);
+                entity.Property(e => e.NextBillingDate).HasColumnType("datetime2(3)").IsRequired(false);
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+                entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+
+                entity.HasOne(e => e.Hospital)
+                      .WithMany()
+                      .HasForeignKey(e => e.HospitalId);
             });
 
             base.OnModelCreating(modelBuilder);
