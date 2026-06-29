@@ -126,10 +126,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 {
                     var smsMsg = $"Dear {patient.FullName}, your appointment is booked for {appointment.ApptDate:yyyy-MM-dd} at {appointment.StartAt:HH:mm}.";
                     var token = string.Empty;
-                    if (tokenNumber.HasValue)
+                    if (tokenNumber.HasValue && tokenNumber.Value > 0)
                     {
-                        smsMsg += $" Your token number is {tokenNumber}.";
-                        token = tokenNumber.HasValue ? tokenNumber.Value.ToString() : string.Empty;
+                        var groupIndex = (tokenNumber.Value - 1) / 30;
+                        var prefix = (char)(65 + groupIndex);
+                        var num = ((tokenNumber.Value - 1) % 30) + 1;
+                        token = $"{prefix}-{num}";
+                        smsMsg += $" Your token number is {token}.";
+                    }
+                    else if (tokenNumber.HasValue)
+                    {
+                        token = tokenNumber.Value.ToString();
+                        smsMsg += $" Your token number is {token}.";
                     }
                     //isSmsSent = await _smsService.SendInvitationSmsAsync(patient.Mobile, smsMsg);
 
@@ -189,8 +197,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     patient.FullName = request.Patient?.FullName ?? patient.FullName;
                 if (!string.IsNullOrEmpty(request.Patient?.Mobile) && request.Patient?.Mobile != patient.Mobile)
                     patient.Mobile = request.Patient?.Mobile ?? patient.Mobile;
-                if (request.Patient?.AgeYears != null && request.Patient.AgeYears != patient.AgeYears)
-                    patient.AgeYears = request.Patient.AgeYears;
+                if (request.Patient?.Age != null && request.Patient.Age != patient.Age)
+                    patient.Age = request.Patient.Age;
+                if (!string.IsNullOrEmpty(request.Patient?.AgeUnit) && request.Patient.AgeUnit != patient.AgeUnit)
+                    patient.AgeUnit = request.Patient.AgeUnit;
                 if (!string.IsNullOrEmpty(request.Patient?.Sex) && request.Patient?.Sex != patient.Sex)
                     patient.Sex = request.Patient?.Sex ?? patient.Sex;
                 if (!string.IsNullOrEmpty(request.Patient?.AddressLine1) && request.Patient?.AddressLine1 != patient.AddressLine)
@@ -212,6 +222,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (!string.IsNullOrEmpty(request.Patient?.EmergencyContactName)) patient.EmergencyContactName = request.Patient?.EmergencyContactName;
                 if (!string.IsNullOrEmpty(request.Patient?.EmergencyContactRelation)) patient.EmergencyContactRelation = request.Patient?.EmergencyContactRelation;
                 if (!string.IsNullOrEmpty(request.Patient?.EmergencyContactPhone)) patient.EmergencyContactPhone = request.Patient?.EmergencyContactPhone;
+                if (!string.IsNullOrEmpty(request.Patient?.GuardianName)) patient.GuardianName = request.Patient?.GuardianName;
+                if (!string.IsNullOrEmpty(request.Patient?.GuardianRelation)) patient.GuardianRelation = request.Patient?.GuardianRelation;
                 patient.HospitalId = request.HospitalId;
                 return patient;
             }
@@ -228,7 +240,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     RegisteredBy = request.UserId,
                     FullName = request.Patient?.FullName ?? string.Empty,
                     Mobile = request.Patient?.Mobile,
-                    AgeYears = (short)(request.Patient?.AgeYears ?? 0),
+                    Age = (short)(request.Patient?.Age ?? 0),
+                    AgeUnit = request.Patient?.AgeUnit ?? "Y",
                     Sex = request.Patient?.Sex,
                     AddressLine = request.Patient?.AddressLine1,
                     City = request.Patient?.City,
@@ -243,6 +256,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     EmergencyContactName = request.Patient?.EmergencyContactName,
                     EmergencyContactRelation = request.Patient?.EmergencyContactRelation,
                     EmergencyContactPhone = request.Patient?.EmergencyContactPhone,
+                    GuardianName = request.Patient?.GuardianName,
+                    GuardianRelation = request.Patient?.GuardianRelation,
                 };
                 _context.PatientRegistrations.Add(newPatient);
                 return newPatient;

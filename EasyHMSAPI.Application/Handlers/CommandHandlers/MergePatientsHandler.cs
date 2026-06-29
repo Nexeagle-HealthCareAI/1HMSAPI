@@ -112,7 +112,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         {
             c.FullName = Pick(c.FullName, d.FullName);
             c.Mobile = Pick(c.Mobile, d.Mobile);
-            c.AgeYears ??= d.AgeYears;
+            c.Age ??= d.Age;
+            c.AgeUnit ??= d.AgeUnit;
             c.DateOfBirth ??= d.DateOfBirth;
             c.Sex = Pick(c.Sex, d.Sex);
             c.BloodGroup = Pick(c.BloodGroup, d.BloodGroup);

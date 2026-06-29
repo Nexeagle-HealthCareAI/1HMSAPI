@@ -16,7 +16,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string PatientId { get; set; } = null!;
         public string? FullName { get; set; }
         public string? Mobile { get; set; }
-        public short? AgeYears { get; set; }
+        public short? Age { get; set; }
+        public string? AgeUnit { get; set; }
         public string? Sex { get; set; }
         public string? City { get; set; }
         // 0..1 name similarity (Jaro-Winkler).

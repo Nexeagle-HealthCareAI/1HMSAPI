@@ -17,7 +17,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? PatientFullName { get; set; }
         public string? PatientMobile { get; set; }
         public string? PatientSex { get; set; }
-        public int? PatientAgeYears { get; set; }
+        public int? PatientAge { get; set; }
+        public string? PatientAgeUnit { get; set; }
         public Guid DoctorId { get; set; }
         public string? DoctorName { get; set; }
         public Guid DepartmentId { get; set; }
@@ -32,6 +33,9 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? AppointmentType { get; set; }
         public string? ReferrerName { get; set; }
         public string? ReferrerRelation { get; set; }
+        // Guardian / relative — sourced from PatientRegistrations (patient-level).
+        public string? GuardianName { get; set; }
+        public string? GuardianRelation { get; set; }
         public DateTime LastStatusAt { get; set; }
         public DateTime CreatedAt { get; set; }
         public TokenDetail? Token { get; set; }

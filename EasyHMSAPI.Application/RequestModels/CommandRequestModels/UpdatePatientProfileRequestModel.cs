@@ -14,7 +14,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string PatientId { get; set; } = string.Empty;
         public string? FullName { get; set; }
         public string? Mobile { get; set; }
-        public short? AgeYears { get; set; }
+        public short? Age { get; set; }
+        public string? AgeUnit { get; set; }
         public string? Sex { get; set; }
         public string? AddressLine1 { get; set; }
         public string? City { get; set; }

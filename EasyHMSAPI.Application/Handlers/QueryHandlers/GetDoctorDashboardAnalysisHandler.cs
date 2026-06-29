@@ -277,7 +277,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             var patientAges = await _context.PatientRegistrations
                 .AsNoTracking()
                 .Where(p => uniquPatients.Contains(p.PatientId))
-                .Select(p => p.AgeYears)
+                .Select(p => p.Age)
                 .ToListAsync(cancellationToken);
             foreach (var age in patientAges)
             {

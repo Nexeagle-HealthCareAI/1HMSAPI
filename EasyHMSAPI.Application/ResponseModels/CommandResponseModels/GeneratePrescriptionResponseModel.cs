@@ -80,6 +80,9 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public string? InsuranceId { get; set; }
         public string? ReferrerName { get; set; }
         public string? ReferrerRelation { get; set; }
+        // Guardian / relative (patient-level, separate from medical referral).
+        public string? GuardianName { get; set; }
+        public string? GuardianRelation { get; set; }
     }
 
     [ExcludeFromCodeCoverage]

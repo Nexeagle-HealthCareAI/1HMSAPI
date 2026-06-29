@@ -17,6 +17,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? Mobile { get; set; }
         public string? Sex { get; set; }
         public int? Age { get; set; }
+        public string? AgeUnit { get; set; }
         public DateTime? DateOfBirth { get; set; }
         public string? Address { get; set; }
         public string? City { get; set; }

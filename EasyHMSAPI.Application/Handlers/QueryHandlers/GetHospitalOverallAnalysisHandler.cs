@@ -355,9 +355,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             // Single pass for age distribution
             foreach (var patient in patients)
             {
-                if (patient.AgeYears.HasValue)
+                if (patient.Age.HasValue)
                 {
-                    var age = patient.AgeYears.Value;
+                    var age = patient.Age.Value;
                     var ageKey = age switch
                     {
                         >= 0 and < 11 => "0-10",
@@ -466,9 +466,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
                 foreach (var patient in genderGroup)
                 {
-                    if (patient.AgeYears.HasValue)
+                    if (patient.Age.HasValue)
                     {
-                        var age = patient.AgeYears.Value;
+                        var age = patient.Age.Value;
                         var ageKey = age switch
                         {
                             >= 0 and < 11 => "0-10",

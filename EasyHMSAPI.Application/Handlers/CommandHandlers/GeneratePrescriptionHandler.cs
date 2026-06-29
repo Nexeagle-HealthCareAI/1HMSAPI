@@ -149,7 +149,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         PatientId = patientRegistration.PatientId,
                         Name = patientRegistration.FullName,
                         Mobile = patientRegistration.Mobile,
-                        Age = patientRegistration.AgeYears ?? 0,
+                        Age = patientRegistration.Age ?? 0,
                         Sex = patientRegistration.Sex,
                         Address = patientRegistration.AddressLine,
                         City = patientRegistration.City,
@@ -158,7 +158,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         Pincode = patientRegistration.Pincode,
                         InsuranceId = patientRegistration.InsuranceId,
                         ReferrerName = referrerName,
-                        ReferrerRelation = existingAppointment.ReferrerRelation
+                        ReferrerRelation = existingAppointment.ReferrerRelation,
+                        GuardianName = patientRegistration.GuardianName,
+                        GuardianRelation = patientRegistration.GuardianRelation
                     });
                 }
 

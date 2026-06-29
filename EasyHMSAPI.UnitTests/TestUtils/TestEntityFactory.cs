@@ -98,7 +98,7 @@ namespace EasyHMSAPI.UnitTests.TestUtils
                 PatientId = patientId,
                 FullName = name,
                 Mobile = "9876543210",
-                AgeYears = 30,
+                Age = 30,
                 Sex = "Male",
                 AddressLine = "Test Address",
                 City = "Test City",

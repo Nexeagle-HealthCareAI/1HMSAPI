@@ -136,7 +136,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         {
             if (!string.IsNullOrWhiteSpace(r.FullName)) p.FullName = r.FullName;
             if (!string.IsNullOrWhiteSpace(r.Mobile)) p.Mobile = r.Mobile;
-            if (r.AgeYears.HasValue) p.AgeYears = r.AgeYears;
+            if (r.Age.HasValue) 
+            {
+                p.Age = r.Age;
+                if (!string.IsNullOrEmpty(r.AgeUnit))
+                {
+                    p.AgeUnit = r.AgeUnit;
+                }
+            }
             if (r.DateOfBirth.HasValue) p.DateOfBirth = r.DateOfBirth;
             if (!string.IsNullOrWhiteSpace(r.Sex)) p.Sex = r.Sex;
             if (!string.IsNullOrWhiteSpace(r.BloodGroup)) p.BloodGroup = r.BloodGroup;

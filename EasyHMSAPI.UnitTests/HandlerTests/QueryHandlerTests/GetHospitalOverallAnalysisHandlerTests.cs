@@ -61,7 +61,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
                  HospitalId = hospitalId, 
                  FullName = "John Doe",
                  Sex = "Male",
-                 AgeYears = 30
+                 Age = 30
              };
             _context.PatientRegistrations.Add(patient);
             await _context.SaveChangesAsync();

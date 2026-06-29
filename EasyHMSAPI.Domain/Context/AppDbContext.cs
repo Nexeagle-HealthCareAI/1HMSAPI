@@ -9,6 +9,10 @@ namespace EasyHMSAPI.Domain.Context
     public class AppDbContext : DbContext
     {
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+        
+        [DbFunction("SOUNDEX", IsBuiltIn = true)]
+        public static string Soundex(string input) => throw new NotSupportedException();
+        
         public DbSet<LookupType> LookupTypes { get; set; }
         public DbSet<LookupMaster> LookupMasters { get; set; }
         public DbSet<LookupPersonal> LookupPersonals { get; set; }
