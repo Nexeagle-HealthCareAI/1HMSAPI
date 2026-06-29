@@ -179,10 +179,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 await tx.CommitAsync(cancellationToken);
                 return new QuickAddUserResponseModel { Success = true, Message = "Team member added.", UserId = userId };
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 await tx.RollbackAsync(cancellationToken);
-                return Fail("Could not add the team member.");
+                return Fail($"Could not add the team member. Error: {ex.InnerException?.Message ?? ex.Message}");
             }
         }
 
