@@ -69,6 +69,7 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public string? PatientId { get; set; }
         public string? Name { get; set; }
         public int Age { get; set; }
+        public string? AgeUnit { get; set; }
         public string? Sex { get; set; }
         public string? Address { get; set; }
         public string? Contact { get; set; }

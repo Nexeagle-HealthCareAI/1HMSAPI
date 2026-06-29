@@ -150,6 +150,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         Name = patientRegistration.FullName,
                         Mobile = patientRegistration.Mobile,
                         Age = patientRegistration.Age ?? 0,
+                        AgeUnit = patientRegistration.AgeUnit,
                         Sex = patientRegistration.Sex,
                         Address = patientRegistration.AddressLine,
                         City = patientRegistration.City,
