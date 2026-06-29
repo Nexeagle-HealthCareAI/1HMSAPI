@@ -29,7 +29,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     {
         public string? FullName { get; set; }
         public string? Mobile { get; set; }
-        public short Age { get; set; }
+        public short? Age { get; set; }
         public string? AgeUnit { get; set; }
         public string? Sex { get; set; }
         public string? AddressLine1 { get; set; }
