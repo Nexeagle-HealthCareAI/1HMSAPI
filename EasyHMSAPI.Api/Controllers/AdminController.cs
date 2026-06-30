@@ -45,6 +45,25 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Updates an existing team member's details and roles
+        [HttpPut("users/update")]
+        public async Task<ActionResult<AdminUpdateUserResponseModel>> UpdateUser([FromBody] AdminUpdateUserRequestModel request)
+        {
+            var userId = EasyHMSAPI.Api.Common.UserContextHelper.GetUserId(HttpContext.User);
+            if (userId == null) return Unauthorized(new { Message = "Could not resolve the signed-in user." });
+            try
+            {
+                request.CallerUserId = userId.Value;
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in UpdateUser for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred while updating the team member." });
+            }
+        }
+
         // Resets an existing member's password to a fresh temporary one and returns it (once) so the
         // admin can re-share login details. The original password can't be recovered (only the hash is stored).
         [HttpPost("users/reset-credentials")]
