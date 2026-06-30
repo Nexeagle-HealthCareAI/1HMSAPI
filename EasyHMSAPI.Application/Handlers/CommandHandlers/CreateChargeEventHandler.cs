@@ -67,8 +67,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 var encounter = await _context.Encounter
                     .FirstOrDefaultAsync(e => e.HospitalId == request.HospitalId
                                            && e.SourceType == "Appointments"
-                                           && e.SourceId == lastAppointment.ApptId
-                                           && e.EncounterTypeCode == encounterTypeCode,
+                                           && e.SourceId == lastAppointment.ApptId,
                                            cancellationToken);
 
                 if (encounter != null)
