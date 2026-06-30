@@ -95,13 +95,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
                     if (inv != null)
                     {
-                        totalBilled = inv.NetAmount ?? 0;
-                        received = allocByInvoice.TryGetValue(inv.InvoiceId, out var r) ? r : 0;
+                        isCancelled = inv.StatusCode == BillingConstants.InvoiceStatus.Cancelled;
+                        totalBilled = isCancelled ? 0 : (inv.NetAmount ?? 0);
+                        received = isCancelled ? 0 : (allocByInvoice.TryGetValue(inv.InvoiceId, out var r) ? r : 0);
                         status = inv.StatusCode;
                         invoiceNo = inv.InvoiceNo;
                         invoiceId = inv.InvoiceId;
                         invoiceDate = inv.InvoiceDate;
-                        isCancelled = inv.StatusCode == BillingConstants.InvoiceStatus.Cancelled;
                         cancelReason = isCancelled ? inv.CancelReason : null;
                         updatedAt = inv.UpdatedAt;
                         updatedBy = inv.UpdatedBy;
