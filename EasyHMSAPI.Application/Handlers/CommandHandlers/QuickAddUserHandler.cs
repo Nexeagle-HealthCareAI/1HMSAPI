@@ -133,7 +133,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         HospitalID = request.HospitalId,
                         UserID = userId,
                         EmployeeID = employeeId,
-                        IsPrimary = true,
+                        IsPrimary = false,
                         CreatedAt = now,
                     });
 
