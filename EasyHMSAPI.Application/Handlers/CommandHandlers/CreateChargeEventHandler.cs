@@ -21,12 +21,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         {
             try
             {
-                // Bill against the specific appointment when provided; otherwise the latest.
+                // Bill against the specific appointment when provided; otherwise the latest non-cancelled one.
                 var lastAppointment = request.AppointmentId.HasValue
                     ? await _context.Appointments
                         .FirstOrDefaultAsync(a => a.ApptId == request.AppointmentId.Value, cancellationToken)
                     : await _context.Appointments
-                        .Where(a => a.PatientId == request.PatientId)
+                        .Where(a => a.PatientId == request.PatientId && a.CurrentStatusCode != AppConstants.AppointmentStatus_Cancelled)
                         .OrderByDescending(a => a.ApptDate)
                         .FirstOrDefaultAsync(cancellationToken);
 
@@ -36,6 +36,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     {
                         Success = false,
                         Message = $"No appointment found for patient {request.PatientId}"
+                    };
+                }
+
+                if (lastAppointment.CurrentStatusCode == AppConstants.AppointmentStatus_Cancelled)
+                {
+                    return new CreateChargeEventResponseModel
+                    {
+                        Success = false,
+                        Message = "Cannot create a bill for a cancelled appointment."
                     };
                 }
 
