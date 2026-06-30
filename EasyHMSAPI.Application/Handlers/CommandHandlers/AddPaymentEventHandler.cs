@@ -50,6 +50,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
                 request.Payment.PaymentType = normalizedPaymentType;
 
+                // Guard against negative/zero amounts: a negative payment would slip past the
+                // "exceeds remaining due" check below and re-open a paid invoice / inflate credit.
+                if (request.Payment.Amount <= 0)
+                {
+                    return new AddPaymentEventResponseModel
+                    {
+                        Success = false,
+                        Message = "Payment amount must be greater than zero."
+                    };
+                }
+
                 // Prefer the DRAFT invoice (still mutable); fall back to the latest invoice.
                 async Task<BillingInvoice?> LoadInvoiceAsync() => await _context.BillingInvoice
                     .Where(bi => bi.EncounterId == request.EncounterId)

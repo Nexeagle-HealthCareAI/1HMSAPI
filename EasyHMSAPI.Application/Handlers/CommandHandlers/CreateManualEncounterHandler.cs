@@ -25,7 +25,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return new CreateManualEncounterResponseModel { Success = false, Message = "PatientId and HospitalId are required." };
 
                 var patientExists = await _context.PatientRegistrations
-                    .AnyAsync(p => p.PatientId == request.PatientId, cancellationToken);
+                    .AnyAsync(p => p.PatientId == request.PatientId && p.HospitalId == request.HospitalId, cancellationToken);
                 if (!patientExists)
                     return new CreateManualEncounterResponseModel { Success = false, Message = $"Patient {request.PatientId} not found." };
 

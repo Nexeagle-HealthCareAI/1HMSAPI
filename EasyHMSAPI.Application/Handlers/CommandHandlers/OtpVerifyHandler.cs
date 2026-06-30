@@ -38,7 +38,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
             else
             {
-                var currentDateTime = DateTime.Now;
+                const int maxFailedOtpAttempts = 5;
+                var currentDateTime = DateTime.UtcNow;
                 var user = await _context.Users.FirstOrDefaultAsync(u => u.MobileNumber == request.MobileNumber && u.UserStatusId != (int)UserStatusEnum.Revoked, cancellationToken);
                 if (user != null)
                 {
@@ -46,7 +47,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     if (userAuth != null)
                     {
                         var userProfile = await _context.UserProfiles.FirstOrDefaultAsync(up => up.UserID == user.UserID, cancellationToken);
-                        
+
+                        // Throttle brute force: too many wrong guesses lock the current OTP window.
+                        // Requesting a fresh OTP (OtpSendHandler) clears this lock.
+                        if (userAuth.IsLocked)
+                        {
+                            return new OtpVerifyResponseModel
+                            {
+                                Success = false,
+                                Message = "Too many incorrect attempts. Please request a new OTP."
+                            };
+                        }
+
                         // Check if masking is enabled and compare accordingly
                         bool isMatch = false;
                         if (!string.IsNullOrEmpty(userAuth.Otp))
@@ -71,10 +83,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             }
                         }
 
-                        if (isMatch && userAuth.IsOtpUsed == false)
+                        bool isExpired = !userAuth.OtpExpireAt.HasValue || userAuth.OtpExpireAt.Value < currentDateTime;
+
+                        if (isMatch && userAuth.IsOtpUsed == false && !isExpired)
                         {
                             userAuth.IsOtpUsed = true;
                             userAuth.IsLocked = false;
+                            userAuth.FailedLoginAttempts = 0;
                             userAuth.UserStatusId = (int)UserStatusEnum.Active;
                             user.UserStatusId = (int)UserStatusEnum.Active;
                             if (userProfile != null)
@@ -110,7 +125,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         }
                         else
                         {
-                            if (!userAuth.OtpExpireAt.HasValue || userAuth.OtpExpireAt.Value < currentDateTime)
+                            if (isExpired)
                             {
                                 return new OtpVerifyResponseModel
                                 {
@@ -118,10 +133,22 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                     Message = "OTP has expired."
                                 };
                             }
+
+                            // Wrong (or replayed) OTP within the validity window: count it and lock
+                            // the window once the attempt ceiling is hit.
+                            userAuth.FailedLoginAttempts += 1;
+                            if (userAuth.FailedLoginAttempts >= maxFailedOtpAttempts)
+                            {
+                                userAuth.IsLocked = true;
+                            }
+                            await _context.SaveChangesAsync(cancellationToken);
+
                             return new OtpVerifyResponseModel
                             {
                                 Success = false,
-                                Message = "Invalid or already used OTP."
+                                Message = userAuth.IsLocked
+                                    ? "Too many incorrect attempts. Please request a new OTP."
+                                    : "Invalid or already used OTP."
                             };
                         }
                     }

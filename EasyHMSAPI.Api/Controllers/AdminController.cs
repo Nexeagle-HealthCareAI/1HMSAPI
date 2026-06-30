@@ -93,7 +93,10 @@ namespace EasyHMSAPI.Api.Controllers
                 if (request == null) return BadRequest(new { Message = "Request body is required." });
                 if (request.HospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
                 if (request.UserId == Guid.Empty) return BadRequest(new { Message = "userId is required." });
-                if (request.PerformedByUserId == Guid.Empty) return BadRequest(new { Message = "performedByUserId is required." });
+
+                var userId = EasyHMSAPI.Api.Common.UserContextHelper.GetUserId(HttpContext.User);
+                if (userId == null) return Unauthorized(new { Message = "Could not resolve the signed-in user." });
+                request.CallerUserId = userId.Value;
 
                 var resp = await _mediator.Send(request);
 
@@ -101,8 +104,8 @@ namespace EasyHMSAPI.Api.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError("Error in DeactivateUser. Error: {Error}", ex);
-                return StatusCode(500, new { Message = "An error occurred while deactivating the user.", Error = ex.Message });
+                _logger.LogError(ex, "Error in DeactivateUser for hospitalId: {HospitalId}", request?.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred while deactivating the user." });
             }
         }
 
@@ -120,8 +123,8 @@ namespace EasyHMSAPI.Api.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError("Error in GetAllHospitalUsers for hospitalId: {HospitalId}. Error: {Error}", hospitalId, ex);
-                return StatusCode(500, new { Message = "An error occurred while fetching hospital users.", Error = ex.Message });
+                _logger.LogError(ex, "Error in GetAllHospitalUsers for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching hospital users." });
             }
         }
     }

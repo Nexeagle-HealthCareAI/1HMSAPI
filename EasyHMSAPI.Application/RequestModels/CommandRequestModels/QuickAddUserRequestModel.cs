@@ -17,11 +17,11 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string MobileNumber { get; set; } = null!;
         public string? Email { get; set; }
         public string Password { get; set; } = null!;
-        public string Role { get; set; } = null!;          // Doctor / AdminDoctor / Receptionist / Nurse / Admin
+        public List<string> Roles { get; set; } = new();          // Doctor / AdminDoctor / Receptionist / Nurse / Admin / Accountant
         public Guid HospitalId { get; set; }
         public string? EmployeeId { get; set; }
 
-        // Doctor details — required only when Role is Doctor/AdminDoctor.
+        // Doctor details — required only when Roles contains Doctor/AdminDoctor.
         public string? LicenseNumber { get; set; }
         public List<string>? Qualification { get; set; }
         public int? ExperienceYears { get; set; }

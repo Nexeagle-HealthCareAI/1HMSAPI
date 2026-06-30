@@ -136,7 +136,7 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 _logger.LogError(ex, "An error occurred while fetching patients for HospitalId: {HospitalId}", hospitalId);
                 result.Success = false;
-                result.Message = "An error occurred while processing your request." + ex.Message + ex.InnerException + ex.StackTrace;
+                result.Message = "An error occurred while processing your request.";
             }
 
             return Ok(result);
@@ -169,11 +169,12 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 _logger.LogError(ex, "An error occurred while fetching patient details for HospitalId: {HospitalId} and PatientId: {PatientId}", hospitalId, patientId);
                 result.Success = false;
-                result.Message = "An error occurred while processing your request." + ex.Message + ex.InnerException + ex.StackTrace;
+                result.Message = "An error occurred while processing your request.";
             }
 
             return Ok(result);
         }
+        [Authorize]
         [HttpGet]
         [Route("visit-summary/appointmentId={appointmentId}")]
         public async Task<ActionResult<GetPatientVisitSummaryPdfResponseModel>> GetPatientVisitSummaryAsync(Guid appointmentId)
@@ -199,7 +200,7 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 _logger.LogError(ex, "An error occurred while fetching visit summary for AppointmentId: {appointmentId}", appointmentId);
                 result.Success = false;
-                result.Message = "An error occurred while processing your request." + ex.Message + ex.InnerException + ex.StackTrace;
+                result.Message = "An error occurred while processing your request.";
             }
 
             return Ok(result);

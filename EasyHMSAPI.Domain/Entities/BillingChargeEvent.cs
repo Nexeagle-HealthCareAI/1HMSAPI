@@ -14,7 +14,8 @@ namespace EasyHMSAPI.Domain.Entities
         public string? PatientId { get; set; }
         public Guid EncounterId { get; set; }
         public string? SourceModule { get; set; }
-        public Guid? SourceRefId { get; set; }
+        // Free-text idempotency key from the source module (DB column is NVARCHAR(100), not a GUID).
+        public string? SourceRefId { get; set; }
         public string? CategoryCode { get; set; }
         public string? DisplayName { get; set; }
         public decimal Qty { get; set; }

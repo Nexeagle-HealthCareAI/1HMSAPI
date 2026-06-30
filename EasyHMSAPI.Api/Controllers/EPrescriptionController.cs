@@ -594,6 +594,7 @@ namespace EasyHMSAPI.Api.Controllers
             return Ok(response);
         }
 
+        [Authorize]
         [HttpPost("visit-summary/upload")]
         public async Task<ActionResult<UploadVisitSummaryResponseModel>> UploadVisitSummary(UploadVisitSummaryRequestModel request)
         {

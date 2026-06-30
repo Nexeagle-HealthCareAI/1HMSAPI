@@ -34,10 +34,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         public async Task<QuickAddUserResponseModel> Handle(QuickAddUserRequestModel request, CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(request.FullName) || string.IsNullOrWhiteSpace(request.MobileNumber)
-                || string.IsNullOrWhiteSpace(request.Password) || string.IsNullOrWhiteSpace(request.Role) || request.HospitalId == Guid.Empty)
-                return Fail("Name, mobile, password, role and hospital are required.");
+                || string.IsNullOrWhiteSpace(request.Password) || request.Roles == null || !request.Roles.Any() || request.HospitalId == Guid.Empty)
+                return Fail("Name, mobile, password, roles and hospital are required.");
 
-            var isDoctorRole = DoctorRoles.Contains(request.Role.Trim().ToLowerInvariant());
+            var isDoctorRole = request.Roles.Any(r => DoctorRoles.Contains(r.Trim().ToLowerInvariant()));
             if (isDoctorRole && string.IsNullOrWhiteSpace(request.LicenseNumber))
                 return Fail("License number is required for a doctor.");
 
@@ -61,14 +61,21 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             if (dup)
                 return Fail("A user with this mobile number or email already exists.");
 
-            // Resolve the role (prefer a hospital-scoped role, else a system role).
-            var roleId = await _context.Roles
-                .Where(r => r.RoleName.ToLower() == request.Role.ToLower() && (r.HospitalID == request.HospitalId || r.HospitalID == null))
+            // Resolve the roles (prefer a hospital-scoped role, else a system role).
+            var roleNames = request.Roles.Select(r => r.Trim().ToLowerInvariant()).ToList();
+            var matchedRoles = await _context.Roles
+                .Where(r => roleNames.Contains(r.RoleName.ToLower()) && (r.HospitalID == request.HospitalId || r.HospitalID == null))
                 .OrderByDescending(r => r.HospitalID != null)
-                .Select(r => r.RoleID)
-                .FirstOrDefaultAsync(cancellationToken);
-            if (roleId == Guid.Empty)
-                return Fail($"Role '{request.Role}' is not available.");
+                .Select(r => new { r.RoleName, r.RoleID })
+                .ToListAsync(cancellationToken);
+
+            var finalRoleIds = matchedRoles
+                .GroupBy(r => r.RoleName.ToLower())
+                .Select(g => g.First().RoleID)
+                .ToList();
+
+            if (finalRoleIds.Count != roleNames.Count)
+                return Fail("One or more roles are not available.");
 
             var now = DateTime.UtcNow;
             var userId = Guid.NewGuid();
@@ -103,7 +110,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         CreatedAt = now,
                     });
 
-                    _context.UserRoles.Add(new UserRole { UserID = userId, RoleID = roleId });
+                    foreach (var rid in finalRoleIds)
+                    {
+                        _context.UserRoles.Add(new UserRole { UserID = userId, RoleID = rid });
+                    }
 
                     _context.UserProfiles.Add(new UserProfile
                     {

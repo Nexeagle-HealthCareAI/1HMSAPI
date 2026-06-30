@@ -41,6 +41,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     existingAppointment.StatusHistoryJson = JsonSerializer.Serialize(history);
 
                     await _context.SaveChangesAsync(cancellationToken);
+
+                    response.Success = true;
+                    response.Message = "Appointment marked as completed.";
                 }
                 else
                 {
@@ -48,10 +51,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     response.Message = "Appointment not found.";
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 response.Success = false;
-                response.Message = ex.Message + ex.InnerException + ex.StackTrace;
+                response.Message = "An error occurred while completing the appointment.";
             }
 
             return response;

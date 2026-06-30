@@ -21,7 +21,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             if (request.ChargeId != null && request.ChargeId != Guid.Empty)
             {
                 var existingCharge = await _context.ChargeMaster
-                    .FirstOrDefaultAsync(x => x.ChargeId == request.ChargeId, cancellationToken);
+                    .FirstOrDefaultAsync(x => x.ChargeId == request.ChargeId && x.HospitalId == request.HospitalId, cancellationToken);
 
                 if (existingCharge == null)
                     throw new Exception("Charge not found for update");

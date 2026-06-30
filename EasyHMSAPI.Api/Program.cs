@@ -19,6 +19,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Configuration
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
     .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
+    // Untracked local overrides for real secrets (see .gitignore). Loaded after the committed
+    // env file so it wins over the placeholder values, but before env vars so prod still overrides.
+    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.local.json", optional: true, reloadOnChange: true)
     .AddEnvironmentVariables();
 
 // ------------------------------------------------------------

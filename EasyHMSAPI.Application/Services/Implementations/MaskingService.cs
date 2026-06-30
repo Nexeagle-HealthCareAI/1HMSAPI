@@ -59,8 +59,20 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
         public bool IsMaskingEnabled()
         {
-            var isEnabled = _configuration["WhatsApp:IsEnabled"];
-            return isEnabled?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
+            // Credential hashing (OTPs + passwords) is controlled by a dedicated flag and must NOT
+            // depend on whether WhatsApp messaging is enabled. For backwards-compatibility with
+            // deployments that predate this flag, fall back to the legacy WhatsApp:IsEnabled value
+            // (which previously, incorrectly, gated hashing). New deployments should set
+            // Security:CredentialHashingEnabled explicitly. Note: hashing is only effective when a
+            // non-empty Security:OtpPepper is configured (see Mask).
+            var flag = _configuration["Security:CredentialHashingEnabled"];
+            if (!string.IsNullOrWhiteSpace(flag))
+            {
+                return flag.Equals("true", StringComparison.OrdinalIgnoreCase);
+            }
+
+            var legacy = _configuration["WhatsApp:IsEnabled"];
+            return legacy?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
         }
     }
 }

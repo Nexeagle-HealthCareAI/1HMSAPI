@@ -114,6 +114,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         DisplayName = charge.DisplayName,
                         Qty = charge.Qty,
                         UnitPrice = rate,
+                        GrossAmount = gross,
                         DiscountAmount = discount,
                         NetAmount = net,
                         IncentiveAmount = incentive,

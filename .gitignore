@@ -25,3 +25,6 @@ publish/
 # OS files
 Thumbs.db
 .DS_Store
+
+# Local secret overrides (never commit real credentials)
+appsettings.*.local.json
