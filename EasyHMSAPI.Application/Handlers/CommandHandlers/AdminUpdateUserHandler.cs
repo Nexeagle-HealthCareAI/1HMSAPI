@@ -109,7 +109,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     _context.UserHistories.Add(new UserHistory
                     {
                         UserId = request.UserId,
-                        UserStatusId = user.UserStatusId ?? (int)UserStatusEnum.Active,
+                        UserStatusId = user.UserStatusId,
                         UpdatedBy = request.CallerUserId,
                         UpdatedDate = now,
                     });
@@ -127,10 +127,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         if (doc != null)
                         {
                             doc.LicenseNumber = request.LicenseNumber!;
-                            doc.YearsOfExperience = request.ExperienceYears;
+                            doc.ExperienceYears = request.ExperienceYears;
                             doc.MedicalCouncil = request.MedicalCouncil;
-                            doc.UpdatedAt = now;
-                            doc.UpdatedBy = request.CallerUserId.ToString();
                             // Qualifications and specializations could be updated similarly, skipping for brevity or delegating to another handler
                             await _context.SaveChangesAsync(cancellationToken);
                         }
