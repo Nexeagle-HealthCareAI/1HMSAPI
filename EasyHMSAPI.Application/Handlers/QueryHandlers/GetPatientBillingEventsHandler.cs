@@ -114,14 +114,14 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         invoiceNo = null;
                         invoiceId = Guid.Empty;
                         invoiceDate = e.CreatedAt;
-                        isCancelled = false;
+                        isCancelled = e.StatusCode == BillingConstants.EncounterStatus.Cancelled;
                         cancelReason = null;
                         updatedAt = e.UpdatedAt;
                         updatedBy = e.UpdatedBy;
                     }
 
                     var balance = totalBilled - received;
-                    string paymentStatus = totalBilled <= 0 ? "UNPAID" : balance <= 0 ? "PAID" : received > 0 ? "PART" : "UNPAID";
+                    string paymentStatus = isCancelled ? "CANCELLED" : totalBilled <= 0 ? "UNPAID" : balance <= 0 ? "PAID" : received > 0 ? "PART" : "UNPAID";
                     var doctorName = e.PrimaryDoctorId.HasValue && doctorNames.TryGetValue(e.PrimaryDoctorId.Value, out var dn) ? dn : null;
 
                     encounterInvoiceDetails.Add(new PatientEncounterInvoiceDetail
