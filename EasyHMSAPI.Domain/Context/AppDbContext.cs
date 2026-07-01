@@ -81,6 +81,15 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<AdmissionDayBill> AdmissionDayBill { get; set; }
         public DbSet<AdmissionDayBillLine> AdmissionDayBillLine { get; set; }
         public DbSet<ConsentRecord> ConsentRecord { get; set; }
+        public DbSet<ConsentTemplate> ConsentTemplate { get; set; }
+        public DbSet<VitalReading> VitalReading { get; set; }
+        public DbSet<FluidEntry> FluidEntry { get; set; }
+        public DbSet<GlucoseReading> GlucoseReading { get; set; }
+        public DbSet<NursingAssessment> NursingAssessment { get; set; }
+        public DbSet<RoundNote> RoundNote { get; set; }
+        public DbSet<ShiftHandoverNote> ShiftHandoverNote { get; set; }
+        public DbSet<NursingCarePlanItem> NursingCarePlanItem { get; set; }
+        public DbSet<RestraintOrder> RestraintOrder { get; set; }
         public DbSet<HospitalSubscription> HospitalSubscriptions { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -615,6 +624,108 @@ namespace EasyHMSAPI.Domain.Context
                 entity.HasKey(c => c.ConsentRecordId);
                 entity.Property(c => c.SignedAt).HasColumnType("datetime2(3)");
                 entity.Property(c => c.CreatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<ConsentTemplate>(entity =>
+            {
+                entity.ToTable("ConsentTemplate");
+                entity.HasKey(c => c.ConsentTemplateId);
+                entity.Property(c => c.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.UpdatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<VitalReading>(entity =>
+            {
+                entity.ToTable("VitalReading");
+                entity.HasKey(v => v.VitalReadingId);
+                entity.Property(v => v.Temperature).HasPrecision(5, 2);
+                entity.Property(v => v.SpO2).HasPrecision(5, 2);
+                entity.Property(v => v.WeightKg).HasPrecision(6, 2);
+                entity.Property(v => v.HeightCm).HasPrecision(6, 2);
+                entity.Property(v => v.BMI).HasPrecision(5, 2);
+                entity.Property(v => v.RecordedAt).HasColumnType("datetime2(3)");
+                entity.Property(v => v.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(v => v.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(v => v.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<FluidEntry>(entity =>
+            {
+                entity.ToTable("FluidEntry");
+                entity.HasKey(f => f.FluidEntryId);
+                entity.Property(f => f.VolumeMl).HasPrecision(8, 2);
+                entity.Property(f => f.RecordedAt).HasColumnType("datetime2(3)");
+                entity.Property(f => f.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(f => f.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(f => f.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<GlucoseReading>(entity =>
+            {
+                entity.ToTable("GlucoseReading");
+                entity.HasKey(g => g.GlucoseReadingId);
+                entity.Property(g => g.Value).HasPrecision(6, 2);
+                entity.Property(g => g.ValueMgDl).HasPrecision(6, 2);
+                entity.Property(g => g.InsulinUnits).HasPrecision(5, 2);
+                entity.Property(g => g.RecordedAt).HasColumnType("datetime2(3)");
+                entity.Property(g => g.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(g => g.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(g => g.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<NursingAssessment>(entity =>
+            {
+                entity.ToTable("NursingAssessment");
+                entity.HasKey(n => n.NursingAssessmentId);
+                entity.Property(n => n.AssessedAt).HasColumnType("datetime2(3)");
+                entity.Property(n => n.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(n => n.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(n => n.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<RoundNote>(entity =>
+            {
+                entity.ToTable("RoundNote");
+                entity.HasKey(r => r.RoundNoteId);
+                entity.Property(r => r.NotedAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<ShiftHandoverNote>(entity =>
+            {
+                entity.ToTable("ShiftHandoverNote");
+                entity.HasKey(s => s.ShiftHandoverNoteId);
+                entity.Property(s => s.ShiftDate).HasColumnType("date");
+                entity.Property(s => s.IncomingAckAt).HasColumnType("datetime2(3)");
+                entity.Property(s => s.HandoverAt).HasColumnType("datetime2(3)");
+                entity.Property(s => s.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(s => s.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(s => s.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<NursingCarePlanItem>(entity =>
+            {
+                entity.ToTable("NursingCarePlanItem");
+                entity.HasKey(n => n.CarePlanItemId);
+                entity.Property(n => n.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(n => n.ResolvedAt).HasColumnType("datetime2(3)");
+                entity.Property(n => n.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(n => n.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<RestraintOrder>(entity =>
+            {
+                entity.ToTable("RestraintOrder");
+                entity.HasKey(r => r.RestraintOrderId);
+                entity.Property(r => r.OrderedAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.StartedAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.FamilyNotifiedAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.ReleasedAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.RowVersion).IsRowVersion();
             });
 
             modelBuilder.Entity<BillingChargeEvent>(entity =>

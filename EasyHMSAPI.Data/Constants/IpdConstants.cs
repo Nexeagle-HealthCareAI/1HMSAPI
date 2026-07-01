@@ -168,5 +168,145 @@ namespace EasyHMSAPI.Data.Constants
                 [Q12h] = 12,
             };
         }
+
+        public static class VitalTemperatureUnit
+        {
+            public const string Celsius = "C";
+            public const string Fahrenheit = "F";
+            public static readonly string[] All = { Celsius, Fahrenheit };
+        }
+
+        public static class FluidDirection
+        {
+            public const string In = "IN";
+            public const string Out = "OUT";
+            public static readonly string[] All = { In, Out };
+        }
+
+        /// <summary>Common FluidEntry.Subtype quick-pick values surfaced by the UI — not
+        /// DB-enforced (column is free NVARCHAR(30)).</summary>
+        public static class FluidSubtype
+        {
+            public const string Urine = "Urine";
+            public const string Iv = "IV";
+            public const string Oral = "Oral";
+            public const string Vomitus = "Vomitus";
+            public const string RtAspirate = "RT_Aspirate";
+            public const string DrainA = "Drain_A";
+            public const string DrainB = "Drain_B";
+            public const string Stool = "Stool";
+
+            public static readonly string[] CommonIn = { Iv, Oral };
+            public static readonly string[] CommonOut = { Urine, Vomitus, RtAspirate, DrainA, DrainB, Stool };
+        }
+
+        public static class GlucoseUnit
+        {
+            public const string MgDl = "mg/dL";
+            public const string MmolL = "mmol/L";
+            public static readonly string[] All = { MgDl, MmolL };
+            // 1 mmol/L glucose = 18.0182 mg/dL.
+            public const decimal MmolLToMgDlFactor = 18.0182m;
+        }
+
+        public static class GlucoseMealTag
+        {
+            public const string Fasting = "FASTING";
+            public const string PostPrandial = "POST_PRANDIAL";
+            public const string Random = "RANDOM";
+            public const string Bedtime = "BEDTIME";
+            public static readonly string[] All = { Fasting, PostPrandial, Random, Bedtime };
+        }
+
+        /// <summary>App-computed hypo/hyper thresholds (mg/dL basis) — no DB enforcement, per
+        /// create_tables_fluid_glucose.sql's own comments.</summary>
+        public static class GlucoseThresholds
+        {
+            public const decimal HypoMgDl = 70m;
+            public const decimal HyperMgDl = 180m;
+        }
+
+        /// <summary>Morse Fall Scale component value sets — exact CHECK-constrained sets from
+        /// create_tables_nursing_assessment.sql.</summary>
+        public static class MorseFallScale
+        {
+            public static readonly int[] HistoryOfFallingOptions = { 0, 25 };
+            public static readonly int[] SecondaryDiagnosisOptions = { 0, 15 };
+            public static readonly int[] AmbulatoryAidOptions = { 0, 15, 30 };
+            public static readonly int[] IvHeparinLockOptions = { 0, 20 };
+            public static readonly int[] GaitOptions = { 0, 10, 20 };
+            public static readonly int[] MentalStatusOptions = { 0, 15 };
+        }
+
+        public static class MorseRisk
+        {
+            public const string None = "NONE";
+            public const string Low = "LOW";
+            public const string High = "HIGH";
+            public static string FromTotal(int total) => total >= 45 ? High : total >= 25 ? Low : None;
+        }
+
+        public static class BradenRisk
+        {
+            public const string None = "NONE";
+            public const string Mild = "MILD";
+            public const string Moderate = "MODERATE";
+            public const string High = "HIGH";
+            public const string VeryHigh = "VERY_HIGH";
+            public static string FromTotal(int total) => total <= 9 ? VeryHigh : total <= 12 ? High : total <= 14 ? Moderate : total <= 18 ? Mild : None;
+        }
+
+        public static class MustRisk
+        {
+            public const string Low = "LOW";
+            public const string Medium = "MEDIUM";
+            public const string High = "HIGH";
+            public static string FromTotal(int total) => total >= 2 ? High : total == 1 ? Medium : Low;
+        }
+
+        /// <summary>Documented set for ConsentTemplate.TypeCode — the DB has no CHECK on this
+        /// column (deliberately loose), so this is soft validation only, not a hard allow-list.</summary>
+        public static class ConsentTypeCode
+        {
+            public const string GeneralAdmission = "GENERAL_ADMISSION";
+            public const string Procedure = "PROCEDURE";
+            public const string Radiation = "RADIATION";
+            public const string IvContrast = "IV_CONTRAST";
+            public const string BloodTransfusion = "BLOOD_TRANSFUSION";
+            public const string Anaesthesia = "ANAESTHESIA";
+            public const string Other = "OTHER";
+            public static readonly string[] All = { GeneralAdmission, Procedure, Radiation, IvContrast, BloodTransfusion, Anaesthesia, Other };
+        }
+
+        public static class ShiftCode
+        {
+            public const string Morning = "MORNING";
+            public const string Evening = "EVENING";
+            public const string Night = "NIGHT";
+            public static readonly string[] All = { Morning, Evening, Night };
+        }
+
+        public static class NursingCarePlanStatus
+        {
+            public const string Active = "ACTIVE";
+            public const string Resolved = "RESOLVED";
+            public const string Discontinued = "DISCONTINUED";
+            public static readonly string[] All = { Active, Resolved, Discontinued };
+        }
+
+        public static class RestraintStatus
+        {
+            public const string Active = "ACTIVE";
+            public const string Released = "RELEASED";
+            public static readonly string[] All = { Active, Released };
+        }
+
+        /// <summary>Round-note 24-hour edit lock — a frontend affordance (the DB has no
+        /// enforcement): once a note is older than this window, the UI offers "add addendum"
+        /// instead of "edit," and the handler requires AddendumReason whenever ParentNoteId is set.</summary>
+        public static class RoundNoteRules
+        {
+            public static readonly TimeSpan EditLockWindow = TimeSpan.FromHours(24);
+        }
     }
 }
