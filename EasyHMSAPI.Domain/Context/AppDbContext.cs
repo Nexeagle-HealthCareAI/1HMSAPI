@@ -75,6 +75,8 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<AdmissionCoverage> AdmissionCoverage { get; set; }
         public DbSet<AdmissionStatusHistory> AdmissionStatusHistory { get; set; }
         public DbSet<BedAssignment> BedAssignment { get; set; }
+        public DbSet<ClinicalOrder> ClinicalOrder { get; set; }
+        public DbSet<ClinicalOrderLine> ClinicalOrderLine { get; set; }
         public DbSet<AdmissionDayBill> AdmissionDayBill { get; set; }
         public DbSet<AdmissionDayBillLine> AdmissionDayBillLine { get; set; }
         public DbSet<ConsentRecord> ConsentRecord { get; set; }
@@ -573,6 +575,25 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(a => a.CreatedAt).HasColumnType("datetime2(3)");
                 entity.Property(a => a.UpdatedAt).HasColumnType("datetime2(3)");
                 entity.Property(a => a.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<ClinicalOrder>(entity =>
+            {
+                entity.ToTable("ClinicalOrder");
+                entity.HasKey(o => o.OrderId);
+                entity.Property(o => o.OrderedAt).HasColumnType("datetime2(3)");
+                entity.Property(o => o.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(o => o.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(o => o.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<ClinicalOrderLine>(entity =>
+            {
+                entity.ToTable("ClinicalOrderLine");
+                entity.HasKey(l => l.OrderLineId);
+                entity.Property(l => l.Qty).HasPrecision(10, 2);
+                entity.Property(l => l.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(l => l.UpdatedAt).HasColumnType("datetime2(3)");
             });
 
             modelBuilder.Entity<ConsentRecord>(entity =>
