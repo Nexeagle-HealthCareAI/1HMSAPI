@@ -77,6 +77,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<BedAssignment> BedAssignment { get; set; }
         public DbSet<ClinicalOrder> ClinicalOrder { get; set; }
         public DbSet<ClinicalOrderLine> ClinicalOrderLine { get; set; }
+        public DbSet<MedicationAdministration> MedicationAdministration { get; set; }
         public DbSet<AdmissionDayBill> AdmissionDayBill { get; set; }
         public DbSet<AdmissionDayBillLine> AdmissionDayBillLine { get; set; }
         public DbSet<ConsentRecord> ConsentRecord { get; set; }
@@ -595,6 +596,17 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(l => l.ScheduledAt).HasColumnType("datetime2(3)");
                 entity.Property(l => l.CreatedAt).HasColumnType("datetime2(3)");
                 entity.Property(l => l.UpdatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<MedicationAdministration>(entity =>
+            {
+                entity.ToTable("MedicationAdministration");
+                entity.HasKey(m => m.MedicationAdministrationId);
+                entity.Property(m => m.ScheduledFor).HasColumnType("datetime2(3)");
+                entity.Property(m => m.ActedAt).HasColumnType("datetime2(3)");
+                entity.Property(m => m.WitnessConfirmedAt).HasColumnType("datetime2(3)");
+                entity.Property(m => m.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(m => m.RowVersion).IsRowVersion();
             });
 
             modelBuilder.Entity<ConsentRecord>(entity =>

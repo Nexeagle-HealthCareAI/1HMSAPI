@@ -38,6 +38,9 @@ namespace EasyHMSAPI.Domain.Entities
         public string? Urgency { get; set; }          // ROUTINE / URGENT / STAT
         public DateTime? ScheduledAt { get; set; }    // when a Procedure/Surgery order is planned for
 
+        // MEDICATION-only: requires a second-nurse witness co-sign at MAR administration.
+        public bool IsHighAlert { get; set; }
+
         public decimal Qty { get; set; } = 1;
 
         public string StatusCode { get; set; } = "ACTIVE";   // ACTIVE / DISCONTINUED

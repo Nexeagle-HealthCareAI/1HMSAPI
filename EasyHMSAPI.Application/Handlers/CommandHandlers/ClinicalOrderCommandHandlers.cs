@@ -96,6 +96,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 Instructions = li.Instructions?.Trim(),
                                 Urgency = string.IsNullOrWhiteSpace(li.Urgency) ? null : li.Urgency.Trim().ToUpperInvariant(),
                                 ScheduledAt = li.ScheduledAt,
+                                IsHighAlert = li.IsHighAlert,
                                 Qty = li.Qty <= 0 ? 1 : li.Qty,
                                 StatusCode = IpdConstants.ClinicalOrderLineStatus.Active,
                                 CreatedAt = now,

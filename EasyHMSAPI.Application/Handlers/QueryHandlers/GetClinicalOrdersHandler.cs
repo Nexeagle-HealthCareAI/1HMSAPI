@@ -76,6 +76,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                                 Instructions = l.Instructions,
                                 Urgency = l.Urgency,
                                 ScheduledAt = l.ScheduledAt,
+                                IsHighAlert = l.IsHighAlert,
                                 Qty = l.Qty,
                                 StatusCode = l.StatusCode,
                                 ChargeEventId = l.ChargeEventId,

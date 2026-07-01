@@ -48,6 +48,9 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? Urgency { get; set; }
         public DateTime? ScheduledAt { get; set; }
 
+        // Medication-only: requires a second-nurse witness co-sign at MAR administration.
+        public bool IsHighAlert { get; set; }
+
         public decimal Qty { get; set; } = 1;
     }
 
