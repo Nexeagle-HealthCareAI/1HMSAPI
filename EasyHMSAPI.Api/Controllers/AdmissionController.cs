@@ -49,14 +49,14 @@ namespace EasyHMSAPI.Api.Controllers
 
         // Every currently-open admission for the hospital, with patient name + current bed (if any).
         [HttpGet("active")]
-        public async Task<ActionResult<GetActiveAdmissionsResponseModel>> GetActiveAdmissions([FromQuery] Guid hospitalId)
+        public async Task<ActionResult<GetActiveAdmissionsResponseModel>> GetActiveAdmissions([FromQuery] Guid hospitalId, [FromQuery] string? statusFilter = null)
         {
             if (hospitalId == Guid.Empty)
                 return BadRequest(new { Message = "hospitalId is required." });
 
             try
             {
-                var request = new GetActiveAdmissionsRequestModel { HospitalId = hospitalId };
+                var request = new GetActiveAdmissionsRequestModel { HospitalId = hospitalId, StatusFilter = statusFilter };
                 var response = await _mediator.Send(request);
                 return Ok(response);
             }

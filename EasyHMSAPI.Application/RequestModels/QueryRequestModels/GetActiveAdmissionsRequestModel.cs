@@ -8,5 +8,8 @@ namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
     public class GetActiveAdmissionsRequestModel : IRequest<GetActiveAdmissionsResponseModel>
     {
         public Guid HospitalId { get; set; }
+
+        // ACTIVE (default, current behavior) / DISCHARGED / ALL.
+        public string? StatusFilter { get; set; }
     }
 }

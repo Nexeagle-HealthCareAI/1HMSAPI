@@ -8,10 +8,10 @@ using Microsoft.EntityFrameworkCore;
 namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 {
     /// <summary>
-    /// Every currently-open admission for the hospital (any non-terminal StatusCode), newest first,
-    /// with patient name and current bed (if assigned) folded in. This is the real-data list that
-    /// GetBedBoardHandler can't provide on its own, since a fresh admission with no bed yet has no
-    /// BedAssignment row to be found by.
+    /// Admissions for the hospital, newest first, with patient name and current bed (if assigned)
+    /// folded in. This is the real-data list that GetBedBoardHandler can't provide on its own,
+    /// since a fresh admission with no bed yet has no BedAssignment row to be found by.
+    /// StatusFilter: ACTIVE (default — any non-terminal status) / DISCHARGED / ALL.
     /// </summary>
     public class GetActiveAdmissionsHandler : IRequestHandler<GetActiveAdmissionsRequestModel, GetActiveAdmissionsResponseModel>
     {
@@ -29,8 +29,17 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 if (request.HospitalId == Guid.Empty)
                     return new GetActiveAdmissionsResponseModel { Success = false, Message = "HospitalId is required." };
 
-                var admissions = await _context.Admission
-                    .Where(a => a.HospitalId == request.HospitalId && IpdConstants.AdmissionStatus.Active.Contains(a.StatusCode))
+                var statusFilter = string.IsNullOrWhiteSpace(request.StatusFilter) ? "ACTIVE" : request.StatusFilter.Trim().ToUpperInvariant();
+
+                var query = _context.Admission.Where(a => a.HospitalId == request.HospitalId);
+                query = statusFilter switch
+                {
+                    "DISCHARGED" => query.Where(a => a.StatusCode == IpdConstants.AdmissionStatus.Discharged),
+                    "ALL" => query,
+                    _ => query.Where(a => IpdConstants.AdmissionStatus.Active.Contains(a.StatusCode)),
+                };
+
+                var admissions = await query
                     .OrderByDescending(a => a.AdmittedAt)
                     .ToListAsync(cancellationToken);
 
