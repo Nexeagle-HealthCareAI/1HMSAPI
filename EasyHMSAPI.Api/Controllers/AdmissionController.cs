@@ -89,5 +89,50 @@ namespace EasyHMSAPI.Api.Controllers
                 return StatusCode(500, new { Message = "An error occurred while admitting the patient." });
             }
         }
+
+        // Basic discharge: closes the admission to DISCHARGED and releases its bed, if any.
+        [HttpPost("discharge")]
+        public async Task<ActionResult<DischargeAdmissionResponseModel>> Discharge([FromBody] DischargeAdmissionRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and admissionId are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in Discharge for admissionId: {AdmissionId}", request.AdmissionId);
+                return StatusCode(500, new { Message = "An error occurred while discharging the patient." });
+            }
+        }
+
+        // Any other status transition (DISCHARGE_INITIATED/DISCHARGE_BILLED, LAMA, DAMA,
+        // TRANSFERRED_OUT, EXPIRED, CANCELLED). Terminal transitions auto-release the bed.
+        [HttpPost("status")]
+        public async Task<ActionResult<UpdateAdmissionStatusResponseModel>> UpdateStatus([FromBody] UpdateAdmissionStatusRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty || string.IsNullOrWhiteSpace(request.ToStatus))
+                return BadRequest(new { Message = "hospitalId, admissionId and toStatus are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in UpdateStatus for admissionId: {AdmissionId}", request.AdmissionId);
+                return StatusCode(500, new { Message = "An error occurred while updating the admission status." });
+            }
+        }
     }
 }
