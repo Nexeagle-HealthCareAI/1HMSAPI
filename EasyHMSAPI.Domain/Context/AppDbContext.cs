@@ -72,6 +72,9 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<DoctorFee> DoctorFees { get; set; }
         public DbSet<Alert> Alert { get; set; }
         public DbSet<Admission> Admission { get; set; }
+        public DbSet<AdmissionCoverage> AdmissionCoverage { get; set; }
+        public DbSet<AdmissionStatusHistory> AdmissionStatusHistory { get; set; }
+        public DbSet<BedAssignment> BedAssignment { get; set; }
         public DbSet<AdmissionDayBill> AdmissionDayBill { get; set; }
         public DbSet<AdmissionDayBillLine> AdmissionDayBillLine { get; set; }
         public DbSet<ConsentRecord> ConsentRecord { get; set; }
@@ -531,10 +534,42 @@ namespace EasyHMSAPI.Domain.Context
             {
                 entity.ToTable("Admission");
                 entity.HasKey(a => a.AdmissionId);
+                entity.Property(a => a.DepositExpected).HasPrecision(18, 2);
                 entity.Property(a => a.AdmittedAt).HasColumnType("datetime2(3)");
                 entity.Property(a => a.ExpectedDischargeAt).HasColumnType("datetime2(3)");
                 entity.Property(a => a.DischargedAt).HasColumnType("datetime2(3)");
                 entity.Property(a => a.CancelledAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<AdmissionCoverage>(entity =>
+            {
+                entity.ToTable("AdmissionCoverage");
+                entity.HasKey(c => c.CoverageId);
+                entity.Property(c => c.SanctionedAmount).HasPrecision(18, 2);
+                entity.Property(c => c.ValidFrom).HasColumnType("datetime2(3)");
+                entity.Property(c => c.ValidTo).HasColumnType("datetime2(3)");
+                entity.Property(c => c.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<AdmissionStatusHistory>(entity =>
+            {
+                entity.ToTable("AdmissionStatusHistory");
+                entity.HasKey(h => h.HistoryId);
+                entity.Property(h => h.ChangedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<BedAssignment>(entity =>
+            {
+                entity.ToTable("BedAssignment");
+                entity.HasKey(a => a.AssignmentId);
+                entity.Property(a => a.DailyRateSnapshot).HasPrecision(18, 2);
+                entity.Property(a => a.AssignedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.ReleasedAt).HasColumnType("datetime2(3)");
                 entity.Property(a => a.CreatedAt).HasColumnType("datetime2(3)");
                 entity.Property(a => a.UpdatedAt).HasColumnType("datetime2(3)");
                 entity.Property(a => a.RowVersion).IsRowVersion();
