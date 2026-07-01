@@ -9,41 +9,45 @@ using Microsoft.EntityFrameworkCore;
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
     /// <summary>
-    /// CPOE medication orders. Placing an order posts a BillingChargeEvent per chargeable line
+    /// CPOE orders — one generic handler pair for every OrderType (Medication/Lab/Radiology/
+    /// Procedure/Diet/Nursing). Placing an order posts a BillingChargeEvent per chargeable line
     /// immediately (charge-on-event) by calling into AddChargeEventHandler via MediatR — this
     /// intentionally reuses the existing GST/discount/incentive engine instead of duplicating it.
     /// Both handlers run inside a transaction so a billing failure rolls back the clinical order too.
     /// </summary>
-    public class MedicationOrderCommandHandlers :
-        IRequestHandler<PlaceMedicationOrderRequestModel, PlaceMedicationOrderResponseModel>,
-        IRequestHandler<DiscontinueMedicationOrderLineRequestModel, DiscontinueMedicationOrderLineResponseModel>
+    public class ClinicalOrderCommandHandlers :
+        IRequestHandler<PlaceClinicalOrderRequestModel, PlaceClinicalOrderResponseModel>,
+        IRequestHandler<DiscontinueClinicalOrderLineRequestModel, DiscontinueClinicalOrderLineResponseModel>
     {
         private readonly AppDbContext _context;
         private readonly IMediator _mediator;
 
-        public MedicationOrderCommandHandlers(AppDbContext context, IMediator mediator)
+        public ClinicalOrderCommandHandlers(AppDbContext context, IMediator mediator)
         {
             _context = context;
             _mediator = mediator;
         }
 
-        public async Task<PlaceMedicationOrderResponseModel> Handle(PlaceMedicationOrderRequestModel request, CancellationToken cancellationToken)
+        public async Task<PlaceClinicalOrderResponseModel> Handle(PlaceClinicalOrderRequestModel request, CancellationToken cancellationToken)
         {
             try
             {
                 if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty)
-                    return new PlaceMedicationOrderResponseModel { Success = false, Message = "HospitalId and AdmissionId are required." };
+                    return new PlaceClinicalOrderResponseModel { Success = false, Message = "HospitalId and AdmissionId are required." };
+                var orderType = request.OrderType?.Trim().ToUpperInvariant();
+                if (string.IsNullOrWhiteSpace(orderType) || !IpdConstants.ClinicalOrderType.All.Contains(orderType))
+                    return new PlaceClinicalOrderResponseModel { Success = false, Message = "Invalid order type." };
                 if (request.Lines == null || request.Lines.Count == 0)
-                    return new PlaceMedicationOrderResponseModel { Success = false, Message = "At least one medication line is required." };
-                if (request.Lines.Any(l => string.IsNullOrWhiteSpace(l.DrugName)))
-                    return new PlaceMedicationOrderResponseModel { Success = false, Message = "Each line requires a drug name." };
+                    return new PlaceClinicalOrderResponseModel { Success = false, Message = "At least one line is required." };
+                if (request.Lines.Any(l => string.IsNullOrWhiteSpace(l.ItemName)))
+                    return new PlaceClinicalOrderResponseModel { Success = false, Message = "Each line requires an item name." };
 
                 var admission = await _context.Admission
                     .FirstOrDefaultAsync(a => a.AdmissionId == request.AdmissionId && a.HospitalId == request.HospitalId, cancellationToken);
                 if (admission == null)
-                    return new PlaceMedicationOrderResponseModel { Success = false, Message = "Admission not found." };
+                    return new PlaceClinicalOrderResponseModel { Success = false, Message = "Admission not found." };
                 if (!IpdConstants.AdmissionStatus.Active.Contains(admission.StatusCode))
-                    return new PlaceMedicationOrderResponseModel { Success = false, Message = "Admission is not active." };
+                    return new PlaceClinicalOrderResponseModel { Success = false, Message = "Admission is not active." };
 
                 var strategy = _context.Database.CreateExecutionStrategy();
                 return await strategy.ExecuteAsync(async () =>
@@ -59,7 +63,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             AdmissionId = admission.AdmissionId,
                             EncounterId = admission.EncounterId,
                             PatientId = admission.PatientId,
-                            OrderType = IpdConstants.ClinicalOrderType.Medication,
+                            OrderType = orderType,
                             StatusCode = IpdConstants.ClinicalOrderStatus.Active,
                             OrderedAt = now,
                             OrderedBy = request.LoggedInUserName,
@@ -83,13 +87,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 HospitalId = request.HospitalId,
                                 ChargeId = li.ChargeId,
                                 DisplayOrder = i,
-                                DrugName = li.DrugName.Trim(),
+                                ItemName = li.ItemName.Trim(),
                                 SaltName = li.SaltName?.Trim(),
                                 Dose = li.Dose?.Trim(),
                                 Route = li.Route?.Trim(),
                                 Frequency = li.Frequency?.Trim(),
                                 DurationDays = li.DurationDays,
                                 Instructions = li.Instructions?.Trim(),
+                                Urgency = string.IsNullOrWhiteSpace(li.Urgency) ? null : li.Urgency.Trim().ToUpperInvariant(),
+                                ScheduledAt = li.ScheduledAt,
                                 Qty = li.Qty <= 0 ? 1 : li.Qty,
                                 StatusCode = IpdConstants.ClinicalOrderLineStatus.Active,
                                 CreatedAt = now,
@@ -119,11 +125,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                     return new ChargeDetail
                                     {
                                         ChargeId = line.ChargeId,
-                                        DisplayName = master?.DisplayName ?? line.DrugName,
+                                        DisplayName = master?.DisplayName ?? line.ItemName,
                                         Qty = line.Qty,
                                         Rate = master?.DefaultRate ?? 0,
                                         DiscountPercent = 0,
-                                        CategoryCode = master?.CategoryCode ?? "PHARMACY",
+                                        CategoryCode = master?.CategoryCode ?? DefaultCategoryFor(orderType),
                                     };
                                 }).ToList();
 
@@ -140,7 +146,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 if (chargeResponse.Success != true || chargeResponse.Data?.ChargeEvents == null)
                                 {
                                     await tx.RollbackAsync(cancellationToken);
-                                    return new PlaceMedicationOrderResponseModel
+                                    return new PlaceClinicalOrderResponseModel
                                     {
                                         Success = false,
                                         Message = chargeResponse.Message ?? "Could not post charges for this order.",
@@ -155,10 +161,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         await _context.SaveChangesAsync(cancellationToken);
                         await tx.CommitAsync(cancellationToken);
 
-                        return new PlaceMedicationOrderResponseModel
+                        return new PlaceClinicalOrderResponseModel
                         {
                             Success = true,
-                            Message = "Medication order placed.",
+                            Message = "Order placed.",
                             OrderId = order.OrderId,
                             LineCount = lines.Count,
                             ChargedLineCount = lines.Count(l => l.ChargeEventId.HasValue),
@@ -167,29 +173,29 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     catch (Exception)
                     {
                         await tx.RollbackAsync(cancellationToken);
-                        return new PlaceMedicationOrderResponseModel { Success = false, Message = "Error placing medication order." };
+                        return new PlaceClinicalOrderResponseModel { Success = false, Message = "Error placing order." };
                     }
                 });
             }
             catch (Exception)
             {
-                return new PlaceMedicationOrderResponseModel { Success = false, Message = "Error placing medication order." };
+                return new PlaceClinicalOrderResponseModel { Success = false, Message = "Error placing order." };
             }
         }
 
-        public async Task<DiscontinueMedicationOrderLineResponseModel> Handle(DiscontinueMedicationOrderLineRequestModel request, CancellationToken cancellationToken)
+        public async Task<DiscontinueClinicalOrderLineResponseModel> Handle(DiscontinueClinicalOrderLineRequestModel request, CancellationToken cancellationToken)
         {
             try
             {
                 if (request.HospitalId == Guid.Empty || request.OrderLineId == Guid.Empty)
-                    return new DiscontinueMedicationOrderLineResponseModel { Success = false, Message = "HospitalId and OrderLineId are required." };
+                    return new DiscontinueClinicalOrderLineResponseModel { Success = false, Message = "HospitalId and OrderLineId are required." };
 
                 var line = await _context.ClinicalOrderLine
                     .FirstOrDefaultAsync(l => l.OrderLineId == request.OrderLineId && l.HospitalId == request.HospitalId, cancellationToken);
                 if (line == null)
-                    return new DiscontinueMedicationOrderLineResponseModel { Success = false, Message = "Order line not found." };
+                    return new DiscontinueClinicalOrderLineResponseModel { Success = false, Message = "Order line not found." };
                 if (line.StatusCode == IpdConstants.ClinicalOrderLineStatus.Discontinued)
-                    return new DiscontinueMedicationOrderLineResponseModel { Success = false, Message = "Line is already discontinued." };
+                    return new DiscontinueClinicalOrderLineResponseModel { Success = false, Message = "Line is already discontinued." };
 
                 var now = DateTime.UtcNow;
                 line.StatusCode = IpdConstants.ClinicalOrderLineStatus.Discontinued;
@@ -206,7 +212,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         chargeEvent.StatusCode = BillingConstants.ChargeEventStatus.Void;
                         chargeEvent.VoidedAt = now;
                         chargeEvent.VoidedBy = request.LoggedInUserName;
-                        chargeEvent.VoidReason = string.IsNullOrWhiteSpace(request.Reason) ? "Medication order line discontinued." : request.Reason.Trim();
+                        chargeEvent.VoidReason = string.IsNullOrWhiteSpace(request.Reason) ? "Order line discontinued." : request.Reason.Trim();
                         chargeEvent.UpdatedAt = now;
                         chargeEvent.UpdatedBy = request.LoggedInUserName;
                         chargeVoided = true;
@@ -215,7 +221,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 await _context.SaveChangesAsync(cancellationToken);
 
-                return new DiscontinueMedicationOrderLineResponseModel
+                return new DiscontinueClinicalOrderLineResponseModel
                 {
                     Success = true,
                     Message = "Order line discontinued.",
@@ -225,8 +231,20 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
             catch (Exception)
             {
-                return new DiscontinueMedicationOrderLineResponseModel { Success = false, Message = "Error discontinuing order line." };
+                return new DiscontinueClinicalOrderLineResponseModel { Success = false, Message = "Error discontinuing order line." };
             }
         }
+
+        // Fallback CategoryCode when the ChargeMaster line has no category of its own set.
+        private static string DefaultCategoryFor(string orderType) => orderType switch
+        {
+            IpdConstants.ClinicalOrderType.Medication => "PHARMACY",
+            IpdConstants.ClinicalOrderType.Lab => "LAB",
+            IpdConstants.ClinicalOrderType.Radiology => "RADIOLOGY",
+            IpdConstants.ClinicalOrderType.Procedure => "PROCEDURE",
+            IpdConstants.ClinicalOrderType.Diet => "DIET",
+            IpdConstants.ClinicalOrderType.Nursing => "NURSING",
+            _ => orderType,
+        };
     }
 }

@@ -3,7 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
 {
     [ExcludeFromCodeCoverage]
-    public class PlaceMedicationOrderResponseModel
+    public class PlaceClinicalOrderResponseModel
     {
         public bool Success { get; set; }
         public string? Message { get; set; }
@@ -13,7 +13,7 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
     }
 
     [ExcludeFromCodeCoverage]
-    public class DiscontinueMedicationOrderLineResponseModel
+    public class DiscontinueClinicalOrderLineResponseModel
     {
         public bool Success { get; set; }
         public string? Message { get; set; }

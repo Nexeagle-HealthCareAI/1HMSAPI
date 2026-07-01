@@ -65,13 +65,17 @@ namespace EasyHMSAPI.Data.Constants
             public const string Enhanced = "ENHANCED";
         }
 
-        /// <summary>CPOE — one generic order schema; Phase 3 only exercises Medication.</summary>
+        /// <summary>CPOE — one generic order schema shared by every order type.</summary>
         public static class ClinicalOrderType
         {
             public const string Medication = "MEDICATION";
             public const string Lab = "LAB";
             public const string Radiology = "RADIOLOGY";
             public const string Procedure = "PROCEDURE";
+            public const string Diet = "DIET";
+            public const string Nursing = "NURSING";
+
+            public static readonly string[] All = { Medication, Lab, Radiology, Procedure, Diet, Nursing };
         }
 
         public static class ClinicalOrderStatus
@@ -85,6 +89,14 @@ namespace EasyHMSAPI.Data.Constants
         {
             public const string Active = "ACTIVE";
             public const string Discontinued = "DISCONTINUED";
+        }
+
+        /// <summary>Order urgency — meaningful mainly for Lab/Radiology/Procedure orders.</summary>
+        public static class OrderUrgency
+        {
+            public const string Routine = "ROUTINE";
+            public const string Urgent = "URGENT";
+            public const string Stat = "STAT";
         }
     }
 }

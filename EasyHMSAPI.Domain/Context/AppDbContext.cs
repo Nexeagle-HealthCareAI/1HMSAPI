@@ -592,6 +592,7 @@ namespace EasyHMSAPI.Domain.Context
                 entity.ToTable("ClinicalOrderLine");
                 entity.HasKey(l => l.OrderLineId);
                 entity.Property(l => l.Qty).HasPrecision(10, 2);
+                entity.Property(l => l.ScheduledAt).HasColumnType("datetime2(3)");
                 entity.Property(l => l.CreatedAt).HasColumnType("datetime2(3)");
                 entity.Property(l => l.UpdatedAt).HasColumnType("datetime2(3)");
             });

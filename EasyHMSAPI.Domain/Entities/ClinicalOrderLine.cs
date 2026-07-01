@@ -5,10 +5,10 @@ using System.Diagnostics.CodeAnalysis;
 namespace EasyHMSAPI.Domain.Entities
 {
     /// <summary>
-    /// One line of a CPOE order (e.g. one drug within a medication order). Medication-specific
-    /// fields are unused for future non-medication OrderTypes. ChargeEventId is back-filled at
-    /// order time when the line has a ChargeId (charge-on-event); voided, not deleted, if the
-    /// line is later discontinued after billing already went through.
+    /// One line of a CPOE order (e.g. one drug within a medication order, one test within a lab
+    /// order). Type-specific fields are unused/null outside their own OrderType. ChargeEventId is
+    /// back-filled at order time when the line has a ChargeId (charge-on-event); voided, not
+    /// deleted, if the line is later discontinued after billing already went through.
     /// </summary>
     [ExcludeFromCodeCoverage]
     [Table("ClinicalOrderLine")]
@@ -22,13 +22,21 @@ namespace EasyHMSAPI.Domain.Entities
         public Guid? ChargeId { get; set; }
         public int DisplayOrder { get; set; }
 
-        public string? DrugName { get; set; }
+        // Generic label for what was ordered: drug name / test name / study name / procedure
+        // name / diet or nursing instruction.
+        public string? ItemName { get; set; }
+
+        // Medication-specific detail; null/unused for other OrderTypes.
         public string? SaltName { get; set; }
         public string? Dose { get; set; }
         public string? Route { get; set; }
         public string? Frequency { get; set; }
         public int? DurationDays { get; set; }
         public string? Instructions { get; set; }
+
+        // Lab/Radiology/Procedure detail; null/unused for MEDICATION and DIET/NURSING.
+        public string? Urgency { get; set; }          // ROUTINE / URGENT / STAT
+        public DateTime? ScheduledAt { get; set; }    // when a Procedure/Surgery order is planned for
 
         public decimal Qty { get; set; } = 1;
 

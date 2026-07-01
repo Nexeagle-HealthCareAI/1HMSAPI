@@ -10,47 +10,49 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Api.Controllers
 {
+    // CPOE orders — one controller for every OrderType (Medication/Lab/Radiology/Procedure/
+    // Diet/Nursing); callers pass orderType to scope each request to one tab's worth of orders.
     [ExcludeFromCodeCoverage]
     [ApiController]
-    [Route("medication-order")]
+    [Route("clinical-order")]
     [Authorize]
-    public class MedicationOrderController : ControllerBase
+    public class ClinicalOrderController : ControllerBase
     {
         private readonly IMediator _mediator;
-        private readonly ILogger<MedicationOrderController> _logger;
+        private readonly ILogger<ClinicalOrderController> _logger;
 
-        public MedicationOrderController(IMediator mediator, ILogger<MedicationOrderController> logger)
+        public ClinicalOrderController(IMediator mediator, ILogger<ClinicalOrderController> logger)
         {
             _mediator = mediator;
             _logger = logger;
         }
 
-        // Every medication order for an admission, newest first.
+        // Every order of one OrderType for an admission, newest first.
         [HttpGet]
-        public async Task<ActionResult<GetMedicationOrdersResponseModel>> GetMedicationOrders([FromQuery] Guid hospitalId, [FromQuery] Guid admissionId)
+        public async Task<ActionResult<GetClinicalOrdersResponseModel>> GetOrders([FromQuery] Guid hospitalId, [FromQuery] Guid admissionId, [FromQuery] string orderType)
         {
-            if (hospitalId == Guid.Empty || admissionId == Guid.Empty)
-                return BadRequest(new { Message = "hospitalId and admissionId are required." });
+            if (hospitalId == Guid.Empty || admissionId == Guid.Empty || string.IsNullOrWhiteSpace(orderType))
+                return BadRequest(new { Message = "hospitalId, admissionId and orderType are required." });
 
             try
             {
-                var request = new GetMedicationOrdersRequestModel { HospitalId = hospitalId, AdmissionId = admissionId };
+                var request = new GetClinicalOrdersRequestModel { HospitalId = hospitalId, AdmissionId = admissionId, OrderType = orderType };
                 var response = await _mediator.Send(request);
                 return Ok(response);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error in GetMedicationOrders for admissionId: {AdmissionId}", admissionId);
-                return StatusCode(500, new { Message = "An error occurred while fetching medication orders." });
+                _logger.LogError(ex, "Error in GetOrders for admissionId: {AdmissionId}", admissionId);
+                return StatusCode(500, new { Message = "An error occurred while fetching orders." });
             }
         }
 
-        // Places a medication order (one or more drugs); chargeable lines are billed immediately.
+        // Places an order (one or more lines); chargeable lines are billed immediately.
         [HttpPost]
-        public async Task<ActionResult<PlaceMedicationOrderResponseModel>> PlaceMedicationOrder([FromBody] PlaceMedicationOrderRequestModel request)
+        public async Task<ActionResult<PlaceClinicalOrderResponseModel>> PlaceOrder([FromBody] PlaceClinicalOrderRequestModel request)
         {
-            if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty)
-                return BadRequest(new { Message = "hospitalId and admissionId are required." });
+            if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty || string.IsNullOrWhiteSpace(request.OrderType))
+                return BadRequest(new { Message = "hospitalId, admissionId and orderType are required." });
 
             try
             {
@@ -62,14 +64,14 @@ namespace EasyHMSAPI.Api.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error in PlaceMedicationOrder for admissionId: {AdmissionId}", request.AdmissionId);
-                return StatusCode(500, new { Message = "An error occurred while placing the medication order." });
+                _logger.LogError(ex, "Error in PlaceOrder for admissionId: {AdmissionId}", request.AdmissionId);
+                return StatusCode(500, new { Message = "An error occurred while placing the order." });
             }
         }
 
-        // Discontinues one line of a medication order; voids its charge event too, if any.
+        // Discontinues one line of an order; voids its charge event too, if any.
         [HttpPost("discontinue-line")]
-        public async Task<ActionResult<DiscontinueMedicationOrderLineResponseModel>> DiscontinueLine([FromBody] DiscontinueMedicationOrderLineRequestModel request)
+        public async Task<ActionResult<DiscontinueClinicalOrderLineResponseModel>> DiscontinueLine([FromBody] DiscontinueClinicalOrderLineRequestModel request)
         {
             if (request.HospitalId == Guid.Empty || request.OrderLineId == Guid.Empty)
                 return BadRequest(new { Message = "hospitalId and orderLineId are required." });
