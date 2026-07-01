@@ -47,6 +47,26 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Every currently-open admission for the hospital, with patient name + current bed (if any).
+        [HttpGet("active")]
+        public async Task<ActionResult<GetActiveAdmissionsResponseModel>> GetActiveAdmissions([FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var request = new GetActiveAdmissionsRequestModel { HospitalId = hospitalId };
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetActiveAdmissions for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching active admissions." });
+            }
+        }
+
         // Returning-patient detail: full demographics (for re-admit pre-fill) + admission history.
         [HttpGet("patient")]
         public async Task<ActionResult<GetPatientAdmissionsResponseModel>> GetPatientAdmissions(
