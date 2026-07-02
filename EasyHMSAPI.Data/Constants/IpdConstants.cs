@@ -336,5 +336,240 @@ namespace EasyHMSAPI.Data.Constants
         {
             public static readonly TimeSpan EditLockWindow = TimeSpan.FromHours(24);
         }
+
+        // ---- Inventory ----
+
+        public static class InventoryCategory
+        {
+            public const string Consumable = "CONSUMABLE";
+            public const string Drug = "DRUG";
+            public const string Disposable = "DISPOSABLE";
+            public const string Surgical = "SURGICAL";
+            public const string Implant = "IMPLANT";
+            public const string Other = "OTHER";
+            public static readonly string[] All = { Consumable, Drug, Disposable, Surgical, Implant, Other };
+        }
+
+        public static class InventoryMovementType
+        {
+            public const string Receive = "RECEIVE";
+            public const string Issue = "ISSUE";
+            public const string Return = "RETURN";
+            public const string AdjustIn = "ADJUST_IN";
+            public const string AdjustOut = "ADJUST_OUT";
+            public static readonly string[] All = { Receive, Issue, Return, AdjustIn, AdjustOut };
+        }
+
+        // ---- Blood Bank ----
+
+        public static class BloodComponent
+        {
+            public const string Whole = "WHOLE";
+            public const string Prbc = "PRBC";
+            public const string Ffp = "FFP";
+            public const string Platelet = "PLATELET";
+            public const string Cryo = "CRYO";
+            public static readonly string[] All = { Whole, Prbc, Ffp, Platelet, Cryo };
+        }
+
+        public static class BloodGroup
+        {
+            public const string APos = "A_POS";
+            public const string ANeg = "A_NEG";
+            public const string BPos = "B_POS";
+            public const string BNeg = "B_NEG";
+            public const string OPos = "O_POS";
+            public const string ONeg = "O_NEG";
+            public const string AbPos = "AB_POS";
+            public const string AbNeg = "AB_NEG";
+            public static readonly string[] All = { APos, ANeg, BPos, BNeg, OPos, ONeg, AbPos, AbNeg };
+        }
+
+        public static class BloodBagStatus
+        {
+            public const string Available = "AVAILABLE";
+            public const string Reserved = "RESERVED";
+            public const string Transfused = "TRANSFUSED";
+            public const string Discarded = "DISCARDED";
+        }
+
+        public static class CrossmatchResult
+        {
+            public const string Compatible = "COMPATIBLE";
+            public const string Incompatible = "INCOMPATIBLE";
+            public const string NotDone = "NOT_DONE";
+        }
+
+        public static class TransfusionReaction
+        {
+            public const string None = "NONE";
+            public const string Mild = "MILD";
+            public const string Severe = "SEVERE";
+            public const string Anaphylaxis = "ANAPHYLAXIS";
+            public static readonly string[] All = { None, Mild, Severe, Anaphylaxis };
+        }
+
+        // ---- Operation Theatre ----
+
+        public static class TheatreStatus
+        {
+            public const string Available = "AVAILABLE";
+            public const string InUse = "IN_USE";
+            public const string Cleaning = "CLEANING";
+            public const string Unavailable = "UNAVAILABLE";
+        }
+
+        public static class SurgeryType
+        {
+            public const string Elective = "ELECTIVE";
+            public const string Emergency = "EMERGENCY";
+            public static readonly string[] All = { Elective, Emergency };
+        }
+
+        public static class SurgeryUrgency
+        {
+            public const string Routine = "ROUTINE";
+            public const string Urgent = "URGENT";
+            public const string Emergency = "EMERGENCY";
+            public static readonly string[] All = { Routine, Urgent, Emergency };
+        }
+
+        /// <summary>SurgeryCase lifecycle. Active = requested through post-op, still an open case.</summary>
+        public static class SurgeryStatus
+        {
+            public const string Requested = "REQUESTED";
+            public const string Scheduled = "SCHEDULED";
+            public const string PreOp = "PRE_OP";
+            public const string InTheatre = "IN_THEATRE";
+            public const string PostOp = "POST_OP";
+            public const string Completed = "COMPLETED";
+            public const string Cancelled = "CANCELLED";
+
+            public static readonly string[] Active = { Requested, Scheduled, PreOp, InTheatre, PostOp };
+            public static readonly string[] Terminal = { Completed, Cancelled };
+        }
+
+        public static class OTBookingStatus
+        {
+            public const string Scheduled = "SCHEDULED";
+            public const string InProgress = "IN_PROGRESS";
+            public const string Completed = "COMPLETED";
+            public const string Cancelled = "CANCELLED";
+
+            // Bookings in either of these states hold the one-active-booking-per-case slot
+            // (mirrors the DB's filtered unique index UX_OTB_CaseActive) and count toward the
+            // theatre-overlap conflict check.
+            public static readonly string[] Active = { Scheduled, InProgress };
+        }
+
+        public static class AsaGrade
+        {
+            public const string I = "I";
+            public const string II = "II";
+            public const string III = "III";
+            public const string IV = "IV";
+            public const string V = "V";
+            public const string VI = "VI";
+            public static readonly string[] All = { I, II, III, IV, V, VI };
+        }
+
+        public static class AnaesthesiaType
+        {
+            public const string Ga = "GA";
+            public const string Spinal = "SPINAL";
+            public const string Epidural = "EPIDURAL";
+            public const string Local = "LOCAL";
+            public const string Sedation = "SEDATION";
+            public const string Regional = "REGIONAL";
+            public static readonly string[] All = { Ga, Spinal, Epidural, Local, Sedation, Regional };
+        }
+
+        public static class IntraOpItemCategory
+        {
+            public const string Consumable = "CONSUMABLE";
+            public const string Implant = "IMPLANT";
+            public static readonly string[] All = { Consumable, Implant };
+        }
+
+        /// <summary>WHO 2009 Surgical Safety Checklist — fixed 3-phase item list. Item answers are
+        /// persisted as a JSON blob per phase (SurgicalSafetyChecklist.SignInItemsJson etc.) against
+        /// this list — not DB-enforced, soft validation only (same posture as ConsentTypeCode). Keys
+        /// are stable identifiers for the JSON blob; labels are the exact WHO checklist wording.</summary>
+        public static class WhoChecklistItems
+        {
+            public static readonly IReadOnlyList<(string Key, string Label)> SignIn = new[]
+            {
+                ("identity_site_procedure_consent", "Patient has confirmed identity, site, procedure, and consent"),
+                ("site_marked", "Site marked / not applicable"),
+                ("anaesthesia_safety_check", "Anaesthesia safety check completed"),
+                ("pulse_oximeter", "Pulse oximeter on patient and functioning"),
+                ("known_allergy", "Known allergy?"),
+                ("difficult_airway_risk", "Difficult airway/aspiration risk? If yes, equipment/assistance available"),
+                ("blood_loss_risk", "Risk of >500ml blood loss (7ml/kg in children)? If yes, adequate IV access/fluids planned"),
+            };
+
+            public static readonly IReadOnlyList<(string Key, string Label)> TimeOut = new[]
+            {
+                ("team_introduced", "All team members introduced by name and role"),
+                ("verbal_confirmation", "Surgeon/anaesthetist/nurse verbally confirm patient, site, procedure"),
+                ("critical_events_surgeon", "Anticipated critical events reviewed — surgeon"),
+                ("critical_events_anaesthetist", "Anticipated critical events reviewed — anaesthetist"),
+                ("critical_events_nursing", "Anticipated critical events reviewed — nursing team"),
+                ("antibiotic_prophylaxis", "Antibiotic prophylaxis given within last 60 minutes? / not applicable"),
+                ("imaging_displayed", "Essential imaging displayed? / not applicable"),
+            };
+
+            public static readonly IReadOnlyList<(string Key, string Label)> SignOut = new[]
+            {
+                ("procedure_name_recorded", "Nurse verbally confirms: name of procedure recorded"),
+                ("counts_correct", "Instrument, sponge, and needle counts correct / not applicable"),
+                ("specimen_labeled", "Specimen labeled correctly, including patient name"),
+                ("equipment_problems", "Equipment problems to be addressed identified"),
+                ("recovery_concerns_reviewed", "Surgeon/anaesthetist/nurse review key concerns for recovery and management"),
+            };
+        }
+
+        // ---- CSSD ----
+
+        public static class InstrumentSetStatus
+        {
+            public const string Available = "AVAILABLE";
+            public const string Issued = "ISSUED";
+            public const string InUse = "IN_USE";
+            public const string ReturnedSoiled = "RETURNED_SOILED";
+            public const string Washing = "WASHING";
+            public const string Packed = "PACKED";
+            public const string Sterilizing = "STERILIZING";
+            public const string Sterile = "STERILE";
+            public const string Quarantined = "QUARANTINED";
+            public const string Retired = "RETIRED";
+        }
+
+        public static class SterilizationCycleType
+        {
+            public const string Steam = "STEAM";
+            public const string Eto = "ETO";
+            public const string Plasma = "PLASMA";
+            public static readonly string[] All = { Steam, Eto, Plasma };
+        }
+
+        public static class IndicatorResult
+        {
+            public const string Pass = "PASS";
+            public const string Fail = "FAIL";
+            public const string Pending = "PENDING";   // biological indicator only
+        }
+
+        public static class InstrumentSetMovementType
+        {
+            public const string IssueToOt = "ISSUE_TO_OT";
+            public const string Return = "RETURN";
+            public const string SendToWash = "SEND_TO_WASH";
+            public const string Pack = "PACK";
+            public const string Quarantine = "QUARANTINE";
+            public const string Discard = "DISCARD";
+            public const string ReceiveSterile = "RECEIVE_STERILE";
+            public static readonly string[] All = { IssueToOt, Return, SendToWash, Pack, Quarantine, Discard, ReceiveSterile };
+        }
     }
 }
