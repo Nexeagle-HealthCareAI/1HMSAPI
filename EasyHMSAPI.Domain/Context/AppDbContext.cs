@@ -74,6 +74,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<Admission> Admission { get; set; }
         public DbSet<AdmissionCoverage> AdmissionCoverage { get; set; }
         public DbSet<AdmissionStatusHistory> AdmissionStatusHistory { get; set; }
+        public DbSet<DischargeSummary> DischargeSummary { get; set; }
         public DbSet<BedAssignment> BedAssignment { get; set; }
         public DbSet<ClinicalOrder> ClinicalOrder { get; set; }
         public DbSet<ClinicalOrderLine> ClinicalOrderLine { get; set; }
@@ -563,9 +564,22 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(c => c.SanctionedAmount).HasPrecision(18, 2);
                 entity.Property(c => c.ValidFrom).HasColumnType("datetime2(3)");
                 entity.Property(c => c.ValidTo).HasColumnType("datetime2(3)");
+                entity.Property(c => c.ClaimSubmittedAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.InsurerApprovalAt).HasColumnType("datetime2(3)");
                 entity.Property(c => c.CreatedAt).HasColumnType("datetime2(3)");
                 entity.Property(c => c.UpdatedAt).HasColumnType("datetime2(3)");
                 entity.Property(c => c.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<DischargeSummary>(entity =>
+            {
+                entity.ToTable("DischargeSummary");
+                entity.HasKey(d => d.DischargeSummaryId);
+                entity.Property(d => d.FollowUpDate).HasColumnType("datetime2(3)");
+                entity.Property(d => d.SignedAt).HasColumnType("datetime2(3)");
+                entity.Property(d => d.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(d => d.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(d => d.RowVersion).IsRowVersion();
             });
 
             modelBuilder.Entity<AdmissionStatusHistory>(entity =>

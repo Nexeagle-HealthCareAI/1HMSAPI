@@ -418,6 +418,79 @@ namespace EasyHMSAPI.Application.Services.Implementations
             }
         }
 
+        public async Task<bool> SendDischargeNotificationAsync(string mobileNumber, string patientName, string hospitalName, string dischargeDate)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(_isEnabled) && _isEnabled.Trim().ToLower() == "true")
+                {
+                    var payload = new
+                    {
+                        messaging_product = "whatsapp",
+                        to = mobileNumber,
+                        type = "template",
+                        template = new
+                        {
+                            name = "discharge_notice_eng",
+                            language = new
+                            {
+                                code = "en"
+                            },
+                            components = new object[]
+                            {
+                                new
+                                {
+                                    type = "body",
+                                    parameters = new object[]
+                                    {
+                                        new
+                                        {
+                                            type = "text",
+                                            text = patientName,
+                                            parameter_name = "patient_name"
+                                        },
+                                        new
+                                        {
+                                            type = "text",
+                                            text = hospitalName,
+                                            parameter_name = "hospital_name"
+                                        },
+                                        new
+                                        {
+                                            type = "text",
+                                            text = dischargeDate,
+                                            parameter_name = "date"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    };
+
+                    var json = JsonSerializer.Serialize(payload);
+                    var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                    var request = new HttpRequestMessage(HttpMethod.Post, _apiUrl)
+                    {
+                        Content = content
+                    };
+                    request.Headers.Add("Authorization", $"Bearer {_accessToken}");
+
+                    var response = await _httpClient.SendAsync(request);
+
+                    return response.IsSuccessStatusCode;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
         private static string FormatDoctorName(string doctorName)
         {
             if (string.IsNullOrWhiteSpace(doctorName))

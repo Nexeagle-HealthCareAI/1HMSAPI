@@ -29,6 +29,14 @@ namespace EasyHMSAPI.Domain.Entities
         public string StatusCode { get; set; } = "PENDING";   // PENDING/APPROVED/QUERIED/REJECTED/ENHANCED
         public string? Notes { get; set; }
 
+        // IRDAI discharge-process clock milestones (TPA/SCHEME only). Kept separate from
+        // StatusCode above, which already carries the pre-auth sanction workflow — a different
+        // process from final-claim submission/approval.
+        public DateTime? ClaimSubmittedAt { get; set; }
+        public string? ClaimSubmittedBy { get; set; }
+        public DateTime? InsurerApprovalAt { get; set; }
+        public string? InsurerApprovalBy { get; set; }
+
         public DateTime CreatedAt { get; set; }
         public string? CreatedBy { get; set; }
         public DateTime UpdatedAt { get; set; }

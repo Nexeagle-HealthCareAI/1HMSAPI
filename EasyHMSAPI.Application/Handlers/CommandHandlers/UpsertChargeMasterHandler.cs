@@ -40,6 +40,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 existingCharge.GstSlabPercent = request.GstSlabPercent;
                 existingCharge.TaxInclusive = request.TaxInclusive;
                 existingCharge.IsActive = request.IsActive;
+                existingCharge.IsIRDAIPayable = request.IsIRDAIPayable ?? existingCharge.IsIRDAIPayable;
                 existingCharge.SortOrder = request.SortOrder;
                 existingCharge.Notes = request.Notes;
                 existingCharge.UpdatedAt = DateTime.UtcNow;
@@ -72,6 +73,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 GstSlabPercent = request.GstSlabPercent,
                 TaxInclusive = request.TaxInclusive,
                 IsActive = request.IsActive,
+                IsIRDAIPayable = request.IsIRDAIPayable ?? true,
                 SortOrder = request.SortOrder,
                 Notes = request.Notes,
                 CreatedAt = DateTime.UtcNow,

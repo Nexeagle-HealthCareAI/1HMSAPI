@@ -43,6 +43,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 GstSlabPercent = charge.GstSlabPercent,
                 TaxInclusive = charge.TaxInclusive,
                 IsActive = charge.IsActive,
+                IsIRDAIPayable = charge.IsIRDAIPayable,
                 SortOrder = charge.SortOrder,
                 UpdatedAt = charge.UpdatedAt,
                 UpdatedBy = charge.UpdatedBy,

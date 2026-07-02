@@ -230,5 +230,50 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 return new VoiceRxFieldsModel();
             }
         }
+
+        public async Task<string> NarrateAsync(string sourceMaterial, string sectionHint, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(_apiKey))
+                throw new InvalidOperationException("AI narrative assist is not configured (missing OpenAI API key).");
+            if (string.IsNullOrWhiteSpace(sourceMaterial))
+                return string.Empty;
+
+            var systemPrompt = "You are a clinical documentation assistant. Write a concise, professional \"" + sectionHint +
+                "\" narrative paragraph for a hospital discharge summary, using ONLY the structured clinical data provided below. " +
+                "Do not invent findings, diagnoses, medications, or dates that are not present in the source material. " +
+                "Write in plain prose (no markdown, no bullet points), third person, past tense. Respond with the narrative text only.";
+
+            var payload = new
+            {
+                model = _structuringModel,
+                temperature = 0.2,
+                messages = new object[]
+                {
+                    new { role = "system", content = systemPrompt },
+                    new { role = "user", content = sourceMaterial }
+                }
+            };
+
+            var json = JsonSerializer.Serialize(payload);
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/chat/completions")
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            };
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+
+            var response = await _httpClient.SendAsync(request, cancellationToken);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
+                throw new InvalidOperationException($"Narrative generation failed ({(int)response.StatusCode}).");
+
+            using var doc = JsonDocument.Parse(body);
+            var contentText = doc.RootElement
+                .GetProperty("choices")[0]
+                .GetProperty("message")
+                .GetProperty("content")
+                .GetString();
+
+            return contentText?.Trim() ?? string.Empty;
+        }
     }
 }

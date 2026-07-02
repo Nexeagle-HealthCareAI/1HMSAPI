@@ -65,6 +65,34 @@ namespace EasyHMSAPI.Data.Constants
             public const string Enhanced = "ENHANCED";
         }
 
+        /// <summary>DischargeSummary.ConditionAtDischarge — exact DB CHECK set.</summary>
+        public static class ConditionAtDischarge
+        {
+            public const string Stable = "STABLE";
+            public const string Improved = "IMPROVED";
+            public const string Recovered = "RECOVERED";
+            public const string Referred = "REFERRED";
+            public const string Lama = "LAMA";
+            public const string Expired = "EXPIRED";
+
+            public static readonly string[] All = { Stable, Improved, Recovered, Referred, Lama, Expired };
+        }
+
+        /// <summary>IRDAI discharge-process clock milestone keys — shared vocabulary between
+        /// GetIrdaiDischargeClocksHandler's response and StampIrdaiMilestoneHandler's request, so
+        /// the frontend never hardcodes magic strings.</summary>
+        public static class IrdaiClockMilestone
+        {
+            public const string DischargeDecision = "DISCHARGE_DECISION";   // AdmissionStatusHistory -> DISCHARGE_INITIATED
+            public const string PhysicalDischarge = "PHYSICAL_DISCHARGE";   // AdmissionStatusHistory -> terminal status
+            public const string ClaimSubmitted = "CLAIM_SUBMITTED";         // AdmissionCoverage.ClaimSubmittedAt (stampable)
+            public const string InsurerApproval = "INSURER_APPROVAL";       // AdmissionCoverage.InsurerApprovalAt (stampable)
+
+            // Only these two are ever stamped directly by a user action — the other two are
+            // always derived from AdmissionStatusHistory.
+            public static readonly string[] Stampable = { ClaimSubmitted, InsurerApproval };
+        }
+
         /// <summary>CPOE — one generic order schema shared by every order type.</summary>
         public static class ClinicalOrderType
         {

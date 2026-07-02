@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
@@ -30,10 +31,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         };
 
         private readonly AppDbContext _context;
+        private readonly ISmsService _smsService;
+        private readonly IWhatsAppMessagingService _whatsAppMessagingService;
 
-        public AdmissionStatusCommandHandlers(AppDbContext context)
+        public AdmissionStatusCommandHandlers(AppDbContext context, ISmsService smsService, IWhatsAppMessagingService whatsAppMessagingService)
         {
             _context = context;
+            _smsService = smsService;
+            _whatsAppMessagingService = whatsAppMessagingService;
         }
 
         public async Task<DischargeAdmissionResponseModel> Handle(DischargeAdmissionRequestModel request, CancellationToken cancellationToken)
@@ -75,6 +80,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 var bedReleased = await ReleaseActiveBedAsync(admission.AdmissionId, request.LoggedInUserName, now, cancellationToken);
 
                 await _context.SaveChangesAsync(cancellationToken);
+
+                await SendDischargeNotificationAsync(admission, dischargedAt, cancellationToken);
 
                 return new DischargeAdmissionResponseModel
                 {
@@ -148,6 +155,43 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             catch (Exception)
             {
                 return new UpdateAdmissionStatusResponseModel { Success = false, Message = "Error updating admission status." };
+            }
+        }
+
+        // Fires a plain-text discharge notice on SMS + WhatsApp. Only DISCHARGED sends this — a
+        // "you've been discharged" message is wrong for LAMA/DAMA/TRANSFERRED_OUT/EXPIRED/
+        // CANCELLED, so UpdateAdmissionStatusHandler deliberately does not call this. Never lets a
+        // notification failure fail the discharge itself — matches the messaging services' own
+        // internal catch-and-return-false posture.
+        private async Task SendDischargeNotificationAsync(Admission admission, DateTime dischargedAt, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var mobile = await _context.PatientRegistrations
+                    .Where(p => p.HospitalId == admission.HospitalId && p.PatientId == admission.PatientId)
+                    .Select(p => p.Mobile)
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (string.IsNullOrWhiteSpace(mobile)) return;
+
+                var hospitalName = await _context.Hospitals
+                    .Where(h => h.HospitalID == admission.HospitalId)
+                    .Select(h => h.Name)
+                    .FirstOrDefaultAsync(cancellationToken) ?? "the hospital";
+
+                var patientName = await _context.PatientRegistrations
+                    .Where(p => p.HospitalId == admission.HospitalId && p.PatientId == admission.PatientId)
+                    .Select(p => p.FullName)
+                    .FirstOrDefaultAsync(cancellationToken) ?? "Patient";
+
+                var dateLabel = dischargedAt.ToString("dd MMM yyyy");
+                var message = $"Dear {patientName}, you have been discharged from {hospitalName} on {dateLabel}. Wishing you a speedy recovery.";
+
+                await _smsService.SendInvitationSmsAsync(mobile, message);
+                await _whatsAppMessagingService.SendDischargeNotificationAsync(mobile, patientName, hospitalName, dateLabel);
+            }
+            catch (Exception)
+            {
+                // Notification failure must never block/roll back a discharge that already succeeded.
             }
         }
 

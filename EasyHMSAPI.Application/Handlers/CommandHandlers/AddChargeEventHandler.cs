@@ -109,6 +109,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         HospitalId = request.HospitalId,
                         PatientId = request.PatientId,
                         EncounterId = request.EncounterId,
+                        ChargeId = charge.ChargeId,
                         SourceModule = sourceModule,
                         CategoryCode = charge.CategoryCode,
                         DisplayName = charge.DisplayName,

@@ -27,6 +27,10 @@ namespace EasyHMSAPI.Domain.Entities
         public decimal? GstSlabPercent { get; set; }  // 0 / 5 / 12 / 18 / 28
         public bool TaxInclusive { get; set; }
 
+        // Per-item IRDAI payable/non-payable classification (real TPA claim forms carry a
+        // "Non-Payable Items" annexure). Hospital-configurable, default payable.
+        public bool IsIRDAIPayable { get; set; }
+
         public bool IsActive { get; set; }
         public int SortOrder { get; set; }
         public string? Notes { get; set; }
