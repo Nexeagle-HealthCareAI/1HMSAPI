@@ -64,7 +64,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                 {
                     FullName = "New Patient",
                     Mobile = "9876543210",
-                    AgeYears = 30,
+                    Age = 30,
                     Sex = "Male"
                 },
                 AllocateToken = true

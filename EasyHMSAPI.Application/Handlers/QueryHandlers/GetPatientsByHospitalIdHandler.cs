@@ -1,4 +1,4 @@
-﻿using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
+using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
@@ -142,7 +142,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                             {
                                 PatientId = p.PatientId,
                                 Name = p.FullName,
-                                Age = p.AgeYears,
+                                Age = p.Age,
                                 Sex = p.Sex,
                                 Contact = p.Mobile,
                                 AddressLine = p.AddressLine,

@@ -104,5 +104,91 @@ namespace EasyHMSAPI.Api.Controllers
                 return StatusCode(500, new { Message = "An error occurred." });
             }
         }
+
+        // Live bed board: every bed for the hospital, with its current occupant if any.
+        [HttpGet("board")]
+        public async Task<ActionResult<GetBedBoardResponseModel>> GetBedBoard([FromQuery] Guid hospitalId, [FromQuery] string? wardCode = null)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var request = new GetBedBoardRequestModel { HospitalId = hospitalId, WardCode = wardCode };
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetBedBoard for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
+        // Assign a bed to an admission that doesn't currently have one.
+        [HttpPost("assign")]
+        public async Task<ActionResult<AssignBedResponseModel>> AssignBed([FromBody] AssignBedRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty || request.BedId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId, admissionId and bedId are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in AssignBed for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
+        // Release the admission's current bed (e.g. on discharge).
+        [HttpPost("release")]
+        public async Task<ActionResult<ReleaseBedResponseModel>> ReleaseBed([FromBody] ReleaseBedRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and admissionId are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in ReleaseBed for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
+        // Move an admission from its current bed to a different one.
+        [HttpPost("transfer")]
+        public async Task<ActionResult<TransferBedResponseModel>> TransferBed([FromBody] TransferBedRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty || request.NewBedId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId, admissionId and newBedId are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in TransferBed for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
     }
 }

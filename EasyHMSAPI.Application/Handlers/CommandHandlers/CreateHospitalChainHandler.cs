@@ -39,8 +39,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     };
 
                 // The caller must own at least one hospital to start a chain.
-                var ownedHospitals = await _context.Hospitals
-                    .Where(h => h.CreatedByUserID == request.OwnerUserId)
+                var ownedHospitals = await _context.HospitalUsers
+                    .Include(hu => hu.Hospital)
+                    .Where(hu => hu.UserID == request.OwnerUserId && hu.Hospital != null)
+                    .Select(hu => hu.Hospital!)
+                    .Distinct()
                     .ToListAsync(cancellationToken);
                 if (ownedHospitals.Count == 0)
                     return new CreateHospitalChainResponseModel { Success = false, Message = "You must own a hospital before creating a chain." };

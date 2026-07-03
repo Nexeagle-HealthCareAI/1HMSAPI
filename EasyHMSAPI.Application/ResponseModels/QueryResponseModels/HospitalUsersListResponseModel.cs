@@ -21,5 +21,6 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public int UsersStatusId { get; set; }
         public List<Roles>? Roles { get; set; }
         public List<string>? PermissionKeys { get; set; }
+        public DateTime? LastLoginTime { get; set; }
     }
 }

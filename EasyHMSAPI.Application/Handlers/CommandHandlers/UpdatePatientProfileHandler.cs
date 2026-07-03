@@ -26,7 +26,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             // Update fields if provided
             if (!string.IsNullOrWhiteSpace(request.FullName)) patient.FullName = request.FullName;
             if (!string.IsNullOrWhiteSpace(request.Mobile)) patient.Mobile = request.Mobile;
-            if (request.AgeYears.HasValue) patient.AgeYears = request.AgeYears;
+            if (request.Age.HasValue) 
+            {
+                patient.Age = request.Age;
+                if (!string.IsNullOrEmpty(request.AgeUnit))
+                {
+                    patient.AgeUnit = request.AgeUnit;
+                }
+            }
             if (!string.IsNullOrWhiteSpace(request.Sex)) patient.Sex = request.Sex;
             if (!string.IsNullOrWhiteSpace(request.AddressLine1)) patient.AddressLine = request.AddressLine1;
             if (!string.IsNullOrWhiteSpace(request.City)) patient.City = request.City;

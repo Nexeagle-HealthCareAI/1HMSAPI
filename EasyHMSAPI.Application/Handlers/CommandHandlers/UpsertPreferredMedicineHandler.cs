@@ -33,6 +33,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (existingDoctor == null)
                 {
                     response.Message = "Invalid doctorId";
+                    return response;
                 }
 
                 var existingHospital = await _dbContext.Hospitals
@@ -42,13 +43,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (existingHospital == null)
                 {
                     response.Message = "Invalid hospitalId";
+                    return response;
                 }
-                else
+
+                if (!await _doctorValidationHelper.ValidateDoctorAsync(request.HospitalId, request.DoctorId, cancellationToken))
                 {
-                    if (!await _doctorValidationHelper.ValidateDoctorAsync(request.HospitalId, request.DoctorId, cancellationToken))
-                    {
-                        response.Message = "Doctor is not associated with the specified hospital.";
-                    }
+                    response.Message = "Doctor is not associated with the specified hospital.";
+                    return response;
                 }
 
                 if (request.PreferrredId is not null)
@@ -98,8 +99,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     if(request?.Source.ToLower() == "prescription")
                     {
                         var existing = await _dbContext.DoctorPreferredMedicines
-                            .Where(x => 
-                                x.MedicineName != null && 
+                            .Where(x =>
+                                x.DoctorId == request.DoctorId &&
+                                x.HospitalId == request.HospitalId &&
+                                x.MedicineName != null &&
                                 request.Medicine.MedicineName != null &&
                                 x.MedicineName.ToLower() == request.Medicine.MedicineName.ToLower()
                             )
@@ -176,10 +179,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     response.Message = "Preferred medicine added";
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 response.Success = false;
-                response.Message = "An error occurred: " + ex.Message + ex.InnerException + ex.StackTrace;
+                response.Message = "An error occurred while saving the preferred medicine.";
             }
 
             return response;

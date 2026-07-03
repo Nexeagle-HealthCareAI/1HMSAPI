@@ -21,7 +21,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             if (request.BedId != null && request.BedId != Guid.Empty)
             {
                 var existingBed = await _context.BedMaster
-                    .FirstOrDefaultAsync(x => x.BedId == request.BedId, cancellationToken);
+                    .FirstOrDefaultAsync(x => x.BedId == request.BedId && x.HospitalId == request.HospitalId, cancellationToken);
 
                 if (existingBed == null)
                     throw new KeyNotFoundException($"Bed with ID {request.BedId} not found.");

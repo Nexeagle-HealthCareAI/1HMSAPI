@@ -17,7 +17,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? PatientId { get; set; }
         public string? FullName { get; set; }
         public string? Mobile { get; set; }
-        public short? AgeYears { get; set; }
+        public short? Age { get; set; }
+        public string? AgeUnit { get; set; }
         public DateTime? DateOfBirth { get; set; }
         public string? Sex { get; set; }
         public string? BloodGroup { get; set; }
@@ -59,5 +60,23 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? ReferralSource { get; set; }  // SELF / DOCTOR / HOSPITAL
         public string? ReferralName { get; set; }
         public Guid? ReferredByReferrerId { get; set; }
+
+        // ── Payer branch (Phase 1: CASH is fully wired; TPA/SCHEME are capture-only) ──
+        public string? PayerType { get; set; }        // CASH / TPA / SCHEME (default CASH)
+        public decimal? DepositExpected { get; set; } // planned deposit (cash flow)
+        // Open an IPD billing encounter so charges/day-wise bills accrue to the stay (default true).
+        public bool EnableIpdBilling { get; set; } = true;
+        // Offline resync idempotency: a re-sent admit with the same id returns the existing admission.
+        public Guid? ClientRequestId { get; set; }
+
+        // Optional bed to assign at admit time.
+        public Guid? BedId { get; set; }
+
+        // Coverage detail (stored when TPA / SCHEME, or when any of these is supplied).
+        public string? PayerName { get; set; }
+        public string? PolicyOrBeneficiaryNo { get; set; }
+        public string? PreAuthNo { get; set; }
+        public string? PackageCode { get; set; }
+        public decimal? SanctionedAmount { get; set; }
     }
 }

@@ -69,6 +69,7 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public string? PatientId { get; set; }
         public string? Name { get; set; }
         public int Age { get; set; }
+        public string? AgeUnit { get; set; }
         public string? Sex { get; set; }
         public string? Address { get; set; }
         public string? Contact { get; set; }
@@ -80,6 +81,9 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public string? InsuranceId { get; set; }
         public string? ReferrerName { get; set; }
         public string? ReferrerRelation { get; set; }
+        // Guardian / relative (patient-level, separate from medical referral).
+        public string? GuardianName { get; set; }
+        public string? GuardianRelation { get; set; }
     }
 
     [ExcludeFromCodeCoverage]

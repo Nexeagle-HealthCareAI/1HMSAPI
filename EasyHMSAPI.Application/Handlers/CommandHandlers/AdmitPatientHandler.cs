@@ -14,11 +14,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     /// Admit a patient (Emergency / Elective / Day Care / LAMA). Reuses the patient master by UHID:
     /// an existing UHID refreshes the demographics, a new patient is registered with an auto UHID.
     /// Each admission gets its own auto-numbered IPD number (ADM-…); one patient can have many.
-    /// Standalone — no billing encounter required.
+    /// Opens a payer branch (CASH/TPA/SCHEME), an IPD billing encounter (unless opted out), an
+    /// optional bed assignment, and the initial status-history row — all in one transaction.
     /// </summary>
     public class AdmitPatientHandler : IRequestHandler<AdmitPatientRequestModel, AdmitPatientResponseModel>
     {
-        private const string StatusAdmitted = "ADMITTED";
         private readonly AppDbContext _context;
 
         public AdmitPatientHandler(AppDbContext context)
@@ -33,88 +33,260 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (request.HospitalId == Guid.Empty)
                     return new AdmitPatientResponseModel { Success = false, Message = "HospitalId is required." };
 
-                var now = DateTime.UtcNow;
+                var payerType = NormalizePayerType(request.PayerType);
+                if (payerType == null)
+                    return new AdmitPatientResponseModel { Success = false, Message = "Invalid payer type." };
 
-                // ── Resolve the patient (existing UHID) or register a new one ──────────────
-                PatientRegistration? patient = null;
-                if (!string.IsNullOrWhiteSpace(request.PatientId))
+                // Offline resync idempotency: a re-sent admit with the same ClientRequestId returns
+                // the admission already created for it instead of creating a duplicate.
+                if (request.ClientRequestId.HasValue)
                 {
-                    patient = await _context.PatientRegistrations
-                        .FirstOrDefaultAsync(p => p.PatientId == request.PatientId && p.HospitalId == request.HospitalId, cancellationToken);
+                    var existing = await _context.Admission
+                        .FirstOrDefaultAsync(a => a.HospitalId == request.HospitalId && a.ClientRequestId == request.ClientRequestId, cancellationToken);
+                    if (existing != null)
+                        return await BuildReplayResponseAsync(existing, cancellationToken);
                 }
 
-                bool isNewPatient = patient == null;
-                if (isNewPatient)
+                var strategy = _context.Database.CreateExecutionStrategy();
+                return await strategy.ExecuteAsync(async () =>
                 {
-                    if (string.IsNullOrWhiteSpace(request.FullName))
-                        return new AdmitPatientResponseModel { Success = false, Message = "Patient name is required to register a new patient." };
-
-                    patient = new PatientRegistration
+                    await using var tx = await _context.Database.BeginTransactionAsync(cancellationToken);
+                    try
                     {
-                        RegistrationId = Guid.NewGuid(),
-                        HospitalId = request.HospitalId,
-                        PatientId = GenerateUhid(),
-                        RegisteredAt = now,
-                        Country = "India",
-                    };
-                    _context.PatientRegistrations.Add(patient);
-                }
+                        var now = DateTime.UtcNow;
 
-                ApplyDemographics(patient!, request);
+                        // ── Resolve the patient (existing UHID) or register a new one ──────────────
+                        PatientRegistration? patient = null;
+                        if (!string.IsNullOrWhiteSpace(request.PatientId))
+                        {
+                            patient = await _context.PatientRegistrations
+                                .FirstOrDefaultAsync(p => p.PatientId == request.PatientId && p.HospitalId == request.HospitalId, cancellationToken);
+                        }
 
-                // ── Create the admission (own IPD number) ──────────────────────────────────
-                var numberSeries = await NumberSeriesDefaults.GetOrCreateAsync(
-                    _context, request.HospitalId, BillingConstants.NumberSeriesCode.Admission, request.LoggedInUserName, cancellationToken);
-                numberSeries.CurrentValue++;
-                var admissionNo = NumberSeriesFormatter.Format(
-                    numberSeries.Prefix, numberSeries.YearFormat, numberSeries.Separator, numberSeries.PadLength, numberSeries.CurrentValue);
-                numberSeries.UpdatedAt = now;
-                numberSeries.UpdatedBy = request.LoggedInUserName;
+                        bool isNewPatient = patient == null;
+                        if (isNewPatient)
+                        {
+                            if (string.IsNullOrWhiteSpace(request.FullName))
+                            {
+                                await tx.RollbackAsync(cancellationToken);
+                                return new AdmitPatientResponseModel { Success = false, Message = "Patient name is required to register a new patient." };
+                            }
 
-                var admittedAt = request.AdmittedAt ?? now;
-                var admission = new Admission
-                {
-                    AdmissionId = Guid.NewGuid(),
-                    HospitalId = request.HospitalId,
-                    PatientId = patient!.PatientId!,
-                    EncounterId = null,
-                    PrimaryDoctorId = request.PrimaryDoctorId,
-                    AdmissionNo = admissionNo,
-                    AdmissionType = NormalizeType(request.AdmissionType),
-                    ReferralSource = string.IsNullOrWhiteSpace(request.ReferralSource) ? null : request.ReferralSource!.Trim().ToUpperInvariant(),
-                    ReferralName = request.ReferralName?.Trim(),
-                    ReferredByReferrerId = request.ReferredByReferrerId,
-                    AdmittedAt = admittedAt,
-                    AdmittedBy = request.LoggedInUserName,
-                    ExpectedDischargeAt = request.ExpectedDischargeAt,
-                    StatusCode = StatusAdmitted,
-                    AdmissionReason = request.AdmissionReason,
-                    Diagnosis = request.Diagnosis,
-                    CreatedAt = now,
-                    CreatedBy = request.LoggedInUserName,
-                    UpdatedAt = now,
-                    UpdatedBy = request.LoggedInUserName,
-                };
-                _context.Admission.Add(admission);
+                            patient = new PatientRegistration
+                            {
+                                RegistrationId = Guid.NewGuid(),
+                                HospitalId = request.HospitalId,
+                                PatientId = GenerateUhid(),
+                                RegisteredAt = now,
+                                Country = "India",
+                            };
+                            _context.PatientRegistrations.Add(patient);
+                        }
 
-                await _context.SaveChangesAsync(cancellationToken);
+                        ApplyDemographics(patient!, request);
 
-                return new AdmitPatientResponseModel
-                {
-                    Success = true,
-                    Message = $"Admitted. {admissionNo}",
-                    AdmissionId = admission.AdmissionId,
-                    AdmissionNo = admissionNo,
-                    PatientId = patient.PatientId,
-                    IsNewPatient = isNewPatient,
-                    AdmittedAt = admittedAt,
-                    WasExisting = !isNewPatient,
-                };
+                        // ── Create the admission (own IPD number) ──────────────────────────────────
+                        var numberSeries = await NumberSeriesDefaults.GetOrCreateAsync(
+                            _context, request.HospitalId, BillingConstants.NumberSeriesCode.Admission, request.LoggedInUserName, cancellationToken);
+                        numberSeries.CurrentValue++;
+                        var admissionNo = NumberSeriesFormatter.Format(
+                            numberSeries.Prefix, numberSeries.YearFormat, numberSeries.Separator, numberSeries.PadLength, numberSeries.CurrentValue);
+                        numberSeries.UpdatedAt = now;
+                        numberSeries.UpdatedBy = request.LoggedInUserName;
+
+                        var admittedAt = request.AdmittedAt ?? now;
+                        var admission = new Admission
+                        {
+                            AdmissionId = Guid.NewGuid(),
+                            HospitalId = request.HospitalId,
+                            PatientId = patient!.PatientId!,
+                            EncounterId = null,
+                            PrimaryDoctorId = request.PrimaryDoctorId,
+                            AdmissionNo = admissionNo,
+                            AdmissionType = NormalizeType(request.AdmissionType),
+                            ReferralSource = string.IsNullOrWhiteSpace(request.ReferralSource) ? null : request.ReferralSource!.Trim().ToUpperInvariant(),
+                            ReferralName = request.ReferralName?.Trim(),
+                            ReferredByReferrerId = request.ReferredByReferrerId,
+                            AdmittedAt = admittedAt,
+                            AdmittedBy = request.LoggedInUserName,
+                            ExpectedDischargeAt = request.ExpectedDischargeAt,
+                            StatusCode = IpdConstants.AdmissionStatus.Admitted,
+                            AdmissionReason = request.AdmissionReason,
+                            Diagnosis = request.Diagnosis,
+                            PayerType = payerType,
+                            DepositExpected = request.DepositExpected,
+                            EnableIpdBilling = request.EnableIpdBilling,
+                            ClientRequestId = request.ClientRequestId,
+                            CreatedAt = now,
+                            CreatedBy = request.LoggedInUserName,
+                            UpdatedAt = now,
+                            UpdatedBy = request.LoggedInUserName,
+                        };
+                        _context.Admission.Add(admission);
+
+                        // ── Open an IPD billing encounter so charges/day-wise bills accrue to the stay ──
+                        if (request.EnableIpdBilling)
+                        {
+                            var encounter = new Encounter
+                            {
+                                EncounterId = Guid.NewGuid(),
+                                HospitalId = request.HospitalId,
+                                PatientId = patient.PatientId,
+                                EncounterTypeCode = BillingConstants.EncounterType.Ipd,
+                                SourceType = "Admission",
+                                SourceId = admission.AdmissionId,
+                                PrimaryDoctorId = request.PrimaryDoctorId,
+                                StatusCode = BillingConstants.EncounterStatus.Open,
+                                CreatedAt = now,
+                                CreatedBy = request.LoggedInUserName,
+                                UpdatedAt = now,
+                                UpdatedBy = request.LoggedInUserName,
+                            };
+                            _context.Encounter.Add(encounter);
+                            admission.EncounterId = encounter.EncounterId;
+                        }
+
+                        // ── Status-transition log (also the KPI source for BOR/turnaround/discharge-TAT) ──
+                        _context.AdmissionStatusHistory.Add(new AdmissionStatusHistory
+                        {
+                            HistoryId = Guid.NewGuid(),
+                            HospitalId = request.HospitalId,
+                            AdmissionId = admission.AdmissionId,
+                            FromStatus = null,
+                            ToStatus = IpdConstants.AdmissionStatus.Admitted,
+                            ChangedAt = now,
+                            ChangedBy = request.LoggedInUserName,
+                            Reason = "Admission created",
+                        });
+
+                        // ── Coverage detail: always for TPA/SCHEME, or whenever any detail is supplied ──
+                        if (payerType != IpdConstants.PayerType.Cash
+                            || !string.IsNullOrWhiteSpace(request.PayerName)
+                            || !string.IsNullOrWhiteSpace(request.PolicyOrBeneficiaryNo)
+                            || !string.IsNullOrWhiteSpace(request.PreAuthNo)
+                            || !string.IsNullOrWhiteSpace(request.PackageCode)
+                            || request.SanctionedAmount.HasValue)
+                        {
+                            _context.AdmissionCoverage.Add(new AdmissionCoverage
+                            {
+                                CoverageId = Guid.NewGuid(),
+                                HospitalId = request.HospitalId,
+                                AdmissionId = admission.AdmissionId,
+                                PayerType = payerType,
+                                PayerName = request.PayerName?.Trim(),
+                                PolicyOrBeneficiaryNo = request.PolicyOrBeneficiaryNo?.Trim(),
+                                PreAuthNo = request.PreAuthNo?.Trim(),
+                                PackageCode = request.PackageCode?.Trim(),
+                                SanctionedAmount = request.SanctionedAmount,
+                                StatusCode = IpdConstants.CoverageStatus.Pending,
+                                CreatedAt = now,
+                                CreatedBy = request.LoggedInUserName,
+                                UpdatedAt = now,
+                                UpdatedBy = request.LoggedInUserName,
+                            });
+                        }
+
+                        // ── Optional bed assignment at admit time ───────────────────────────────────
+                        BedAssignment? bedAssignment = null;
+                        if (request.BedId.HasValue)
+                        {
+                            var bed = await _context.BedMaster
+                                .FirstOrDefaultAsync(b => b.BedId == request.BedId.Value && b.HospitalId == request.HospitalId, cancellationToken);
+                            if (bed == null)
+                            {
+                                await tx.RollbackAsync(cancellationToken);
+                                return new AdmitPatientResponseModel { Success = false, Message = "Bed not found." };
+                            }
+
+                            bedAssignment = new BedAssignment
+                            {
+                                AssignmentId = Guid.NewGuid(),
+                                HospitalId = request.HospitalId,
+                                AdmissionId = admission.AdmissionId,
+                                BedId = bed.BedId,
+                                AssignedAt = now,
+                                AssignedBy = request.LoggedInUserName,
+                                DailyRateSnapshot = bed.BedDailyRateOverride ?? bed.WardRoomDailyRate,
+                                StatusCode = IpdConstants.BedAssignmentStatus.Active,
+                                CreatedAt = now,
+                                CreatedBy = request.LoggedInUserName,
+                                UpdatedAt = now,
+                                UpdatedBy = request.LoggedInUserName,
+                            };
+                            _context.BedAssignment.Add(bedAssignment);
+                        }
+
+                        try
+                        {
+                            await _context.SaveChangesAsync(cancellationToken);
+                        }
+                        catch (DbUpdateException) when (request.BedId.HasValue)
+                        {
+                            // Filtered unique index backstop: another admit won the race for this bed.
+                            await tx.RollbackAsync(cancellationToken);
+                            return new AdmitPatientResponseModel { Success = false, Message = "That bed is already occupied by another patient." };
+                        }
+
+                        await tx.CommitAsync(cancellationToken);
+
+                        return new AdmitPatientResponseModel
+                        {
+                            Success = true,
+                            Message = $"Admitted. {admissionNo}",
+                            AdmissionId = admission.AdmissionId,
+                            AdmissionNo = admissionNo,
+                            PatientId = patient.PatientId,
+                            IsNewPatient = isNewPatient,
+                            AdmittedAt = admittedAt,
+                            WasExisting = !isNewPatient,
+                            EncounterId = admission.EncounterId,
+                            PayerType = payerType,
+                            BedId = bedAssignment?.BedId,
+                            BedAssignmentId = bedAssignment?.AssignmentId,
+                        };
+                    }
+                    catch (Exception)
+                    {
+                        await tx.RollbackAsync(cancellationToken);
+                        return new AdmitPatientResponseModel { Success = false, Message = "Error admitting patient." };
+                    }
+                });
             }
             catch (Exception)
             {
                 return new AdmitPatientResponseModel { Success = false, Message = "Error admitting patient." };
             }
+        }
+
+        // Idempotent replay: echo back the admission already created for this ClientRequestId.
+        private async Task<AdmitPatientResponseModel> BuildReplayResponseAsync(Admission admission, CancellationToken cancellationToken)
+        {
+            var activeBed = await _context.BedAssignment
+                .Where(b => b.AdmissionId == admission.AdmissionId && b.StatusCode == IpdConstants.BedAssignmentStatus.Active)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            return new AdmitPatientResponseModel
+            {
+                Success = true,
+                Message = $"Admitted. {admission.AdmissionNo}",
+                AdmissionId = admission.AdmissionId,
+                AdmissionNo = admission.AdmissionNo,
+                PatientId = admission.PatientId,
+                IsNewPatient = false,
+                AdmittedAt = admission.AdmittedAt,
+                WasExisting = true,
+                EncounterId = admission.EncounterId,
+                PayerType = admission.PayerType,
+                BedId = activeBed?.BedId,
+                BedAssignmentId = activeBed?.AssignmentId,
+            };
+        }
+
+        private static string? NormalizePayerType(string? payerType)
+        {
+            if (string.IsNullOrWhiteSpace(payerType)) return IpdConstants.PayerType.Cash;
+            var v = payerType.Trim().ToUpperInvariant();
+            return IpdConstants.PayerType.All.Contains(v) ? v : null;
         }
 
         private static string? NormalizeType(string? t)
@@ -136,7 +308,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         {
             if (!string.IsNullOrWhiteSpace(r.FullName)) p.FullName = r.FullName;
             if (!string.IsNullOrWhiteSpace(r.Mobile)) p.Mobile = r.Mobile;
-            if (r.AgeYears.HasValue) p.AgeYears = r.AgeYears;
+            if (r.Age.HasValue) 
+            {
+                p.Age = r.Age;
+                if (!string.IsNullOrEmpty(r.AgeUnit))
+                {
+                    p.AgeUnit = r.AgeUnit;
+                }
+            }
             if (r.DateOfBirth.HasValue) p.DateOfBirth = r.DateOfBirth;
             if (!string.IsNullOrWhiteSpace(r.Sex)) p.Sex = r.Sex;
             if (!string.IsNullOrWhiteSpace(r.BloodGroup)) p.BloodGroup = r.BloodGroup;

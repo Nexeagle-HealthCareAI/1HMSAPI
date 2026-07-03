@@ -81,7 +81,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 var billEncounter = await _context.Encounter
                     .FirstOrDefaultAsync(e => e.SourceType == "Appointments"
                                            && e.SourceId == appt.ApptId
-                                           && e.StatusCode == BillingConstants.EncounterStatus.Open,
+                                           && e.StatusCode != BillingConstants.EncounterStatus.Cancelled,
                                            cancellationToken);
 
                 if (billEncounter != null)

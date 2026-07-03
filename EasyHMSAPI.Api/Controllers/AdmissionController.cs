@@ -47,6 +47,26 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Every currently-open admission for the hospital, with patient name + current bed (if any).
+        [HttpGet("active")]
+        public async Task<ActionResult<GetActiveAdmissionsResponseModel>> GetActiveAdmissions([FromQuery] Guid hospitalId, [FromQuery] string? statusFilter = null)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var request = new GetActiveAdmissionsRequestModel { HospitalId = hospitalId, StatusFilter = statusFilter };
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetActiveAdmissions for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching active admissions." });
+            }
+        }
+
         // Returning-patient detail: full demographics (for re-admit pre-fill) + admission history.
         [HttpGet("patient")]
         public async Task<ActionResult<GetPatientAdmissionsResponseModel>> GetPatientAdmissions(
@@ -87,6 +107,51 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 _logger.LogError(ex, "Error in Admit for hospitalId: {HospitalId}", request.HospitalId);
                 return StatusCode(500, new { Message = "An error occurred while admitting the patient." });
+            }
+        }
+
+        // Basic discharge: closes the admission to DISCHARGED and releases its bed, if any.
+        [HttpPost("discharge")]
+        public async Task<ActionResult<DischargeAdmissionResponseModel>> Discharge([FromBody] DischargeAdmissionRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and admissionId are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in Discharge for admissionId: {AdmissionId}", request.AdmissionId);
+                return StatusCode(500, new { Message = "An error occurred while discharging the patient." });
+            }
+        }
+
+        // Any other status transition (DISCHARGE_INITIATED/DISCHARGE_BILLED, LAMA, DAMA,
+        // TRANSFERRED_OUT, EXPIRED, CANCELLED). Terminal transitions auto-release the bed.
+        [HttpPost("status")]
+        public async Task<ActionResult<UpdateAdmissionStatusResponseModel>> UpdateStatus([FromBody] UpdateAdmissionStatusRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty || string.IsNullOrWhiteSpace(request.ToStatus))
+                return BadRequest(new { Message = "hospitalId, admissionId and toStatus are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in UpdateStatus for admissionId: {AdmissionId}", request.AdmissionId);
+                return StatusCode(500, new { Message = "An error occurred while updating the admission status." });
             }
         }
     }

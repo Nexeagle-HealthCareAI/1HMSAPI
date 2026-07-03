@@ -157,6 +157,55 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 };
                 _context.HospitalSubscriptions.Add(trialSub);
 
+                // --- Automatically Setup Doctor profile and Default Department if AdminDoctor/Doctor ---
+                var userRolesList = await _context.UserRoles
+                    .Include(ur => ur.Role)
+                    .Where(ur => ur.UserID == request.UserId)
+                    .ToListAsync(cancellationToken);
+
+                bool isDoctorOrAdminDoctor = userRolesList.Any(ur => ur.Role != null && 
+                    (ur.Role.RoleName == "Doctor" || ur.Role.RoleName == "AdminDoctor"));
+
+                if (isDoctorOrAdminDoctor)
+                {
+                    // Create a default department
+                    var defaultDeptId = Guid.NewGuid();
+                    var defaultDept = new Department
+                    {
+                        DepartmentID = defaultDeptId,
+                        Name = "General Medicine",
+                        Description = "Default department created during hospital registration",
+                        HospitalID = hospitalId,
+                        IsActive = true,
+                        CreatedByUserID = request.UserId,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _context.Departments.Add(defaultDept);
+
+                    // Create Doctor profile
+                    var doctorId = Guid.NewGuid();
+                    var doctor = new Doctor
+                    {
+                        DoctorID = doctorId,
+                        UserID = request.UserId,
+                        LicenseNumber = "PENDING", // Needs to be updated later
+                        HospitalId = hospitalId,
+                        CreatedAt = DateTime.UtcNow,
+                        PrimaryDepartmentID = defaultDeptId
+                    };
+                    _context.Doctors.Add(doctor);
+
+                    // Map doctor to department
+                    var docDept = new DoctorDepartment
+                    {
+                        DoctorID = doctorId,
+                        DepartmentID = defaultDeptId,
+                        HospitalId = hospitalId
+                    };
+                    _context.DoctorDepartments.Add(docDept);
+                }
+                // --- End Doctor setup ---
+
                 await _context.SaveChangesAsync(cancellationToken);
 
                 return new HospitalRegisterResponseModel

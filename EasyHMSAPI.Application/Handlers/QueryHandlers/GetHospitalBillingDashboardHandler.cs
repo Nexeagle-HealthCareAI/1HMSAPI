@@ -96,12 +96,11 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         var doctorName = encounter.PrimaryDoctorId.HasValue
                             && doctorNames.TryGetValue(encounter.PrimaryDoctorId.Value, out var dn) ? dn : null;
 
-                        var totalPaid = paidByInvoice.TryGetValue(invoice.InvoiceId, out var paid) ? paid : 0m;
-
-                        decimal netAmount = invoice.NetAmount ?? 0;
-                        decimal dueAmount = netAmount - totalPaid;
-
                         bool isCancelled = invoice.StatusCode == BillingConstants.InvoiceStatus.Cancelled;
+
+                        var totalPaid = isCancelled ? 0 : (paidByInvoice.TryGetValue(invoice.InvoiceId, out var paid) ? paid : 0m);
+                        decimal netAmount = isCancelled ? 0 : (invoice.NetAmount ?? 0);
+                        decimal dueAmount = netAmount - totalPaid;
 
                         encounterDetails.Add(new DashboardEncounterDetail
                         {

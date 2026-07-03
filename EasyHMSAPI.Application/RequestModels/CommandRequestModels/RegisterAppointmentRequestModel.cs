@@ -29,7 +29,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     {
         public string? FullName { get; set; }
         public string? Mobile { get; set; }
-        public short AgeYears { get; set; }
+        public short? Age { get; set; }
+        public string? AgeUnit { get; set; }
         public string? Sex { get; set; }
         public string? AddressLine1 { get; set; }
         public string? City { get; set; }
@@ -48,5 +49,9 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? EmergencyContactName { get; set; }
         public string? EmergencyContactRelation { get; set; }
         public string? EmergencyContactPhone { get; set; }
+
+        // Guardian / relative info (separate from medical referrals on the appointment).
+        public string? GuardianName { get; set; }
+        public string? GuardianRelation { get; set; }
     }
 }

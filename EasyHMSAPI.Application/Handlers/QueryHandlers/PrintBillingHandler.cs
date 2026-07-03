@@ -59,7 +59,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     DisplayName = ce.DisplayName,
                     Qty = ce.Qty,
                     UnitPrice = ce.UnitPrice,
-                    GrossAmount = ce.GrossAmount ?? 0,
+                    // Fallback to Qty*UnitPrice for legacy rows persisted before GrossAmount was stored.
+                    GrossAmount = ce.GrossAmount ?? (ce.Qty * ce.UnitPrice),
                     DiscountAmount = ce.DiscountAmount ?? 0,
                     NetAmount = ce.NetAmount
                 }).ToList();

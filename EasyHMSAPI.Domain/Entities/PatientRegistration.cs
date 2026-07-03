@@ -16,7 +16,8 @@ namespace EasyHMSAPI.Domain.Entities
         public Guid? RegisteredBy { get; set; }
         public string? FullName { get; set; }
         public string? Mobile { get; set; }
-        public short? AgeYears { get; set; }
+        public short? Age { get; set; }
+        public string? AgeUnit { get; set; }
         public string? Sex { get; set; }
         public string? AddressLine { get; set; }
         public string? City { get; set; }
@@ -34,6 +35,10 @@ namespace EasyHMSAPI.Domain.Entities
         public string? EmergencyContactName { get; set; }
         public string? EmergencyContactRelation { get; set; }
         public string? EmergencyContactPhone { get; set; }
+
+        // Guardian / relative — permanent patient-level data (separate from medical referrals).
+        public string? GuardianName { get; set; }
+        public string? GuardianRelation { get; set; }
 
         // Admission-module demographics, government IDs & granular address (all optional).
         public DateTime? DateOfBirth { get; set; }

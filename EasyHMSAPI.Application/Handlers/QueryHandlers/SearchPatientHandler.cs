@@ -30,7 +30,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             {
                 var searchTerm = request.SearchText.ToLower();
                 query = query.Where(p =>
-                    (p.FullName != null && p.FullName.ToLower().Contains(searchTerm)) ||
+                    (p.FullName != null && (p.FullName.ToLower().Contains(searchTerm) || AppDbContext.Soundex(p.FullName) == AppDbContext.Soundex(searchTerm))) ||
                     (p.PatientId != null && p.PatientId.ToLower().Contains(searchTerm)) ||
                     (p.Mobile != null && p.Mobile.Contains(searchTerm)) ||
                     (p.AlternateMobile != null && p.AlternateMobile.Contains(searchTerm)) ||
@@ -96,10 +96,14 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     appointmentId = upcomingAppt.ApptId;
                 }
 
-                // Calculate date of birth from age
-                DateTime? dateOfBirth = p.AgeYears.HasValue && p.AgeYears.Value > 0
-                    ? DateTime.UtcNow.AddYears(-p.AgeYears.Value)
-                    : null;
+                // Calculate date of birth from age and unit
+                DateTime? dateOfBirth = null;
+                if (p.Age.HasValue && p.Age.Value > 0)
+                {
+                    if (p.AgeUnit == "M") dateOfBirth = DateTime.UtcNow.AddMonths(-p.Age.Value);
+                    else if (p.AgeUnit == "D") dateOfBirth = DateTime.UtcNow.AddDays(-p.Age.Value);
+                    else dateOfBirth = DateTime.UtcNow.AddYears(-p.Age.Value);
+                }
 
                 response.Items.Add(new PatientSearchResult
                 {
@@ -107,7 +111,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     FullName = p.FullName,
                     Mobile = p.Mobile,
                     Sex = p.Sex,
-                    Age = p.AgeYears,
+                    Age = p.Age,
+                    AgeUnit = p.AgeUnit,
                     DateOfBirth = dateOfBirth,
                     Address = p.AddressLine,
                     City = p.City,

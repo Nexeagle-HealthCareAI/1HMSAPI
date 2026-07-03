@@ -112,6 +112,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             userAuth.OtpSentDateTime = DateTime.UtcNow;
             userAuth.OtpExpireAt = DateTime.UtcNow.AddMinutes(3);
             userAuth.IsOtpUsed = false;
+            // Issuing a fresh OTP clears any brute-force lockout from the previous OTP window:
+            // the legitimate user self-recovers by requesting a new code, and any attacker's
+            // in-progress guessing is invalidated against the new code.
+            userAuth.FailedLoginAttempts = 0;
+            userAuth.IsLocked = false;
             await _context.SaveChangesAsync(cancellationToken);
 
             return response;

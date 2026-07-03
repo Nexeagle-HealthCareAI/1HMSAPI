@@ -14,7 +14,14 @@ namespace EasyHMSAPI.Domain.Entities
         public string? PatientId { get; set; }
         public Guid EncounterId { get; set; }
         public string? SourceModule { get; set; }
-        public Guid? SourceRefId { get; set; }
+        // Free-text idempotency key from the source module (DB column is NVARCHAR(100), not a GUID).
+        public string? SourceRefId { get; set; }
+
+        // Links back to the originating ChargeMaster row, when one exists (manual free-text
+        // charges have none). Nullable — legacy rows predating this column have no reliable
+        // backfill and stay null. Needed to join ChargeMaster.IsIRDAIPayable at discharge time.
+        public Guid? ChargeId { get; set; }
+
         public string? CategoryCode { get; set; }
         public string? DisplayName { get; set; }
         public decimal Qty { get; set; }

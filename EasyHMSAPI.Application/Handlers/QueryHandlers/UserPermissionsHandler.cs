@@ -26,12 +26,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 if (!userExists)
                     return null;
 
-                var userRole = await _context.UserRoles
+                var userRolesList = await _context.UserRoles
                     .Include(ur => ur.Role)
                     .ThenInclude(r => r.RolePermissions)
-                    .FirstOrDefaultAsync(ur => ur.UserID == request.UserId, cancellationToken);
+                    .Where(ur => ur.UserID == request.UserId)
+                    .ToListAsync(cancellationToken);
 
-                if (userRole == null || userRole.Role == null)
+                if (!userRolesList.Any())
                     return null;
 
                 // Fetch default hospitalId for the user (IsPrimary = true, else first hospital)
@@ -43,11 +44,12 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
                 var response = new UserPermissionsResponseModel
                 {
-                    RoleId = userRole.Role.RoleID,
-                    RoleName = userRole.Role.RoleName,
-                    Description = userRole.Role.Description,
-                    PermissionKeys = userRole.Role.RolePermissions
+                    RoleId = userRolesList.First().Role.RoleID,
+                    RoleName = string.Join(",", userRolesList.Select(ur => ur.Role.RoleName)),
+                    Description = string.Join(" | ", userRolesList.Select(ur => ur.Role.Description)),
+                    PermissionKeys = userRolesList.SelectMany(ur => ur.Role.RolePermissions)
                         .Select(rp => rp.PermissionKey)
+                        .Distinct()
                         .ToList(),
                     AllRoles = null,
                     HospitalId = hospitalUser?.HospitalID // Set default hospitalId if found

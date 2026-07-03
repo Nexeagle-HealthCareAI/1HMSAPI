@@ -35,7 +35,16 @@ namespace EasyHMSAPI.Domain.Entities
         public string? DischargedBy { get; set; }
         public string? DischargeNotes { get; set; }
 
-        public string StatusCode { get; set; } = "ADMITTED";   // ADMITTED / DISCHARGED / CANCELLED
+        public string StatusCode { get; set; } = "ADMITTED";   // see IpdConstants.AdmissionStatus
+
+        // Payer branch — drives the whole workflow. CASH / TPA / SCHEME (detail in AdmissionCoverage).
+        public string PayerType { get; set; } = "CASH";
+        // Planned deposit to collect (cash flow); actual collection runs through the billing engine.
+        public decimal? DepositExpected { get; set; }
+        // When true, admit opens an IPD billing Encounter so charges/day-wise bills accrue to the stay.
+        public bool EnableIpdBilling { get; set; } = true;
+        // Offline resync idempotency key stamped by the client (unique per hospital when present).
+        public Guid? ClientRequestId { get; set; }
 
         public string? AdmissionReason { get; set; }
         public string? Diagnosis { get; set; }

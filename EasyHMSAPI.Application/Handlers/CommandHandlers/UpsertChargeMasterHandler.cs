@@ -21,7 +21,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             if (request.ChargeId != null && request.ChargeId != Guid.Empty)
             {
                 var existingCharge = await _context.ChargeMaster
-                    .FirstOrDefaultAsync(x => x.ChargeId == request.ChargeId, cancellationToken);
+                    .FirstOrDefaultAsync(x => x.ChargeId == request.ChargeId && x.HospitalId == request.HospitalId, cancellationToken);
 
                 if (existingCharge == null)
                     throw new Exception("Charge not found for update");
@@ -40,6 +40,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 existingCharge.GstSlabPercent = request.GstSlabPercent;
                 existingCharge.TaxInclusive = request.TaxInclusive;
                 existingCharge.IsActive = request.IsActive;
+                existingCharge.IsIRDAIPayable = request.IsIRDAIPayable ?? existingCharge.IsIRDAIPayable;
                 existingCharge.SortOrder = request.SortOrder;
                 existingCharge.Notes = request.Notes;
                 existingCharge.UpdatedAt = DateTime.UtcNow;
@@ -72,6 +73,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 GstSlabPercent = request.GstSlabPercent,
                 TaxInclusive = request.TaxInclusive,
                 IsActive = request.IsActive,
+                IsIRDAIPayable = request.IsIRDAIPayable ?? true,
                 SortOrder = request.SortOrder,
                 Notes = request.Notes,
                 CreatedAt = DateTime.UtcNow,

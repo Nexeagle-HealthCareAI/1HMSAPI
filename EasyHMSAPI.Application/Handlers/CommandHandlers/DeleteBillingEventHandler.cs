@@ -92,6 +92,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 };
             }
 
+            // Never mutate a locked invoice: deleting a charge from a finalized/cancelled bill
+            // would silently rewrite immutable totals.
+            if (string.Equals(billingInvoice.StatusCode, BillingConstants.InvoiceStatus.Finalized, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(billingInvoice.StatusCode, BillingConstants.InvoiceStatus.Cancelled, StringComparison.OrdinalIgnoreCase))
+            {
+                return new DeleteBillingEventResponseModel
+                {
+                    Success = false,
+                    Message = "Cannot delete a charge from a finalized or cancelled invoice."
+                };
+            }
+
             _context.BillingChargeEvent.Remove(chargeEvent);
 
             foreach (var mapping in invoiceChargeEvents)
@@ -105,25 +117,42 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 .Select(bice => bice.ChargeEventId)
                 .ToListAsync(cancellationToken);
 
+            var remainingCharges = await _context.BillingChargeEvent
+                .Where(bce => remainingChargeEventIds.Contains(bce.ChargeEventId))
+                .ToListAsync(cancellationToken);
+
             decimal totalGrossAmount = 0;
             decimal totalDiscountAmount = 0;
+            decimal totalNetAmount = 0;
+            decimal totalTaxableAmount = 0;
+            decimal totalCgst = 0;
+            decimal totalSgst = 0;
+            decimal totalIgst = 0;
+            decimal totalTax = 0;
 
-            foreach (var remainingChargeId in remainingChargeEventIds)
+            foreach (var chargeDetail in remainingCharges)
             {
-                var chargeDetail = await _context.BillingChargeEvent
-                    .Where(bce => bce.ChargeEventId == remainingChargeId)
-                    .FirstOrDefaultAsync(cancellationToken);
-
-                if (chargeDetail != null)
-                {
-                    totalGrossAmount += chargeDetail.GrossAmount ?? 0;
-                    totalDiscountAmount += chargeDetail.DiscountAmount ?? 0;
-                }
+                // Fallback to Qty*UnitPrice for legacy rows persisted before GrossAmount was stored.
+                var gross = chargeDetail.GrossAmount ?? (chargeDetail.Qty * chargeDetail.UnitPrice);
+                var discount = chargeDetail.DiscountAmount ?? 0;
+                totalGrossAmount += gross;
+                totalDiscountAmount += discount;
+                totalNetAmount += chargeDetail.NetAmount;
+                totalTaxableAmount += chargeDetail.TaxableAmount ?? 0;
+                totalCgst += chargeDetail.CgstAmount;
+                totalSgst += chargeDetail.SgstAmount;
+                totalIgst += chargeDetail.IgstAmount;
+                totalTax += chargeDetail.TaxAmount;
             }
 
             billingInvoice.GrossAmount = totalGrossAmount;
             billingInvoice.DiscountAmount = totalDiscountAmount;
-            billingInvoice.NetAmount = totalGrossAmount - totalDiscountAmount;
+            billingInvoice.NetAmount = totalNetAmount;
+            billingInvoice.TaxableAmount = totalTaxableAmount;
+            billingInvoice.CgstAmount = totalCgst;
+            billingInvoice.SgstAmount = totalSgst;
+            billingInvoice.IgstAmount = totalIgst;
+            billingInvoice.TaxAmount = totalTax;
             billingInvoice.UpdatedAt = DateTime.UtcNow;
             billingInvoice.UpdatedBy = request.LoggedInUserName;
             _context.BillingInvoice.Update(billingInvoice);

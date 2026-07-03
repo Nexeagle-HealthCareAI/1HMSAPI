@@ -95,13 +95,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
                     if (inv != null)
                     {
-                        totalBilled = inv.NetAmount ?? 0;
-                        received = allocByInvoice.TryGetValue(inv.InvoiceId, out var r) ? r : 0;
+                        isCancelled = inv.StatusCode == BillingConstants.InvoiceStatus.Cancelled;
+                        totalBilled = isCancelled ? 0 : (inv.NetAmount ?? 0);
+                        received = isCancelled ? 0 : (allocByInvoice.TryGetValue(inv.InvoiceId, out var r) ? r : 0);
                         status = inv.StatusCode;
                         invoiceNo = inv.InvoiceNo;
                         invoiceId = inv.InvoiceId;
                         invoiceDate = inv.InvoiceDate;
-                        isCancelled = inv.StatusCode == BillingConstants.InvoiceStatus.Cancelled;
                         cancelReason = isCancelled ? inv.CancelReason : null;
                         updatedAt = inv.UpdatedAt;
                         updatedBy = inv.UpdatedBy;
@@ -114,14 +114,14 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         invoiceNo = null;
                         invoiceId = Guid.Empty;
                         invoiceDate = e.CreatedAt;
-                        isCancelled = false;
+                        isCancelled = e.StatusCode == BillingConstants.EncounterStatus.Cancelled;
                         cancelReason = null;
                         updatedAt = e.UpdatedAt;
                         updatedBy = e.UpdatedBy;
                     }
 
                     var balance = totalBilled - received;
-                    string paymentStatus = totalBilled <= 0 ? "UNPAID" : balance <= 0 ? "PAID" : received > 0 ? "PART" : "UNPAID";
+                    string paymentStatus = isCancelled ? "CANCELLED" : totalBilled <= 0 ? "UNPAID" : balance <= 0 ? "PAID" : received > 0 ? "PART" : "UNPAID";
                     var doctorName = e.PrimaryDoctorId.HasValue && doctorNames.TryGetValue(e.PrimaryDoctorId.Value, out var dn) ? dn : null;
 
                     encounterInvoiceDetails.Add(new PatientEncounterInvoiceDetail

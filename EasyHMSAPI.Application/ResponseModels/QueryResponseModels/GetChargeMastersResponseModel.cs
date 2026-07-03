@@ -29,6 +29,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public decimal? GstSlabPercent { get; set; }
         public bool TaxInclusive { get; set; }
         public bool IsActive { get; set; }
+        public bool IsIRDAIPayable { get; set; }
         public int SortOrder { get; set; }
         public DateTime UpdatedAt { get; set; }
         public string? UpdatedBy { get; set; }

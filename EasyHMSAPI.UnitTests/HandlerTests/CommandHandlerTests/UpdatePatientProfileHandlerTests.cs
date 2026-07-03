@@ -53,7 +53,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                 PatientId = patientId,
                 HospitalId = hospitalId,
                 FullName = "New Name",
-                AgeYears = 30
+                Age = 30
             };
 
             // Act
@@ -64,7 +64,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             
             var updated = await _context.PatientRegistrations.FirstOrDefaultAsync(p => p.PatientId == patientId);
             Assert.That(updated!.FullName, Is.EqualTo("New Name"));
-            Assert.That(updated.AgeYears, Is.EqualTo(30));
+            Assert.That(updated.Age, Is.EqualTo(30));
         }
 
         [Test]

@@ -25,6 +25,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         join up in _context.UserProfiles.AsNoTracking()
                             .Where(up => up.UserStatusId != (int)UserStatusEnum.Revoked) on u.UserID equals up.UserID into upg
                         from up in upg.OrderByDescending(x => x.UpdatedAt).Take(1).DefaultIfEmpty()
+                        join ua in _context.UserAuths.AsNoTracking() on u.UserID equals ua.UserID into uag
+                        from ua in uag.DefaultIfEmpty()
                         select new HospitalUsersListItem
                         {
                             UserId = u.UserID,
@@ -35,7 +37,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                             IsPrimary = hu.IsPrimary,
                             UsersStatusId = u.UserStatusId,
                             Roles = new List<Roles>(),
-                            PermissionKeys = new List<string>()
+                            PermissionKeys = new List<string>(),
+                            LastLoginTime = ua != null ? ua.LastLoginTime : null
                         };
 
             resp.Users = await query.OrderByDescending(x => x.IsPrimary).ThenBy(x => x.FullName).ToListAsync(cancellationToken);
