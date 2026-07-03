@@ -209,5 +209,63 @@ namespace EasyHMSAPI.Api.Controllers
                 return StatusCode(500, new { Message = "An error occurred." });
             }
         }
+
+        // ── Rate cards (payer-type override + room-class multiplier) ──────────
+
+        [HttpGet("rate-card")]
+        public async Task<ActionResult<GetRateCardConfigResponseModel>> GetRateCardConfig([FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetRateCardConfigRequestModel { HospitalId = hospitalId });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetRateCardConfig for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
+        [HttpPut("rate-card/payer-rate")]
+        public async Task<ActionResult<UpsertChargeMasterPayerRateResponseModel>> UpsertChargeMasterPayerRate([FromBody] UpsertChargeMasterPayerRateRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.ChargeId == Guid.Empty)
+                return BadRequest(new { Message = "HospitalId and ChargeId are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in UpsertChargeMasterPayerRate for chargeId: {ChargeId}", request.ChargeId);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
+        [HttpPut("rate-card/room-multiplier")]
+        public async Task<ActionResult<UpsertRoomClassRateMultiplierResponseModel>> UpsertRoomClassRateMultiplier([FromBody] UpsertRoomClassRateMultiplierRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || string.IsNullOrEmpty(request.RoomType))
+                return BadRequest(new { Message = "HospitalId and RoomType are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in UpsertRoomClassRateMultiplier for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
     }
 }

@@ -33,6 +33,10 @@ namespace EasyHMSAPI.Domain.Entities
         // Incentive for this line: seeded from ChargeMaster/BedMaster, editable per bill; null/0 = none.
         public decimal? IncentiveAmount { get; set; }
 
+        // Best-effort treating-doctor attribution for consultant incentive accrual. No FK — same
+        // soft-link convention as ClinicalOrder.OrderedByDoctorId.
+        public Guid? AttributedDoctorId { get; set; }
+
         // GST snapshot (NULL on legacy rows)
         public string? HsnSacCode { get; set; }
         public decimal? GstRate { get; set; }

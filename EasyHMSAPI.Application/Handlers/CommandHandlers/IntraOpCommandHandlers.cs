@@ -166,6 +166,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                         Rate = request.UnitRate ?? 0,
                                         DiscountPercent = 0,
                                         CategoryCode = category == IpdConstants.IntraOpItemCategory.Implant ? "IMPLANT" : "SURGICAL",
+                                        AttributedDoctorId = surgeryCase.SurgeonDoctorId,
                                     },
                                 },
                                 LoggedInUserName = request.LoggedInUserName,
