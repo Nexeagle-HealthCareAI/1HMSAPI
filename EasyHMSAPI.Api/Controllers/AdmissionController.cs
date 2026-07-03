@@ -154,5 +154,28 @@ namespace EasyHMSAPI.Api.Controllers
                 return StatusCode(500, new { Message = "An error occurred while updating the admission status." });
             }
         }
+
+        // Confirms a PRE_ADMIT (elective pre-registration) admission has physically arrived:
+        // flips it to ADMITTED and optionally assigns a bed in the same transaction.
+        [HttpPost("confirm-arrival")]
+        public async Task<ActionResult<ConfirmPatientArrivalResponseModel>> ConfirmArrival([FromBody] ConfirmPatientArrivalRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and admissionId are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in ConfirmArrival for admissionId: {AdmissionId}", request.AdmissionId);
+                return StatusCode(500, new { Message = "An error occurred while confirming arrival." });
+            }
+        }
     }
 }

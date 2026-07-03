@@ -21,4 +21,15 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public string? StatusCode { get; set; }
         public bool BedReleased { get; set; }
     }
+
+    [ExcludeFromCodeCoverage]
+    public class ConfirmPatientArrivalResponseModel
+    {
+        public bool Success { get; set; }
+        public string? Message { get; set; }
+        public Guid? AdmissionId { get; set; }
+        public DateTime? AdmittedAt { get; set; }
+        public Guid? BedId { get; set; }
+        public Guid? BedAssignmentId { get; set; }
+    }
 }

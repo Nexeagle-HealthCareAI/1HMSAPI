@@ -61,6 +61,17 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     .Where(b => bedIds.Contains(b.BedId))
                     .ToDictionaryAsync(b => b.BedId, cancellationToken);
 
+                // OrderByDescending + GroupBy-first (not ToDictionaryAsync) since a given admission
+                // could in principle have more than one coverage row over time — same defensive
+                // "latest wins" pattern StampIrdaiMilestoneHandler already uses for this table.
+                var coverageRows = await _context.AdmissionCoverage
+                    .Where(c => c.HospitalId == request.HospitalId && admissionIds.Contains(c.AdmissionId) && c.EntitledRoomCategory != null)
+                    .OrderByDescending(c => c.CreatedAt)
+                    .ToListAsync(cancellationToken);
+                var entitledCategoryByAdmission = coverageRows
+                    .GroupBy(c => c.AdmissionId)
+                    .ToDictionary(g => g.Key, g => g.First().EntitledRoomCategory);
+
                 var items = admissions.Select(a =>
                 {
                     patientsById.TryGetValue(a.PatientId, out var patient);
@@ -90,6 +101,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         BedCode = bedCode,
                         WardName = wardName,
                         EncounterId = a.EncounterId,
+                        EntitledRoomCategory = entitledCategoryByAdmission.TryGetValue(a.AdmissionId, out var erc) ? erc : null,
                     };
                 }).ToList();
 

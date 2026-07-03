@@ -26,6 +26,13 @@ namespace EasyHMSAPI.Domain.Entities
         public string? ReferralName { get; set; }
         public Guid? ReferredByReferrerId { get; set; }
 
+        // Structured "referred/transferred in from an outside facility" capture (PM-JAY referral
+        // rules + referral-network analytics) — a different concept from the commission-tracking
+        // ReferralSource/ReferralName/ReferredByReferrerId above.
+        public string? ReferringFacilityName { get; set; }
+        public string? ReferringFacilityType { get; set; }   // see IpdConstants.ReferringFacilityType
+        public string? ReferringFacilityContact { get; set; }
+
         public DateTime AdmittedAt { get; set; }
         public string? AdmittedBy { get; set; }
 

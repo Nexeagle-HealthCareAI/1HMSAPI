@@ -17,7 +17,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     /// </summary>
     public class AdmissionStatusCommandHandlers :
         IRequestHandler<DischargeAdmissionRequestModel, DischargeAdmissionResponseModel>,
-        IRequestHandler<UpdateAdmissionStatusRequestModel, UpdateAdmissionStatusResponseModel>
+        IRequestHandler<UpdateAdmissionStatusRequestModel, UpdateAdmissionStatusResponseModel>,
+        IRequestHandler<ConfirmPatientArrivalRequestModel, ConfirmPatientArrivalResponseModel>
     {
         private static readonly string[] AllowedGenericTransitions =
         {
@@ -33,12 +34,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         private readonly AppDbContext _context;
         private readonly ISmsService _smsService;
         private readonly IWhatsAppMessagingService _whatsAppMessagingService;
+        private readonly IMediator _mediator;
 
-        public AdmissionStatusCommandHandlers(AppDbContext context, ISmsService smsService, IWhatsAppMessagingService whatsAppMessagingService)
+        public AdmissionStatusCommandHandlers(AppDbContext context, ISmsService smsService, IWhatsAppMessagingService whatsAppMessagingService, IMediator mediator)
         {
             _context = context;
             _smsService = smsService;
             _whatsAppMessagingService = whatsAppMessagingService;
+            _mediator = mediator;
         }
 
         public async Task<DischargeAdmissionResponseModel> Handle(DischargeAdmissionRequestModel request, CancellationToken cancellationToken)
@@ -155,6 +158,96 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             catch (Exception)
             {
                 return new UpdateAdmissionStatusResponseModel { Success = false, Message = "Error updating admission status." };
+            }
+        }
+
+        public async Task<ConfirmPatientArrivalResponseModel> Handle(ConfirmPatientArrivalRequestModel request, CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty)
+                    return new ConfirmPatientArrivalResponseModel { Success = false, Message = "HospitalId and AdmissionId are required." };
+
+                var strategy = _context.Database.CreateExecutionStrategy();
+                return await strategy.ExecuteAsync(async () =>
+                {
+                    await using var tx = await _context.Database.BeginTransactionAsync(cancellationToken);
+                    try
+                    {
+                        var admission = await _context.Admission
+                            .FirstOrDefaultAsync(a => a.AdmissionId == request.AdmissionId && a.HospitalId == request.HospitalId, cancellationToken);
+                        if (admission == null)
+                        {
+                            await tx.RollbackAsync(cancellationToken);
+                            return new ConfirmPatientArrivalResponseModel { Success = false, Message = "Admission not found." };
+                        }
+                        if (admission.StatusCode != IpdConstants.AdmissionStatus.PreAdmit)
+                        {
+                            await tx.RollbackAsync(cancellationToken);
+                            return new ConfirmPatientArrivalResponseModel { Success = false, Message = "Admission is not a pending pre-registration." };
+                        }
+
+                        var now = DateTime.UtcNow;
+                        _context.AdmissionStatusHistory.Add(new AdmissionStatusHistory
+                        {
+                            HistoryId = Guid.NewGuid(),
+                            HospitalId = request.HospitalId,
+                            AdmissionId = admission.AdmissionId,
+                            FromStatus = admission.StatusCode,
+                            ToStatus = IpdConstants.AdmissionStatus.Admitted,
+                            ChangedAt = now,
+                            ChangedBy = request.LoggedInUserName,
+                            Reason = "Patient arrived",
+                        });
+
+                        admission.StatusCode = IpdConstants.AdmissionStatus.Admitted;
+                        admission.AdmittedAt = now;
+                        admission.UpdatedAt = now;
+                        admission.UpdatedBy = request.LoggedInUserName;
+
+                        await _context.SaveChangesAsync(cancellationToken);
+
+                        Guid? bedId = null, bedAssignmentId = null;
+                        if (request.BedId.HasValue)
+                        {
+                            var assignResponse = await _mediator.Send(new AssignBedRequestModel
+                            {
+                                HospitalId = request.HospitalId,
+                                AdmissionId = admission.AdmissionId,
+                                BedId = request.BedId.Value,
+                                LoggedInUserName = request.LoggedInUserName,
+                            }, cancellationToken);
+                            if (!assignResponse.Success)
+                            {
+                                await tx.RollbackAsync(cancellationToken);
+                                return new ConfirmPatientArrivalResponseModel { Success = false, Message = assignResponse.Message ?? "Could not assign the bed." };
+                            }
+                            bedId = assignResponse.BedId;
+                            bedAssignmentId = assignResponse.BedAssignmentId;
+                        }
+
+                        await tx.CommitAsync(cancellationToken);
+
+                        return new ConfirmPatientArrivalResponseModel
+                        {
+                            Success = true,
+                            Message = "Arrival confirmed. Patient is now admitted.",
+                            AdmissionId = admission.AdmissionId,
+                            AdmittedAt = admission.AdmittedAt,
+                            BedId = bedId,
+                            BedAssignmentId = bedAssignmentId,
+                        };
+                    }
+                    catch (Exception)
+                    {
+                        await tx.RollbackAsync(cancellationToken);
+                        return new ConfirmPatientArrivalResponseModel { Success = false, Message = "Error confirming arrival." };
+                    }
+                });
+            }
+            catch (Exception)
+            {
+                return new ConfirmPatientArrivalResponseModel { Success = false, Message = "Error confirming arrival." };
             }
         }
 

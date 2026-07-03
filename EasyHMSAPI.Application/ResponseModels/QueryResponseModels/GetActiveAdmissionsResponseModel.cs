@@ -35,5 +35,9 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? WardName { get; set; }
 
         public Guid? EncounterId { get; set; }
+
+        // From AdmissionCoverage, when captured — drives the bed-entitlement warning at
+        // assign/transfer time (client-side check, see roomEntitlement.ts).
+        public string? EntitledRoomCategory { get; set; }
     }
 }

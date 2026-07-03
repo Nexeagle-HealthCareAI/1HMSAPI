@@ -63,13 +63,30 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 .FirstOrDefaultAsync(p => p.PatientId == request.PatientId && p.HospitalId == request.HospitalId, cancellationToken);
                         }
 
+                        var admissionType = NormalizeType(request.AdmissionType);
+                        var isEmergency = admissionType == "EMERGENCY";
+
                         bool isNewPatient = patient == null;
                         if (isNewPatient)
                         {
                             if (string.IsNullOrWhiteSpace(request.FullName))
                             {
-                                await tx.RollbackAsync(cancellationToken);
-                                return new AdmitPatientResponseModel { Success = false, Message = "Patient name is required to register a new patient." };
+                                // Emergency/casualty: an unidentified patient must never be blocked at
+                                // the door. Sex + approximate age are the only two things required —
+                                // everything else (name, mobile, KYC) is backfilled later.
+                                if (isEmergency)
+                                {
+                                    if (string.IsNullOrWhiteSpace(request.Sex) || (!request.Age.HasValue && !request.DateOfBirth.HasValue))
+                                    {
+                                        await tx.RollbackAsync(cancellationToken);
+                                        return new AdmitPatientResponseModel { Success = false, Message = "For an emergency admission without a name, Sex and approximate age are required." };
+                                    }
+                                }
+                                else
+                                {
+                                    await tx.RollbackAsync(cancellationToken);
+                                    return new AdmitPatientResponseModel { Success = false, Message = "Patient name is required to register a new patient." };
+                                }
                             }
 
                             patient = new PatientRegistration
@@ -84,6 +101,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         }
 
                         ApplyDemographics(patient!, request);
+                        if (string.IsNullOrWhiteSpace(patient!.FullName))
+                            patient.FullName = SynthesizeUnknownName(request.Sex, request.Age);
 
                         // ── Create the admission (own IPD number) ──────────────────────────────────
                         var numberSeries = await NumberSeriesDefaults.GetOrCreateAsync(
@@ -94,6 +113,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         numberSeries.UpdatedAt = now;
                         numberSeries.UpdatedBy = request.LoggedInUserName;
 
+                        // Pre-registration only makes sense for Elective (patient not yet arrived) —
+                        // silently ignored for every other admission type rather than rejecting.
+                        var isPreRegistration = request.IsPreRegistration && admissionType == "ELECTIVE";
+                        var initialStatus = isPreRegistration ? IpdConstants.AdmissionStatus.PreAdmit : IpdConstants.AdmissionStatus.Admitted;
+
                         var admittedAt = request.AdmittedAt ?? now;
                         var admission = new Admission
                         {
@@ -103,14 +127,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             EncounterId = null,
                             PrimaryDoctorId = request.PrimaryDoctorId,
                             AdmissionNo = admissionNo,
-                            AdmissionType = NormalizeType(request.AdmissionType),
+                            AdmissionType = admissionType,
                             ReferralSource = string.IsNullOrWhiteSpace(request.ReferralSource) ? null : request.ReferralSource!.Trim().ToUpperInvariant(),
                             ReferralName = request.ReferralName?.Trim(),
                             ReferredByReferrerId = request.ReferredByReferrerId,
+                            ReferringFacilityName = request.ReferringFacilityName?.Trim(),
+                            ReferringFacilityType = string.IsNullOrWhiteSpace(request.ReferringFacilityType) ? null : request.ReferringFacilityType!.Trim().ToUpperInvariant(),
+                            ReferringFacilityContact = request.ReferringFacilityContact?.Trim(),
                             AdmittedAt = admittedAt,
                             AdmittedBy = request.LoggedInUserName,
                             ExpectedDischargeAt = request.ExpectedDischargeAt,
-                            StatusCode = IpdConstants.AdmissionStatus.Admitted,
+                            StatusCode = initialStatus,
                             AdmissionReason = request.AdmissionReason,
                             Diagnosis = request.Diagnosis,
                             PayerType = payerType,
@@ -153,10 +180,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             HospitalId = request.HospitalId,
                             AdmissionId = admission.AdmissionId,
                             FromStatus = null,
-                            ToStatus = IpdConstants.AdmissionStatus.Admitted,
+                            ToStatus = initialStatus,
                             ChangedAt = now,
                             ChangedBy = request.LoggedInUserName,
-                            Reason = "Admission created",
+                            Reason = isPreRegistration ? "Pre-registered" : "Admission created",
                         });
 
                         // ── Coverage detail: always for TPA/SCHEME, or whenever any detail is supplied ──
@@ -165,6 +192,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             || !string.IsNullOrWhiteSpace(request.PolicyOrBeneficiaryNo)
                             || !string.IsNullOrWhiteSpace(request.PreAuthNo)
                             || !string.IsNullOrWhiteSpace(request.PackageCode)
+                            || !string.IsNullOrWhiteSpace(request.EntitledRoomCategory)
                             || request.SanctionedAmount.HasValue)
                         {
                             _context.AdmissionCoverage.Add(new AdmissionCoverage
@@ -178,6 +206,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 PreAuthNo = request.PreAuthNo?.Trim(),
                                 PackageCode = request.PackageCode?.Trim(),
                                 SanctionedAmount = request.SanctionedAmount,
+                                EntitledRoomCategory = string.IsNullOrWhiteSpace(request.EntitledRoomCategory) ? null : request.EntitledRoomCategory!.Trim().ToUpperInvariant(),
                                 StatusCode = IpdConstants.CoverageStatus.Pending,
                                 CreatedAt = now,
                                 CreatedBy = request.LoggedInUserName,
@@ -232,13 +261,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         return new AdmitPatientResponseModel
                         {
                             Success = true,
-                            Message = $"Admitted. {admissionNo}",
+                            Message = isPreRegistration ? $"Pre-registered. {admissionNo}" : $"Admitted. {admissionNo}",
                             AdmissionId = admission.AdmissionId,
                             AdmissionNo = admissionNo,
                             PatientId = patient.PatientId,
                             IsNewPatient = isNewPatient,
                             AdmittedAt = admittedAt,
                             WasExisting = !isNewPatient,
+                            StatusCode = initialStatus,
                             EncounterId = admission.EncounterId,
                             PayerType = payerType,
                             BedId = bedAssignment?.BedId,
@@ -268,13 +298,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             return new AdmitPatientResponseModel
             {
                 Success = true,
-                Message = $"Admitted. {admission.AdmissionNo}",
+                Message = admission.StatusCode == IpdConstants.AdmissionStatus.PreAdmit ? $"Pre-registered. {admission.AdmissionNo}" : $"Admitted. {admission.AdmissionNo}",
                 AdmissionId = admission.AdmissionId,
                 AdmissionNo = admission.AdmissionNo,
                 PatientId = admission.PatientId,
                 IsNewPatient = false,
                 AdmittedAt = admission.AdmittedAt,
                 WasExisting = true,
+                StatusCode = admission.StatusCode,
                 EncounterId = admission.EncounterId,
                 PayerType = admission.PayerType,
                 BedId = activeBed?.BedId,
@@ -301,6 +332,20 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 "LAMA" => "LAMA",
                 _ => t.Trim().ToUpperInvariant(),
             };
+        }
+
+        // Emergency/casualty fallback when no name is given (or known) — PatientRegistration.FullName
+        // is NOT NULL at the DB level, so a placeholder is required regardless; backfilled later.
+        private static string SynthesizeUnknownName(string? sex, short? age)
+        {
+            var sexLabel = sex?.Trim().ToUpperInvariant() switch
+            {
+                "M" or "MALE" => "Male",
+                "F" or "FEMALE" => "Female",
+                _ => "Patient",
+            };
+            var ageSuffix = age.HasValue ? $", ~{age.Value}y" : "";
+            return $"Unknown {sexLabel}{ageSuffix}";
         }
 
         // Copy any provided demographic field onto the patient (skip nulls so an edit never wipes data).

@@ -65,6 +65,18 @@ namespace EasyHMSAPI.Data.Constants
             public const string Enhanced = "ENHANCED";
         }
 
+        /// <summary>Admission.ReferringFacilityType — which kind of outside facility referred/
+        /// transferred the patient in. Soft-validated (no DB CHECK), same convention as WardType.</summary>
+        public static class ReferringFacilityType
+        {
+            public const string Phc = "PHC";
+            public const string NursingHome = "NURSING_HOME";
+            public const string Hospital = "HOSPITAL";
+            public const string Other = "OTHER";
+
+            public static readonly string[] All = { Phc, NursingHome, Hospital, Other };
+        }
+
         /// <summary>DischargeSummary.ConditionAtDischarge — exact DB CHECK set.</summary>
         public static class ConditionAtDischarge
         {
