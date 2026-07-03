@@ -111,6 +111,9 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<IcuLevelOfCare> IcuLevelOfCare { get; set; }
         public DbSet<ApacheIIScore> ApacheIIScore { get; set; }
         public DbSet<SofaScore> SofaScore { get; set; }
+        public DbSet<ChargeMasterPayerRate> ChargeMasterPayerRate { get; set; }
+        public DbSet<RoomClassRateMultiplier> RoomClassRateMultiplier { get; set; }
+        public DbSet<ConsultantIncentiveLedger> ConsultantIncentiveLedger { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {   
@@ -585,6 +588,9 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(c => c.ValidTo).HasColumnType("datetime2(3)");
                 entity.Property(c => c.ClaimSubmittedAt).HasColumnType("datetime2(3)");
                 entity.Property(c => c.InsurerApprovalAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.EnhancementRequestedAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.EnhancedSanctionedAmount).HasPrecision(18, 2);
+                entity.Property(c => c.EnhancementApprovedAt).HasColumnType("datetime2(3)");
                 entity.Property(c => c.CreatedAt).HasColumnType("datetime2(3)");
                 entity.Property(c => c.UpdatedAt).HasColumnType("datetime2(3)");
                 entity.Property(c => c.RowVersion).IsRowVersion();
@@ -1090,6 +1096,40 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(s => s.ScoredAt).HasColumnType("datetime2(3)");
                 entity.Property(s => s.CreatedAt).HasColumnType("datetime2(3)");
                 entity.Property(s => s.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<ChargeMasterPayerRate>(entity =>
+            {
+                entity.ToTable("ChargeMasterPayerRate");
+                entity.HasKey(r => r.ChargeMasterPayerRateId);
+                entity.Property(r => r.OverrideRate).HasPrecision(18, 2);
+                entity.Property(r => r.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<RoomClassRateMultiplier>(entity =>
+            {
+                entity.ToTable("RoomClassRateMultiplier");
+                entity.HasKey(r => r.RoomClassRateMultiplierId);
+                entity.Property(r => r.MultiplierPercent).HasPrecision(6, 2);
+                entity.Property(r => r.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<ConsultantIncentiveLedger>(entity =>
+            {
+                entity.ToTable("ConsultantIncentiveLedger");
+                entity.HasKey(c => c.ConsultantIncentiveLedgerId);
+                entity.Property(c => c.IncentiveAmount).HasPrecision(18, 2);
+                entity.Property(c => c.TdsAmount).HasPrecision(18, 2);
+                entity.Property(c => c.AccruedAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.PaidAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.CancelledAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.RowVersion).IsRowVersion();
             });
 
             base.OnModelCreating(modelBuilder);

@@ -51,6 +51,10 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         // Medication-only: requires a second-nurse witness co-sign at MAR administration.
         public bool IsHighAlert { get; set; }
 
+        // Accrues one charge per IST day the line stays ACTIVE (oxygen, continuous monitoring),
+        // instead of charging once at order time.
+        public bool IsDailyRecurringCharge { get; set; }
+
         public decimal Qty { get; set; } = 1;
     }
 

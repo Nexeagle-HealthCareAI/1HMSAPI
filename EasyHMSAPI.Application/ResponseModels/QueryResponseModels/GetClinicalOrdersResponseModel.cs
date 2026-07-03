@@ -35,6 +35,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? Urgency { get; set; }
         public DateTime? ScheduledAt { get; set; }
         public bool IsHighAlert { get; set; }
+        public bool IsDailyRecurringCharge { get; set; }
         public decimal Qty { get; set; }
         public string StatusCode { get; set; } = null!;
 

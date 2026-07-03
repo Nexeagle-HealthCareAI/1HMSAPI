@@ -22,5 +22,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public decimal NetAmount { get; set; }
         // null = unclassified (no ChargeId link, or the linked ChargeMaster row is gone).
         public bool? IsIRDAIPayable { get; set; }
+        // Set only for a BED charge above the admission's EntitledRoomCategory — the portion of
+        // NetAmount attributed to the patient (the room-rent proportionate deduction).
+        public decimal? ProratedNonPayableAmount { get; set; }
     }
 }

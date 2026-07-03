@@ -39,6 +39,54 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     ? BillingConstants.SourceModule.Manual
                     : encounter.EncounterTypeCode!;
 
+                // ── IPD ward/room/payer context (GST resolver + rate-card lookups need this) ──
+                // Resolved once per request, not per line — every charge in one batch belongs to
+                // the same encounter/admission.
+                string? ipdWardType = null;
+                decimal? ipdRoomDailyRate = null;
+                string? ipdPayerType = null;
+                var isIpdEncounter = string.Equals(encounter.SourceType, "Admission", StringComparison.OrdinalIgnoreCase) && encounter.SourceId.HasValue;
+                if (isIpdEncounter)
+                {
+                    var activeBed = await (
+                        from ba in _context.BedAssignment
+                        join bm in _context.BedMaster on ba.BedId equals bm.BedId
+                        where ba.AdmissionId == encounter.SourceId!.Value && ba.StatusCode == IpdConstants.BedAssignmentStatus.Active
+                        select new { bm.WardType, ba.DailyRateSnapshot }
+                    ).FirstOrDefaultAsync(cancellationToken);
+                    ipdWardType = activeBed?.WardType;
+                    ipdRoomDailyRate = activeBed?.DailyRateSnapshot;
+
+                    ipdPayerType = await _context.Admission
+                        .Where(a => a.AdmissionId == encounter.SourceId!.Value)
+                        .Select(a => a.PayerType)
+                        .FirstOrDefaultAsync(cancellationToken);
+                }
+
+                // "Tariff = f(service, payer, room class)" — payer-rate override, then a room-class
+                // multiplier, both optional and IPD-only (no payer/room concept on OPD visits today).
+                Dictionary<Guid, decimal> payerRateOverrideByChargeId = new();
+                decimal? roomClassMultiplierPercent = null;
+                if (isIpdEncounter)
+                {
+                    var chargeIdsForRateCard = request.Charges.Where(c => c.ChargeId.HasValue).Select(c => c.ChargeId!.Value).Distinct().ToList();
+                    if (chargeIdsForRateCard.Count > 0 && !string.IsNullOrWhiteSpace(ipdPayerType))
+                    {
+                        payerRateOverrideByChargeId = await _context.ChargeMasterPayerRate
+                            .Where(r => r.HospitalId == request.HospitalId && r.IsActive
+                                && chargeIdsForRateCard.Contains(r.ChargeId) && r.PayerType == ipdPayerType)
+                            .ToDictionaryAsync(r => r.ChargeId, r => r.OverrideRate, cancellationToken);
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(ipdWardType))
+                    {
+                        roomClassMultiplierPercent = await _context.RoomClassRateMultiplier
+                            .Where(r => r.HospitalId == request.HospitalId && r.RoomType == ipdWardType)
+                            .Select(r => (decimal?)r.MultiplierPercent)
+                            .FirstOrDefaultAsync(cancellationToken);
+                    }
+                }
+
                 // ── Tax context ────────────────────────────────────────────
                 var policy = await _context.BillingPolicy
                     .FirstOrDefaultAsync(p => p.HospitalId == request.HospitalId, cancellationToken);
@@ -80,9 +128,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 foreach (var charge in request.Charges)
                 {
                     var isConsult = string.Equals(charge.CategoryCode, "CONSULT", StringComparison.OrdinalIgnoreCase);
-                    var rate = (isConsult && doctorConsultFee.HasValue && doctorConsultFee.Value > 0)
-                        ? doctorConsultFee.Value
-                        : charge.Rate;
+                    var isDoctorConsultFee = isConsult && doctorConsultFee.HasValue && doctorConsultFee.Value > 0;
+                    var rate = isDoctorConsultFee ? doctorConsultFee!.Value : charge.Rate;
+
+                    // "Tariff = f(service, payer, room class)" — payer-rate override then the
+                    // room-class multiplier, on top of whatever rate the caller resolved. Skipped
+                    // for the doctor-consult-fee case above, which is already a specific, final rate.
+                    if (!isDoctorConsultFee)
+                    {
+                        if (charge.ChargeId.HasValue && payerRateOverrideByChargeId.TryGetValue(charge.ChargeId.Value, out var payerRate))
+                            rate = payerRate;
+                        if (roomClassMultiplierPercent.HasValue)
+                            rate = Math.Round(rate * roomClassMultiplierPercent.Value / 100m, 2);
+                    }
 
                     var gross = charge.Qty * rate;
                     var discount = Math.Round(gross * (charge.DiscountPercent / 100m), 2);
@@ -90,7 +148,22 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                     ChargeMaster? master = (charge.ChargeId.HasValue && masters.TryGetValue(charge.ChargeId.Value, out var m)) ? m : null;
                     var hsn = !string.IsNullOrWhiteSpace(charge.HsnSacCode) ? charge.HsnSacCode!.Trim() : master?.HsnSacCode;
-                    var gstRate = charge.GstRate ?? (master?.IsTaxable == true ? master.GstSlabPercent : null);
+                    var itemGstRate = charge.GstRate ?? (master?.IsTaxable == true ? master.GstSlabPercent : null);
+                    var itemIsTaxable = itemGstRate.HasValue && itemGstRate.Value > 0m;
+
+                    var isPharmacyItem = string.Equals(master?.AppliesTo, "PHARMACY", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(charge.CategoryCode, "PHARMACY", StringComparison.OrdinalIgnoreCase);
+                    var effectiveSourceModule = isPharmacyItem
+                        ? (isIpdEncounter ? BillingConstants.SourceModule.PharmacyIpd : BillingConstants.SourceModule.PharmacyCounter)
+                        : sourceModule;
+
+                    // Resolves ICU/room-threshold/pharmacy exemptions on top of the item's own
+                    // configured GST treatment — see GstResolver's remarks for full rule precedence.
+                    // isBundled is always false this phase (package billing deferred).
+                    var gstTreatment = GstResolver.Resolve(charge.CategoryCode, ipdWardType, ipdRoomDailyRate,
+                        effectiveSourceModule, isBundled: false, itemGstRate, itemIsTaxable);
+                    var gstRate = gstTreatment.IsExempt ? null : (gstTreatment.EffectiveGstRatePercent ?? itemGstRate);
+
                     var taxInclusive = charge.TaxInclusive ?? master?.TaxInclusive ?? policyDefaultInclusive;
                     var taxable = gstRate.HasValue && gstRate.Value > 0m
                         ? GstTaxComputer.Compute(net, gstRate, taxInclusive, isInterState, rounding)
@@ -110,7 +183,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         PatientId = request.PatientId,
                         EncounterId = request.EncounterId,
                         ChargeId = charge.ChargeId,
-                        SourceModule = sourceModule,
+                        SourceModule = effectiveSourceModule,
                         CategoryCode = charge.CategoryCode,
                         DisplayName = charge.DisplayName,
                         Qty = charge.Qty,
@@ -119,6 +192,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         DiscountAmount = discount,
                         NetAmount = net,
                         IncentiveAmount = incentive,
+                        AttributedDoctorId = charge.AttributedDoctorId,
                         HsnSacCode = hsn,
                         GstRate = gstRate,
                         TaxableAmount = taxable.TaxableAmount,
@@ -138,6 +212,28 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         UpdatedBy = request.LoggedInUserName
                     };
                     _context.BillingChargeEvent.Add(chargeEvent);
+
+                    // Consultant incentive accrual: insert-only, same pattern as every other
+                    // accrual ledger this session. Best-effort — only when a doctor is attributed.
+                    if (charge.AttributedDoctorId.HasValue && incentive.HasValue && incentive.Value > 0)
+                    {
+                        _context.ConsultantIncentiveLedger.Add(new ConsultantIncentiveLedger
+                        {
+                            ConsultantIncentiveLedgerId = Guid.NewGuid(),
+                            HospitalId = request.HospitalId,
+                            DoctorId = charge.AttributedDoctorId.Value,
+                            PatientId = request.PatientId!,
+                            EncounterId = request.EncounterId,
+                            ChargeEventId = chargeEvent.ChargeEventId,
+                            IncentiveAmount = incentive.Value,
+                            StatusCode = "ACCRUED",
+                            AccruedAt = now,
+                            CreatedAt = now,
+                            CreatedBy = request.LoggedInUserName,
+                            UpdatedAt = now,
+                            UpdatedBy = request.LoggedInUserName,
+                        });
+                    }
 
                     Guid? approvalId = null;
                     if (needsApproval)

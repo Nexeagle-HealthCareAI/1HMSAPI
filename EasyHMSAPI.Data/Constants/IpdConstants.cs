@@ -601,5 +601,30 @@ namespace EasyHMSAPI.Data.Constants
             public const string DopamineHighOrEpiHighOrNorepiHigh = "DOPAMINE_HIGH_OR_EPI_HIGH_OR_NOREPI_HIGH";
             public static readonly string[] All = { None, MapLow, DopamineLowOrDobutamine, DopamineMedOrEpiLowOrNorepiLow, DopamineHighOrEpiHighOrNorepiHigh };
         }
+
+        // ---- Billing / GST ----
+
+        /// <summary>Soft-validated — BedMaster.WardType is free-text with no DB CHECK constraint (pre-existing
+        /// data may not match), same posture as ConsentTypeCode. IcuFamily drives the GST resolver's
+        /// "always exempt regardless of tariff" rule.</summary>
+        public static class WardType
+        {
+            public const string General = "GENERAL";
+            public const string Icu = "ICU";
+            public const string Nicu = "NICU";
+            public const string Picu = "PICU";
+            public const string Hdu = "HDU";
+            public const string Ccu = "CCU";
+            public const string Iccu = "ICCU";
+            public const string Private = "PRIVATE";
+            public const string SemiPrivate = "SEMI_PRIVATE";
+            public const string Other = "OTHER";
+
+            public static readonly string[] All = { General, Icu, Nicu, Picu, Hdu, Ccu, Iccu, Private, SemiPrivate, Other };
+            public static readonly string[] IcuFamily = { Icu, Nicu, Picu, Hdu, Ccu, Iccu };
+
+            public static bool IsIcuFamily(string? wardType) =>
+                !string.IsNullOrWhiteSpace(wardType) && IcuFamily.Contains(wardType.Trim().ToUpperInvariant());
+        }
     }
 }

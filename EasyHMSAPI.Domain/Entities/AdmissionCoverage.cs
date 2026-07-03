@@ -25,6 +25,7 @@ namespace EasyHMSAPI.Domain.Entities
         public decimal? SanctionedAmount { get; set; }
         public DateTime? ValidFrom { get; set; }
         public DateTime? ValidTo { get; set; }
+        public string? EntitledRoomCategory { get; set; }   // e.g. GENERAL/PRIVATE — drives the TPA split's room-rent proportionate deduction
 
         public string StatusCode { get; set; } = "PENDING";   // PENDING/APPROVED/QUERIED/REJECTED/ENHANCED
         public string? Notes { get; set; }
@@ -36,6 +37,15 @@ namespace EasyHMSAPI.Domain.Entities
         public string? ClaimSubmittedBy { get; set; }
         public DateTime? InsurerApprovalAt { get; set; }
         public string? InsurerApprovalBy { get; set; }
+
+        // Pre-auth enhancement (sanction increase) tracking. EnhancedSanctionedAmount is the
+        // PROPOSED new total sanctioned amount — only effective once EnhancementApprovedAt is set;
+        // until then utilization still compares against SanctionedAmount above.
+        public DateTime? EnhancementRequestedAt { get; set; }
+        public string? EnhancementRequestedBy { get; set; }
+        public decimal? EnhancedSanctionedAmount { get; set; }
+        public DateTime? EnhancementApprovedAt { get; set; }
+        public string? EnhancementApprovedBy { get; set; }
 
         public DateTime CreatedAt { get; set; }
         public string? CreatedBy { get; set; }

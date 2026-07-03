@@ -43,6 +43,11 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         // Incentive override for this line. If null, seeded from ChargeMaster.IncentiveAmount.
         public decimal? IncentiveAmount { get; set; }
 
+        // Best-effort treating-doctor attribution, resolved by the caller (CPOE: the order's
+        // OrderedByDoctorId; OT: the surgery case's SurgeonDoctorId). Drives consultant incentive
+        // ledger accrual when set alongside a positive IncentiveAmount.
+        public Guid? AttributedDoctorId { get; set; }
+
         // Optional reason captured when the discount exceeds policy / charge cap.
         public string? DiscountReason { get; set; }
     }

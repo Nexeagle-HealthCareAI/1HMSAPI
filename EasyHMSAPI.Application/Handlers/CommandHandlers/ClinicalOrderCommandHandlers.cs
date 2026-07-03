@@ -97,6 +97,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 Urgency = string.IsNullOrWhiteSpace(li.Urgency) ? null : li.Urgency.Trim().ToUpperInvariant(),
                                 ScheduledAt = li.ScheduledAt,
                                 IsHighAlert = li.IsHighAlert,
+                                IsDailyRecurringCharge = li.IsDailyRecurringCharge,
                                 Qty = li.Qty <= 0 ? 1 : li.Qty,
                                 StatusCode = IpdConstants.ClinicalOrderLineStatus.Active,
                                 CreatedAt = now,
@@ -109,9 +110,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         }
 
                         // ── Charge-on-event: post one BillingChargeEvent per chargeable line ────
+                        // Daily-recurring lines (oxygen, continuous monitoring) are excluded here —
+                        // they accrue once per IST day via the nightly PostDailyRecurringCharges job
+                        // instead of being charged once at order time.
                         if (admission.EncounterId.HasValue)
                         {
-                            var chargeableIndices = Enumerable.Range(0, lines.Count).Where(i => lines[i].ChargeId.HasValue).ToList();
+                            var chargeableIndices = Enumerable.Range(0, lines.Count).Where(i => lines[i].ChargeId.HasValue && !lines[i].IsDailyRecurringCharge).ToList();
                             if (chargeableIndices.Count > 0)
                             {
                                 var chargeIds = chargeableIndices.Select(i => lines[i].ChargeId!.Value).Distinct().ToList();
@@ -131,6 +135,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                         Rate = master?.DefaultRate ?? 0,
                                         DiscountPercent = 0,
                                         CategoryCode = master?.CategoryCode ?? DefaultCategoryFor(orderType),
+                                        AttributedDoctorId = order.OrderedByDoctorId,
                                     };
                                 }).ToList();
 
