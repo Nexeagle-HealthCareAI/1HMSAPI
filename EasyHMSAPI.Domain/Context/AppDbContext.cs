@@ -108,6 +108,9 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<SterilizationCycle> SterilizationCycle { get; set; }
         public DbSet<SterilizationCycleItem> SterilizationCycleItem { get; set; }
         public DbSet<InstrumentSetMovement> InstrumentSetMovement { get; set; }
+        public DbSet<IcuLevelOfCare> IcuLevelOfCare { get; set; }
+        public DbSet<ApacheIIScore> ApacheIIScore { get; set; }
+        public DbSet<SofaScore> SofaScore { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {   
@@ -1049,6 +1052,44 @@ namespace EasyHMSAPI.Domain.Context
                 entity.HasKey(m => m.InstrumentSetMovementId);
                 entity.Property(m => m.MovedAt).HasColumnType("datetime2(3)");
                 entity.Property(m => m.CreatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<IcuLevelOfCare>(entity =>
+            {
+                entity.ToTable("IcuLevelOfCare");
+                entity.HasKey(l => l.IcuLevelOfCareId);
+                entity.Property(l => l.AssessedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<ApacheIIScore>(entity =>
+            {
+                entity.ToTable("ApacheIIScore");
+                entity.HasKey(a => a.ApacheIIScoreId);
+                entity.Property(a => a.Temperature).HasPrecision(5, 2);
+                entity.Property(a => a.FiO2).HasPrecision(5, 2);
+                entity.Property(a => a.PaO2).HasPrecision(6, 2);
+                entity.Property(a => a.ArterialPh).HasPrecision(4, 2);
+                entity.Property(a => a.SerumPotassium).HasPrecision(4, 2);
+                entity.Property(a => a.SerumCreatinine).HasPrecision(5, 2);
+                entity.Property(a => a.Hematocrit).HasPrecision(5, 2);
+                entity.Property(a => a.Wbc).HasPrecision(6, 2);
+                entity.Property(a => a.ScoredAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<SofaScore>(entity =>
+            {
+                entity.ToTable("SofaScore");
+                entity.HasKey(s => s.SofaScoreId);
+                entity.Property(s => s.PaO2FiO2Ratio).HasPrecision(6, 2);
+                entity.Property(s => s.PlateletsCount).HasPrecision(8, 2);
+                entity.Property(s => s.BilirubinMgDl).HasPrecision(5, 2);
+                entity.Property(s => s.CreatinineMgDl).HasPrecision(5, 2);
+                entity.Property(s => s.UrineOutputMlPerDay).HasPrecision(8, 2);
+                entity.Property(s => s.ScoredAt).HasColumnType("datetime2(3)");
+                entity.Property(s => s.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(s => s.RowVersion).IsRowVersion();
             });
 
             base.OnModelCreating(modelBuilder);

@@ -571,5 +571,35 @@ namespace EasyHMSAPI.Data.Constants
             public const string ReceiveSterile = "RECEIVE_STERILE";
             public static readonly string[] All = { IssueToOt, Return, SendToWash, Pack, Quarantine, Discard, ReceiveSterile };
         }
+
+        // ---- ICU ----
+
+        /// <summary>Level 1 = HDU/step-down critical-care input; Level 2 = single organ support; Level 3 = multi-organ support.</summary>
+        public static class IcuLevelOfCare
+        {
+            public const string Level1 = "LEVEL_1";
+            public const string Level2 = "LEVEL_2";
+            public const string Level3 = "LEVEL_3";
+            public static readonly string[] All = { Level1, Level2, Level3 };
+        }
+
+        public static class ApacheChronicHealthCategory
+        {
+            public const string None = "NONE";
+            public const string ElectivePostOp = "ELECTIVE_POSTOP";
+            public const string NonoperativeOrEmergencyPostOp = "NONOPERATIVE_OR_EMERGENCY_POSTOP";
+            public static readonly string[] All = { None, ElectivePostOp, NonoperativeOrEmergencyPostOp };
+        }
+
+        /// <summary>SOFA cardiovascular component — standard categorical tiers (as charted on paper), not a raw infusion-rate calculator.</summary>
+        public static class SofaVasopressorTier
+        {
+            public const string None = "NONE";
+            public const string MapLow = "MAP_LOW";
+            public const string DopamineLowOrDobutamine = "DOPAMINE_LOW_OR_DOBUTAMINE";
+            public const string DopamineMedOrEpiLowOrNorepiLow = "DOPAMINE_MED_OR_EPI_LOW_OR_NOREPI_LOW";
+            public const string DopamineHighOrEpiHighOrNorepiHigh = "DOPAMINE_HIGH_OR_EPI_HIGH_OR_NOREPI_HIGH";
+            public static readonly string[] All = { None, MapLow, DopamineLowOrDobutamine, DopamineMedOrEpiLowOrNorepiLow, DopamineHighOrEpiHighOrNorepiHigh };
+        }
     }
 }
