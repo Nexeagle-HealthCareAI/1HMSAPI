@@ -42,7 +42,12 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 Allergies = patient.Allergies,
                 Email = patient.Email,
                 EmergencyContactName = patient.EmergencyContactName,
-                EmergencyContactPhone = patient.EmergencyContactPhone
+                EmergencyContactPhone = patient.EmergencyContactPhone,
+                EmergencyContactRelation = patient.EmergencyContactRelation,
+                Block = patient.Block,
+                AlternateMobile = patient.AlternateMobile,
+                GuardianName = patient.GuardianName,
+                GuardianRelation = patient.GuardianRelation
             };
         }
     }

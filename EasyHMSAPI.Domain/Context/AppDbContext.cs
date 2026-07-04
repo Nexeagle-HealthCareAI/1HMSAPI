@@ -68,6 +68,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<BillingInvoiceChargeEvent> BillingInvoiceChargeEvent { get; set; }
         public DbSet<BillingPaymentAllocation> BillingPaymentAllocation { get; set; }
         public DbSet<DiscountApproval> DiscountApproval { get; set; }
+        public DbSet<CreditApproval> CreditApproval { get; set; }
         public DbSet<Expense> Expenses { get; set; }
         public DbSet<DoctorFee> DoctorFees { get; set; }
         public DbSet<Alert> Alert { get; set; }
@@ -845,6 +846,19 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(d => d.CreatedAt).HasColumnType("datetime2(3)");
                 entity.Property(d => d.UpdatedAt).HasColumnType("datetime2(3)");
                 entity.Property(d => d.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<CreditApproval>(entity =>
+            {
+                entity.ToTable("CreditApproval");
+                entity.HasKey(c => c.CreditApprovalId);
+                entity.Property(c => c.RequestedAmount).HasPrecision(18, 2);
+                entity.Property(c => c.ResultingCreditBalance).HasPrecision(18, 2);
+                entity.Property(c => c.RequestedAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.DecidedAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.RowVersion).IsRowVersion();
             });
 
             modelBuilder.Entity<Expense>(entity =>

@@ -14,6 +14,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public PaymentDetail? Payment { get; set; }
         [JsonIgnore]
         public string? LoggedInUserName { get; set; }
+        [JsonIgnore]
+        public Guid? LoggedInUserId { get; set; }
     }
 
     [ExcludeFromCodeCoverage]
