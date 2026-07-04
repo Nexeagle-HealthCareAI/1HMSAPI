@@ -65,12 +65,27 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 // could in principle have more than one coverage row over time — same defensive
                 // "latest wins" pattern StampIrdaiMilestoneHandler already uses for this table.
                 var coverageRows = await _context.AdmissionCoverage
-                    .Where(c => c.HospitalId == request.HospitalId && admissionIds.Contains(c.AdmissionId) && c.EntitledRoomCategory != null)
+                    .Where(c => c.HospitalId == request.HospitalId && admissionIds.Contains(c.AdmissionId))
                     .OrderByDescending(c => c.CreatedAt)
                     .ToListAsync(cancellationToken);
-                var entitledCategoryByAdmission = coverageRows
+                var coverageByAdmission = coverageRows
                     .GroupBy(c => c.AdmissionId)
-                    .ToDictionary(g => g.Key, g => g.First().EntitledRoomCategory);
+                    .ToDictionary(g => g.Key, g => g.First());
+
+                // Admitting-consultant name — same Doctors→UserProfiles join GetHospitalDoctorsHandler uses.
+                var doctorIds = admissions.Where(a => a.PrimaryDoctorId.HasValue).Select(a => a.PrimaryDoctorId!.Value).Distinct().ToList();
+                var doctorUserIds = await _context.Doctors
+                    .Where(d => doctorIds.Contains(d.DoctorID))
+                    .Select(d => new { d.DoctorID, d.UserID })
+                    .ToListAsync(cancellationToken);
+                var userIds = doctorUserIds.Select(d => d.UserID).Distinct().ToList();
+                var nameByUser = await _context.UserProfiles
+                    .Where(up => userIds.Contains(up.UserID))
+                    .OrderByDescending(up => up.UpdatedAt)
+                    .Select(up => new { up.UserID, up.FullName })
+                    .ToListAsync(cancellationToken);
+                var nameByUserLookup = nameByUser.GroupBy(n => n.UserID).ToDictionary(g => g.Key, g => g.First().FullName);
+                var doctorNameById = doctorUserIds.ToDictionary(d => d.DoctorID, d => nameByUserLookup.TryGetValue(d.UserID, out var n) ? n : null);
 
                 var items = admissions.Select(a =>
                 {
@@ -84,6 +99,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         wardName = bed.WardName;
                     }
 
+                    coverageByAdmission.TryGetValue(a.AdmissionId, out var coverage);
+
                     return new ActiveAdmissionItem
                     {
                         AdmissionId = a.AdmissionId,
@@ -92,8 +109,17 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         StatusCode = a.StatusCode,
                         PayerType = a.PayerType,
                         AdmittedAt = a.AdmittedAt,
+                        ExpectedDischargeAt = a.ExpectedDischargeAt,
                         AdmissionReason = a.AdmissionReason,
                         Diagnosis = a.Diagnosis,
+                        DepositExpected = a.DepositExpected,
+                        PrimaryDoctorId = a.PrimaryDoctorId,
+                        PrimaryDoctorName = a.PrimaryDoctorId.HasValue && doctorNameById.TryGetValue(a.PrimaryDoctorId.Value, out var dn) ? dn : null,
+                        ReferralSource = a.ReferralSource,
+                        ReferralName = a.ReferralName,
+                        ReferringFacilityName = a.ReferringFacilityName,
+                        ReferringFacilityType = a.ReferringFacilityType,
+                        ReferringFacilityContact = a.ReferringFacilityContact,
                         PatientId = a.PatientId,
                         PatientName = patient?.FullName,
                         PatientAge = patient?.Age,
@@ -101,7 +127,12 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         BedCode = bedCode,
                         WardName = wardName,
                         EncounterId = a.EncounterId,
-                        EntitledRoomCategory = entitledCategoryByAdmission.TryGetValue(a.AdmissionId, out var erc) ? erc : null,
+                        PayerName = coverage?.PayerName,
+                        PolicyOrBeneficiaryNo = coverage?.PolicyOrBeneficiaryNo,
+                        PreAuthNo = coverage?.PreAuthNo,
+                        PackageCode = coverage?.PackageCode,
+                        SanctionedAmount = coverage?.SanctionedAmount,
+                        EntitledRoomCategory = coverage?.EntitledRoomCategory,
                     };
                 }).ToList();
 

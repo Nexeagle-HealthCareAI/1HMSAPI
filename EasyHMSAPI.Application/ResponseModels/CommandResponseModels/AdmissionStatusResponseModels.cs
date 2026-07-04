@@ -32,4 +32,20 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public Guid? BedId { get; set; }
         public Guid? BedAssignmentId { get; set; }
     }
+
+    [ExcludeFromCodeCoverage]
+    public class UpdateAdmissionDetailsResponseModel
+    {
+        public bool Success { get; set; }
+        public string? Message { get; set; }
+        public Guid? AdmissionId { get; set; }
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class UpsertAdmissionCoverageResponseModel
+    {
+        public bool Success { get; set; }
+        public string? Message { get; set; }
+        public Guid? CoverageId { get; set; }
+    }
 }
