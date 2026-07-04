@@ -31,7 +31,9 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? InsuranceId { get; set; }
         public string? PaymentMode { get; set; }
         public string? AppointmentType { get; set; }
+        public Guid? ReferrerId { get; set; }
         public string? ReferrerName { get; set; }
+        public string? ReferrerType { get; set; }
         public string? ReferrerRelation { get; set; }
         // Guardian / relative — sourced from PatientRegistrations (patient-level).
         public string? GuardianName { get; set; }
