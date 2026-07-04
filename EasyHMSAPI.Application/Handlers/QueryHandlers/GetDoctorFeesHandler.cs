@@ -11,6 +11,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
     {
         private const string OpdConsult = "OPD_CONSULT";
         private const string IpdVisit = "IPD_VISIT";
+        private const string Emergency = "EMERGENCY";
 
         private readonly AppDbContext _context;
 
@@ -69,6 +70,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         DepartmentName = d.DepartmentName,
                         OpdConsultFee = Of(OpdConsult),
                         IpdVisitFee = Of(IpdVisit),
+                        EmergencyFee = Of(Emergency),
                     };
                 })
                 .ToList();

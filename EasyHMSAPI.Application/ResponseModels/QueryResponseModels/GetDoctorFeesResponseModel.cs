@@ -16,5 +16,6 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? DepartmentName { get; set; }
         public decimal OpdConsultFee { get; set; }
         public decimal IpdVisitFee { get; set; }
+        public decimal EmergencyFee { get; set; }
     }
 }

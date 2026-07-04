@@ -11,6 +11,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     {
         private const string OpdConsult = "OPD_CONSULT";
         private const string IpdVisit = "IPD_VISIT";
+        private const string Emergency = "EMERGENCY";
 
         private readonly AppDbContext _context;
 
@@ -23,7 +24,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         {
             if (request.DoctorId == Guid.Empty)
                 return new UpsertDoctorFeeResponseModel { IsSuccess = false, Message = "DoctorId is required." };
-            if (request.OpdConsultFee < 0 || request.IpdVisitFee < 0)
+            if (request.OpdConsultFee < 0 || request.IpdVisitFee < 0 || request.EmergencyFee < 0)
                 return new UpsertDoctorFeeResponseModel { IsSuccess = false, Message = "Fees cannot be negative." };
 
             var existing = await _context.DoctorFees
@@ -62,6 +63,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
             Apply(OpdConsult, request.OpdConsultFee);
             Apply(IpdVisit, request.IpdVisitFee);
+            Apply(Emergency, request.EmergencyFee);
 
             await _context.SaveChangesAsync(cancellationToken);
 
