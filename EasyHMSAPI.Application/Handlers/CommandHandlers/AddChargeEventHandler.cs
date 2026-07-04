@@ -25,6 +25,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (request.Charges == null || request.Charges.Count == 0)
                     return new AddChargeEventResponseModel { Success = false, Message = "No charges provided." };
 
+                if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
+                {
+                    var alreadyPosted = await _context.BillingChargeEvent
+                        .Where(e => e.HospitalId == request.HospitalId && e.IdempotencyKey == request.IdempotencyKey)
+                        .ToListAsync(cancellationToken);
+                    if (alreadyPosted.Count > 0)
+                        return BuildReplayResponse(request.EncounterId, alreadyPosted, await _context.DiscountApproval
+                            .Where(a => alreadyPosted.Select(e => e.ChargeEventId).Contains(a.ChargeEventId))
+                            .ToDictionaryAsync(a => a.ChargeEventId, cancellationToken));
+                }
+
                 var encounter = await _context.Encounter
                     .FirstOrDefaultAsync(e => e.EncounterId == request.EncounterId
                                            && e.HospitalId == request.HospitalId
@@ -202,6 +213,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         TaxAmount = taxable.TaxAmount,
                         IsTaxInclusive = taxInclusive,
                         IsInterState = isInterState,
+                        IdempotencyKey = request.IdempotencyKey,
                         StatusCode = BillingConstants.ChargeEventStatus.Posted,
                         ServiceDate = now,
                         PostedAt = now,
@@ -324,6 +336,62 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             {
                 return new AddChargeEventResponseModel { Success = false, Message = "Error posting charges." };
             }
+        }
+
+        // A retried "add-event" call (same Idempotency-Key, e.g. the offline outbox replaying
+        // after a dropped response) matches charges already posted by the original call —
+        // return that original outcome instead of posting the batch again.
+        private static AddChargeEventResponseModel BuildReplayResponse(
+            Guid encounterId, List<BillingChargeEvent> existing, Dictionary<Guid, DiscountApproval> approvalsByChargeEvent)
+        {
+            var details = existing.Select(e =>
+            {
+                approvalsByChargeEvent.TryGetValue(e.ChargeEventId, out var approval);
+                return new ChargeEventDetail
+                {
+                    ChargeEventId = e.ChargeEventId,
+                    DisplayName = e.DisplayName,
+                    Qty = e.Qty,
+                    UnitPrice = e.UnitPrice,
+                    GrossAmount = e.GrossAmount ?? 0,
+                    DiscountAmount = e.DiscountAmount ?? 0,
+                    NetAmount = e.NetAmount,
+                    IncentiveAmount = e.IncentiveAmount,
+                    HsnSacCode = e.HsnSacCode,
+                    GstRate = e.GstRate,
+                    TaxableAmount = e.TaxableAmount ?? 0,
+                    CgstAmount = e.CgstAmount,
+                    SgstAmount = e.SgstAmount,
+                    IgstAmount = e.IgstAmount,
+                    TaxAmount = e.TaxAmount,
+                    IsTaxInclusive = e.IsTaxInclusive,
+                    IsInterState = e.IsInterState,
+                    DiscountApprovalId = approval?.DiscountApprovalId,
+                    DiscountApprovalRequired = approval != null,
+                    DiscountCapPercent = approval?.CapPercent,
+                };
+            }).ToList();
+
+            return new AddChargeEventResponseModel
+            {
+                Success = true,
+                Message = "Charges already posted (duplicate submission ignored).",
+                Data = new AddChargesData
+                {
+                    EncounterId = encounterId,
+                    ChargeCount = details.Count,
+                    TotalGross = existing.Sum(e => e.GrossAmount ?? 0),
+                    TotalDiscount = existing.Sum(e => e.DiscountAmount ?? 0),
+                    TotalNet = existing.Sum(e => e.NetAmount),
+                    TotalIncentive = existing.Sum(e => e.IncentiveAmount ?? 0),
+                    TotalTaxable = existing.Sum(e => e.TaxableAmount ?? 0),
+                    TotalCgst = existing.Sum(e => e.CgstAmount),
+                    TotalSgst = existing.Sum(e => e.SgstAmount),
+                    TotalIgst = existing.Sum(e => e.IgstAmount),
+                    TotalTax = existing.Sum(e => e.TaxAmount),
+                    ChargeEvents = details
+                }
+            };
         }
     }
 }

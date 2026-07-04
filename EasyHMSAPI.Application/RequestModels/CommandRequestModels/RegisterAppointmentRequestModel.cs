@@ -22,6 +22,11 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public Guid? UserId { get; set; }
         public Guid? ReferredByReferrerId { get; set; }
         public string? ReferrerRelation { get; set; }
+
+        // Reschedule-only opt-in (RescheduleDialog): void this visit's posted charges/invoice and
+        // auto-refund whatever was already collected, since the old charge no longer applies once
+        // the visit moves to a new date/doctor. Ignored on new-appointment creation.
+        public bool VoidExistingChargesAndRefund { get; set; }
     }
 
     [ExcludeFromCodeCoverage]

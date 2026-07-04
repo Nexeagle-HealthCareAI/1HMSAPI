@@ -104,6 +104,33 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 };
             }
 
+            // Reverse any payment money already applied to this specific charge (per-charge
+            // breakdown built by PaymentAllocationHelper) — it becomes unallocated again and is
+            // swept back onto the next invoice draft for this encounter, same as a fresh deposit.
+            var allocationCharges = await _context.BillingPaymentAllocationCharge
+                .Where(ac => ac.ChargeEventId == request.EventId)
+                .ToListAsync(cancellationToken);
+            if (allocationCharges.Count > 0)
+            {
+                var allocationIds = allocationCharges.Select(ac => ac.AllocationId).Distinct().ToList();
+                var allocations = await _context.BillingPaymentAllocation
+                    .Where(a => allocationIds.Contains(a.AllocationId))
+                    .ToListAsync(cancellationToken);
+                var allocationsById = allocations.ToDictionary(a => a.AllocationId);
+
+                foreach (var ac in allocationCharges)
+                {
+                    if (allocationsById.TryGetValue(ac.AllocationId, out var allocation))
+                        allocation.AllocatedAmount -= ac.Amount;
+                }
+                _context.BillingPaymentAllocationCharge.RemoveRange(allocationCharges);
+
+                // An allocation reduced to (near) zero no longer represents a real invoice
+                // contribution — drop it so it doesn't linger as a zero/negative-amount row.
+                foreach (var allocation in allocations.Where(a => a.AllocatedAmount <= 0))
+                    _context.BillingPaymentAllocation.Remove(allocation);
+            }
+
             _context.BillingChargeEvent.Remove(chargeEvent);
 
             foreach (var mapping in invoiceChargeEvents)
@@ -198,6 +225,16 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     billingInvoice.UpdatedBy = request.LoggedInUserName;
                     _context.BillingInvoice.Update(billingInvoice);
                 }
+            }
+
+            if (paymentAllocations.Count > 0)
+            {
+                var allocationIds = paymentAllocations.Select(a => a.AllocationId).ToList();
+                var allocationCharges = await _context.BillingPaymentAllocationCharge
+                    .Where(ac => allocationIds.Contains(ac.AllocationId))
+                    .ToListAsync(cancellationToken);
+                if (allocationCharges.Count > 0)
+                    _context.BillingPaymentAllocationCharge.RemoveRange(allocationCharges);
             }
 
             foreach (var allocation in paymentAllocations)

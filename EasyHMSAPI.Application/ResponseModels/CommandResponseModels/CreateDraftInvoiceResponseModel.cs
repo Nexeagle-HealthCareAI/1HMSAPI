@@ -8,6 +8,10 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public bool Success { get; set; }
         public string? Message { get; set; }
         public CreateDraftInvoiceData? Data { get; set; }
+        // True when an explicit discount request would have reduced NetAmount below what's
+        // already been collected — held as a PENDING CreditApproval instead of applied.
+        public bool PendingApproval { get; set; }
+        public Guid? CreditApprovalId { get; set; }
     }
 
     [ExcludeFromCodeCoverage]

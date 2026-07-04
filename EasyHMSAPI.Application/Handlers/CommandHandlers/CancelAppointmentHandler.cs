@@ -142,7 +142,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             .Where(a => a.EncounterId == billEncounter.EncounterId)
                             .ToListAsync(cancellationToken);
                         if (allocations.Count > 0)
+                        {
+                            var allocationIds = allocations.Select(a => a.AllocationId).ToList();
+                            var allocationCharges = await _context.BillingPaymentAllocationCharge
+                                .Where(ac => allocationIds.Contains(ac.AllocationId))
+                                .ToListAsync(cancellationToken);
+                            if (allocationCharges.Count > 0)
+                                _context.BillingPaymentAllocationCharge.RemoveRange(allocationCharges);
                             _context.BillingPaymentAllocation.RemoveRange(allocations);
+                        }
 
                         billRefunded = true;
                         refundAmount = netCollected;

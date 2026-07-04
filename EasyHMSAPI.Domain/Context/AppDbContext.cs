@@ -67,6 +67,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<BillingInvoice> BillingInvoice { get; set; }
         public DbSet<BillingInvoiceChargeEvent> BillingInvoiceChargeEvent { get; set; }
         public DbSet<BillingPaymentAllocation> BillingPaymentAllocation { get; set; }
+        public DbSet<BillingPaymentAllocationCharge> BillingPaymentAllocationCharge { get; set; }
         public DbSet<DiscountApproval> DiscountApproval { get; set; }
         public DbSet<CreditApproval> CreditApproval { get; set; }
         public DbSet<Expense> Expenses { get; set; }
@@ -788,6 +789,7 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(e => e.SgstAmount).HasPrecision(18, 2);
                 entity.Property(e => e.IgstAmount).HasPrecision(18, 2);
                 entity.Property(e => e.TaxAmount).HasPrecision(18, 2);
+                entity.Property(e => e.IdempotencyKey).HasMaxLength(100);
                 entity.Property(e => e.ServiceDate).HasColumnType("datetime2(3)");
                 entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)");
                 entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)");
@@ -831,6 +833,14 @@ namespace EasyHMSAPI.Domain.Context
                 entity.ToTable("BillingPaymentAllocation");
                 entity.HasKey(e => e.AllocationId);
                 entity.Property(e => e.AllocatedAmount).HasPrecision(18, 2);
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<BillingPaymentAllocationCharge>(entity =>
+            {
+                entity.ToTable("BillingPaymentAllocationCharge");
+                entity.HasKey(e => e.AllocationChargeId);
+                entity.Property(e => e.Amount).HasPrecision(18, 2);
                 entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)");
             });
 

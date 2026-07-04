@@ -21,6 +21,10 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? LoggedInUserName { get; set; }
         [JsonIgnore]
         public Guid? LoggedInUserId { get; set; }
+
+        // Populated from the Idempotency-Key request header (offline outbox replay), not the body.
+        [JsonIgnore]
+        public string? IdempotencyKey { get; set; }
     }
 
     [ExcludeFromCodeCoverage]

@@ -91,6 +91,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 if (billingInvoice == null)
                 {
+                    // No charges have been posted for this encounter yet — a plain PAYMENT/REFUND
+                    // has nothing to apply against, but an ADVANCE is a valid deposit-before-any-
+                    // charge scenario (e.g. collected at registration). Hold it charge-less;
+                    // CreateDraftInvoiceHandler auto-allocates it once the first charge posts.
+                    if (normalizedPaymentType == BillingConstants.PaymentType.Advance)
+                    {
+                        return await RecordChargeLessAdvanceAsync(request, cancellationToken);
+                    }
                     return new AddPaymentEventResponseModel
                     {
                         Success = false,
@@ -234,6 +242,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     };
 
                     _context.BillingPaymentAllocation.Add(paymentAllocation);
+                    await PaymentAllocationHelper.DistributeToChargesAsync(
+                        _context, billingInvoice.InvoiceId, paymentAllocation.AllocationId, allocatedAmount, request.LoggedInUserName, cancellationToken);
                 }
 
                 numberSeries.UpdatedAt = DateTime.UtcNow;
@@ -264,6 +274,57 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     Message = "Error adding payment."
                 };
             }
+        }
+
+        // Deposit-before-any-charge: records the ADVANCE with no BillingPaymentAllocation (there's
+        // no invoice yet to allocate against). CreateDraftInvoiceHandler picks up any unallocated
+        // ADVANCE payments for the encounter and allocates them against the first real invoice.
+        private async Task<AddPaymentEventResponseModel> RecordChargeLessAdvanceAsync(AddPaymentEventRequestModel request, CancellationToken cancellationToken)
+        {
+            var numberSeries = await NumberSeriesDefaults.GetOrCreateAsync(
+                _context, request.HospitalId, BillingConstants.NumberSeriesCode.Receipt, request.LoggedInUserName, cancellationToken);
+            numberSeries.CurrentValue++;
+            var receiptNo = NumberSeriesFormatter.Format(
+                numberSeries.Prefix, numberSeries.YearFormat, numberSeries.Separator, numberSeries.PadLength, numberSeries.CurrentValue);
+
+            var now = DateTime.UtcNow;
+            var billingPayment = new BillingPayment
+            {
+                PaymentId = Guid.NewGuid(),
+                HospitalId = request.HospitalId,
+                PatientId = request.PatientId,
+                EncounterId = request.EncounterId,
+                ReceiptNo = receiptNo,
+                PaymentType = BillingConstants.PaymentType.Advance,
+                PaymentMode = request.Payment!.PaymentMode,
+                PaymentDescription = request.Payment.Description,
+                TransactionId = request.Payment.TransactionId,
+                Amount = request.Payment.Amount,
+                PaidAt = now,
+                CreatedAt = now,
+                CreatedBy = request.LoggedInUserName,
+                UpdatedAt = now,
+                UpdatedBy = request.LoggedInUserName,
+            };
+            _context.BillingPayment.Add(billingPayment);
+
+            numberSeries.UpdatedAt = now;
+            numberSeries.UpdatedBy = request.LoggedInUserName;
+
+            await _context.SaveChangesAsync(cancellationToken);
+
+            return new AddPaymentEventResponseModel
+            {
+                Success = true,
+                Message = "Deposit recorded — it will apply automatically once a charge is billed.",
+                Data = new AddPaymentData
+                {
+                    PaymentId = billingPayment.PaymentId,
+                    ReceiptNo = receiptNo,
+                    AllocatedAmount = 0,
+                    CreditAmount = request.Payment.Amount,
+                }
+            };
         }
 
         // Records a PENDING CreditApproval instead of posting the payment — no BillingPayment
