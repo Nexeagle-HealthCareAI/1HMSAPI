@@ -9,6 +9,9 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     public class BulkCreateBedMasterRequestModel : IRequest<BulkCreateBedMasterResponseModel>
     {
         public Guid HospitalId { get; set; }
+        // When set, Ward/Room/rate/capacity fields below are ignored and instead synced from the
+        // Room master row, and the room's remaining capacity caps how many beds can be created.
+        public Guid? RoomId { get; set; }
         public string? WardCode { get; set; }
         public string? WardName { get; set; }
         public string? WardType { get; set; }

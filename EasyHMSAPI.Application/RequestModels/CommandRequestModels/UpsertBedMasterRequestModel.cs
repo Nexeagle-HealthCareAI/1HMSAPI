@@ -12,6 +12,9 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public Guid? BedId { get; set; }
         [Required]
         public Guid HospitalId { get; set; }
+        // When set, Ward/Room/rate/capacity fields below are ignored on CREATE and instead synced
+        // from the Room master row, so a bed always matches the room it was added to.
+        public Guid? RoomId { get; set; }
         public string? WardCode { get; set; }
         public string? WardName { get; set; }
         public string? WardType { get; set; }

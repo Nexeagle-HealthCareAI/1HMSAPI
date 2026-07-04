@@ -61,6 +61,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<NumberSeries> NumberSeries { get; set; }
         public DbSet<ChargeMaster> ChargeMaster { get; set; }
         public DbSet<BedMaster> BedMaster { get; set; }
+        public DbSet<Room> Room { get; set; }
         public DbSet<Encounter> Encounter { get; set; }
         public DbSet<BillingChargeEvent> BillingChargeEvent { get; set; }
         public DbSet<BillingPayment> BillingPayment { get; set; }
@@ -543,6 +544,16 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(b => b.CreatedAt).HasColumnType("datetime2(3)");
                 entity.Property(b => b.UpdatedAt).HasColumnType("datetime2(3)");
                 entity.Property(b => b.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<Room>(entity =>
+            {
+                entity.ToTable("Room");
+                entity.HasKey(r => r.RoomId);
+                entity.Property(r => r.DailyRate).HasPrecision(18, 2);
+                entity.Property(r => r.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.RowVersion).IsRowVersion();
             });
 
             modelBuilder.Entity<Encounter>(entity =>
