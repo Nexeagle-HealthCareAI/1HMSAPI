@@ -1,5 +1,6 @@
 using EasyHMSAPI.Api.Common;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModel;
+using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
@@ -68,6 +69,32 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 _logger.LogError(ex, "Error in UpdateHospital for hospitalId: {HospitalId}", hospitalId);
                 return StatusCode(500, new { Message = "An error occurred while updating hospital", Error = ex.Message });
+            }
+        }
+
+        [HttpPatch("{hospitalId}/deactivate")]
+        [Authorize]
+        public async Task<ActionResult<DeactivateHospitalResponseModel>> DeactivateHospital(Guid hospitalId)
+        {
+            _logger.LogInformation("DeactivateHospital started at {Time} for hospitalId: {HospitalId}", DateTime.UtcNow, hospitalId);
+            try
+            {
+                if (hospitalId == Guid.Empty)
+                    return BadRequest(new { Message = "Hospital ID is required and cannot be empty." });
+
+                var userId = UserContextHelper.GetUserId(HttpContext.User);
+                if (userId == null) return Unauthorized(new { Message = "Could not resolve the signed-in user." });
+
+                var request = new DeactivateHospitalRequestModel { HospitalId = hospitalId, CallerUserId = userId.Value };
+                var response = await _mediator.Send(request);
+                _logger.LogInformation("DeactivateHospital ended for hospitalId: {HospitalId}", hospitalId);
+
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in DeactivateHospital for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while deactivating the hospital." });
             }
         }
 

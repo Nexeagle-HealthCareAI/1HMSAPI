@@ -168,7 +168,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 if (isDoctorOrAdminDoctor)
                 {
-                    // Create a default department
+                    // Create a default department (every hospital gets its own)
                     var defaultDeptId = Guid.NewGuid();
                     var defaultDept = new Department
                     {
@@ -182,20 +182,32 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     };
                     _context.Departments.Add(defaultDept);
 
-                    // Create Doctor profile
-                    var doctorId = Guid.NewGuid();
-                    var doctor = new Doctor
+                    // Reuse the doctor's existing single Doctor row when this isn't their first
+                    // hospital (e.g. adding a 2nd+ branch to a chain) — Doctors.UserID is globally
+                    // unique (UQ_Doctors_User), so inserting a second row for the same user
+                    // violates that constraint and crashes with a 500 on SaveChangesAsync.
+                    var existingDoctor = await _context.Doctors.FirstOrDefaultAsync(d => d.UserID == request.UserId, cancellationToken);
+                    Guid doctorId;
+                    if (existingDoctor != null)
                     {
-                        DoctorID = doctorId,
-                        UserID = request.UserId,
-                        LicenseNumber = "PENDING", // Needs to be updated later
-                        HospitalId = hospitalId,
-                        CreatedAt = DateTime.UtcNow,
-                        PrimaryDepartmentID = defaultDeptId
-                    };
-                    _context.Doctors.Add(doctor);
+                        doctorId = existingDoctor.DoctorID;
+                    }
+                    else
+                    {
+                        doctorId = Guid.NewGuid();
+                        var doctor = new Doctor
+                        {
+                            DoctorID = doctorId,
+                            UserID = request.UserId,
+                            LicenseNumber = "PENDING", // Needs to be updated later
+                            HospitalId = hospitalId,
+                            CreatedAt = DateTime.UtcNow,
+                            PrimaryDepartmentID = defaultDeptId
+                        };
+                        _context.Doctors.Add(doctor);
+                    }
 
-                    // Map doctor to department
+                    // Map doctor to this hospital's default department
                     var docDept = new DoctorDepartment
                     {
                         DoctorID = doctorId,
