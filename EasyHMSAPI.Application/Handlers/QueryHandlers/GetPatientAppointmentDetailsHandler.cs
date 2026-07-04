@@ -82,13 +82,16 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                                     where appts.Select(x => x.ApptId).Contains(a.ApptId)
                                     select new { a.ApptId, DoctorName = u.FullName, DepartmentId = d.PrimaryDepartmentID, DepartmentName = dept.Name }).ToListAsync(cancellationToken);
 
-            // Referrer ("Referred By") names for appointments that carry one.
+            // Referrer ("Referred By") name + type for appointments that carry one — the edit form
+            // needs both (plus the id, already on the appointment row) to pre-select the exact
+            // referrer instead of re-searching by name.
             var referrerIds = appts.Where(a => a.ReferredByReferrerId.HasValue).Select(a => a.ReferredByReferrerId!.Value).Distinct().ToList();
-            var referrerNames = referrerIds.Count == 0
-                ? new Dictionary<Guid, string>()
+            var referrerRows = referrerIds.Count == 0
+                ? new List<Referrer>()
                 : await _context.Referrers
                     .Where(r => referrerIds.Contains(r.ReferrerId))
-                    .ToDictionaryAsync(r => r.ReferrerId, r => r.ReferrerName, cancellationToken);
+                    .ToListAsync(cancellationToken);
+            var referrerInfoById = referrerRows.ToDictionary(r => r.ReferrerId, r => (Name: r.ReferrerName, Type: r.ReferrerType));
 
             // ── OPD consult billing status per appointment (mirrors GetConsultTimelineHandler) ──
             var opdEncounters = await _context.Encounter.AsNoTracking()
@@ -176,7 +179,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     LastStatusAt = a.LastStatusCodeAt,
                     CreatedAt = a.CreatedAt,
                     AppointmentType = a.AppointmentType,
-                    ReferrerName = a.ReferredByReferrerId.HasValue && referrerNames.TryGetValue(a.ReferredByReferrerId.Value, out var rn) ? rn : null,
+                    ReferrerId = a.ReferredByReferrerId,
+                    ReferrerName = a.ReferredByReferrerId.HasValue && referrerInfoById.TryGetValue(a.ReferredByReferrerId.Value, out var rInfo) ? rInfo.Name : null,
+                    ReferrerType = a.ReferredByReferrerId.HasValue && referrerInfoById.TryGetValue(a.ReferredByReferrerId.Value, out var rInfo2) ? rInfo2.Type : null,
                     ReferrerRelation = a.ReferrerRelation,
                     GuardianName = p?.GuardianName,
                     GuardianRelation = p?.GuardianRelation,

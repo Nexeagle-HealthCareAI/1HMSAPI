@@ -286,6 +286,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         existingAppointment.ReferredByReferrerId = request.ReferredByReferrerId;
                         existingAppointment.ReferrerRelation = string.IsNullOrWhiteSpace(request.ReferrerRelation) ? null : request.ReferrerRelation;
                     }
+                    if (!string.IsNullOrWhiteSpace(request.Reason))
+                    {
+                        existingAppointment.Reason = request.Reason;
+                    }
+                    if (!string.IsNullOrWhiteSpace(request.Patient?.InsuranceId))
+                    {
+                        existingAppointment.InsuranceId = request.Patient.InsuranceId;
+                    }
+                    if (!string.IsNullOrWhiteSpace(request.Patient?.PaymentMode))
+                    {
+                        existingAppointment.PaymentMode = request.Patient.PaymentMode;
+                    }
                     if(existingAppointment.ApptDate.Date != request.ApptDate.Date)
                     {
                         existingAppointment.ApptDate = request.ApptDate;
@@ -311,61 +323,73 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         }
                     }
 
-                    var bookedSlots = await (from a in _context.Appointments
-                                             join d in _context.Doctors on a.DoctorId equals d.DoctorID
-                                             join u in _context.Users on d.UserID equals u.UserID
-                                             where a.DoctorId == request.DoctorId && a.HospitalId == request.HospitalId && a.ApptDate.Date == request.ApptDate.Date && u.UserStatusId != (int)UserStatusEnum.Revoked && a.CurrentStatusCode != AppConstants.AppointmentStatus_Cancelled
-                                             select a.StartAt.TimeOfDay)
-                                     .ToListAsync(cancellationToken);
-
-                    var requestDate = request.ApptDate.Date;
-
-                    var overrideShifts = await _context.DoctorShiftOverrides
-                        .Where(o => o.DoctorID == request.DoctorId &&
-                                  o.HospitalId == request.HospitalId &&
-                                  o.StartDate <= requestDate &&
-                                  (!o.EndDate.HasValue || o.EndDate >= requestDate))
-                        .OrderBy(o => o.StartTime)
-                        .ToListAsync(cancellationToken);
-
-                    var shiftDetails = new List<ShiftDayDetailsModel>();
-                    if (overrideShifts.Count > 0)
+                    // A caller that explicitly picks a slot (the full edit form) is honored directly,
+                    // no auto-search. A caller that doesn't (RescheduleDialog's date-only reschedule)
+                    // keeps the original auto-pick-first-available behavior below, unchanged.
+                    if (request.StartAt.HasValue)
                     {
-                        shiftDetails = overrideShifts
-                            .Select(shift => new ShiftDayDetailsModel
-                            {
-                                OverrideId = shift.OverrideID,
-                                ShiftName = shift.ShiftName,
-                                StartTime = shift.StartTime,
-                                EndTime = shift.EndTime,
-                                SlotDurationInMinutes = shift.SlotDurationInMinutes,
-                                RecurringDays = shift.RecurringDays
-                            })
-                            .ToList();
+                        var explicitDuration = request.SlotTimeInMinutes.HasValue && request.SlotTimeInMinutes.Value > 0 ? request.SlotTimeInMinutes.Value : 15;
+                        existingAppointment.StartAt = request.StartAt.Value;
+                        existingAppointment.EndAt = request.StartAt.Value.AddMinutes(explicitDuration);
                     }
                     else
                     {
-                        shiftDetails = await _context.DoctorShiftTemplates
-                            .Where(t => t.IsActive)
-                            .OrderBy(t => t.StartTime)
-                            .Select(t => new ShiftDayDetailsModel
-                            {
-                                ShiftName = t.ShiftName,
-                                StartTime = t.StartTime,
-                                EndTime = t.EndTime,
-                                SlotDurationInMinutes = t.SlotDurationInMinutes
-                            })
-                            .ToListAsync(cancellationToken);
-                    }
+                        var bookedSlots = await (from a in _context.Appointments
+                                                 join d in _context.Doctors on a.DoctorId equals d.DoctorID
+                                                 join u in _context.Users on d.UserID equals u.UserID
+                                                 where a.DoctorId == request.DoctorId && a.HospitalId == request.HospitalId && a.ApptDate.Date == request.ApptDate.Date && u.UserStatusId != (int)UserStatusEnum.Revoked && a.CurrentStatusCode != AppConstants.AppointmentStatus_Cancelled
+                                                 select a.StartAt.TimeOfDay)
+                                         .ToListAsync(cancellationToken);
 
-                    int slotDurationMinutes = shiftDetails.FirstOrDefault()?.SlotDurationInMinutes ?? 10;
-                    var availableSlotStart = FindFirstAvailableSlot(bookedSlots, shiftDetails, slotDurationMinutes, request.ApptDate);
-                    
-                    if (availableSlotStart.HasValue)
-                    {
-                        existingAppointment.StartAt = availableSlotStart.Value;
-                        request.StartAt = availableSlotStart.Value;
-                        existingAppointment.EndAt = availableSlotStart.Value.AddMinutes(slotDurationMinutes);
+                        var requestDate = request.ApptDate.Date;
+
+                        var overrideShifts = await _context.DoctorShiftOverrides
+                            .Where(o => o.DoctorID == request.DoctorId &&
+                                      o.HospitalId == request.HospitalId &&
+                                      o.StartDate <= requestDate &&
+                                      (!o.EndDate.HasValue || o.EndDate >= requestDate))
+                            .OrderBy(o => o.StartTime)
+                            .ToListAsync(cancellationToken);
+
+                        var shiftDetails = new List<ShiftDayDetailsModel>();
+                        if (overrideShifts.Count > 0)
+                        {
+                            shiftDetails = overrideShifts
+                                .Select(shift => new ShiftDayDetailsModel
+                                {
+                                    OverrideId = shift.OverrideID,
+                                    ShiftName = shift.ShiftName,
+                                    StartTime = shift.StartTime,
+                                    EndTime = shift.EndTime,
+                                    SlotDurationInMinutes = shift.SlotDurationInMinutes,
+                                    RecurringDays = shift.RecurringDays
+                                })
+                                .ToList();
+                        }
+                        else
+                        {
+                            shiftDetails = await _context.DoctorShiftTemplates
+                                .Where(t => t.IsActive)
+                                .OrderBy(t => t.StartTime)
+                                .Select(t => new ShiftDayDetailsModel
+                                {
+                                    ShiftName = t.ShiftName,
+                                    StartTime = t.StartTime,
+                                    EndTime = t.EndTime,
+                                    SlotDurationInMinutes = t.SlotDurationInMinutes
+                                })
+                                .ToListAsync(cancellationToken);
+                        }
+
+                        int slotDurationMinutes = shiftDetails.FirstOrDefault()?.SlotDurationInMinutes ?? 10;
+                        var availableSlotStart = FindFirstAvailableSlot(bookedSlots, shiftDetails, slotDurationMinutes, request.ApptDate);
+
+                        if (availableSlotStart.HasValue)
+                        {
+                            existingAppointment.StartAt = availableSlotStart.Value;
+                            request.StartAt = availableSlotStart.Value;
+                            existingAppointment.EndAt = availableSlotStart.Value.AddMinutes(slotDurationMinutes);
+                        }
                     }
 
                     return (existingAppointment, isNew);
