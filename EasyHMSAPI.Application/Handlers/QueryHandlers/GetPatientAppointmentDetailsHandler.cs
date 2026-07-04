@@ -59,6 +59,11 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 query = query.Where(a => a.DoctorId == request.DoctorId.Value);
             }
 
+            if (!string.IsNullOrWhiteSpace(request.PatientId))
+            {
+                query = query.Where(a => a.PatientId == request.PatientId);
+            }
+
             var appts = await query
                 .OrderBy(a => a.ApptDate)
                 .ToListAsync(cancellationToken);

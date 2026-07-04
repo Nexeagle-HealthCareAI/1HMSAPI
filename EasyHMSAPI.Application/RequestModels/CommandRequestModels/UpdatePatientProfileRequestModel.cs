@@ -29,5 +29,10 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? Email { get; set; }
         public string? EmergencyContactName { get; set; }
         public string? EmergencyContactPhone { get; set; }
+        public string? EmergencyContactRelation { get; set; }
+        public string? Block { get; set; }
+        public string? AlternateMobile { get; set; }
+        public string? GuardianName { get; set; }
+        public string? GuardianRelation { get; set; }
     }
 }
