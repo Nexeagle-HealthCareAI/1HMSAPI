@@ -55,11 +55,20 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public DateTime? ExpectedDischargeAt { get; set; }
         public string? AdmissionReason { get; set; }
         public string? Diagnosis { get; set; }
+        // Elective only: patient hasn't physically arrived yet — creates the admission as PRE_ADMIT
+        // instead of ADMITTED (bed pre-block/pre-auth can still happen now; confirm arrival later).
+        public bool IsPreRegistration { get; set; }
 
-        // Referral (for MIS)
+        // Referral (for MIS — commission/incentive tracking, distinct from ReferringFacility* below)
         public string? ReferralSource { get; set; }  // SELF / DOCTOR / HOSPITAL
         public string? ReferralName { get; set; }
         public Guid? ReferredByReferrerId { get; set; }
+
+        // Referral / transfer-in (structured): which outside facility sent this patient. Distinct
+        // from ReferralSource/ReferralName above, which track referral commission, not provenance.
+        public string? ReferringFacilityName { get; set; }
+        public string? ReferringFacilityType { get; set; }   // PHC / NURSING_HOME / HOSPITAL / OTHER
+        public string? ReferringFacilityContact { get; set; }
 
         // ── Payer branch (Phase 1: CASH is fully wired; TPA/SCHEME are capture-only) ──
         public string? PayerType { get; set; }        // CASH / TPA / SCHEME (default CASH)
@@ -78,5 +87,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? PreAuthNo { get; set; }
         public string? PackageCode { get; set; }
         public decimal? SanctionedAmount { get; set; }
+        // The patient's entitled ward/room category under this scheme/policy (e.g. GENERAL) — drives
+        // the bed-entitlement warning at assignment time and the TPA-split proportionate deduction.
+        public string? EntitledRoomCategory { get; set; }
     }
 }

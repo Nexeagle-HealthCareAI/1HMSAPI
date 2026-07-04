@@ -34,4 +34,62 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string ToStatus { get; set; } = null!;
         public string? Reason { get; set; }
     }
+
+    // Confirms a PRE_ADMIT (elective pre-registration) admission has physically arrived: flips it
+    // to ADMITTED, stamps AdmittedAt to now, and optionally assigns a bed in the same transaction
+    // (nested-mediator call into AssignBedRequestModel — reuses the existing race-safe assignment
+    // logic rather than duplicating it). Dedicated handler, same reasoning as DischargeAdmission
+    // being separate from the generic transition: this has side effects beyond a status flip.
+    [ExcludeFromCodeCoverage]
+    public class ConfirmPatientArrivalRequestModel : IRequest<ConfirmPatientArrivalResponseModel>
+    {
+        public Guid HospitalId { get; set; }
+        [JsonIgnore]
+        public string? LoggedInUserName { get; set; }
+        public Guid AdmissionId { get; set; }
+        public Guid? BedId { get; set; }
+    }
+
+    // Edits fields captured at admission time, after the fact — only while the admission is still
+    // Active (a closed/historical admission's record stays fixed). Same skip-null-or-blank
+    // convention as AdmitPatientHandler.ApplyDemographics: a field omitted/blank leaves the
+    // existing value untouched (this is for adding/correcting details, not clearing them back out).
+    [ExcludeFromCodeCoverage]
+    public class UpdateAdmissionDetailsRequestModel : IRequest<UpdateAdmissionDetailsResponseModel>
+    {
+        public Guid HospitalId { get; set; }
+        [JsonIgnore]
+        public string? LoggedInUserName { get; set; }
+        public Guid AdmissionId { get; set; }
+
+        public Guid? PrimaryDoctorId { get; set; }
+        public string? AdmissionReason { get; set; }
+        public string? Diagnosis { get; set; }
+        public DateTime? ExpectedDischargeAt { get; set; }
+        public string? PayerType { get; set; }
+        public decimal? DepositExpected { get; set; }
+        public string? ReferralSource { get; set; }
+        public string? ReferralName { get; set; }
+        public string? ReferringFacilityName { get; set; }
+        public string? ReferringFacilityType { get; set; }
+        public string? ReferringFacilityContact { get; set; }
+    }
+
+    // Upserts the admission's AdmissionCoverage row (create if none exists yet — e.g. a CASH
+    // admission converted to TPA/SCHEME after the fact — else update in place).
+    [ExcludeFromCodeCoverage]
+    public class UpsertAdmissionCoverageRequestModel : IRequest<UpsertAdmissionCoverageResponseModel>
+    {
+        public Guid HospitalId { get; set; }
+        [JsonIgnore]
+        public string? LoggedInUserName { get; set; }
+        public Guid AdmissionId { get; set; }
+
+        public string? PayerName { get; set; }
+        public string? PolicyOrBeneficiaryNo { get; set; }
+        public string? PreAuthNo { get; set; }
+        public string? PackageCode { get; set; }
+        public decimal? SanctionedAmount { get; set; }
+        public string? EntitledRoomCategory { get; set; }
+    }
 }

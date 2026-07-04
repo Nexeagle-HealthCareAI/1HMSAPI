@@ -135,5 +135,26 @@ namespace EasyHMSAPI.Api.Controllers
                 return StatusCode(500, new { Message = "An error occurred while retrieving specializations", Error = ex.Message });
             }
         }
+
+        // Flat, hospital-wide doctor list (no department filter) — for simple pickers such as the
+        // admitting-consultant selector on the IPD admit form.
+        [HttpGet("hospital")]
+        [Authorize]
+        public async Task<ActionResult<GetHospitalDoctorsResponseModel>> GetHospitalDoctors([FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetHospitalDoctorsRequestModel { HospitalId = hospitalId });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetHospitalDoctors for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while retrieving hospital doctors." });
+            }
+        }
     }
 }

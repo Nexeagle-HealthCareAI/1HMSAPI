@@ -22,8 +22,19 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string StatusCode { get; set; } = null!;
         public string PayerType { get; set; } = null!;
         public DateTime AdmittedAt { get; set; }
+        public DateTime? ExpectedDischargeAt { get; set; }
         public string? AdmissionReason { get; set; }
         public string? Diagnosis { get; set; }
+        public decimal? DepositExpected { get; set; }
+
+        public Guid? PrimaryDoctorId { get; set; }
+        public string? PrimaryDoctorName { get; set; }
+
+        public string? ReferralSource { get; set; }
+        public string? ReferralName { get; set; }
+        public string? ReferringFacilityName { get; set; }
+        public string? ReferringFacilityType { get; set; }
+        public string? ReferringFacilityContact { get; set; }
 
         public string? PatientId { get; set; }
         public string? PatientName { get; set; }
@@ -35,5 +46,15 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? WardName { get; set; }
 
         public Guid? EncounterId { get; set; }
+
+        // Full coverage detail, when captured (TPA/SCHEME, or a CASH admission with coverage added
+        // later). EntitledRoomCategory also drives the bed-entitlement warning at assign/transfer
+        // time (client-side check, see roomEntitlement.ts).
+        public string? PayerName { get; set; }
+        public string? PolicyOrBeneficiaryNo { get; set; }
+        public string? PreAuthNo { get; set; }
+        public string? PackageCode { get; set; }
+        public decimal? SanctionedAmount { get; set; }
+        public string? EntitledRoomCategory { get; set; }
     }
 }
