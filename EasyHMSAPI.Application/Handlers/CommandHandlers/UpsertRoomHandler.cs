@@ -18,6 +18,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
         public async Task<UpsertRoomResponseModel> Handle(UpsertRoomRequestModel request, CancellationToken cancellationToken)
         {
+            if (string.IsNullOrWhiteSpace(request.FloorNo))
+                return new UpsertRoomResponseModel { Success = false, Message = "Floor is required." };
             if (string.IsNullOrWhiteSpace(request.RoomNo))
                 return new UpsertRoomResponseModel { Success = false, Message = "Room number is required." };
             if (request.CapacityInRoom <= 0)
@@ -47,7 +49,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 existingRoom.WardCode = request.WardCode;
                 existingRoom.WardName = request.WardName;
                 existingRoom.WardType = request.WardType;
-                existingRoom.FloorNo = request.FloorNo;
+                existingRoom.FloorNo = request.FloorNo.Trim();
                 existingRoom.RoomNo = request.RoomNo.Trim();
                 existingRoom.RoomType = request.RoomType;
                 existingRoom.CapacityInRoom = request.CapacityInRoom;
@@ -56,7 +58,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 existingRoom.UpdatedAt = now;
                 existingRoom.UpdatedBy = request.LoggedInUserName;
 
-                await _context.SaveChangesAsync(cancellationToken);
+                try
+                {
+                    await _context.SaveChangesAsync(cancellationToken);
+                }
+                catch (DbUpdateException)
+                {
+                    return new UpsertRoomResponseModel { Success = false, Message = $"Room '{request.RoomNo}' already exists on floor '{request.FloorNo}'." };
+                }
 
                 return new UpsertRoomResponseModel
                 {
@@ -76,7 +85,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 WardCode = request.WardCode,
                 WardName = request.WardName,
                 WardType = request.WardType,
-                FloorNo = request.FloorNo,
+                FloorNo = request.FloorNo.Trim(),
                 RoomNo = request.RoomNo.Trim(),
                 RoomType = request.RoomType,
                 CapacityInRoom = request.CapacityInRoom,
@@ -95,7 +104,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
             catch (DbUpdateException)
             {
-                return new UpsertRoomResponseModel { Success = false, Message = $"Room number '{request.RoomNo}' already exists." };
+                return new UpsertRoomResponseModel { Success = false, Message = $"Room '{request.RoomNo}' already exists on floor '{request.FloorNo}'." };
             }
 
             return new UpsertRoomResponseModel

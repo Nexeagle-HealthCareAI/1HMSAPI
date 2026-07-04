@@ -15,6 +15,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? WardCode { get; set; }
         public string? WardName { get; set; }
         public string? WardType { get; set; }
+        [Required]
         public string? FloorNo { get; set; }
         [Required]
         public string? RoomNo { get; set; }
