@@ -196,6 +196,62 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             };
                         }
                     }
+                    else if (scope?.ToLower() == "change-password")
+                    {
+                        if (string.IsNullOrEmpty(request.CurrentPassword))
+                        {
+                            return new SetOrResetPasswordResponseModel
+                            {
+                                Success = false,
+                                Message = "Current password is required."
+                            };
+                        }
+                        if (string.IsNullOrEmpty(request.Password))
+                        {
+                            return new SetOrResetPasswordResponseModel
+                            {
+                                Success = false,
+                                Message = "Password cannot be empty"
+                            };
+                        }
+
+                        var currentHashedBytes = SHA256.HashData(Encoding.UTF8.GetBytes(request.CurrentPassword));
+                        var currentHashed = BitConverter.ToString(currentHashedBytes).Replace("-", "").ToLower();
+                        bool currentMatches = _maskingService.IsMaskingEnabled()
+                            ? userAuth.HashedPassword == _maskingService.Mask(currentHashed)
+                            : userAuth.HashedPassword == currentHashed;
+                        if (!currentMatches)
+                        {
+                            return new SetOrResetPasswordResponseModel
+                            {
+                                Success = false,
+                                Message = "Current password is incorrect."
+                            };
+                        }
+
+                        var newHashedBytes = SHA256.HashData(Encoding.UTF8.GetBytes(request.Password));
+                        var newHashed = BitConverter.ToString(newHashedBytes).Replace("-", "").ToLower();
+                        bool sameAsCurrent = _maskingService.IsMaskingEnabled()
+                            ? userAuth.HashedPassword == _maskingService.Mask(newHashed)
+                            : userAuth.HashedPassword == newHashed;
+                        if (sameAsCurrent)
+                        {
+                            return new SetOrResetPasswordResponseModel
+                            {
+                                Success = false,
+                                Message = "New password cannot be same as the current password."
+                            };
+                        }
+
+                        userAuth.HashedPassword = _maskingService.IsMaskingEnabled() ? _maskingService.Mask(newHashed) : newHashed;
+                        await _context.SaveChangesAsync(cancellationToken);
+
+                        return new SetOrResetPasswordResponseModel
+                        {
+                            Success = true,
+                            Message = "Password changed successfully."
+                        };
+                    }
                     else
                     {
                         return new SetOrResetPasswordResponseModel

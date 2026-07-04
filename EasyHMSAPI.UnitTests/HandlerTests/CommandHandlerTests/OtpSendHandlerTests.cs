@@ -18,7 +18,6 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
     public class OtpSendHandlerTests
     {
         private AppDbContext _context = null!;
-        private Mock<ISmsService> _smsServiceMock = null!;
         private Mock<IEmailService> _emailServiceMock = null!;
         private Mock<IWhatsAppMessagingService> _whatsAppServiceMock = null!;
         private Mock<IConfiguration> _configurationMock = null!;
@@ -29,7 +28,6 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public void SetUp()
         {
             _context = InMemoryDbContextFactory.CreateContext();
-            _smsServiceMock = new Mock<ISmsService>();
             _emailServiceMock = new Mock<IEmailService>();
             _whatsAppServiceMock = new Mock<IWhatsAppMessagingService>();
             _configurationMock = new Mock<IConfiguration>();
@@ -40,10 +38,9 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             _maskingServiceMock.Setup(m => m.Mask(It.IsAny<string>())).Returns((string s) => s);
 
             _handler = new OtpSendHandler(
-                _context, 
-                _smsServiceMock.Object, 
-                _emailServiceMock.Object, 
-                _whatsAppServiceMock.Object, 
+                _context,
+                _emailServiceMock.Object,
+                _whatsAppServiceMock.Object,
                 _configurationMock.Object,
                 _maskingServiceMock.Object);
         }

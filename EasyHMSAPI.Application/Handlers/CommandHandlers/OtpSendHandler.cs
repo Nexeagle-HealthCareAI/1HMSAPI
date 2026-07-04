@@ -13,16 +13,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     public class OtpSendHandler : IRequestHandler<OtpSendRequestModel, OtpSendResponseModel>
     {
         private readonly AppDbContext _context;
-        private readonly ISmsService _smsService;
         private readonly IEmailService _emailService;
         private readonly IWhatsAppMessagingService _whatsAppMessagingService;
         private readonly IConfiguration _configuration;
         private readonly IMaskingService _maskingService;
 
-        public OtpSendHandler(AppDbContext context, ISmsService smsService, IEmailService emailService, IWhatsAppMessagingService whatsAppMessagingService, IConfiguration configuration, IMaskingService maskingService)
+        public OtpSendHandler(AppDbContext context, IEmailService emailService, IWhatsAppMessagingService whatsAppMessagingService, IConfiguration configuration, IMaskingService maskingService)
         {
             _context = context;
-            _smsService = smsService;
             _emailService = emailService;
             _whatsAppMessagingService = whatsAppMessagingService;
             _configuration = configuration;
@@ -31,7 +29,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
         public async Task<OtpSendResponseModel> Handle(OtpSendRequestModel request, CancellationToken cancellationToken)
         {
-            var response = new OtpSendResponseModel { Success = true, IsSmsSent = false, IsEmailSent = false, IsWhatsappSent = false };
+            var response = new OtpSendResponseModel { Success = true, IsEmailSent = false, IsWhatsappSent = false };
 
             if (string.IsNullOrEmpty(request.MobileNumber))
             {
@@ -63,50 +61,30 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             // Mask the OTP if masking is enabled, otherwise store plaintext
             var otpToStore = _maskingService.Mask(newGeneratedOtp);
 
-            //bool smsSent = await _smsService.SendOtpSmsAsync(user.MobileNumber, newGeneratedOtp);
-            bool smsSent = false;
+            // SMS/Twilio delivery has been removed — WhatsApp is the primary OTP channel, with
+            // email as a fallback for users without a reachable WhatsApp number.
             bool whatsappSent = await _whatsAppMessagingService.SendOtpAsync(user.MobileNumber, newGeneratedOtp);
+            bool emailSent = !string.IsNullOrEmpty(user.Email) && await _emailService.SendOtpEmailAsync(user.Email, newGeneratedOtp);
 
-            if(whatsappSent)
+            response.IsWhatsappSent = whatsappSent;
+            response.IsEmailSent = emailSent;
+
+            var sentChannels = new List<string>();
+            if (whatsappSent) sentChannels.Add("WhatsApp");
+            if (emailSent) sentChannels.Add("Email");
+
+            if (sentChannels.Count == 0)
             {
-                response.IsWhatsappSent = true;
-                response.Success = true;
-                response.Message = "OTP sent successfully via WhatsApp.";
-                response.UserId = user.UserID;
+                // Nothing actually reached the user — don't overwrite a still-valid prior OTP or
+                // reset the lockout counters for a request that delivered no usable code.
+                response.Success = false;
+                response.Message = "Could not send the OTP via WhatsApp or Email. Please try again or contact support.";
+                return response;
             }
 
-            if (smsSent)
-            {
-                response.IsSmsSent = true;
-                response.Success = true;
-                response.Message = "OTP sent successfully via SMS.";
-                response.UserId = user.UserID;
-            }
-
-            if (!string.IsNullOrEmpty(user.Email))
-            {
-                bool emailSent = await _emailService.SendOtpEmailAsync(user.Email, newGeneratedOtp);
-                if(smsSent && emailSent)
-                {
-                    response.Success = true;
-                    response.IsEmailSent = true;
-                    response.Message = "OTP sent successfully.";
-                    response.UserId = user.UserID;
-                }
-                else if(emailSent)
-                {
-                    response.Success = true;
-                    response.IsEmailSent = true;
-                    response.Message = "OTP sent successfully via Email.";
-                    response.UserId = user.UserID;
-                }
-                else
-                {
-                    response.IsEmailSent = true;
-                    response.IsSmsSent = false;
-                    response.Message = "OTP generation failed";
-                }
-            }
+            response.Success = true;
+            response.Message = $"OTP sent successfully via {string.Join(" and ", sentChannels)}.";
+            response.UserId = user.UserID;
 
             userAuth.Otp = otpToStore;
             userAuth.OtpSentDateTime = DateTime.UtcNow;
