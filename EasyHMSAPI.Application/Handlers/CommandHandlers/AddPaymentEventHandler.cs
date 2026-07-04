@@ -169,11 +169,24 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
                 else if (normalizedPaymentType == BillingConstants.PaymentType.Refund)
                 {
-                    var totalPastPayments = await _context.BillingPaymentAllocation
-                        .Where(bpa => bpa.InvoiceId == billingInvoice.InvoiceId)
-                        .SumAsync(bpa => bpa.AllocatedAmount, cancellationToken);
+                    // Whole-encounter credit, not just this one invoice's allocations: charges can
+                    // fragment across multiple BillingInvoice rows (e.g. day-wise IPD finalize
+                    // cycles) and money can sit unallocated (a charge-less advance, or money freed
+                    // up by cancelling a paid charge) — none of that shows up in this invoice's own
+                    // AllocatedAmount total. "Available credit" has to net total collected against
+                    // total billed for the ENTIRE encounter, or a real credit balance reads as zero.
+                    var totalCollected = await _context.BillingPayment
+                        .Where(p => p.EncounterId == request.EncounterId
+                                 && (p.PaymentType == BillingConstants.PaymentType.Payment || p.PaymentType == BillingConstants.PaymentType.Advance))
+                        .SumAsync(p => (decimal?)p.Amount, cancellationToken) ?? 0m;
+                    var totalRefunded = await _context.BillingPayment
+                        .Where(p => p.EncounterId == request.EncounterId && p.PaymentType == BillingConstants.PaymentType.Refund)
+                        .SumAsync(p => (decimal?)p.Amount, cancellationToken) ?? 0m;
+                    var totalBilled = await _context.BillingChargeEvent
+                        .Where(c => c.EncounterId == request.EncounterId && c.StatusCode != BillingConstants.ChargeEventStatus.Void)
+                        .SumAsync(c => (decimal?)c.NetAmount, cancellationToken) ?? 0m;
 
-                    decimal remainingDue = netAmount - totalPastPayments;
+                    decimal remainingDue = totalBilled - (totalCollected - totalRefunded);
                     decimal availableCredit = Math.Max(0, -remainingDue);
 
                     if (availableCredit <= 0 || request.Payment.Amount > availableCredit)

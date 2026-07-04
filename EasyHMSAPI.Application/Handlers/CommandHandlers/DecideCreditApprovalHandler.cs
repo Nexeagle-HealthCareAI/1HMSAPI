@@ -80,6 +80,41 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 };
             }
 
+            if (decision == "APPROVED" && (approval.PaymentType == "DELETE_CHARGE" || approval.PaymentType == "DELETE_PAYMENT"))
+            {
+                // Deleting isn't a money-posting action like ADVANCE/REFUND — just re-invoke the
+                // actual delete now that an admin has signed off, bypassing the approval gate.
+                var deleteResult = await _mediator.Send(new DeleteBillingEventRequestModel
+                {
+                    HospitalId = approval.HospitalId,
+                    PatientId = approval.PatientId,
+                    EventId = approval.TargetEventId ?? Guid.Empty,
+                    Type = approval.PaymentType == "DELETE_CHARGE" ? BillingConstants.BillingActionType.Charges : BillingConstants.BillingActionType.Payment,
+                    SkipCreditApprovalCheck = true,
+                    LoggedInUserName = request.LoggedInUserName,
+                }, cancellationToken);
+                if (deleteResult?.Success != true)
+                {
+                    return new DecideCreditApprovalResponseModel { Success = false, Message = deleteResult?.Message ?? "Could not delete the billing entry." };
+                }
+
+                approval.Status = decision;
+                approval.DecidedAt = now;
+                approval.DecidedBy = request.LoggedInUserName;
+                approval.DecidedByUserId = request.LoggedInUserId;
+                approval.DecisionNote = string.IsNullOrWhiteSpace(request.DecisionNote) ? null : request.DecisionNote.Trim();
+                approval.UpdatedAt = now;
+                await _context.SaveChangesAsync(cancellationToken);
+
+                return new DecideCreditApprovalResponseModel
+                {
+                    Success = true,
+                    Message = $"Deletion approved — the {(approval.PaymentType == "DELETE_CHARGE" ? "charge" : "payment")} has been removed.",
+                    Status = approval.Status,
+                    DecidedAt = approval.DecidedAt,
+                };
+            }
+
             if (decision == "APPROVED")
             {
                 async Task<BillingInvoice?> LoadInvoiceAsync() => await _context.BillingInvoice
