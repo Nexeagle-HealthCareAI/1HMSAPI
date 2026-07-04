@@ -11,6 +11,9 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public Guid UserId { get; set; }
         public string? Email { get; set; }
         public string Password { get; set; } = string.Empty;
+        // Required for scope=change-password — verified against the stored hash before the
+        // new password is accepted.
+        public string? CurrentPassword { get; set; }
         [JsonIgnore]
         public string Scope { get; set; } = string.Empty;
     }

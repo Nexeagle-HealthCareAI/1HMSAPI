@@ -1,6 +1,7 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
+using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -51,6 +52,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
             var fullName = string.IsNullOrWhiteSpace(request.FullName) ? "there" : request.FullName.Trim();
             var login = request.MobileNumber.Trim();
+
+            // Defense-in-depth: the UI already disables "Share Login" for a deactivated member,
+            // but this request carries no UserId (just mobile/password), so a client could bypass
+            // that and share credentials for a revoked account. Block it server-side too.
+            var targetUser = await _context.Users.FirstOrDefaultAsync(u => u.MobileNumber == login, cancellationToken);
+            if (targetUser != null && targetUser.UserStatusId != (int)UserStatusEnum.Active)
+                return Fail("This member is not active.");
 
             var response = new ShareCredentialsResponseModel();
 

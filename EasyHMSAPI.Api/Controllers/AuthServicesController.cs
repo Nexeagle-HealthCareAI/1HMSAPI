@@ -102,6 +102,14 @@ namespace EasyHMSAPI.Api.Controllers
             try
             {
                 request.Scope = scope;
+                // Changing your own password from an authenticated session must act on the
+                // CALLER's account — never trust a client-supplied UserId for this scope.
+                if (string.Equals(scope, "change-password", StringComparison.OrdinalIgnoreCase))
+                {
+                    var callerId = EasyHMSAPI.Api.Common.UserContextHelper.GetUserId(User);
+                    if (callerId == null) return Unauthorized(new { Message = "Could not resolve the signed-in user." });
+                    request.UserId = callerId.Value;
+                }
                 var result = await _mediator.Send(request);
                 _logger.LogInformation("SetOrResetPassword ended for scope: {Scope}", scope);
 

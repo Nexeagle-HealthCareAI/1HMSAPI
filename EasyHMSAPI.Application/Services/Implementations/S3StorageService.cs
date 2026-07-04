@@ -34,6 +34,10 @@ namespace EasyHMSAPI.Application.Services.Implementations
         private readonly TimeSpan _urlExpiry;
         private readonly string _prescriptionAssestsContainer;
         private readonly string _prescriptionAttachmentsContainer;
+        // True only when every required Storage:S3:* setting is actually present — lets us fail
+        // fast with a clear message instead of letting the AWS SDK throw an opaque error deep
+        // inside an S3 call (e.g. an empty ServiceURL/credentials producing a cryptic exception).
+        private readonly bool _isConfigured;
 
         public S3StorageService(IConfiguration configuration)
         {
@@ -45,6 +49,8 @@ namespace EasyHMSAPI.Application.Services.Implementations
             _bucket = configuration["Storage:S3:Bucket"] ?? string.Empty;
             _prefix = (configuration["Storage:S3:Prefix"] ?? "1HMS").Trim();
             _urlExpiry = TimeSpan.FromHours(double.TryParse(configuration["Storage:S3:UrlExpiryHours"], out var h) && h > 0 ? h : 24);
+            _isConfigured = !string.IsNullOrWhiteSpace(serviceUrl) && !string.IsNullOrWhiteSpace(accessKey)
+                && !string.IsNullOrWhiteSpace(secretKey) && !string.IsNullOrWhiteSpace(_bucket);
 
             // Match BlobStorageService's container fields (used only for upload/get branching).
             _prescriptionAssestsContainer = configuration["BlobStorage:PrescriptionAssetsContainer"] ?? string.Empty;
@@ -86,6 +92,9 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
         public async Task<string> UploadAsync(string entityId, IFormFile? file, string containerName, CancellationToken cancellationToken)
         {
+            if (!_isConfigured)
+                throw new InvalidOperationException("File storage is not configured on this environment (Storage:S3:ServiceUrl/AccessKey/SecretKey/Bucket). Contact an administrator.");
+
             if (file == null || file.Length == 0)
                 throw new ArgumentException("File is empty or missing");
 

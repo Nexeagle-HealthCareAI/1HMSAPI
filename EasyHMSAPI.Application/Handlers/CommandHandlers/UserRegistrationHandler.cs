@@ -42,7 +42,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 {
                     if(existingUser.UserStatusId == (int)UserStatusEnum.Revoked)
                     {
-                        response = await CreateNewUser(request, cancellationToken);
+                        // Mobile numbers are globally unique (UQ_Users_Mobile) — inserting a new
+                        // row here would violate that constraint and crash with a raw 500.
+                        // A deactivated account can only come back via an admin's Reactivate
+                        // action, never via self-service signup (that would let anyone reclaim
+                        // someone else's deactivated account just by knowing their number).
+                        response.Success = false;
+                        response.Message = "This mobile number belongs to a deactivated account. Contact your hospital admin to reactivate it.";
                     }
                     else if (existingUser.UserStatusId == (int)UserStatusEnum.Inactive)
                     {
