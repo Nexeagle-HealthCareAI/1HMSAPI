@@ -158,6 +158,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (item.CurrentStock + delta < 0)
                     return new RecordInventoryMovementResponseModel { Success = false, Message = $"Insufficient stock — only {item.CurrentStock} {item.Unit} available." };
 
+                // India regulatory compliance (INV-8) — schedule-class gating on dispensing. Legacy
+                // callers (OT/CSSD) issue CONSUMABLE/SURGICAL/IMPLANT items that never carry a
+                // ScheduleClass, so this is a no-op for them; it only bites real drug dispensing.
+                if (!isInbound && !string.IsNullOrWhiteSpace(item.ScheduleClass))
+                {
+                    if (item.ScheduleClass == IpdConstants.DrugScheduleClass.Narcotic && !request.IsNarcoticDispenseContext)
+                        return new RecordInventoryMovementResponseModel { Success = false, Message = "Narcotic items must be dispensed via the narcotics dispense endpoint, not a plain movement." };
+                    if (string.IsNullOrWhiteSpace(request.PrescriberRef))
+                        return new RecordInventoryMovementResponseModel { Success = false, Message = "A prescriber reference is required to dispense a scheduled drug." };
+                    if (item.ScheduleClass == IpdConstants.DrugScheduleClass.Narcotic && string.IsNullOrWhiteSpace(request.WitnessBy))
+                        return new RecordInventoryMovementResponseModel { Success = false, Message = "A witness is required to dispense a narcotic." };
+                }
+
                 // Batch/store-aware path (INV-2) — resolve which batch (if any) this movement posts
                 // against, entirely optional so legacy callers (no BatchId/StoreId) behave exactly as
                 // before.
@@ -176,6 +189,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     batch = await FefoBatchAllocationService.AllocateAsync(_context, request.HospitalId, item.InventoryItemId, request.StoreId.Value, request.Qty, cancellationToken);
                     if (batch == null)
                         return new RecordInventoryMovementResponseModel { Success = false, Message = "No active batch has enough remaining stock in that store to cover this quantity." };
+                }
+
+                // Expired/inactive batch hard-block on dispensing — no override path. FEFO already
+                // filters these out at selection time; this catches an explicitly-supplied BatchId.
+                if (!isInbound && batch != null)
+                {
+                    var today = DateTime.UtcNow.Date;
+                    if (batch.Status != "ACTIVE" || (batch.ExpiryDate.HasValue && batch.ExpiryDate.Value.Date < today))
+                        return new RecordInventoryMovementResponseModel { Success = false, Message = $"Cannot dispense from batch {batch.BatchNumber} — it is expired or no longer active." };
                 }
 
                 var storeId = batch?.StoreId ?? request.StoreId;
@@ -248,6 +270,44 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     }
                     stockLevel.QtyOnHand += delta;
                     stockLevel.UpdatedAt = now;
+                }
+
+                // NDPS narcotics register (INV-8) — every movement of a NARCOTIC-scheduled item that
+                // resolved to a real batch is logged here, both directions. Witness is only enforced
+                // above for dispensing (OUT); a receipt (IN, e.g. via GRN) logs with the receiving
+                // user standing in as witness since a second-signer flow isn't wired for receiving yet.
+                if (item.ScheduleClass == IpdConstants.DrugScheduleClass.Narcotic && batch != null && storeId.HasValue)
+                {
+                    var formType = !string.IsNullOrWhiteSpace(request.PatientId)
+                        ? IpdConstants.NarcoticFormType.Form3E
+                        : IpdConstants.NarcoticFormType.Form3D;
+                    if (formType == IpdConstants.NarcoticFormType.Form3D)
+                    {
+                        var storeType = await _context.Store.Where(s => s.StoreId == storeId).Select(s => s.StoreType).FirstOrDefaultAsync(cancellationToken);
+                        if (storeType == IpdConstants.StoreType.Main || storeType == IpdConstants.StoreType.Narcotic)
+                            formType = IpdConstants.NarcoticFormType.Form3H;
+                    }
+
+                    _context.NarcoticRegisterEntry.Add(new NarcoticRegisterEntry
+                    {
+                        RegisterEntryId = Guid.NewGuid(),
+                        HospitalId = request.HospitalId,
+                        InventoryItemId = item.InventoryItemId,
+                        BatchId = batch.BatchId,
+                        StoreId = storeId.Value,
+                        FormType = formType,
+                        Direction = isInbound ? IpdConstants.NarcoticDirection.In : IpdConstants.NarcoticDirection.Out,
+                        Qty = request.Qty,
+                        BalanceAfter = batch.RemainingQty,
+                        PatientId = request.PatientId,
+                        EncounterId = request.EncounterId,
+                        PrescriberRef = request.PrescriberRef,
+                        IssuedBy = request.LoggedInUserName,
+                        IssuedByUserId = request.LoggedInUserId,
+                        WitnessBy = string.IsNullOrWhiteSpace(request.WitnessBy) ? (request.LoggedInUserName ?? "Unknown") : request.WitnessBy,
+                        WitnessByUserId = request.WitnessByUserId,
+                        RecordedAt = now,
+                    });
                 }
 
                 await _context.SaveChangesAsync(cancellationToken);
