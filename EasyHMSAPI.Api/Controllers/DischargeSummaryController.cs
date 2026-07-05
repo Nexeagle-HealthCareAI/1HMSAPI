@@ -110,5 +110,31 @@ namespace EasyHMSAPI.Api.Controllers
                 return StatusCode(500, new { Message = "An error occurred while generating the narrative." });
             }
         }
+
+        // Personalized discharge-summary field layout (global per doctor): rename / reorder /
+        // show-hide built-in fields and add custom fields. Mirrors EPrescriptionController's
+        // configuration/field-layout routes.
+        [HttpGet("configuration/field-layout/doctorId={doctorId}")]
+        public async Task<ActionResult<GetDoctorDischargeFieldConfigResponseModel>> GetFieldLayout(Guid doctorId)
+        {
+            if (doctorId == Guid.Empty)
+                return BadRequest(new { Message = "Invalid doctorId." });
+
+            var result = await _mediator.Send(new GetDoctorDischargeFieldConfigRequestModel { DoctorId = doctorId });
+            return Ok(result);
+        }
+
+        [HttpPut("configuration/field-layout/doctorId={doctorId}")]
+        public async Task<ActionResult<UpdateDoctorDischargeFieldConfigResponseModel>> UpdateFieldLayout(Guid doctorId, [FromBody] UpdateDoctorDischargeFieldConfigRequestModel model)
+        {
+            if (model == null)
+                return BadRequest(new { Message = "Invalid request body." });
+            if (doctorId == Guid.Empty)
+                return BadRequest(new { Message = "Invalid doctorId." });
+
+            model.DoctorId = doctorId;
+            var result = await _mediator.Send(model);
+            return Ok(result);
+        }
     }
 }
