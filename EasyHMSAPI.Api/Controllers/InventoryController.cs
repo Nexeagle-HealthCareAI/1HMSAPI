@@ -160,5 +160,25 @@ namespace EasyHMSAPI.Api.Controllers
                 return StatusCode(500, new { Message = "An error occurred while fetching the inventory board." });
             }
         }
+
+        // Unified "everything, every store" view — InventoryItem/StockLevel, BloodBag, and
+        // InstrumentSet combined (INV-10). Read-only; each module's own screen/API is unchanged.
+        [HttpGet("unified-stock")]
+        public async Task<ActionResult<GetUnifiedStockVisibilityResponseModel>> GetUnifiedStock([FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetUnifiedStockVisibilityRequestModel { HospitalId = hospitalId });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetUnifiedStock for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching unified stock visibility." });
+            }
+        }
     }
 }

@@ -20,6 +20,8 @@ namespace EasyHMSAPI.Domain.Entities
         public DateTime CollectedAt { get; set; }
         public DateTime ExpiresAt { get; set; }
         public string? StorageLocation { get; set; }
+        // Unified Store reference (INV-10) — added alongside StorageLocation, not replacing it.
+        public Guid? StoreId { get; set; }
 
         public string Status { get; set; } = null!;   // AVAILABLE/RESERVED/TRANSFUSED/DISCARDED
 
