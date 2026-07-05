@@ -36,6 +36,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string MovementType { get; set; } = null!;
         public Guid? SurgeryCaseId { get; set; }
         public string? Location { get; set; }
+        // Unified Store reference (INV-10) — optional, sets InstrumentSet.StoreId alongside Location.
+        public Guid? StoreId { get; set; }
         public string? Notes { get; set; }
     }
 

@@ -32,6 +32,13 @@ namespace EasyHMSAPI.Domain.Entities
         public decimal MinStockLevel { get; set; }
         public string? StoreLocation { get; set; }
 
+        public string? ScheduleClass { get; set; }   // H/H1/X/NARCOTIC — null means unregulated/OTC
+        public bool IsLasa { get; set; }
+        public bool IsHighAlert { get; set; }
+        public string? StorageCondition { get; set; }   // ROOM/COLD_CHAIN/FROZEN/CONTROLLED
+        public decimal ReorderQty { get; set; }
+        public decimal? MaxStockLevel { get; set; }
+
         public bool IsActive { get; set; }
 
         public DateTime CreatedAt { get; set; }

@@ -45,6 +45,76 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
             var now = DateTime.UtcNow;
 
+            if (decision == "APPROVED" && approval.PaymentType == "DISCOUNT")
+            {
+                // A discount never posts a BillingPayment — it just applies the previously-held
+                // discount amount now that an admin has signed off on it dipping into collected money.
+                var applyResult = await _mediator.Send(new CreateDraftInvoiceRequestModel
+                {
+                    PatientId = approval.PatientId,
+                    EncounterId = approval.EncounterId,
+                    HospitalId = approval.HospitalId,
+                    InvoiceDiscountAmount = approval.RequestedAmount,
+                    SkipCreditApprovalCheck = true,
+                    LoggedInUserName = request.LoggedInUserName,
+                }, cancellationToken);
+                if (applyResult?.Success != true)
+                {
+                    return new DecideCreditApprovalResponseModel { Success = false, Message = applyResult?.Message ?? "Could not apply the discount." };
+                }
+
+                approval.Status = decision;
+                approval.DecidedAt = now;
+                approval.DecidedBy = request.LoggedInUserName;
+                approval.DecidedByUserId = request.LoggedInUserId;
+                approval.DecisionNote = string.IsNullOrWhiteSpace(request.DecisionNote) ? null : request.DecisionNote.Trim();
+                approval.UpdatedAt = now;
+                await _context.SaveChangesAsync(cancellationToken);
+
+                return new DecideCreditApprovalResponseModel
+                {
+                    Success = true,
+                    Message = "Discount approved and applied to the invoice.",
+                    Status = approval.Status,
+                    DecidedAt = approval.DecidedAt,
+                };
+            }
+
+            if (decision == "APPROVED" && (approval.PaymentType == "DELETE_CHARGE" || approval.PaymentType == "DELETE_PAYMENT"))
+            {
+                // Deleting isn't a money-posting action like ADVANCE/REFUND — just re-invoke the
+                // actual delete now that an admin has signed off, bypassing the approval gate.
+                var deleteResult = await _mediator.Send(new DeleteBillingEventRequestModel
+                {
+                    HospitalId = approval.HospitalId,
+                    PatientId = approval.PatientId,
+                    EventId = approval.TargetEventId ?? Guid.Empty,
+                    Type = approval.PaymentType == "DELETE_CHARGE" ? BillingConstants.BillingActionType.Charges : BillingConstants.BillingActionType.Payment,
+                    SkipCreditApprovalCheck = true,
+                    LoggedInUserName = request.LoggedInUserName,
+                }, cancellationToken);
+                if (deleteResult?.Success != true)
+                {
+                    return new DecideCreditApprovalResponseModel { Success = false, Message = deleteResult?.Message ?? "Could not delete the billing entry." };
+                }
+
+                approval.Status = decision;
+                approval.DecidedAt = now;
+                approval.DecidedBy = request.LoggedInUserName;
+                approval.DecidedByUserId = request.LoggedInUserId;
+                approval.DecisionNote = string.IsNullOrWhiteSpace(request.DecisionNote) ? null : request.DecisionNote.Trim();
+                approval.UpdatedAt = now;
+                await _context.SaveChangesAsync(cancellationToken);
+
+                return new DecideCreditApprovalResponseModel
+                {
+                    Success = true,
+                    Message = $"Deletion approved — the {(approval.PaymentType == "DELETE_CHARGE" ? "charge" : "payment")} has been removed.",
+                    Status = approval.Status,
+                    DecidedAt = approval.DecidedAt,
+                };
+            }
+
             if (decision == "APPROVED")
             {
                 async Task<BillingInvoice?> LoadInvoiceAsync() => await _context.BillingInvoice
@@ -113,7 +183,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 if (allocatedAmount > 0)
                 {
-                    _context.BillingPaymentAllocation.Add(new BillingPaymentAllocation
+                    var newAllocation = new BillingPaymentAllocation
                     {
                         AllocationId = Guid.NewGuid(),
                         EncounterId = approval.EncounterId,
@@ -122,7 +192,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         AllocatedAmount = allocatedAmount,
                         CreatedAt = now,
                         CreatedBy = request.LoggedInUserName,
-                    });
+                    };
+                    _context.BillingPaymentAllocation.Add(newAllocation);
+                    await PaymentAllocationHelper.DistributeToChargesAsync(
+                        _context, billingInvoice.InvoiceId, newAllocation.AllocationId, allocatedAmount, request.LoggedInUserName, cancellationToken);
                 }
 
                 numberSeries.UpdatedAt = now;

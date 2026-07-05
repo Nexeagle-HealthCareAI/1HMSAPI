@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 
 namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
 {
+    // Upsert: TheatreId present => update that theatre in place; absent => create a new one.
     [ExcludeFromCodeCoverage]
     public class CreateOperationTheatreRequestModel : IRequest<CreateOperationTheatreResponseModel>
     {
@@ -12,8 +13,13 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         [JsonIgnore]
         public string? LoggedInUserName { get; set; }
 
+        public Guid? TheatreId { get; set; }
         public string TheatreCode { get; set; } = null!;
         public string TheatreName { get; set; } = null!;
+        public Guid? DepartmentId { get; set; }
+        public decimal Price { get; set; }
+        public string? Status { get; set; }
+        public bool IsActive { get; set; } = true;
     }
 
     // Books a theatre/time-slot for a SurgeryCase. Conflict-checked (application-level, not a DB

@@ -116,6 +116,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 set.CurrentStatus = newStatus;
                 if (!string.IsNullOrWhiteSpace(request.Location))
                     set.CurrentLocation = request.Location.Trim();
+                if (request.StoreId.HasValue && request.StoreId != Guid.Empty)
+                    set.StoreId = request.StoreId;
                 set.UpdatedAt = now;
                 set.UpdatedBy = request.LoggedInUserName;
 

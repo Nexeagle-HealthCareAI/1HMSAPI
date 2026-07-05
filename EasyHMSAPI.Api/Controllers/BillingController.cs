@@ -118,7 +118,8 @@ namespace EasyHMSAPI.Api.Controllers
             [FromQuery] Guid hospitalId,
             [FromQuery] string? patientId,
             [FromQuery] Guid eventId,
-            [FromQuery] string? type)
+            [FromQuery] string? type,
+            [FromQuery] string? reason)
         {
             if (hospitalId == Guid.Empty || eventId == Guid.Empty)
                 return BadRequest(new { Message = "hospitalId and eventId are required." });
@@ -131,7 +132,9 @@ namespace EasyHMSAPI.Api.Controllers
                     PatientId = patientId,
                     EventId = eventId,
                     Type = type,
+                    Reason = reason,
                     LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext),
+                    LoggedInUserId = UserContextHelper.GetUserId(User),
                 };
                 var response = await _mediator.Send(request);
                 return Ok(response);
@@ -152,6 +155,7 @@ namespace EasyHMSAPI.Api.Controllers
             try
             {
                 request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                request.LoggedInUserId = UserContextHelper.GetUserId(User);
                 var response = await _mediator.Send(request);
                 return Ok(response);
             }

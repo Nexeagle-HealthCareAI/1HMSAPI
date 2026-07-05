@@ -63,6 +63,24 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 bill.UpdatedBy = request.LoggedInUserName;
                 _context.AdmissionDayBill.Update(bill);
 
+                // The day-bill is only a printed snapshot — the actual lock on charge-cancel and
+                // payment-delete is the underlying BillingInvoice's FINALIZED status. Un-finalize
+                // the invoice that covers this day's charges so it becomes editable again too.
+                var invoiceToReopen = await _context.BillingInvoice
+                    .Where(bi => bi.EncounterId == bill.EncounterId && bi.HospitalId == request.HospitalId
+                              && bi.StatusCode == BillingConstants.InvoiceStatus.Finalized)
+                    .OrderByDescending(bi => bi.FinalizedAt)
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (invoiceToReopen != null)
+                {
+                    invoiceToReopen.StatusCode = BillingConstants.InvoiceStatus.Draft;
+                    invoiceToReopen.IsReopened = true;
+                    invoiceToReopen.ReopenedReason = request.Reason;
+                    invoiceToReopen.UpdatedAt = now;
+                    invoiceToReopen.UpdatedBy = request.LoggedInUserName;
+                    _context.BillingInvoice.Update(invoiceToReopen);
+                }
+
                 await _context.SaveChangesAsync(cancellationToken);
 
                 return new ReopenAdmissionDayResponseModel { Success = true, Message = "Interim bill reopened. Its charges are billable again." };

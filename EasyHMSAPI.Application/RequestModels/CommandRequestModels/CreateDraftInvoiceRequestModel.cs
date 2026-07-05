@@ -14,5 +14,12 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public decimal? InvoiceDiscountAmount { get; set; }
         [JsonIgnore]
         public string? LoggedInUserName { get; set; }
+        [JsonIgnore]
+        public Guid? LoggedInUserId { get; set; }
+        // Internal-only: set true when re-invoked from DecideCreditApprovalHandler after an
+        // admin has already approved a discount that would dip into collected money — never
+        // set by the public API surface.
+        [JsonIgnore]
+        public bool SkipCreditApprovalCheck { get; set; }
     }
 }

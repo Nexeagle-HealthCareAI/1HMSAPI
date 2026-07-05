@@ -61,6 +61,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 var (appointment, isNewAppointment) = await CreateOrUpdateAppointment(request, patient, status, cancellationToken);
 
+                (bool billRefunded, decimal refundAmount, string? refundReceiptNo) refundResult = (false, 0m, null);
+                if (!isNewAppointment && request.VoidExistingChargesAndRefund)
+                {
+                    refundResult = await VoidExistingChargesAndRefundAsync(appointment, cancellationToken);
+                }
+
                 if(request.AppointmentId is not null)
                 {
                     patient = await _context.PatientRegistrations
@@ -158,6 +164,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         appointmentTime);
                 }
 
+                var message = "Appointment registered successfully";
+                if (refundResult.billRefunded)
+                    message += $". ₹{refundResult.refundAmount:0.##} was refunded (receipt {refundResult.refundReceiptNo}) and the prior consultation bill was voided.";
+
                 return new RegisterAppointmentResponseModel
                 {
                     PatientId = patient.PatientId,
@@ -165,7 +175,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     Status = status,
                     TokenNumber = tokenNumber,
                     IsReminderSent = isReminderSent,
-                    Message = "Appointment registered successfully"
+                    Message = message,
+                    BillRefunded = refundResult.billRefunded,
+                    RefundAmount = refundResult.billRefunded ? refundResult.refundAmount : null,
+                    RefundReceiptNo = refundResult.refundReceiptNo
                 };
             }
             catch (DbUpdateException dbEx)
@@ -494,6 +507,117 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             {
                 // Non-fatal: the bill can still be created later from the Add Bill popup.
             }
+        }
+
+        // Reschedule opt-in: void this visit's posted charges/invoice and auto-refund whatever was
+        // already collected — mirrors CancelAppointmentHandler's void-then-refund logic, except the
+        // encounter itself is left Open (the visit continues on the new date, not torn down).
+        private async Task<(bool billRefunded, decimal refundAmount, string? refundReceiptNo)> VoidExistingChargesAndRefundAsync(
+            Appointment appointment, CancellationToken cancellationToken)
+        {
+            var billEncounter = await _context.Encounter
+                .FirstOrDefaultAsync(e => e.SourceType == "Appointments"
+                                       && e.SourceId == appointment.ApptId
+                                       && e.StatusCode != BillingConstants.EncounterStatus.Cancelled,
+                                       cancellationToken);
+            if (billEncounter == null)
+                return (false, 0m, null);
+
+            var now = DateTime.UtcNow;
+
+            var paidTotal = await _context.BillingPayment
+                .Where(p => p.EncounterId == billEncounter.EncounterId
+                         && p.PaymentType == BillingConstants.PaymentType.Payment)
+                .SumAsync(p => (decimal?)p.Amount, cancellationToken) ?? 0m;
+            var refundedAlready = await _context.BillingPayment
+                .Where(p => p.EncounterId == billEncounter.EncounterId
+                         && p.PaymentType == BillingConstants.PaymentType.Refund)
+                .SumAsync(p => (decimal?)p.Amount, cancellationToken) ?? 0m;
+            var netCollected = paidTotal - refundedAlready;
+
+            bool billRefunded = false;
+            decimal refundAmount = 0m;
+            string? refundReceiptNo = null;
+
+            if (netCollected > 0)
+            {
+                var lastMode = await _context.BillingPayment
+                    .Where(p => p.EncounterId == billEncounter.EncounterId
+                             && p.PaymentType == BillingConstants.PaymentType.Payment)
+                    .OrderByDescending(p => p.PaidAt)
+                    .Select(p => p.PaymentMode)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                var rcptSeries = await NumberSeriesDefaults.GetOrCreateAsync(
+                    _context, appointment.HospitalId, BillingConstants.NumberSeriesCode.Receipt, "SYSTEM", cancellationToken);
+                rcptSeries.CurrentValue++;
+                refundReceiptNo = NumberSeriesFormatter.Format(
+                    rcptSeries.Prefix, rcptSeries.YearFormat, rcptSeries.Separator, rcptSeries.PadLength, rcptSeries.CurrentValue);
+                rcptSeries.UpdatedAt = now;
+                rcptSeries.UpdatedBy = "SYSTEM";
+
+                _context.BillingPayment.Add(new BillingPayment
+                {
+                    PaymentId = Guid.NewGuid(),
+                    HospitalId = appointment.HospitalId,
+                    PatientId = billEncounter.PatientId,
+                    EncounterId = billEncounter.EncounterId,
+                    ReceiptNo = refundReceiptNo,
+                    PaymentType = BillingConstants.PaymentType.Refund,
+                    PaymentMode = lastMode,
+                    PaymentDescription = "Auto refund — appointment rescheduled",
+                    Amount = netCollected,
+                    PaidAt = now,
+                    CreatedAt = now,
+                    CreatedBy = "SYSTEM",
+                    UpdatedAt = now,
+                    UpdatedBy = "SYSTEM"
+                });
+
+                var allocations = await _context.BillingPaymentAllocation
+                    .Where(a => a.EncounterId == billEncounter.EncounterId)
+                    .ToListAsync(cancellationToken);
+                if (allocations.Count > 0)
+                {
+                    var allocationIds = allocations.Select(a => a.AllocationId).ToList();
+                    var allocationCharges = await _context.BillingPaymentAllocationCharge
+                        .Where(ac => allocationIds.Contains(ac.AllocationId))
+                        .ToListAsync(cancellationToken);
+                    if (allocationCharges.Count > 0)
+                        _context.BillingPaymentAllocationCharge.RemoveRange(allocationCharges);
+                    _context.BillingPaymentAllocation.RemoveRange(allocations);
+                }
+
+                billRefunded = true;
+                refundAmount = netCollected;
+            }
+
+            var charges = await _context.BillingChargeEvent
+                .Where(c => c.EncounterId == billEncounter.EncounterId
+                         && c.StatusCode != BillingConstants.ChargeEventStatus.Void)
+                .ToListAsync(cancellationToken);
+            foreach (var c in charges)
+            {
+                c.StatusCode = BillingConstants.ChargeEventStatus.Void;
+                c.VoidedAt = now;
+                c.VoidedBy = "SYSTEM";
+                c.VoidReason = "Appointment rescheduled";
+                c.UpdatedAt = now;
+                c.UpdatedBy = "SYSTEM";
+            }
+
+            var invoices = await _context.BillingInvoice
+                .Where(i => i.EncounterId == billEncounter.EncounterId
+                         && i.StatusCode != BillingConstants.InvoiceStatus.Cancelled)
+                .ToListAsync(cancellationToken);
+            foreach (var inv in invoices)
+            {
+                inv.StatusCode = BillingConstants.InvoiceStatus.Cancelled;
+                inv.UpdatedAt = now;
+                inv.UpdatedBy = "SYSTEM";
+            }
+
+            return (billRefunded, refundAmount, refundReceiptNo);
         }
 
         private string GenerateNewPatientId()

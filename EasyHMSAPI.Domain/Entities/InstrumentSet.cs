@@ -20,6 +20,8 @@ namespace EasyHMSAPI.Domain.Entities
 
         public string CurrentStatus { get; set; } = null!;
         public string? CurrentLocation { get; set; }
+        // Unified Store reference (INV-10) — added alongside CurrentLocation, not replacing it.
+        public Guid? StoreId { get; set; }
 
         public bool IsActive { get; set; }
 

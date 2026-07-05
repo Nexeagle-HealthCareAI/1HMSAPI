@@ -22,6 +22,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public DateTime CollectedAt { get; set; }
         public DateTime ExpiresAt { get; set; }
         public string? StorageLocation { get; set; }
+        // Unified Store reference (INV-10) — optional, sets BloodBag.StoreId alongside StorageLocation.
+        public Guid? StoreId { get; set; }
         public Guid? ChargeId { get; set; }
         public decimal? UnitRate { get; set; }
     }

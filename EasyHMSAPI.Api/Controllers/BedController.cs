@@ -75,6 +75,10 @@ namespace EasyHMSAPI.Api.Controllers
                 var response = await _mediator.Send(request);
                 return Ok(response);
             }
+            catch (Exception ex) when (ex is KeyNotFoundException || ex is InvalidOperationException)
+            {
+                return BadRequest(new { ex.Message });
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in UpsertBedMaster for hospitalId: {HospitalId}", request.HospitalId);
@@ -101,6 +105,65 @@ namespace EasyHMSAPI.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in BulkCreateBedMaster for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
+        [HttpGet("room/master")]
+        public async Task<ActionResult<GetRoomsResponseModel>> GetRooms([FromQuery] Guid hospitalId, [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var request = new GetRoomsRequestModel { HospitalId = hospitalId, Page = page, PageSize = pageSize };
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetRooms for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
+        [HttpGet("room/master/{roomId}")]
+        public async Task<ActionResult<RoomDetailResponseModel>> GetRoomById(Guid roomId, [FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty || roomId == Guid.Empty)
+                return BadRequest(new { Message = "HospitalId and RoomId are required." });
+
+            try
+            {
+                var request = new GetRoomByIdRequestModel { HospitalId = hospitalId, RoomId = roomId };
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetRoomById for roomId: {RoomId}", roomId);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
+        [HttpPut("room/master")]
+        public async Task<ActionResult<UpsertRoomResponseModel>> UpsertRoom([FromBody] UpsertRoomRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in UpsertRoom for hospitalId: {HospitalId}", request.HospitalId);
                 return StatusCode(500, new { Message = "An error occurred." });
             }
         }

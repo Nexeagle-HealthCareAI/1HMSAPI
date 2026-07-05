@@ -22,6 +22,12 @@ namespace EasyHMSAPI.Application.Services
                 return ("ADM", "YYYY", "-", 6);
             if (string.Equals(seriesCode, BillingConstants.NumberSeriesCode.InterimBill, StringComparison.OrdinalIgnoreCase))
                 return ("IB", "YYYY", "-", 6);
+            if (string.Equals(seriesCode, BillingConstants.NumberSeriesCode.Indent, StringComparison.OrdinalIgnoreCase))
+                return ("IND", "YYYY", "-", 6);
+            if (string.Equals(seriesCode, BillingConstants.NumberSeriesCode.PurchaseOrder, StringComparison.OrdinalIgnoreCase))
+                return ("PO", "YYYY", "-", 6);
+            if (string.Equals(seriesCode, BillingConstants.NumberSeriesCode.Grn, StringComparison.OrdinalIgnoreCase))
+                return ("GRN", "YYYY", "-", 6);
             return ("INV", "YYYY", "-", 6);
         }
 

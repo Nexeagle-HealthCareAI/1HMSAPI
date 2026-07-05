@@ -68,14 +68,35 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     .Join(_context.UserProfiles, d => d.UserID, u => u.UserID, (d, u) => new { d.DoctorID, u.FullName })
                     .ToDictionaryAsync(x => x.DoctorID, x => x.FullName, cancellationToken);
 
-                var invoiceIds = invoices.Select(i => i.InvoiceId).ToList();
-
-                var paidByInvoice = (await _context.BillingPaymentAllocation
-                        .Where(bpa => invoiceIds.Contains(bpa.InvoiceId))
-                        .GroupBy(bpa => bpa.InvoiceId)
-                        .Select(g => new { InvoiceId = g.Key, Total = g.Sum(x => x.AllocatedAmount) })
+                // Due/credit must be computed per ENCOUNTER (charges + payments across every
+                // invoice that visit has ever had), not per one arbitrary invoice's own
+                // allocations — an encounter can fragment across multiple BillingInvoice rows
+                // (e.g. day-wise IPD finalize cycles) and money can sit unallocated (a charge-less
+                // advance, or money freed up by cancelling a paid charge). Scoping to one invoice
+                // under-counts real credit, which is exactly what made the Revenue table's
+                // Due/Credit badge unreliable.
+                var totalBilledByEncounter = (await _context.BillingChargeEvent
+                        .Where(c => encounterIds.Contains(c.EncounterId) && c.StatusCode != BillingConstants.ChargeEventStatus.Void)
+                        .GroupBy(c => c.EncounterId)
+                        .Select(g => new { EncounterId = g.Key, Total = g.Sum(x => x.NetAmount) })
                         .ToListAsync(cancellationToken))
-                    .ToDictionary(x => x.InvoiceId, x => x.Total);
+                    .ToDictionary(x => x.EncounterId, x => x.Total);
+
+                var paymentTotalsByEncounter = await _context.BillingPayment
+                    .Where(p => encounterIds.Contains(p.EncounterId))
+                    .GroupBy(p => new { p.EncounterId, p.PaymentType })
+                    .Select(g => new { g.Key.EncounterId, g.Key.PaymentType, Total = g.Sum(x => x.Amount) })
+                    .ToListAsync(cancellationToken);
+
+                var collectedByEncounter = paymentTotalsByEncounter
+                    .Where(x => x.PaymentType == BillingConstants.PaymentType.Payment || x.PaymentType == BillingConstants.PaymentType.Advance)
+                    .GroupBy(x => x.EncounterId)
+                    .ToDictionary(g => g.Key, g => g.Sum(x => x.Total));
+
+                var refundedByEncounter = paymentTotalsByEncounter
+                    .Where(x => x.PaymentType == BillingConstants.PaymentType.Refund)
+                    .GroupBy(x => x.EncounterId)
+                    .ToDictionary(g => g.Key, g => g.Sum(x => x.Total));
 
                 var invoiceByEncounter = invoices
                     .GroupBy(bi => bi.EncounterId)
@@ -98,8 +119,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
                         bool isCancelled = invoice.StatusCode == BillingConstants.InvoiceStatus.Cancelled;
 
-                        var totalPaid = isCancelled ? 0 : (paidByInvoice.TryGetValue(invoice.InvoiceId, out var paid) ? paid : 0m);
-                        decimal netAmount = isCancelled ? 0 : (invoice.NetAmount ?? 0);
+                        decimal netAmount = isCancelled ? 0 : (totalBilledByEncounter.TryGetValue(encounter.EncounterId, out var billed) ? billed : 0m);
+                        decimal totalCollected = isCancelled ? 0 : (collectedByEncounter.TryGetValue(encounter.EncounterId, out var collected) ? collected : 0m);
+                        decimal totalRefunded = isCancelled ? 0 : (refundedByEncounter.TryGetValue(encounter.EncounterId, out var refunded) ? refunded : 0m);
+                        var totalPaid = totalCollected - totalRefunded;
                         decimal dueAmount = netAmount - totalPaid;
 
                         encounterDetails.Add(new DashboardEncounterDetail

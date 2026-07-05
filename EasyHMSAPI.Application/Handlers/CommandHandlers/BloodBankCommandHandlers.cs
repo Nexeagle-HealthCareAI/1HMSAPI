@@ -63,6 +63,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     CollectedAt = request.CollectedAt,
                     ExpiresAt = request.ExpiresAt,
                     StorageLocation = string.IsNullOrWhiteSpace(request.StorageLocation) ? null : request.StorageLocation.Trim(),
+                    StoreId = request.StoreId,
                     Status = IpdConstants.BloodBagStatus.Available,
                     ChargeId = request.ChargeId,
                     UnitRate = request.UnitRate,

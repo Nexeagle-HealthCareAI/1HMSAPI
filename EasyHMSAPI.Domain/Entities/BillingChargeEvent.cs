@@ -48,6 +48,11 @@ namespace EasyHMSAPI.Domain.Entities
         public bool IsTaxInclusive { get; set; }
         public bool IsInterState { get; set; }
 
+        // Client-generated key from the offline sync engine's outbox replay (Idempotency-Key
+        // header) — lets a retried "add-event" call be detected and short-circuited instead of
+        // re-posting the same batch of charges. Null for calls made without the header.
+        public string? IdempotencyKey { get; set; }
+
         public string? StatusCode { get; set; }
         public DateTime ServiceDate { get; set; }
         public DateTime? PostedAt { get; set; }

@@ -181,28 +181,77 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             decimal gross = linkedChargeEvents.Sum(ce => ce.Qty * ce.UnitPrice);
             decimal lineDiscount = linkedChargeEvents.Sum(ce => ce.DiscountAmount ?? 0);
 
-            // Invoice-level (overall) discount. When the caller doesn't specify one, preserve any
-            // previously-applied invoice-level discount on the existing draft — i.e. its prior total
-            // discount minus the line discounts of the charges that were already on it. This keeps the
-            // overall discount intact when the draft is rebuilt to add a charge, record a payment, or
-            // finalize, instead of silently resetting it to zero.
-            decimal invoiceLevelDiscount;
-            if (request.InvoiceDiscountAmount.HasValue)
-            {
-                invoiceLevelDiscount = request.InvoiceDiscountAmount.Value;
-            }
-            else if (existingDraft != null)
+            // The discount already in effect, unaffected by this request — used both as the
+            // "caller didn't specify one" fallback and as what stays in effect if a NEW discount
+            // needs admin approval below.
+            decimal existingInvoiceLevelDiscount;
+            if (existingDraft != null)
             {
                 decimal priorLineDiscount = allChargeEvents
                     .Where(ce => alreadyLinkedSet.Contains(ce.ChargeEventId))
                     .Sum(ce => ce.DiscountAmount ?? 0);
-                invoiceLevelDiscount = Math.Max(0, (existingDraft.DiscountAmount ?? 0) - priorLineDiscount);
+                existingInvoiceLevelDiscount = Math.Max(0, (existingDraft.DiscountAmount ?? 0) - priorLineDiscount);
             }
             else
             {
-                invoiceLevelDiscount = 0;
+                existingInvoiceLevelDiscount = 0;
             }
+
+            // Invoice-level (overall) discount. When the caller doesn't specify one, preserve the
+            // existing one — keeps it intact when the draft is rebuilt to add a charge, record a
+            // payment, or finalize, instead of silently resetting it to zero.
+            decimal invoiceLevelDiscount = request.InvoiceDiscountAmount ?? existingInvoiceLevelDiscount;
             if (invoiceLevelDiscount < 0) invoiceLevelDiscount = 0;
+
+            // A NEW discount request (not a payment/charge-triggered rebuild) that would reduce
+            // NetAmount below money already collected needs admin sign-off — the same
+            // CreditApproval gate used for advances/refunds — instead of silently discounting
+            // money that's already been paid out.
+            bool isExplicitDiscountRequest = request.InvoiceDiscountAmount.HasValue && !request.SkipCreditApprovalCheck;
+            if (isExplicitDiscountRequest && existingDraft != null)
+            {
+                decimal requestedTotalDiscount = Math.Min(gross, lineDiscount + invoiceLevelDiscount);
+                decimal requestedNet = gross - requestedTotalDiscount;
+                decimal totalPaid = await _context.BillingPaymentAllocation
+                    .Where(bpa => bpa.InvoiceId == invoice.InvoiceId)
+                    .SumAsync(bpa => bpa.AllocatedAmount, cancellationToken);
+
+                if (requestedNet < totalPaid)
+                {
+                    await tx.RollbackAsync(cancellationToken);
+                    _context.ChangeTracker.Clear();
+
+                    var approvalNow = DateTime.UtcNow;
+                    var approval = new CreditApproval
+                    {
+                        CreditApprovalId = Guid.NewGuid(),
+                        HospitalId = request.HospitalId,
+                        EncounterId = request.EncounterId,
+                        PatientId = request.PatientId,
+                        PaymentType = "DISCOUNT",
+                        RequestedAmount = request.InvoiceDiscountAmount!.Value,
+                        ResultingCreditBalance = totalPaid - requestedNet,
+                        Reason = "Discount would reduce the invoice below the amount already collected.",
+                        RequestedBy = request.LoggedInUserName,
+                        RequestedByUserId = request.LoggedInUserId,
+                        RequestedAt = approvalNow,
+                        Status = "PENDING",
+                        CreatedAt = approvalNow,
+                        UpdatedAt = approvalNow,
+                    };
+                    _context.CreditApproval.Add(approval);
+                    await _context.SaveChangesAsync(cancellationToken);
+
+                    return new CreateDraftInvoiceResponseModel
+                    {
+                        Success = true,
+                        Message = $"This discount would leave {totalPaid - requestedNet:0.00} of already-collected money unaccounted for and requires admin approval before it's applied.",
+                        PendingApproval = true,
+                        CreditApprovalId = approval.CreditApprovalId,
+                    };
+                }
+            }
+
             decimal totalDiscount = lineDiscount + invoiceLevelDiscount;
             if (totalDiscount > gross) totalDiscount = gross;
             decimal net = gross - totalDiscount;
@@ -224,6 +273,58 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             invoice.TaxAmount = tax;
             invoice.UpdatedAt = now;
             invoice.UpdatedBy = request.LoggedInUserName;
+
+            // Flush the charge-invoice links created above before querying them back below —
+            // PaymentAllocationHelper reads BillingInvoiceChargeEvent from the database, and on a
+            // first-time invoice those links were only added to the change tracker, not yet saved.
+            await _context.SaveChangesAsync(cancellationToken);
+
+            // Auto-allocate any unallocated payment balance for this encounter against this
+            // invoice's remaining due — covers a charge-less deposit taken before this invoice
+            // existed (AddPaymentEventHandler's charge-less ADVANCE path) AND money freed up by
+            // cancelling a paid charge elsewhere (DeleteBillingEventHandler reverses that charge's
+            // BillingPaymentAllocationCharge share, leaving the parent payment partly unallocated).
+            // REFUND rows are excluded — that's money paid back out, never available credit.
+            var unallocatedCandidatePayments = await _context.BillingPayment
+                .Where(p => p.EncounterId == request.EncounterId && p.PaymentType != BillingConstants.PaymentType.Refund)
+                .OrderBy(p => p.PaidAt)
+                .ToListAsync(cancellationToken);
+            if (unallocatedCandidatePayments.Count > 0)
+            {
+                var candidatePaymentIds = unallocatedCandidatePayments.Select(p => p.PaymentId).ToList();
+                var allocatedByPayment = await _context.BillingPaymentAllocation
+                    .Where(a => candidatePaymentIds.Contains(a.PaymentId))
+                    .GroupBy(a => a.PaymentId)
+                    .Select(g => new { PaymentId = g.Key, Total = g.Sum(x => x.AllocatedAmount) })
+                    .ToDictionaryAsync(x => x.PaymentId, x => x.Total, cancellationToken);
+                decimal alreadyAllocatedToThisInvoice = await _context.BillingPaymentAllocation
+                    .Where(a => a.InvoiceId == invoice.InvoiceId)
+                    .SumAsync(a => a.AllocatedAmount, cancellationToken);
+                decimal remainingDue = net - alreadyAllocatedToThisInvoice;
+
+                foreach (var payment in unallocatedCandidatePayments)
+                {
+                    if (remainingDue <= 0) break;
+                    var alreadyAllocated = allocatedByPayment.TryGetValue(payment.PaymentId, out var a) ? a : 0m;
+                    var available = payment.Amount - alreadyAllocated;
+                    if (available <= 0) continue;
+                    var toAllocate = Math.Min(available, remainingDue);
+                    var newAllocation = new BillingPaymentAllocation
+                    {
+                        AllocationId = Guid.NewGuid(),
+                        EncounterId = request.EncounterId,
+                        PaymentId = payment.PaymentId,
+                        InvoiceId = invoice.InvoiceId,
+                        AllocatedAmount = toAllocate,
+                        CreatedAt = now,
+                        CreatedBy = request.LoggedInUserName,
+                    };
+                    _context.BillingPaymentAllocation.Add(newAllocation);
+                    await PaymentAllocationHelper.DistributeToChargesAsync(
+                        _context, invoice.InvoiceId, newAllocation.AllocationId, toAllocate, request.LoggedInUserName, cancellationToken);
+                    remainingDue -= toAllocate;
+                }
+            }
 
             await _context.SaveChangesAsync(cancellationToken);
             await tx.CommitAsync(cancellationToken);

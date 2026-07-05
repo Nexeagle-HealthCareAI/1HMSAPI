@@ -24,10 +24,51 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 return new BulkCreateBedMasterResponseModel { Success = false, Message = "Number of beds must be greater than 0." };
             if (request.Count > MaxBulk)
                 return new BulkCreateBedMasterResponseModel { Success = false, Message = $"Cannot create more than {MaxBulk} beds at once." };
-            if (string.IsNullOrWhiteSpace(request.WardCode))
+
+            var wardCode = request.WardCode;
+            var wardName = request.WardName;
+            var wardType = request.WardType;
+            var floorNo = request.FloorNo;
+            var roomCode = request.RoomCode;
+            var roomType = request.RoomType;
+            var capacityInRoomOverride = request.CapacityInRoom;
+            var wardRoomDailyRate = request.WardRoomDailyRate;
+
+            if (request.RoomId.HasValue && request.RoomId != Guid.Empty)
+            {
+                var room = await _context.Room
+                    .FirstOrDefaultAsync(r => r.RoomId == request.RoomId && r.HospitalId == request.HospitalId, cancellationToken);
+                if (room == null)
+                    return new BulkCreateBedMasterResponseModel { Success = false, Message = "Room not found." };
+
+                var activeBedCount = await _context.BedMaster
+                    .CountAsync(b => b.RoomId == room.RoomId && b.IsActive, cancellationToken);
+                var remainingCapacity = room.CapacityInRoom - activeBedCount;
+                if (request.Count > remainingCapacity)
+                {
+                    return new BulkCreateBedMasterResponseModel
+                    {
+                        Success = false,
+                        Message = remainingCapacity <= 0
+                            ? $"Room {room.RoomNo} is already at its capacity of {room.CapacityInRoom} bed(s)."
+                            : $"Room {room.RoomNo} has room for {remainingCapacity} more bed(s), not {request.Count}."
+                    };
+                }
+
+                wardCode = room.WardCode;
+                wardName = room.WardName;
+                wardType = room.WardType;
+                floorNo = room.FloorNo;
+                roomCode = room.RoomNo;
+                roomType = room.RoomType;
+                capacityInRoomOverride = room.CapacityInRoom;
+                wardRoomDailyRate = room.DailyRate;
+            }
+
+            if (string.IsNullOrWhiteSpace(wardCode))
                 return new BulkCreateBedMasterResponseModel { Success = false, Message = "Ward code is required." };
 
-            var prefix = (request.BedCodePrefix ?? request.WardType ?? "BED").Trim().ToUpperInvariant();
+            var prefix = (request.BedCodePrefix ?? wardType ?? "BED").Trim().ToUpperInvariant();
             if (string.IsNullOrWhiteSpace(prefix))
                 prefix = "BED";
 
@@ -52,7 +93,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
 
             var now = DateTime.UtcNow;
-            var capacity = request.CapacityInRoom > 0 ? request.CapacityInRoom : null;
+            var capacity = capacityInRoomOverride > 0 ? capacityInRoomOverride : null;
             var statusCode = string.IsNullOrWhiteSpace(request.StatusCode) ? "AVAILABLE" : request.StatusCode;
 
             var beds = new List<BedMaster>(request.Count);
@@ -64,14 +105,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 {
                     BedId = Guid.NewGuid(),
                     HospitalId = request.HospitalId,
-                    WardCode = request.WardCode,
-                    WardName = request.WardName,
-                    WardType = request.WardType,
-                    FloorNo = request.FloorNo,
-                    RoomCode = request.RoomCode,
-                    RoomType = request.RoomType,
+                    RoomId = request.RoomId,
+                    WardCode = wardCode,
+                    WardName = wardName,
+                    WardType = wardType,
+                    FloorNo = floorNo,
+                    RoomCode = roomCode,
+                    RoomType = roomType,
                     CapacityInRoom = capacity,
-                    WardRoomDailyRate = request.WardRoomDailyRate,
+                    WardRoomDailyRate = wardRoomDailyRate,
                     BedDailyRateOverride = request.BedDailyRateOverride,
                     IncentiveAmount = request.IncentiveAmount,
                     BedCode = code,

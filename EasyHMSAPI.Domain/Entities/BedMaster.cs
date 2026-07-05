@@ -16,6 +16,9 @@ namespace EasyHMSAPI.Domain.Entities
         public string? RoomCode { get; set; }
         public string? RoomType { get; set; }
         public int? CapacityInRoom { get; set; }
+        // Links to the Room master row this bed belongs to, when created that way. Null for beds
+        // created the old way (free-text RoomCode only, no Room master row).
+        public Guid? RoomId { get; set; }
         public decimal WardRoomDailyRate { get; set; }
         public decimal? BedDailyRateOverride { get; set; }
         public decimal? IncentiveAmount { get; set; }

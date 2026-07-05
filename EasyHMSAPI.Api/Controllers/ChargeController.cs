@@ -181,6 +181,7 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
                 request.LoggedInUserId = UserContextHelper.GetUserId(User);
+                request.IdempotencyKey = Request.Headers["Idempotency-Key"].FirstOrDefault();
                 var response = await _mediator.Send(request);
                 return Ok(response);
             }

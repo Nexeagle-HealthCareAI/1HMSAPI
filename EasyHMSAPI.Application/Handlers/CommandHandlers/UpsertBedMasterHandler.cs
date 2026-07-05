@@ -57,18 +57,50 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 };
             }
 
+            var wardCode = request.WardCode;
+            var wardName = request.WardName;
+            var wardType = request.WardType;
+            var floorNo = request.FloorNo;
+            var roomCode = request.RoomCode;
+            var roomType = request.RoomType;
+            var capacityInRoom = request.CapacityInRoom > 0 ? request.CapacityInRoom : null;
+            var wardRoomDailyRate = request.WardRoomDailyRate;
+
+            if (request.RoomId.HasValue && request.RoomId != Guid.Empty)
+            {
+                var room = await _context.Room
+                    .FirstOrDefaultAsync(r => r.RoomId == request.RoomId && r.HospitalId == request.HospitalId, cancellationToken);
+                if (room == null)
+                    throw new KeyNotFoundException($"Room with ID {request.RoomId} not found.");
+
+                var activeBedCount = await _context.BedMaster
+                    .CountAsync(b => b.RoomId == room.RoomId && b.IsActive, cancellationToken);
+                if (activeBedCount >= room.CapacityInRoom)
+                    throw new InvalidOperationException($"Room {room.RoomNo} is already at its capacity of {room.CapacityInRoom} bed(s).");
+
+                wardCode = room.WardCode;
+                wardName = room.WardName;
+                wardType = room.WardType;
+                floorNo = room.FloorNo;
+                roomCode = room.RoomNo;
+                roomType = room.RoomType;
+                capacityInRoom = room.CapacityInRoom;
+                wardRoomDailyRate = room.DailyRate;
+            }
+
             var bed = new BedMaster
             {
                 BedId = Guid.NewGuid(),
                 HospitalId = request.HospitalId,
-                WardCode = request.WardCode,
-                WardName = request.WardName,
-                WardType = request.WardType,
-                FloorNo = request.FloorNo,
-                RoomCode = request.RoomCode,
-                RoomType = request.RoomType,
-                CapacityInRoom = request.CapacityInRoom > 0 ? request.CapacityInRoom : null,
-                WardRoomDailyRate = request.WardRoomDailyRate,
+                RoomId = request.RoomId,
+                WardCode = wardCode,
+                WardName = wardName,
+                WardType = wardType,
+                FloorNo = floorNo,
+                RoomCode = roomCode,
+                RoomType = roomType,
+                CapacityInRoom = capacityInRoom,
+                WardRoomDailyRate = wardRoomDailyRate,
                 BedDailyRateOverride = request.BedDailyRateOverride,
                 IncentiveAmount = request.IncentiveAmount,
                 BedCode = request.BedCode,

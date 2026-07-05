@@ -15,7 +15,11 @@ namespace EasyHMSAPI.Domain.Entities
         public Guid EncounterId { get; set; }
         public string? PatientId { get; set; }
 
-        public string PaymentType { get; set; } = string.Empty; // ADVANCE / REFUND
+        public string PaymentType { get; set; } = string.Empty; // ADVANCE / REFUND / DISCOUNT / DELETE_CHARGE / DELETE_PAYMENT
+
+        // Which specific ChargeEventId/PaymentId a DELETE_CHARGE/DELETE_PAYMENT request targets.
+        // Null for ADVANCE/REFUND/DISCOUNT, which apply to the whole encounter, not one line.
+        public Guid? TargetEventId { get; set; }
         public decimal RequestedAmount { get; set; }
         public string? PaymentMode { get; set; }
         public string? TransactionId { get; set; }
