@@ -369,7 +369,132 @@ namespace EasyHMSAPI.Data.Constants
             public const string Return = "RETURN";
             public const string AdjustIn = "ADJUST_IN";
             public const string AdjustOut = "ADJUST_OUT";
+            // DB-level only for now (schema forward-compat) — a dual-store, net-zero-on-CurrentStock
+            // movement needs its own code path, not the single-signed-delta model below. Deliberately
+            // excluded from All until that's built, so RecordInventoryMovement rejects it rather than
+            // silently mis-accounting it as a plain outbound decrement.
+            public const string Transfer = "TRANSFER";
             public static readonly string[] All = { Receive, Issue, Return, AdjustIn, AdjustOut };
+            public static readonly string[] Inbound = { Receive, Return, AdjustIn };
+            public static readonly string[] Outbound = { Issue, AdjustOut };
+        }
+
+        // Null/unset ScheduleClass means unregulated/OTC — not itself a member of All.
+        public static class DrugScheduleClass
+        {
+            public const string H = "H";
+            public const string H1 = "H1";
+            public const string X = "X";
+            public const string Narcotic = "NARCOTIC";
+            public static readonly string[] All = { H, H1, X, Narcotic };
+        }
+
+        public static class StorageCondition
+        {
+            public const string Room = "ROOM";
+            public const string ColdChain = "COLD_CHAIN";
+            public const string Frozen = "FROZEN";
+            public const string Controlled = "CONTROLLED";
+            public static readonly string[] All = { Room, ColdChain, Frozen, Controlled };
+        }
+
+        public static class StoreType
+        {
+            public const string Main = "MAIN";
+            public const string Sub = "SUB";
+            public const string Department = "DEPARTMENT";
+            public const string Ot = "OT";
+            public const string Pharmacy = "PHARMACY";
+            public const string ColdChain = "COLD_CHAIN";
+            public const string Narcotic = "NARCOTIC";
+            public const string BloodBank = "BLOOD_BANK";
+            public const string Cssd = "CSSD";
+            public static readonly string[] All = { Main, Sub, Department, Ot, Pharmacy, ColdChain, Narcotic, BloodBank, Cssd };
+        }
+
+        // ---- Equipment (biomedical asset register) ----
+
+        public static class EquipmentCategory
+        {
+            public const string Biomedical = "BIOMEDICAL";
+            public const string Ict = "ICT";
+            public const string Facility = "FACILITY";
+            public const string Furniture = "FURNITURE";
+            public const string Other = "OTHER";
+            public static readonly string[] All = { Biomedical, Ict, Facility, Furniture, Other };
+        }
+
+        public static class EquipmentStatus
+        {
+            public const string Active = "ACTIVE";
+            public const string UnderMaintenance = "UNDER_MAINTENANCE";
+            public const string Retired = "RETIRED";
+            public static readonly string[] All = { Active, UnderMaintenance, Retired };
+        }
+
+        public static class MaintenanceActivityType
+        {
+            public const string Pm = "PM";
+            public const string Breakdown = "BREAKDOWN";
+            public const string Calibration = "CALIBRATION";
+            public const string Inspection = "INSPECTION";
+            public const string Repair = "REPAIR";
+            public const string Other = "OTHER";
+            public static readonly string[] All = { Pm, Breakdown, Calibration, Inspection, Repair, Other };
+        }
+
+        public static class MaintenanceOutcome
+        {
+            public const string Pass = "PASS";
+            public const string Fail = "FAIL";
+            public const string NeedsFollowup = "NEEDS_FOLLOWUP";
+            public static readonly string[] All = { Pass, Fail, NeedsFollowup };
+        }
+
+        // ---- Procurement (Indent / PurchaseOrder / GoodsReceiptNote) ----
+
+        public static class IndentStatus
+        {
+            public const string Draft = "DRAFT";
+            public const string Submitted = "SUBMITTED";
+            public const string Approved = "APPROVED";
+            public const string Rejected = "REJECTED";
+            public const string ConvertedToPo = "CONVERTED_TO_PO";
+            public const string Cancelled = "CANCELLED";
+            public static readonly string[] All = { Draft, Submitted, Approved, Rejected, ConvertedToPo, Cancelled };
+        }
+
+        public static class PurchaseOrderStatus
+        {
+            public const string Draft = "DRAFT";
+            public const string Approved = "APPROVED";
+            public const string Sent = "SENT";
+            public const string PartiallyReceived = "PARTIALLY_RECEIVED";
+            public const string Received = "RECEIVED";
+            public const string Cancelled = "CANCELLED";
+            public static readonly string[] All = { Draft, Approved, Sent, PartiallyReceived, Received, Cancelled };
+        }
+
+        public static class GrnMatchStatus
+        {
+            public const string Matched = "MATCHED";
+            public const string Mismatch = "MISMATCH";
+            public const string Pending = "PENDING";
+        }
+
+        // ---- India regulatory compliance (narcotics register / cold-chain) ----
+
+        public static class NarcoticFormType
+        {
+            public const string Form3D = "3D";   // ward/department sub-storage day-to-day transaction
+            public const string Form3E = "3E";   // per-patient dispensing record
+            public const string Form3H = "3H";   // main drug storage room's master ledger
+        }
+
+        public static class NarcoticDirection
+        {
+            public const string In = "IN";
+            public const string Out = "OUT";
         }
 
         // ---- Blood Bank ----

@@ -95,6 +95,7 @@ namespace EasyHMSAPI.Api.Controllers
             try
             {
                 request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                request.LoggedInUserId = UserContextHelper.GetUserId(User);
                 var response = await _mediator.Send(request);
                 if (!response.Success)
                     return BadRequest(new { response.Message });

@@ -17,5 +17,8 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public string? Message { get; set; }
         public Guid? InventoryMovementId { get; set; }
         public decimal? NewCurrentStock { get; set; }
+        // Echoes back which batch the movement actually posted against — the caller's own pick if
+        // BatchId was supplied, or the FEFO-resolved one when only StoreId was.
+        public Guid? BatchId { get; set; }
     }
 }

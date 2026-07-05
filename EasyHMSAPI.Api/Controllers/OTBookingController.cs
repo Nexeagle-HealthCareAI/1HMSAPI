@@ -28,14 +28,14 @@ namespace EasyHMSAPI.Api.Controllers
         }
 
         [HttpGet("theatres")]
-        public async Task<ActionResult<GetOperationTheatresResponseModel>> GetTheatres([FromQuery] Guid hospitalId)
+        public async Task<ActionResult<GetOperationTheatresResponseModel>> GetTheatres([FromQuery] Guid hospitalId, [FromQuery] bool includeInactive = false)
         {
             if (hospitalId == Guid.Empty)
                 return BadRequest(new { Message = "hospitalId is required." });
 
             try
             {
-                var response = await _mediator.Send(new GetOperationTheatresRequestModel { HospitalId = hospitalId });
+                var response = await _mediator.Send(new GetOperationTheatresRequestModel { HospitalId = hospitalId, IncludeInactive = includeInactive });
                 return Ok(response);
             }
             catch (Exception ex)
@@ -63,6 +63,24 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 _logger.LogError(ex, "Error in CreateTheatre for hospitalId: {HospitalId}", request.HospitalId);
                 return StatusCode(500, new { Message = "An error occurred while creating the theatre." });
+            }
+        }
+
+        [HttpGet("board")]
+        public async Task<ActionResult<GetOtBoardResponseModel>> GetBoard([FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetOtBoardRequestModel { HospitalId = hospitalId });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetBoard for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching the OT board." });
             }
         }
 

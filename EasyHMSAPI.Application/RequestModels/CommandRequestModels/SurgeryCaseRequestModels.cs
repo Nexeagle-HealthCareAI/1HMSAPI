@@ -33,6 +33,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public Guid HospitalId { get; set; }
         [JsonIgnore]
         public string? LoggedInUserName { get; set; }
+        [JsonIgnore]
+        public Guid? LoggedInUserId { get; set; }
 
         public Guid SurgeryCaseId { get; set; }
         public string ToStatus { get; set; } = null!;

@@ -10,9 +10,9 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Api.Controllers
 {
-    // Pharmacy/consumable/implant inventory — item master + stock movements. Consumed directly by
-    // OT (IntraOpItemUsage) and CSSD handlers via nested mediator send; this controller exists for
-    // any direct item-master/receive/adjust needs, not a full stock-management screen this phase.
+    // Pharmacy/consumable/implant inventory — item master + batch/store-aware stock movements.
+    // RecordMovement is also called directly via nested mediator send from OT (IntraOpItemUsage)
+    // and CSSD handlers, passing neither BatchId nor StoreId — the legacy CurrentStock-only path.
     [ExcludeFromCodeCoverage]
     [ApiController]
     [Route("inventory")]
@@ -93,6 +93,71 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 _logger.LogError(ex, "Error in RecordMovement for hospitalId: {HospitalId}", request.HospitalId);
                 return StatusCode(500, new { Message = "An error occurred while recording the inventory movement." });
+            }
+        }
+
+        [HttpGet("items/{inventoryItemId:guid}/batches")]
+        public async Task<ActionResult<GetBatchesForItemResponseModel>> GetBatches(
+            Guid inventoryItemId, [FromQuery] Guid hospitalId, [FromQuery] Guid? storeId, [FromQuery] bool activeOnly = true)
+        {
+            if (hospitalId == Guid.Empty || inventoryItemId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and inventoryItemId are required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetBatchesForItemRequestModel
+                {
+                    HospitalId = hospitalId,
+                    InventoryItemId = inventoryItemId,
+                    StoreId = storeId,
+                    ActiveOnly = activeOnly,
+                });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetBatches for inventoryItemId: {InventoryItemId}", inventoryItemId);
+                return StatusCode(500, new { Message = "An error occurred while fetching batches." });
+            }
+        }
+
+        [HttpPost("batches")]
+        public async Task<ActionResult<CreateBatchResponseModel>> CreateBatch([FromBody] CreateBatchRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.InventoryItemId == Guid.Empty || request.StoreId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId, inventoryItemId, and storeId are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in CreateBatch for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred while creating the batch." });
+            }
+        }
+
+        // Hospital-wide board: stock-by-store, expiry alerts (90/60/30-day tiers), reorder alerts.
+        [HttpGet("board")]
+        public async Task<ActionResult<GetInventoryBoardResponseModel>> GetBoard([FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetInventoryBoardRequestModel { HospitalId = hospitalId });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetBoard for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching the inventory board." });
             }
         }
     }

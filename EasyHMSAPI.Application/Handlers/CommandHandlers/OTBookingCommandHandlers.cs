@@ -33,21 +33,51 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             {
                 if (request.HospitalId == Guid.Empty || string.IsNullOrWhiteSpace(request.TheatreCode) || string.IsNullOrWhiteSpace(request.TheatreName))
                     return new CreateOperationTheatreResponseModel { Success = false, Message = "HospitalId, TheatreCode, and TheatreName are required." };
+                if (request.Price < 0)
+                    return new CreateOperationTheatreResponseModel { Success = false, Message = "Price cannot be negative." };
+
+                var now = DateTime.UtcNow;
+
+                if (request.TheatreId.HasValue && request.TheatreId != Guid.Empty)
+                {
+                    var existingTheatre = await _context.OperationTheatre
+                        .FirstOrDefaultAsync(t => t.TheatreId == request.TheatreId && t.HospitalId == request.HospitalId, cancellationToken);
+                    if (existingTheatre == null)
+                        return new CreateOperationTheatreResponseModel { Success = false, Message = "Theatre not found." };
+
+                    var codeTaken = await _context.OperationTheatre.AnyAsync(
+                        t => t.HospitalId == request.HospitalId && t.TheatreCode == request.TheatreCode.Trim() && t.TheatreId != existingTheatre.TheatreId, cancellationToken);
+                    if (codeTaken)
+                        return new CreateOperationTheatreResponseModel { Success = false, Message = "A theatre with this code already exists." };
+
+                    existingTheatre.TheatreCode = request.TheatreCode.Trim();
+                    existingTheatre.TheatreName = request.TheatreName.Trim();
+                    existingTheatre.DepartmentId = request.DepartmentId;
+                    existingTheatre.Price = request.Price;
+                    if (!string.IsNullOrWhiteSpace(request.Status)) existingTheatre.Status = request.Status;
+                    existingTheatre.IsActive = request.IsActive;
+                    existingTheatre.UpdatedAt = now;
+                    existingTheatre.UpdatedBy = request.LoggedInUserName;
+
+                    await _context.SaveChangesAsync(cancellationToken);
+                    return new CreateOperationTheatreResponseModel { Success = true, Message = "Theatre updated.", TheatreId = existingTheatre.TheatreId };
+                }
 
                 var exists = await _context.OperationTheatre.AnyAsync(
                     t => t.HospitalId == request.HospitalId && t.TheatreCode == request.TheatreCode.Trim(), cancellationToken);
                 if (exists)
                     return new CreateOperationTheatreResponseModel { Success = false, Message = "A theatre with this code already exists." };
 
-                var now = DateTime.UtcNow;
                 var theatre = new OperationTheatre
                 {
                     TheatreId = Guid.NewGuid(),
                     HospitalId = request.HospitalId,
                     TheatreCode = request.TheatreCode.Trim(),
                     TheatreName = request.TheatreName.Trim(),
-                    Status = IpdConstants.TheatreStatus.Available,
-                    IsActive = true,
+                    DepartmentId = request.DepartmentId,
+                    Price = request.Price,
+                    Status = string.IsNullOrWhiteSpace(request.Status) ? IpdConstants.TheatreStatus.Available : request.Status,
+                    IsActive = request.IsActive,
                     CreatedAt = now,
                     CreatedBy = request.LoggedInUserName,
                     UpdatedAt = now,

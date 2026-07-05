@@ -14,12 +14,18 @@ namespace EasyHMSAPI.Domain.Entities
         public Guid HospitalId { get; set; }
         public Guid InventoryItemId { get; set; }
 
-        public string MovementType { get; set; } = null!;   // RECEIVE/ISSUE/RETURN/ADJUST_IN/ADJUST_OUT
+        public string MovementType { get; set; } = null!;   // RECEIVE/ISSUE/RETURN/ADJUST_IN/ADJUST_OUT/TRANSFER
 
         public decimal Qty { get; set; }
         public decimal? UnitCost { get; set; }
         public string? BatchNumber { get; set; }
         public DateTime? ExpiryDate { get; set; }
+
+        // Batch/store-aware path (INV-2). Nullable — legacy callers (OT's IntraOpItemUsage, the
+        // original /inventory/items/movement endpoint) pass none of these and are unaffected.
+        public Guid? BatchId { get; set; }
+        public Guid? FromStoreId { get; set; }
+        public Guid? ToStoreId { get; set; }
 
         public Guid? EncounterId { get; set; }
         public string? PatientId { get; set; }

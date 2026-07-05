@@ -66,6 +66,9 @@ namespace EasyHMSAPI.Data.Constants
             public const string PcpndtFormF = "PCPNDT";
             public const string Mlc = "MLC";
             public const string VisitorPass = "VIS";
+            public const string Indent = "INDENT";
+            public const string PurchaseOrder = "PO";
+            public const string Grn = "GRN";
         }
 
         public static class BillingActionType
