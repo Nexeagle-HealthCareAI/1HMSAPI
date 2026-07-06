@@ -3,6 +3,7 @@ using EasyHMSAPI.Domain.Context;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Net.Http.Headers;
 
 namespace EasyHMSAPI.Api.Controllers.V1
 {
@@ -12,10 +13,58 @@ namespace EasyHMSAPI.Api.Controllers.V1
     public class SubscriptionController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IConfiguration _configuration;
+        private readonly ILogger<SubscriptionController> _logger;
 
-        public SubscriptionController(AppDbContext context)
+        public SubscriptionController(AppDbContext context, IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<SubscriptionController> logger)
         {
             _context = context;
+            _httpClientFactory = httpClientFactory;
+            _configuration = configuration;
+            _logger = logger;
+        }
+
+        // Server-to-server proxy to CMSAPI's plan catalog: the browser never talks to CMSAPI
+        // directly (it has no CMS credential, and CMSAPI's own endpoints require CMS auth), and
+        // CMSAPI's plans stay fully behind [Authorize] for everyone except this shared-key call.
+        // [SkipHospitalAccessCheck] because a blocked/expired hospital must still be able to see
+        // plans in order to pick one and pay.
+        [HttpGet("plans")]
+        [SkipHospitalAccessCheck]
+        public async Task<IActionResult> GetPlans()
+        {
+            var baseUrl = _configuration["Cms:BaseUrl"];
+            var serviceKey = _configuration["Cms:ServiceApiKey"];
+            if (string.IsNullOrEmpty(baseUrl) || string.IsNullOrEmpty(serviceKey))
+            {
+                _logger.LogError("Cms:BaseUrl or Cms:ServiceApiKey is not configured; cannot fetch plans.");
+                return StatusCode(503, new { Message = "The plan catalog is not available right now. Please try again later." });
+            }
+
+            try
+            {
+                var client = _httpClientFactory.CreateClient();
+                var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl.TrimEnd('/')}/api/v1/SubscriptionPlans/service");
+                request.Headers.Add("X-Service-Key", serviceKey);
+                request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+                var response = await client.SendAsync(request);
+                var body = await response.Content.ReadAsStringAsync();
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogError("CMS plan catalog request failed with {StatusCode}: {Body}", response.StatusCode, body);
+                    return StatusCode(502, new { Message = "Could not load the plan catalog right now. Please try again later." });
+                }
+
+                return Content(body, "application/json");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching plans from CMS.");
+                return StatusCode(502, new { Message = "Could not load the plan catalog right now. Please try again later." });
+            }
         }
 
         [HttpGet("{hospitalId}")]
