@@ -412,6 +412,14 @@ namespace EasyHMSAPI.Data.Constants
             public static readonly string[] All = { Main, Sub, Department, Ot, Pharmacy, ColdChain, Narcotic, BloodBank, Cssd };
         }
 
+        public static class StoreAssignedBoard
+        {
+            public const string Ot = "OT";
+            public const string Icu = "ICU";
+            public const string Ward = "WARD";
+            public static readonly string[] All = { Ot, Icu, Ward };
+        }
+
         // ---- Equipment (biomedical asset register) ----
 
         public static class EquipmentCategory
@@ -460,8 +468,10 @@ namespace EasyHMSAPI.Data.Constants
             public const string Approved = "APPROVED";
             public const string Rejected = "REJECTED";
             public const string ConvertedToPo = "CONVERTED_TO_PO";
+            public const string PartiallyIssued = "PARTIALLY_ISSUED";
+            public const string Issued = "ISSUED";
             public const string Cancelled = "CANCELLED";
-            public static readonly string[] All = { Draft, Submitted, Approved, Rejected, ConvertedToPo, Cancelled };
+            public static readonly string[] All = { Draft, Submitted, Approved, Rejected, ConvertedToPo, PartiallyIssued, Issued, Cancelled };
         }
 
         public static class PurchaseOrderStatus

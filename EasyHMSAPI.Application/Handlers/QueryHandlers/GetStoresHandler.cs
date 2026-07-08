@@ -32,6 +32,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     StoreCode = s.StoreCode,
                     StoreName = s.StoreName,
                     StoreType = s.StoreType,
+                    AssignedBoard = s.AssignedBoard,
                     ParentStoreId = s.ParentStoreId,
                     ParentStoreName = s.ParentStoreId.HasValue && byId.TryGetValue(s.ParentStoreId.Value, out var name) ? name : null,
                     MinTempCelsius = s.MinTempCelsius,

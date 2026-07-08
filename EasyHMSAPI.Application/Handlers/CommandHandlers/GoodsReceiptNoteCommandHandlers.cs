@@ -143,6 +143,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             };
                             _context.Batch.Add(batch);
 
+                            // Save changes so that the RecordInventoryMovementHandler can query this newly created batch from the DB (within the transaction).
+                            await _context.SaveChangesAsync(cancellationToken);
+
                             var movementResponse = await _mediator.Send(new RecordInventoryMovementRequestModel
                             {
                                 HospitalId = request.HospitalId,
@@ -186,16 +189,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             MatchStatus = grn.MatchStatus,
                         };
                     }
-                    catch (Exception)
+                    catch (Exception ex)
                     {
                         await tx.RollbackAsync(cancellationToken);
-                        return new CreateGoodsReceiptNoteResponseModel { Success = false, Message = "Error recording goods receipt." };
+                        var errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                        return new CreateGoodsReceiptNoteResponseModel { Success = false, Message = $"Error recording goods receipt: {errorMsg}" };
                     }
                 });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                return new CreateGoodsReceiptNoteResponseModel { Success = false, Message = "Error recording goods receipt." };
+                var errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                return new CreateGoodsReceiptNoteResponseModel { Success = false, Message = $"Error recording goods receipt: {errorMsg}" };
             }
         }
     }

@@ -25,6 +25,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return new UpsertStoreResponseModel { Success = false, Message = "HospitalId, StoreCode, and StoreName are required." };
                 if (string.IsNullOrWhiteSpace(request.StoreType) || !IpdConstants.StoreType.All.Contains(request.StoreType))
                     return new UpsertStoreResponseModel { Success = false, Message = "Invalid store type." };
+                if (!string.IsNullOrWhiteSpace(request.AssignedBoard) && !IpdConstants.StoreAssignedBoard.All.Contains(request.AssignedBoard))
+                    return new UpsertStoreResponseModel { Success = false, Message = "Invalid assigned board." };
 
                 if (request.ParentStoreId.HasValue && request.ParentStoreId != Guid.Empty)
                 {
@@ -53,6 +55,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     existingStore.StoreCode = request.StoreCode.Trim();
                     existingStore.StoreName = request.StoreName.Trim();
                     existingStore.StoreType = request.StoreType;
+                    existingStore.AssignedBoard = string.IsNullOrWhiteSpace(request.AssignedBoard) ? null : request.AssignedBoard;
                     existingStore.ParentStoreId = request.ParentStoreId;
                     existingStore.MinTempCelsius = request.MinTempCelsius;
                     existingStore.MaxTempCelsius = request.MaxTempCelsius;
@@ -76,6 +79,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     StoreCode = request.StoreCode.Trim(),
                     StoreName = request.StoreName.Trim(),
                     StoreType = request.StoreType,
+                    AssignedBoard = string.IsNullOrWhiteSpace(request.AssignedBoard) ? null : request.AssignedBoard,
                     ParentStoreId = request.ParentStoreId,
                     MinTempCelsius = request.MinTempCelsius,
                     MaxTempCelsius = request.MaxTempCelsius,

@@ -113,6 +113,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         numberSeries.UpdatedAt = now;
                         numberSeries.UpdatedBy = request.LoggedInUserName;
 
+                        // ── Generate token if not provided manually ────────────────────────────────
+                        var admissionToken = request.AdmissionToken?.Trim();
+                        if (string.IsNullOrWhiteSpace(admissionToken))
+                        {
+                            var tokenSeries = await NumberSeriesDefaults.GetOrCreateAsync(
+                                _context, request.HospitalId, BillingConstants.NumberSeriesCode.Token, request.LoggedInUserName, cancellationToken);
+                            tokenSeries.CurrentValue++;
+                            admissionToken = NumberSeriesFormatter.Format(
+                                tokenSeries.Prefix, tokenSeries.YearFormat, tokenSeries.Separator, tokenSeries.PadLength, tokenSeries.CurrentValue);
+                            tokenSeries.UpdatedAt = now;
+                            tokenSeries.UpdatedBy = request.LoggedInUserName;
+                        }
+
                         // Pre-registration only makes sense for Elective (patient not yet arrived) —
                         // silently ignored for every other admission type rather than rejecting.
                         var isPreRegistration = request.IsPreRegistration && admissionType == "ELECTIVE";
@@ -127,6 +140,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             EncounterId = null,
                             PrimaryDoctorId = request.PrimaryDoctorId,
                             AdmissionNo = admissionNo,
+                            AdmissionToken = admissionToken,
                             AdmissionType = admissionType,
                             ReferralSource = string.IsNullOrWhiteSpace(request.ReferralSource) ? null : request.ReferralSource!.Trim().ToUpperInvariant(),
                             ReferralName = request.ReferralName?.Trim(),

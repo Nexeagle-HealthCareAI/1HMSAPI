@@ -14,7 +14,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     /// </summary>
     public class DischargeSummaryCommandHandlers :
         IRequestHandler<SaveDischargeSummaryRequestModel, SaveDischargeSummaryResponseModel>,
-        IRequestHandler<SignDischargeSummaryRequestModel, SignDischargeSummaryResponseModel>
+        IRequestHandler<SignDischargeSummaryRequestModel, SignDischargeSummaryResponseModel>,
+        IRequestHandler<UnsignDischargeSummaryRequestModel, UnsignDischargeSummaryResponseModel>
     {
         private readonly AppDbContext _context;
 
@@ -136,6 +137,38 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             catch (Exception)
             {
                 return new SignDischargeSummaryResponseModel { Success = false, Message = "Error signing discharge summary." };
+            }
+        }
+
+        public async Task<UnsignDischargeSummaryResponseModel> Handle(UnsignDischargeSummaryRequestModel request, CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty)
+                    return new UnsignDischargeSummaryResponseModel { Success = false, Message = "HospitalId and AdmissionId are required." };
+
+                var summary = await _context.DischargeSummary
+                    .FirstOrDefaultAsync(d => d.HospitalId == request.HospitalId && d.AdmissionId == request.AdmissionId, cancellationToken);
+                if (summary == null)
+                    return new UnsignDischargeSummaryResponseModel { Success = false, Message = "Discharge summary not found." };
+                if (!summary.IsSigned)
+                    return new UnsignDischargeSummaryResponseModel { Success = false, Message = "Discharge summary is not signed." };
+
+                var now = DateTime.UtcNow;
+                summary.IsSigned = false;
+                summary.SignedAt = null;
+                summary.SignedBy = null;
+                summary.SignedByDoctorId = null;
+                summary.SignedByDoctorName = null;
+                summary.UpdatedAt = now;
+                summary.UpdatedBy = request.LoggedInUserName;
+
+                await _context.SaveChangesAsync(cancellationToken);
+                return new UnsignDischargeSummaryResponseModel { Success = true, Message = "Discharge summary signature revoked." };
+            }
+            catch (Exception)
+            {
+                return new UnsignDischargeSummaryResponseModel { Success = false, Message = "Error unsigning discharge summary." };
             }
         }
     }

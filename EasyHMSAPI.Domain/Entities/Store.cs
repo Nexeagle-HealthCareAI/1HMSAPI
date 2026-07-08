@@ -19,6 +19,9 @@ namespace EasyHMSAPI.Domain.Entities
         public string StoreName { get; set; } = null!;
         public string StoreType { get; set; } = null!;   // MAIN/SUB/DEPARTMENT/OT/PHARMACY/COLD_CHAIN/NARCOTIC/BLOOD_BANK/CSSD
 
+        // Optional linking to a specific clinical board context (e.g. OT, ICU, WARD)
+        public string? AssignedBoard { get; set; }
+
         public Guid? ParentStoreId { get; set; }
 
         public decimal? MinTempCelsius { get; set; }

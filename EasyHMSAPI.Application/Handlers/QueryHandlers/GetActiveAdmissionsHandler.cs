@@ -39,9 +39,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     _ => query.Where(a => IpdConstants.AdmissionStatus.Active.Contains(a.StatusCode)),
                 };
 
-                var admissions = await query
-                    .OrderByDescending(a => a.AdmittedAt)
-                    .ToListAsync(cancellationToken);
+                IQueryable<Domain.Entities.Admission> admissionsQuery = query.OrderByDescending(a => a.AdmittedAt);
+                if (statusFilter == "DISCHARGED" || statusFilter == "ALL")
+                {
+                    admissionsQuery = admissionsQuery.Take(200);
+                }
+
+                var admissions = await admissionsQuery.ToListAsync(cancellationToken);
 
                 var patientIds = admissions.Select(a => a.PatientId).Distinct().ToList();
                 var patientsById = await _context.PatientRegistrations
@@ -105,6 +109,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     {
                         AdmissionId = a.AdmissionId,
                         AdmissionNo = a.AdmissionNo,
+                        AdmissionToken = a.AdmissionToken,
                         AdmissionType = a.AdmissionType,
                         StatusCode = a.StatusCode,
                         PayerType = a.PayerType,
@@ -124,6 +129,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         PatientName = patient?.FullName,
                         PatientAge = patient?.Age,
                         PatientSex = patient?.Sex,
+                        PatientAddress = patient != null ? string.Join(", ", new[] { patient.AddressLine, patient.City, patient.State }.Where(x => !string.IsNullOrWhiteSpace(x))) : null,
+                        Mobile = patient?.Mobile,
                         BedCode = bedCode,
                         WardName = wardName,
                         EncounterId = a.EncounterId,

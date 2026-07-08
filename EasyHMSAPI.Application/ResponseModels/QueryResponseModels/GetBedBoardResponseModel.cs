@@ -33,6 +33,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public Guid? BedAssignmentId { get; set; }
         public Guid? AdmissionId { get; set; }
         public string? AdmissionNo { get; set; }
+        public string? AdmissionToken { get; set; }
         public string? AdmissionType { get; set; }
         public string? PayerType { get; set; }
         public DateTime? AssignedAt { get; set; }

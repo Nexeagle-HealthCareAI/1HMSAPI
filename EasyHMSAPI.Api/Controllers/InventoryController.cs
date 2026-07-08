@@ -96,6 +96,28 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        [HttpPost("transfer")]
+        public async Task<ActionResult<TransferStockResponseModel>> TransferStock([FromBody] TransferStockRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                request.LoggedInUserId = UserContextHelper.GetUserId(HttpContext.User);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in TransferStock for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred while transferring stock." });
+            }
+        }
+
         [HttpGet("items/{inventoryItemId:guid}/batches")]
         public async Task<ActionResult<GetBatchesForItemResponseModel>> GetBatches(
             Guid inventoryItemId, [FromQuery] Guid hospitalId, [FromQuery] Guid? storeId, [FromQuery] bool activeOnly = true)
@@ -139,6 +161,25 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 _logger.LogError(ex, "Error in CreateBatch for hospitalId: {HospitalId}", request.HospitalId);
                 return StatusCode(500, new { Message = "An error occurred while creating the batch." });
+            }
+        }
+
+        [HttpPost("batches/bulk")]
+        public async Task<ActionResult<CreateBulkBatchResponseModel>> CreateBulkBatch([FromBody] CreateBulkBatchRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                return response.Success ? Ok(response) : BadRequest(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in CreateBulkBatch for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred while creating bulk batches." });
             }
         }
 

@@ -55,6 +55,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public DateTime? ExpectedDischargeAt { get; set; }
         public string? AdmissionReason { get; set; }
         public string? Diagnosis { get; set; }
+        public string? AdmissionToken { get; set; }
         // Elective only: patient hasn't physically arrived yet — creates the admission as PRE_ADMIT
         // instead of ADMITTED (bed pre-block/pre-auth can still happen now; confirm arrival later).
         public bool IsPreRegistration { get; set; }

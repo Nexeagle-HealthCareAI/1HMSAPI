@@ -84,15 +84,24 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
                     // Re-sign the template URL from its object key so it never goes stale
                     // (S3/MinIO presigned URLs expire within 7 days; Azure returns it unchanged).
+                    // Key matches the upload key in UploadDischargeTemplateHandler: "{DoctorId}_{HospitalId}".
                     data.URI = await _blobStorageService.RefreshUrlAsync(
                         _templatesContainer,
-                        $"{dischargeSettings.DoctorId}_{dischargeSettings.HospitalId}_{_templatesContainer}",
+                        $"{dischargeSettings.DoctorId}_{dischargeSettings.HospitalId}",
                         dischargeSettings.URI,
                         cancellationToken);
 
                     response.Success = true;
                     response.Message = "Discharge settings retrieved successfully.";
                     response.Data = data;
+                }
+                else
+                {
+                    // No settings row yet (new doctor) — return success with null data so
+                    // the frontend can initialise with defaults without treating it as an error.
+                    response.Success = true;
+                    response.Message = "No discharge settings found for this doctor.";
+                    response.Data = null;
                 }
             }
             catch (Exception ex)

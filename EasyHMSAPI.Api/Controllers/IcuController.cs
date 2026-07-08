@@ -27,6 +27,24 @@ namespace EasyHMSAPI.Api.Controllers
             _logger = logger;
         }
 
+        [HttpGet("board")]
+        public async Task<ActionResult<GetIcuBoardResponseModel>> GetIcuBoard([FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetIcuBoardRequestModel { HospitalId = hospitalId });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetIcuBoard for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching the ICU board." });
+            }
+        }
+
         [HttpPost("level-of-care")]
         public async Task<ActionResult<RecordLevelOfCareResponseModel>> RecordLevelOfCare([FromBody] RecordLevelOfCareRequestModel request)
         {

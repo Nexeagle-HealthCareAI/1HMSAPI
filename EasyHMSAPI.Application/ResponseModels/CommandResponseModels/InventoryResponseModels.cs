@@ -21,4 +21,12 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         // BatchId was supplied, or the FEFO-resolved one when only StoreId was.
         public Guid? BatchId { get; set; }
     }
+
+    [ExcludeFromCodeCoverage]
+    public class BulkCreateBatchResponseModel
+    {
+        public bool Success { get; set; }
+        public string? Message { get; set; }
+        public int BatchesCreated { get; set; }
+    }
 }

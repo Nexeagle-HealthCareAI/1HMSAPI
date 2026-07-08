@@ -24,8 +24,11 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 query = query.Where(i => i.Status == request.Status.Trim().ToUpperInvariant());
 
             var indents = await query.OrderByDescending(i => i.RequestedAt).ToListAsync(cancellationToken);
+            var storeIds = indents.Select(i => i.RequestingStoreId)
+                .Concat(indents.Where(i => i.TargetStoreId.HasValue).Select(i => i.TargetStoreId!.Value))
+                .Distinct().ToList();
             var storeNames = await _context.Store
-                .Where(s => indents.Select(i => i.RequestingStoreId).Distinct().Contains(s.StoreId))
+                .Where(s => storeIds.Contains(s.StoreId))
                 .ToDictionaryAsync(s => s.StoreId, s => s.StoreName, cancellationToken);
             var lineCounts = await _context.IndentLine
                 .Where(l => indents.Select(i => i.IndentId).Contains(l.IndentId))
@@ -39,6 +42,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 IndentNumber = i.IndentNumber,
                 RequestingStoreId = i.RequestingStoreId,
                 RequestingStoreName = storeNames.TryGetValue(i.RequestingStoreId, out var name) ? name : null,
+                TargetStoreId = i.TargetStoreId,
+                TargetStoreName = i.TargetStoreId.HasValue && storeNames.TryGetValue(i.TargetStoreId.Value, out var targetName) ? targetName : null,
                 Status = i.Status,
                 IsSystemGenerated = i.IsSystemGenerated,
                 RequestedBy = i.RequestedBy,
@@ -56,10 +61,12 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             if (indent == null)
                 return new GetIndentDetailResponseModel { Success = false, Message = "Indent not found." };
 
-            var storeName = await _context.Store
-                .Where(s => s.StoreId == indent.RequestingStoreId)
-                .Select(s => s.StoreName)
-                .FirstOrDefaultAsync(cancellationToken);
+            var storeIds = new List<Guid> { indent.RequestingStoreId };
+            if (indent.TargetStoreId.HasValue) storeIds.Add(indent.TargetStoreId.Value);
+
+            var storeNames = await _context.Store
+                .Where(s => storeIds.Contains(s.StoreId))
+                .ToDictionaryAsync(s => s.StoreId, s => s.StoreName, cancellationToken);
 
             var lines = await _context.IndentLine.Where(l => l.IndentId == indent.IndentId).ToListAsync(cancellationToken);
             var itemsById = await _context.InventoryItem
@@ -74,7 +81,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     IndentId = indent.IndentId,
                     IndentNumber = indent.IndentNumber,
                     RequestingStoreId = indent.RequestingStoreId,
-                    RequestingStoreName = storeName,
+                    RequestingStoreName = storeNames.TryGetValue(indent.RequestingStoreId, out var reqName) ? reqName : null,
+                    TargetStoreId = indent.TargetStoreId,
+                    TargetStoreName = indent.TargetStoreId.HasValue && storeNames.TryGetValue(indent.TargetStoreId.Value, out var tgtName) ? tgtName : null,
                     Status = indent.Status,
                     IsSystemGenerated = indent.IsSystemGenerated,
                     RequestedBy = indent.RequestedBy,
@@ -88,6 +97,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     ItemName = itemsById.TryGetValue(l.InventoryItemId, out var item) ? item.ItemName : "Unknown",
                     Unit = itemsById.TryGetValue(l.InventoryItemId, out var item2) ? item2.Unit : "",
                     Qty = l.Qty,
+                    IssuedQty = l.IssuedQty,
                     Notes = l.Notes,
                 }).ToList(),
             };

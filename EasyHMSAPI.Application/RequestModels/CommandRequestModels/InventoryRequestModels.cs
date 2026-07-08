@@ -87,4 +87,30 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         [JsonIgnore]
         public bool IsNarcoticDispenseContext { get; set; }
     }
+
+    [ExcludeFromCodeCoverage]
+    public class BulkCreateBatchRequestModel : IRequest<BulkCreateBatchResponseModel>
+    {
+        public Guid HospitalId { get; set; }
+        [JsonIgnore]
+        public string? LoggedInUserName { get; set; }
+        [JsonIgnore]
+        public Guid? LoggedInUserId { get; set; }
+
+        public List<BulkCreateBatchLine> Lines { get; set; } = new();
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class BulkCreateBatchLine
+    {
+        public Guid? InventoryItemId { get; set; }
+        public string? ItemCode { get; set; }
+        public Guid? StoreId { get; set; }
+        public string? StoreName { get; set; }
+        public string BatchNumber { get; set; } = null!;
+        public DateTime? ExpiryDate { get; set; }
+        public DateTime? ManufactureDate { get; set; }
+        public decimal ReceivedQty { get; set; }
+        public decimal? UnitCost { get; set; }
+    }
 }

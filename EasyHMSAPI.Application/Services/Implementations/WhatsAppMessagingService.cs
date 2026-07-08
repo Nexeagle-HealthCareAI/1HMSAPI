@@ -1,4 +1,4 @@
-﻿using EasyHMSAPI.Application.Services.Interfaces;
+using EasyHMSAPI.Application.Services.Interfaces;
 using Microsoft.Extensions.Configuration;
 using System;
 using System.Diagnostics.CodeAnalysis;
@@ -15,6 +15,9 @@ namespace EasyHMSAPI.Application.Services.Implementations
         private readonly string _isEnabled;
         private readonly string _apiUrl;
         private readonly string _accessToken;
+        // Country code (digits only, no '+') prepended to 10-digit numbers.
+        // Defaults to "91" (India). Override via WhatsApp:CountryCode in appsettings.
+        private readonly string _countryCode;
 
         public WhatsAppMessagingService(HttpClient httpClient, IConfiguration configuration)
         {
@@ -22,75 +25,65 @@ namespace EasyHMSAPI.Application.Services.Implementations
             _isEnabled = configuration["WhatsApp:IsEnabled"] ?? string.Empty;
             _apiUrl = configuration["WhatsApp:ApiUrl"] ?? string.Empty;
             _accessToken = configuration["WhatsApp:AccessToken"] ?? string.Empty;
+            _countryCode = configuration["WhatsApp:CountryCode"] ?? "91";
         }
 
         public async Task<bool> SendOtpAsync(string mobileNumber, string otp)
         {
             try
             {
-                if(!string.IsNullOrEmpty(_isEnabled) && _isEnabled.Trim().ToLower() == "true")
+                // Normalize to E.164 style (no '+') as required by the Meta Cloud API.
+                // e.g. "9876543210" → "919876543210" (country code prepended)
+                var to = NormalizeToE164(mobileNumber);
+
+                var payload = new
                 {
-                    var payload = new
+                    messaging_product = "whatsapp",
+                    to,
+                    type = "template",
+                    template = new
                     {
-                        messaging_product = "whatsapp",
-                        to = mobileNumber,
-                        type = "template",
-                        template = new
+                        name = "otp",
+                        language = new { code = "en" },
+                        components = new object[]
                         {
-                            name = "otp",
-                            language = new
-                            {
-                                code = "en"
-                            },
-                            components = new object[]
-                        {
+                            // Body component — passes the OTP as the {{1}} variable
                             new
                             {
                                 type = "body",
                                 parameters = new object[]
                                 {
-                                    new
-                                    {
-                                        type = "text",
-                                        text = otp
-                                    }
+                                    new { type = "text", text = otp }
                                 }
                             },
+                            // URL button component — "payload" type pre-fills the OTP into the
+                            // autofill button (Meta requires type="payload", NOT type="text" here)
                             new
                             {
                                 type = "button",
                                 sub_type = "url",
-                                index = 0,
+                                index = "0",
                                 parameters = new object[]
                                 {
-                                    new
-                                    {
-                                        type = "text",
-                                        text = otp
-                                    }
+                                    new { type = "payload", payload = otp }
                                 }
                             }
                         }
-                        }
-                    };
+                    }
+                };
 
-                    var json = JsonSerializer.Serialize(payload);
-                    var content = new StringContent(json, Encoding.UTF8, "application/json");
+                var json = JsonSerializer.Serialize(payload);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                    var request = new HttpRequestMessage(HttpMethod.Post, _apiUrl)
-                    {
-                        Content = content
-                    };
-                    request.Headers.Add("Authorization", $"Bearer {_accessToken}");
-
-                    var response = await _httpClient.SendAsync(request);
-
-                    return response.IsSuccessStatusCode;
-                }
-                else
+                var request = new HttpRequestMessage(HttpMethod.Post, _apiUrl)
                 {
-                    return false;
-                }
+                    Content = content
+                };
+                request.Headers.Add("Authorization", $"Bearer {_accessToken}");
+
+                var response = await _httpClient.SendAsync(request);
+
+                return response.IsSuccessStatusCode;
             }
             catch (Exception)
             {
@@ -163,7 +156,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 else
                 {
                     return false;
-                } 
+                }
             }
             catch (Exception)
             {
@@ -327,7 +320,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 else
                 {
                     return false;
-                }   
+                }
             }
             catch (Exception)
             {
@@ -410,7 +403,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 else
                 {
                     return false;
-                }   
+                }
             }
             catch (Exception)
             {
@@ -491,6 +484,21 @@ namespace EasyHMSAPI.Application.Services.Implementations
             }
         }
 
+        // Normalizes a mobile number to E.164 style (no leading '+') as required by the Meta
+        // Cloud API. Strips non-digits, removes a leading '0', and prepends the configured
+        // country code if not already present. Example: "9876543210" → "919876543210".
+        private string NormalizeToE164(string mobileNumber)
+        {
+            var digits = new string(mobileNumber.Where(char.IsDigit).ToArray());
+            // Remove a single leading zero (local dialing prefix)
+            if (digits.StartsWith("0") && digits.Length > 1)
+                digits = digits.Substring(1);
+            // Prepend country code if not already present
+            if (!digits.StartsWith(_countryCode))
+                digits = _countryCode + digits;
+            return digits;
+        }
+
         private static string FormatDoctorName(string doctorName)
         {
             if (string.IsNullOrWhiteSpace(doctorName))
@@ -511,4 +519,3 @@ namespace EasyHMSAPI.Application.Services.Implementations
         }
     }
 }
-

@@ -18,6 +18,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
     {
         public Guid AdmissionId { get; set; }
         public string AdmissionNo { get; set; } = null!;
+        public string? AdmissionToken { get; set; }
         public string? AdmissionType { get; set; }
         public string StatusCode { get; set; } = null!;
         public string PayerType { get; set; } = null!;
@@ -40,6 +41,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? PatientName { get; set; }
         public short? PatientAge { get; set; }
         public string? PatientSex { get; set; }
+        public string? PatientAddress { get; set; }
+        public string? Mobile { get; set; }
 
         // Current bed, if any — null means this admission hasn't had a bed assigned yet.
         public string? BedCode { get; set; }
