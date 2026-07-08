@@ -82,6 +82,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         item.BedAssignmentId = assignment.AssignmentId;
                         item.AdmissionId = admission.AdmissionId;
                         item.AdmissionNo = admission.AdmissionNo;
+                        item.AdmissionToken = admission.AdmissionToken;
                         item.AdmissionType = admission.AdmissionType;
                         item.PayerType = admission.PayerType;
                         item.AssignedAt = assignment.AssignedAt;

@@ -127,6 +127,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             EncounterId = null,
                             PrimaryDoctorId = request.PrimaryDoctorId,
                             AdmissionNo = admissionNo,
+                            AdmissionToken = request.AdmissionToken?.Trim(),
                             AdmissionType = admissionType,
                             ReferralSource = string.IsNullOrWhiteSpace(request.ReferralSource) ? null : request.ReferralSource!.Trim().ToUpperInvariant(),
                             ReferralName = request.ReferralName?.Trim(),

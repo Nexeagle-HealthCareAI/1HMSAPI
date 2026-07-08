@@ -109,6 +109,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     {
                         AdmissionId = a.AdmissionId,
                         AdmissionNo = a.AdmissionNo,
+                        AdmissionToken = a.AdmissionToken,
                         AdmissionType = a.AdmissionType,
                         StatusCode = a.StatusCode,
                         PayerType = a.PayerType,

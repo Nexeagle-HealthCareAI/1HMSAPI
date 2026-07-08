@@ -18,6 +18,7 @@ namespace EasyHMSAPI.Domain.Entities
         public Guid? PrimaryDoctorId { get; set; }
 
         public string AdmissionNo { get; set; } = null!;
+        public string? AdmissionToken { get; set; }
 
         // EMERGENCY / ELECTIVE / DAYCARE / LAMA
         public string? AdmissionType { get; set; }

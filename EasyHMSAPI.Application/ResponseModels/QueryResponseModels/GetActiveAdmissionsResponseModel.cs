@@ -18,6 +18,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
     {
         public Guid AdmissionId { get; set; }
         public string AdmissionNo { get; set; } = null!;
+        public string? AdmissionToken { get; set; }
         public string? AdmissionType { get; set; }
         public string StatusCode { get; set; } = null!;
         public string PayerType { get; set; } = null!;
