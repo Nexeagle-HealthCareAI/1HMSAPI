@@ -41,6 +41,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string ItemName { get; set; } = null!;
         public string Unit { get; set; } = null!;
         public decimal Qty { get; set; }
+        public decimal IssuedQty { get; set; }
         public string? Notes { get; set; }
     }
 }

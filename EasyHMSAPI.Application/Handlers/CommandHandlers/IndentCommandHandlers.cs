@@ -260,8 +260,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     i => i.IndentId == request.IndentId && i.HospitalId == request.HospitalId, cancellationToken);
                 if (indent == null)
                     return new IssueIndentResponseModel { Success = false, Message = "Indent not found." };
-                if (indent.Status != IpdConstants.IndentStatus.Submitted)
-                    return new IssueIndentResponseModel { Success = false, Message = $"Indent is {indent.Status.ToLowerInvariant()}, not submitted." };
+                if (indent.Status != IpdConstants.IndentStatus.Submitted && indent.Status != IpdConstants.IndentStatus.PartiallyIssued)
+                    return new IssueIndentResponseModel { Success = false, Message = $"Indent is {indent.Status.ToLowerInvariant()}, cannot issue." };
                 if (!indent.TargetStoreId.HasValue)
                     return new IssueIndentResponseModel { Success = false, Message = "Indent has no target store assigned for internal transfer." };
 
@@ -275,6 +275,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 foreach (var issueLine in request.Lines)
                 {
                     var indentLine = indentLinesById[issueLine.IndentLineId];
+                    if (issueLine.Qty > indentLine.Qty - indentLine.IssuedQty)
+                        return new IssueIndentResponseModel { Success = false, Message = $"Cannot issue more than the remaining quantity for item {indentLine.InventoryItemId}." };
+                    
                     
                     var transferResponse = await _mediator.Send(new TransferStockRequestModel
                     {
@@ -294,10 +297,16 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         // Stop processing further lines
                         return new IssueIndentResponseModel { Success = false, Message = transferResponse.Message ?? "Failed to issue stock." };
                     }
+                    
+                    indentLine.IssuedQty += issueLine.Qty;
                 }
 
-                // Mark Indent as ISSUED
-                indent.Status = IpdConstants.IndentStatus.Issued;
+                // Check if all lines are fully issued
+                if (indentLines.All(l => l.IssuedQty >= l.Qty))
+                    indent.Status = IpdConstants.IndentStatus.Issued;
+                else
+                    indent.Status = IpdConstants.IndentStatus.PartiallyIssued;
+                    
                 indent.UpdatedAt = DateTime.UtcNow;
                 indent.UpdatedBy = request.LoggedInUserName;
 

@@ -46,6 +46,7 @@ namespace EasyHMSAPI.Domain.Entities
         public Guid IndentId { get; set; }
         public Guid InventoryItemId { get; set; }
         public decimal Qty { get; set; }
+        public decimal IssuedQty { get; set; }
         public string? Notes { get; set; }
     }
 }

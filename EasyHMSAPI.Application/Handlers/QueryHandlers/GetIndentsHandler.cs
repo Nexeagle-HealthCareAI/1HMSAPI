@@ -97,6 +97,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     ItemName = itemsById.TryGetValue(l.InventoryItemId, out var item) ? item.ItemName : "Unknown",
                     Unit = itemsById.TryGetValue(l.InventoryItemId, out var item2) ? item2.Unit : "",
                     Qty = l.Qty,
+                    IssuedQty = l.IssuedQty,
                     Notes = l.Notes,
                 }).ToList(),
             };
