@@ -164,6 +164,25 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        [HttpPost("batches/bulk")]
+        public async Task<ActionResult<CreateBulkBatchResponseModel>> CreateBulkBatch([FromBody] CreateBulkBatchRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                return response.Success ? Ok(response) : BadRequest(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in CreateBulkBatch for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred while creating bulk batches." });
+            }
+        }
+
         // Hospital-wide board: stock-by-store, expiry alerts (90/60/30-day tiers), reorder alerts.
         [HttpGet("board")]
         public async Task<ActionResult<GetInventoryBoardResponseModel>> GetBoard([FromQuery] Guid hospitalId)
