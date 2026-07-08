@@ -26,6 +26,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (existingBed == null)
                     throw new KeyNotFoundException($"Bed with ID {request.BedId} not found.");
 
+                if (!request.IsActive && existingBed.StatusCode == "OCCUPIED")
+                    throw new InvalidOperationException($"Bed {existingBed.BedCode} is currently occupied and cannot be deactivated.");
+
                 if (!string.IsNullOrEmpty(request.WardCode)) existingBed.WardCode = request.WardCode;
                 if (!string.IsNullOrEmpty(request.WardName)) existingBed.WardName = request.WardName;
                 if (!string.IsNullOrEmpty(request.WardType)) existingBed.WardType = request.WardType;

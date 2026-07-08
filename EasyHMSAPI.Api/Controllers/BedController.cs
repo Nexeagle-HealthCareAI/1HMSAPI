@@ -86,6 +86,51 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // True hard delete — only succeeds if the bed has no BedAssignment history and isn't
+        // currently occupied. Beds with history must be deactivated (PUT master, isActive=false)
+        // instead; the database's FK on BedAssignment.BedId would reject a hard delete anyway.
+        [HttpDelete("master/{bedId}")]
+        public async Task<ActionResult<HardDeleteBedMasterResponseModel>> HardDeleteBedMaster(Guid bedId, [FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty || bedId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and bedId are required." });
+
+            try
+            {
+                var response = await _mediator.Send(new HardDeleteBedMasterRequestModel { HospitalId = hospitalId, BedId = bedId });
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in HardDeleteBedMaster for bedId: {BedId}", bedId);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
+        [HttpPost("master/bulk-hard-delete")]
+        public async Task<ActionResult<BulkHardDeleteBedMasterResponseModel>> BulkHardDeleteBedMaster([FromBody] BulkHardDeleteBedMasterRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+            if (request.BedIds == null || request.BedIds.Count == 0)
+                return BadRequest(new { Message = "At least one bedId is required." });
+
+            try
+            {
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in BulkHardDeleteBedMaster for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
         [HttpPost("master/bulk")]
         public async Task<ActionResult<BulkCreateBedMasterResponseModel>> BulkCreateBedMaster([FromBody] BulkCreateBedMasterRequestModel request)
         {
@@ -105,6 +150,31 @@ namespace EasyHMSAPI.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in BulkCreateBedMaster for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
+        // Soft-deletes (IsActive=false) every requested bed that isn't OCCUPIED; occupied beds are
+        // rejected individually (see BulkDeleteBedMasterHandler) rather than failing the whole batch.
+        [HttpPost("master/bulk-delete")]
+        public async Task<ActionResult<BulkDeleteBedMasterResponseModel>> BulkDeleteBedMaster([FromBody] BulkDeleteBedMasterRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+            if (request.BedIds == null || request.BedIds.Count == 0)
+                return BadRequest(new { Message = "At least one bedId is required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in BulkDeleteBedMaster for hospitalId: {HospitalId}", request.HospitalId);
                 return StatusCode(500, new { Message = "An error occurred." });
             }
         }
