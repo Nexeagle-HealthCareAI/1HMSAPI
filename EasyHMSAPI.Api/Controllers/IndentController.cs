@@ -155,5 +155,29 @@ namespace EasyHMSAPI.Api.Controllers
                 return StatusCode(500, new { Message = "An error occurred while converting the indent to a purchase order." });
             }
         }
+
+        [HttpPost("{indentId:guid}/issue")]
+        public async Task<ActionResult<IssueIndentResponseModel>> IssueIndent(Guid indentId, [FromBody] IssueIndentRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            request.IndentId = indentId;
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                request.LoggedInUserId = UserContextHelper.GetUserId(User);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in IssueIndent for indentId: {IndentId}", indentId);
+                return StatusCode(500, new { Message = "An error occurred while issuing the indent." });
+            }
+        }
     }
 }

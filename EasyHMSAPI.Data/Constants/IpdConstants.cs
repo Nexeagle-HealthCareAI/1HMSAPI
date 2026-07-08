@@ -468,8 +468,9 @@ namespace EasyHMSAPI.Data.Constants
             public const string Approved = "APPROVED";
             public const string Rejected = "REJECTED";
             public const string ConvertedToPo = "CONVERTED_TO_PO";
+            public const string Issued = "ISSUED";
             public const string Cancelled = "CANCELLED";
-            public static readonly string[] All = { Draft, Submitted, Approved, Rejected, ConvertedToPo, Cancelled };
+            public static readonly string[] All = { Draft, Submitted, Approved, Rejected, ConvertedToPo, Issued, Cancelled };
         }
 
         public static class PurchaseOrderStatus

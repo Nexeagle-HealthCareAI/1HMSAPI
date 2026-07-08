@@ -13,13 +13,16 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         IRequestHandler<CreateIndentRequestModel, CreateIndentResponseModel>,
         IRequestHandler<SubmitIndentRequestModel, ApproveIndentResponseModel>,
         IRequestHandler<ApproveIndentRequestModel, ApproveIndentResponseModel>,
-        IRequestHandler<ConvertIndentToPoRequestModel, ConvertIndentToPoResponseModel>
+        IRequestHandler<ConvertIndentToPoRequestModel, ConvertIndentToPoResponseModel>,
+        IRequestHandler<IssueIndentRequestModel, IssueIndentResponseModel>
     {
         private readonly AppDbContext _context;
+        private readonly IMediator _mediator;
 
-        public IndentCommandHandlers(AppDbContext context)
+        public IndentCommandHandlers(AppDbContext context, IMediator mediator)
         {
             _context = context;
+            _mediator = mediator;
         }
 
         public async Task<CreateIndentResponseModel> Handle(CreateIndentRequestModel request, CancellationToken cancellationToken)
@@ -37,6 +40,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     s => s.StoreId == request.RequestingStoreId && s.HospitalId == request.HospitalId, cancellationToken);
                 if (!storeExists)
                     return new CreateIndentResponseModel { Success = false, Message = "Requesting store not found." };
+
+                if (request.TargetStoreId.HasValue)
+                {
+                    var targetStoreExists = await _context.Store.AnyAsync(
+                        s => s.StoreId == request.TargetStoreId.Value && s.HospitalId == request.HospitalId, cancellationToken);
+                    if (!targetStoreExists)
+                        return new CreateIndentResponseModel { Success = false, Message = "Target store not found." };
+                }
 
                 var itemIds = request.Lines.Select(l => l.InventoryItemId).Distinct().ToList();
                 var validItemCount = await _context.InventoryItem.CountAsync(
@@ -57,6 +68,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     HospitalId = request.HospitalId,
                     IndentNumber = indentNumber,
                     RequestingStoreId = request.RequestingStoreId,
+                    TargetStoreId = request.TargetStoreId,
                     Status = request.IsSystemGenerated ? IpdConstants.IndentStatus.Draft : IpdConstants.IndentStatus.Submitted,
                     IsSystemGenerated = request.IsSystemGenerated,
                     RequestedBy = request.LoggedInUserName,
@@ -230,6 +242,72 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             catch (Exception)
             {
                 return new ConvertIndentToPoResponseModel { Success = false, Message = "Error converting indent to purchase order." };
+            }
+        }
+
+        public async Task<IssueIndentResponseModel> Handle(IssueIndentRequestModel request, CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (request.HospitalId == Guid.Empty || request.IndentId == Guid.Empty)
+                    return new IssueIndentResponseModel { Success = false, Message = "HospitalId and IndentId are required." };
+                if (request.Lines.Count == 0)
+                    return new IssueIndentResponseModel { Success = false, Message = "At least one line is required to issue." };
+                if (request.Lines.Any(l => l.Qty <= 0))
+                    return new IssueIndentResponseModel { Success = false, Message = "Issue quantities must be positive." };
+
+                var indent = await _context.Indent.FirstOrDefaultAsync(
+                    i => i.IndentId == request.IndentId && i.HospitalId == request.HospitalId, cancellationToken);
+                if (indent == null)
+                    return new IssueIndentResponseModel { Success = false, Message = "Indent not found." };
+                if (indent.Status != IpdConstants.IndentStatus.Submitted)
+                    return new IssueIndentResponseModel { Success = false, Message = $"Indent is {indent.Status.ToLowerInvariant()}, not submitted." };
+                if (!indent.TargetStoreId.HasValue)
+                    return new IssueIndentResponseModel { Success = false, Message = "Indent has no target store assigned for internal transfer." };
+
+                var indentLines = await _context.IndentLine.Where(l => l.IndentId == indent.IndentId).ToListAsync(cancellationToken);
+                var indentLinesById = indentLines.ToDictionary(l => l.IndentLineId);
+                
+                if (request.Lines.Any(l => !indentLinesById.ContainsKey(l.IndentLineId)))
+                    return new IssueIndentResponseModel { Success = false, Message = "One or more lines do not belong to this indent." };
+
+                // Execute transfer for each line
+                foreach (var issueLine in request.Lines)
+                {
+                    var indentLine = indentLinesById[issueLine.IndentLineId];
+                    
+                    var transferResponse = await _mediator.Send(new TransferStockRequestModel
+                    {
+                        HospitalId = request.HospitalId,
+                        FromStoreId = indent.TargetStoreId.Value,
+                        ToStoreId = indent.RequestingStoreId,
+                        InventoryItemId = indentLine.InventoryItemId,
+                        BatchId = issueLine.BatchId,
+                        Qty = issueLine.Qty,
+                        Notes = $"Issued against Indent {indent.IndentNumber}",
+                        LoggedInUserName = request.LoggedInUserName,
+                        LoggedInUserId = request.LoggedInUserId
+                    }, cancellationToken);
+
+                    if (!transferResponse.Success)
+                    {
+                        // Stop processing further lines
+                        return new IssueIndentResponseModel { Success = false, Message = transferResponse.Message ?? "Failed to issue stock." };
+                    }
+                }
+
+                // Mark Indent as ISSUED
+                indent.Status = IpdConstants.IndentStatus.Issued;
+                indent.UpdatedAt = DateTime.UtcNow;
+                indent.UpdatedBy = request.LoggedInUserName;
+
+                await _context.SaveChangesAsync(cancellationToken);
+
+                return new IssueIndentResponseModel { Success = true, Message = "Stock issued successfully." };
+            }
+            catch (Exception ex)
+            {
+                return new IssueIndentResponseModel { Success = false, Message = $"Error processing issue: {ex.Message}" };
             }
         }
     }

@@ -192,13 +192,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     catch (Exception ex)
                     {
                         await tx.RollbackAsync(cancellationToken);
-                        return new CreateGoodsReceiptNoteResponseModel { Success = false, Message = $"Error recording goods receipt: {ex.Message}" };
+                        var errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                        return new CreateGoodsReceiptNoteResponseModel { Success = false, Message = $"Error recording goods receipt: {errorMsg}" };
                     }
                 });
             }
             catch (Exception ex)
             {
-                return new CreateGoodsReceiptNoteResponseModel { Success = false, Message = $"Error recording goods receipt: {ex.Message}" };
+                var errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                return new CreateGoodsReceiptNoteResponseModel { Success = false, Message = $"Error recording goods receipt: {errorMsg}" };
             }
         }
     }

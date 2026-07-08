@@ -26,4 +26,11 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public Guid? PurchaseOrderId { get; set; }
         public string? PoNumber { get; set; }
     }
+
+    [ExcludeFromCodeCoverage]
+    public class IssueIndentResponseModel
+    {
+        public bool Success { get; set; }
+        public string? Message { get; set; }
+    }
 }

@@ -12,7 +12,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public Guid FromStoreId { get; set; }
         public Guid ToStoreId { get; set; }
         public Guid? BatchId { get; set; }
-        public int Qty { get; set; }
+        public decimal Qty { get; set; }
         public string? Notes { get; set; }
 
         public string? LoggedInUserName { get; set; }

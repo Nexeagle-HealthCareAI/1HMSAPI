@@ -15,6 +15,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string IndentNumber { get; set; } = null!;
         public Guid RequestingStoreId { get; set; }
         public string? RequestingStoreName { get; set; }
+        public Guid? TargetStoreId { get; set; }
+        public string? TargetStoreName { get; set; }
         public string Status { get; set; } = null!;
         public bool IsSystemGenerated { get; set; }
         public string? RequestedBy { get; set; }

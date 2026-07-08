@@ -26,6 +26,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public Guid? LoggedInUserId { get; set; }
 
         public Guid RequestingStoreId { get; set; }
+        public Guid? TargetStoreId { get; set; }
         public bool IsSystemGenerated { get; set; }
         public string? Notes { get; set; }
         public List<IndentLineInput> Lines { get; set; } = new();
@@ -76,5 +77,27 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public Guid VendorId { get; set; }
         public DateTime? ExpectedDeliveryDate { get; set; }
         public List<ConvertIndentLineInput> Lines { get; set; } = new();
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class IssueIndentLineInput
+    {
+        public Guid IndentLineId { get; set; }
+        public Guid BatchId { get; set; }
+        public decimal Qty { get; set; }
+    }
+
+    // SUBMITTED -> ISSUED: For internal store transfers. Deducts stock from TargetStoreId, adds to RequestingStoreId.
+    [ExcludeFromCodeCoverage]
+    public class IssueIndentRequestModel : IRequest<IssueIndentResponseModel>
+    {
+        public Guid HospitalId { get; set; }
+        [JsonIgnore]
+        public string? LoggedInUserName { get; set; }
+        [JsonIgnore]
+        public Guid? LoggedInUserId { get; set; }
+
+        public Guid IndentId { get; set; }
+        public List<IssueIndentLineInput> Lines { get; set; } = new();
     }
 }

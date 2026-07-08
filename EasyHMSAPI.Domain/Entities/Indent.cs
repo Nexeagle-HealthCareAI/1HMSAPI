@@ -13,6 +13,7 @@ namespace EasyHMSAPI.Domain.Entities
 
         public string IndentNumber { get; set; } = null!;
         public Guid RequestingStoreId { get; set; }
+        public Guid? TargetStoreId { get; set; }
 
         public string Status { get; set; } = null!;
         public bool IsSystemGenerated { get; set; }
