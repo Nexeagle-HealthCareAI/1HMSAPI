@@ -1,4 +1,4 @@
-﻿using EasyHMSAPI.Application.Helpers.Interfaces;
+using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
@@ -65,6 +65,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 {
                     List<string> allowedStatuses = new()
                     {
+                        AppConstants.AppointmentStatus_Ready,
+                        AppConstants.AppointmentStatus_UnderConsult,
                         AppConstants.AppointmentStatus_AwaitingReconsult,
                         AppConstants.AppointmentStatus_Completed,
                         AppConstants.AppointmentStatus_LabRequired
@@ -72,8 +74,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                     if (!string.IsNullOrEmpty(appointment?.CurrentStatusCode) && allowedStatuses.Contains(appointment.CurrentStatusCode.ToUpper()))
                     {
+                        var targetContainer = request.ReportType?.Equals("Lab Report", StringComparison.OrdinalIgnoreCase) == true 
+                            ? "labreports" 
+                            : _containerName;
+
                         var newAttachmentId = Guid.NewGuid();
-                        var uploadResult = await _blobStorageService.UploadAsync(newAttachmentId.ToString(), request.File, _containerName, cancellationToken);
+                        var uploadResult = await _blobStorageService.UploadAsync(newAttachmentId.ToString(), request.File, targetContainer, cancellationToken);
 
                         if (!string.IsNullOrEmpty(uploadResult))
                         {

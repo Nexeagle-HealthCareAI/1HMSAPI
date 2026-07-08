@@ -237,6 +237,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
             if (c.Contains("profile")) return "ProfilePicture";
             if (c.Contains("invoice")) return "Invoice";
             if (c.Contains("discharge")) return "DischargeLetterhead";
+            if (c.Contains("labreports")) return "LabReports";
             return string.IsNullOrWhiteSpace(c) ? "Misc" : char.ToUpperInvariant(c[0]) + c.Substring(1);
         }
 

@@ -1,4 +1,4 @@
-﻿using EasyHMSAPI.Application.Helpers.Interfaces;
+using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
@@ -86,8 +86,12 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     // (S3/MinIO presigned URLs expire within 7 days; Azure returns them unchanged).
                     foreach (var attachment in attachments)
                     {
+                        var targetContainer = attachment.ReportType?.Equals("Lab Report", StringComparison.OrdinalIgnoreCase) == true 
+                            ? "labreports" 
+                            : _attachmentsContainer;
+
                         attachment.StorageUrl = await _blobStorageService.RefreshUrlAsync(
-                            _attachmentsContainer,
+                            targetContainer,
                             $"{attachment.AttachmentId}_",
                             attachment.StorageUrl,
                             cancellationToken);

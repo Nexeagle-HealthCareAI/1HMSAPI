@@ -1,4 +1,4 @@
-﻿using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
+using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
@@ -31,7 +31,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     .FirstOrDefaultAsync(cancellationToken);
                 if(existingAttachment is not null)
                 {
-                    bool isDeleted = await _blobStorageService.DeleteAsync(request.AttachmentId.ToString(), _containerName, cancellationToken);
+                    var targetContainer = existingAttachment.ReportType?.Equals("Lab Report", StringComparison.OrdinalIgnoreCase) == true 
+                        ? "labreports" 
+                        : _containerName;
+
+                    bool isDeleted = await _blobStorageService.DeleteAsync(request.AttachmentId.ToString(), targetContainer, cancellationToken);
                     if(isDeleted)
                     {
                         _context.PrescriptionAttachments.Remove(existingAttachment);
