@@ -124,6 +124,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         PatientName = patient?.FullName,
                         PatientAge = patient?.Age,
                         PatientSex = patient?.Sex,
+                        PatientAddress = patient != null ? string.Join(", ", new[] { patient.AddressLine, patient.City, patient.State }.Where(x => !string.IsNullOrWhiteSpace(x))) : null,
+                        Mobile = patient?.Mobile,
                         BedCode = bedCode,
                         WardName = wardName,
                         EncounterId = a.EncounterId,

@@ -87,6 +87,27 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        [HttpPost("unsign")]
+        public async Task<ActionResult<UnsignDischargeSummaryResponseModel>> Unsign([FromBody] UnsignDischargeSummaryRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and admissionId are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in Unsign for admissionId: {AdmissionId}", request.AdmissionId);
+                return StatusCode(500, new { Message = "An error occurred while unsigning the discharge summary." });
+            }
+        }
+
         [HttpPost("narrate")]
         public async Task<ActionResult<GenerateDischargeNarrativeResponseModel>> Narrate([FromBody] GenerateDischargeNarrativeRequestModel request)
         {

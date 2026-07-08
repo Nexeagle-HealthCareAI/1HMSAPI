@@ -40,6 +40,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? PatientName { get; set; }
         public short? PatientAge { get; set; }
         public string? PatientSex { get; set; }
+        public string? PatientAddress { get; set; }
+        public string? Mobile { get; set; }
 
         // Current bed, if any — null means this admission hasn't had a bed assigned yet.
         public string? BedCode { get; set; }
