@@ -67,35 +67,37 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             bool emailSent = !string.IsNullOrEmpty(user.Email) && await _emailService.SendOtpEmailAsync(user.Email, newGeneratedOtp);
 
             response.IsWhatsappSent = whatsappSent;
+            response.IsWhatsappSent = whatsappSent;
             response.IsEmailSent = emailSent;
 
             var sentChannels = new List<string>();
             if (whatsappSent) sentChannels.Add("WhatsApp");
             if (emailSent) sentChannels.Add("Email");
 
-            if (sentChannels.Count == 0)
-            {
-                // Nothing actually reached the user — don't overwrite a still-valid prior OTP or
-                // reset the lockout counters for a request that delivered no usable code.
-                response.Success = false;
-                response.Message = "Could not send the OTP via WhatsApp or Email. Please try again or contact support.";
-                return response;
-            }
-
-            response.Success = true;
-            response.Message = $"OTP sent successfully via {string.Join(" and ", sentChannels)}.";
             response.UserId = user.UserID;
 
+            // ALWAYS save the generated OTP to the database, regardless of delivery success.
+            // This ensures it can be manually retrieved for testing or support.
             userAuth.Otp = otpToStore;
             userAuth.OtpSentDateTime = DateTime.UtcNow;
             userAuth.OtpExpireAt = DateTime.UtcNow.AddMinutes(3);
             userAuth.IsOtpUsed = false;
             // Issuing a fresh OTP clears any brute-force lockout from the previous OTP window:
-            // the legitimate user self-recovers by requesting a new code, and any attacker's
-            // in-progress guessing is invalidated against the new code.
             userAuth.FailedLoginAttempts = 0;
             userAuth.IsLocked = false;
             await _context.SaveChangesAsync(cancellationToken);
+
+            if (sentChannels.Count == 0)
+            {
+                // Returning Success = true so the frontend UI still moves to the OTP entry step,
+                // allowing developers/support to manually look up the OTP in the DB and use it.
+                response.Success = true;
+                response.Message = "OTP generated and saved, but could not be delivered via WhatsApp or Email.";
+                return response;
+            }
+
+            response.Success = true;
+            response.Message = $"OTP sent successfully via {string.Join(" and ", sentChannels)}.";
 
             return response;
         }
