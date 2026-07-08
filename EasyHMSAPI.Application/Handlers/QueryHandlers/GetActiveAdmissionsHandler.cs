@@ -39,9 +39,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     _ => query.Where(a => IpdConstants.AdmissionStatus.Active.Contains(a.StatusCode)),
                 };
 
-                var admissions = await query
-                    .OrderByDescending(a => a.AdmittedAt)
-                    .ToListAsync(cancellationToken);
+                IQueryable<Domain.Entities.Admission> admissionsQuery = query.OrderByDescending(a => a.AdmittedAt);
+                if (statusFilter == "DISCHARGED" || statusFilter == "ALL")
+                {
+                    admissionsQuery = admissionsQuery.Take(200);
+                }
+
+                var admissions = await admissionsQuery.ToListAsync(cancellationToken);
 
                 var patientIds = admissions.Select(a => a.PatientId).Distinct().ToList();
                 var patientsById = await _context.PatientRegistrations
