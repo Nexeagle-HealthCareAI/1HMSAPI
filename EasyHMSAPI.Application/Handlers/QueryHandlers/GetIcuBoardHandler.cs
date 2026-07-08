@@ -40,10 +40,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .ToDictionaryAsync(b => b.BedId, cancellationToken);
                 
             // Fetch patients
-            var patientIds = activeAdmissions.Select(a => a.PatientId).Distinct().ToList();
+            var patientIds = activeAdmissions.Select(a => a.PatientId).Where(id => id != null).Distinct().ToList();
             var patients = await _context.PatientRegistrations
                 .Where(p => p.HospitalId == request.HospitalId && patientIds.Contains(p.PatientId))
-                .ToDictionaryAsync(p => p.PatientId, cancellationToken);
+                .ToDictionaryAsync(p => p.PatientId!, cancellationToken);
                 
             // Latest Level of Care
             var latestLevelOfCare = await _context.IcuLevelOfCare
@@ -81,7 +81,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 
                 if (!isIcuWard && !hasIcuLevel) continue; // Skip non-ICU patients
                 
-                patients.TryGetValue(a.PatientId, out var patient);
+                EasyHMSAPI.Domain.Entities.PatientRegistration? patient = null;
+                if (a.PatientId != null) patients.TryGetValue(a.PatientId, out patient);
+                
                 latestApache.TryGetValue(a.AdmissionId, out var apache);
                 latestSofa.TryGetValue(a.AdmissionId, out var sofa);
 
@@ -96,7 +98,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     ApacheScore = apache?.TotalScore,
                     SofaScore = sofa?.TotalScore,
                     OnVentilator = sofa?.OnRespiratorySupport ?? false,
-                    PrimaryDiagnosis = a.ProvisionalDiagnosis // or admitting diagnosis
+                    PrimaryDiagnosis = null // Admission doesn't have ProvisionalDiagnosis in EasyHMS
                 });
             }
             
