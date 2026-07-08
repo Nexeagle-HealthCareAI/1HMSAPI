@@ -189,16 +189,16 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             MatchStatus = grn.MatchStatus,
                         };
                     }
-                    catch (Exception)
+                    catch (Exception ex)
                     {
                         await tx.RollbackAsync(cancellationToken);
-                        return new CreateGoodsReceiptNoteResponseModel { Success = false, Message = "Error recording goods receipt." };
+                        return new CreateGoodsReceiptNoteResponseModel { Success = false, Message = $"Error recording goods receipt: {ex.Message}" };
                     }
                 });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                return new CreateGoodsReceiptNoteResponseModel { Success = false, Message = "Error recording goods receipt." };
+                return new CreateGoodsReceiptNoteResponseModel { Success = false, Message = $"Error recording goods receipt: {ex.Message}" };
             }
         }
     }
