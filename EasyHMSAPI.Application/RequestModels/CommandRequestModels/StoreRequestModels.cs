@@ -17,6 +17,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string StoreCode { get; set; } = null!;
         public string StoreName { get; set; } = null!;
         public string StoreType { get; set; } = null!;
+        public string? AssignedBoard { get; set; }
         public Guid? ParentStoreId { get; set; }
         public decimal? MinTempCelsius { get; set; }
         public decimal? MaxTempCelsius { get; set; }

@@ -412,6 +412,14 @@ namespace EasyHMSAPI.Data.Constants
             public static readonly string[] All = { Main, Sub, Department, Ot, Pharmacy, ColdChain, Narcotic, BloodBank, Cssd };
         }
 
+        public static class StoreAssignedBoard
+        {
+            public const string Ot = "OT";
+            public const string Icu = "ICU";
+            public const string Ward = "WARD";
+            public static readonly string[] All = { Ot, Icu, Ward };
+        }
+
         // ---- Equipment (biomedical asset register) ----
 
         public static class EquipmentCategory
