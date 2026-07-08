@@ -143,6 +143,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             };
                             _context.Batch.Add(batch);
 
+                            // Save changes so that the RecordInventoryMovementHandler can query this newly created batch from the DB (within the transaction).
+                            await _context.SaveChangesAsync(cancellationToken);
+
                             var movementResponse = await _mediator.Send(new RecordInventoryMovementRequestModel
                             {
                                 HospitalId = request.HospitalId,
