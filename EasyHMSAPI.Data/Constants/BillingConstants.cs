@@ -62,6 +62,7 @@ namespace EasyHMSAPI.Data.Constants
             public const string LabAccession = "LABACC";
             public const string RadStudy = "RADSTUDY";
             public const string Admission = "ADM";
+            public const string Token = "TOKEN";
             public const string InterimBill = "IB";
             public const string PcpndtFormF = "PCPNDT";
             public const string Mlc = "MLC";

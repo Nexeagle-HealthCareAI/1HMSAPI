@@ -20,6 +20,8 @@ namespace EasyHMSAPI.Application.Services
                 return ("RCPT", "YYYY", "-", 6);
             if (string.Equals(seriesCode, BillingConstants.NumberSeriesCode.Admission, StringComparison.OrdinalIgnoreCase))
                 return ("ADM", "YYYY", "-", 6);
+            if (string.Equals(seriesCode, BillingConstants.NumberSeriesCode.Token, StringComparison.OrdinalIgnoreCase))
+                return ("T", "", "-", 4);
             if (string.Equals(seriesCode, BillingConstants.NumberSeriesCode.InterimBill, StringComparison.OrdinalIgnoreCase))
                 return ("IB", "YYYY", "-", 6);
             if (string.Equals(seriesCode, BillingConstants.NumberSeriesCode.Indent, StringComparison.OrdinalIgnoreCase))
