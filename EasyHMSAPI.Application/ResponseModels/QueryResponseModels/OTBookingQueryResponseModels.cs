@@ -62,6 +62,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? TheatreName { get; set; }
         public DateTime? ScheduledStart { get; set; }
         public DateTime? ScheduledEnd { get; set; }
+        public Guid? EncounterId { get; set; }
+        public Guid AdmissionId { get; set; }
         // Drives the card's progress readout — which safety-gate items are done so far.
         public bool PreOpAssessmentComplete { get; set; }
         public bool SignInComplete { get; set; }

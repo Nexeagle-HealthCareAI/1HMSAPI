@@ -89,6 +89,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     TheatreName = theatre?.TheatreName,
                     ScheduledStart = booking?.ScheduledStart,
                     ScheduledEnd = booking?.ScheduledEnd,
+                    EncounterId = c.EncounterId,
+                    AdmissionId = c.AdmissionId,
                     PreOpAssessmentComplete = preOpComplete,
                     SignInComplete = checklist?.SignInCompletedAt != null,
                     TimeOutComplete = checklist?.TimeOutCompletedAt != null,
