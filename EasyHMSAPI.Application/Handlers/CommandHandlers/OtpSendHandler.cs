@@ -33,7 +33,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
             if (string.IsNullOrEmpty(request.MobileNumber))
             {
-                response.Success = true;
+                response.Success = false;
                 response.Message = "Mobile number is required.";
                 return response;
             }
