@@ -57,6 +57,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<PrescriptionDrawing> PrescriptionDrawings { get; set; }
         public DbSet<OTPlan> OTPlans { get; set; }
         public DbSet<PackageType> PackageTypes { get; set; }
+        public DbSet<OTPlanPackageType> OTPlanPackageTypes { get; set; }
         public DbSet<AdmissionReferral> AdmissionReferrals { get; set; }
         public DbSet<AdmissionReferralStatusHistory> AdmissionReferralStatusHistories { get; set; }
         public DbSet<Prescription> Prescription { get; set; }
@@ -338,6 +339,11 @@ namespace EasyHMSAPI.Domain.Context
             modelBuilder.Entity<PackageType>().Property(e => e.CreatedAt).HasColumnType("datetime2");
             modelBuilder.Entity<PackageType>().Property(e => e.UpdatedAt).HasColumnType("datetime2");
             modelBuilder.Entity<PackageType>().Property(e => e.RowVersion).IsRowVersion();
+
+            // Configure OTPlanPackageType (many-to-many join: an OT Plan may offer several Package Types)
+            modelBuilder.Entity<OTPlanPackageType>().ToTable("OTPlanPackageType");
+            modelBuilder.Entity<OTPlanPackageType>().HasKey(e => new { e.OtPlanId, e.PackageTypeId });
+            modelBuilder.Entity<OTPlanPackageType>().Property(e => e.CreatedAt).HasColumnType("datetime2");
 
             // Configure AdmissionReferral
             modelBuilder.Entity<AdmissionReferral>().ToTable("AdmissionReferral");

@@ -8,7 +8,6 @@ namespace EasyHMSAPI.Domain.Entities
         public Guid OtPlanId { get; set; }
         public Guid HospitalId { get; set; }
         public Guid? DepartmentId { get; set; }
-        public Guid? PackageTypeId { get; set; }
         public string PlanName { get; set; } = null!;
         public string ProcedureName { get; set; } = null!;
         public string? DefaultRoomCategory { get; set; }

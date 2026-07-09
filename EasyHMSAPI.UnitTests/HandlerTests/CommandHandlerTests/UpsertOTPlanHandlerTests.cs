@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.CommandHandlers;
@@ -107,22 +109,28 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
-        public async Task Handle_PackageTypeId_RoundTrips_OnCreateAndUpdate()
+        public async Task Handle_PackageTypeIds_RoundTrip_OnCreateAndUpdate()
         {
             var hospitalId = Guid.NewGuid();
-            var packageType = new PackageType
+            var fullPackage = new PackageType
             {
                 PackageTypeId = Guid.NewGuid(), HospitalId = hospitalId,
                 Name = "Full Package", IsActive = true,
                 CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
             };
-            _context.PackageTypes.Add(packageType);
+            var nonPackage = new PackageType
+            {
+                PackageTypeId = Guid.NewGuid(), HospitalId = hospitalId,
+                Name = "Non Package", IsActive = true,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+            };
+            _context.PackageTypes.AddRange(fullPackage, nonPackage);
             await _context.SaveChangesAsync();
 
             var createRequest = new UpsertOTPlanRequestModel
             {
                 HospitalId = hospitalId,
-                PackageTypeId = packageType.PackageTypeId,
+                PackageTypeIds = new List<Guid> { fullPackage.PackageTypeId, nonPackage.PackageTypeId },
                 PlanName = "PCNL Plan",
                 ProcedureName = "Percutaneous Nephrolithotomy",
             };
@@ -130,32 +138,46 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var createResponse = await _handler.Handle(createRequest, CancellationToken.None);
 
             Assert.That(createResponse.Success, Is.True);
-            var created = await _context.OTPlans.FindAsync(createResponse.OtPlanId);
-            Assert.That(created!.PackageTypeId, Is.EqualTo(packageType.PackageTypeId));
+            var linksAfterCreate = _context.OTPlanPackageTypes.Where(l => l.OtPlanId == createResponse.OtPlanId).ToList();
+            Assert.That(linksAfterCreate.Select(l => l.PackageTypeId), Is.EquivalentTo(new[] { fullPackage.PackageTypeId, nonPackage.PackageTypeId }));
 
-            var otherPackageType = new PackageType
+            var thirdPackage = new PackageType
             {
                 PackageTypeId = Guid.NewGuid(), HospitalId = hospitalId,
-                Name = "Non Package", IsActive = true,
+                Name = "ICU Package", IsActive = true,
                 CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
             };
-            _context.PackageTypes.Add(otherPackageType);
+            _context.PackageTypes.Add(thirdPackage);
             await _context.SaveChangesAsync();
 
             var updateRequest = new UpsertOTPlanRequestModel
             {
-                OtPlanId = created.OtPlanId,
+                OtPlanId = createResponse.OtPlanId,
                 HospitalId = hospitalId,
-                PackageTypeId = otherPackageType.PackageTypeId,
-                PlanName = created.PlanName,
-                ProcedureName = created.ProcedureName,
+                PackageTypeIds = new List<Guid> { thirdPackage.PackageTypeId },
+                PlanName = "PCNL Plan",
+                ProcedureName = "Percutaneous Nephrolithotomy",
             };
 
             var updateResponse = await _handler.Handle(updateRequest, CancellationToken.None);
 
             Assert.That(updateResponse.Success, Is.True);
-            var updated = await _context.OTPlans.FindAsync(created.OtPlanId);
-            Assert.That(updated!.PackageTypeId, Is.EqualTo(otherPackageType.PackageTypeId));
+            var linksAfterUpdate = _context.OTPlanPackageTypes.Where(l => l.OtPlanId == createResponse.OtPlanId).ToList();
+            Assert.That(linksAfterUpdate.Select(l => l.PackageTypeId), Is.EquivalentTo(new[] { thirdPackage.PackageTypeId }));
+
+            var clearRequest = new UpsertOTPlanRequestModel
+            {
+                OtPlanId = createResponse.OtPlanId,
+                HospitalId = hospitalId,
+                PackageTypeIds = new List<Guid>(),
+                PlanName = "PCNL Plan",
+                ProcedureName = "Percutaneous Nephrolithotomy",
+            };
+
+            var clearResponse = await _handler.Handle(clearRequest, CancellationToken.None);
+
+            Assert.That(clearResponse.Success, Is.True);
+            Assert.That(_context.OTPlanPackageTypes.Any(l => l.OtPlanId == createResponse.OtPlanId), Is.False);
         }
 
         [Test]

@@ -37,19 +37,31 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     .Where(d => plans.Select(p => p.DepartmentId).Contains(d.DepartmentID))
                     .ToDictionaryAsync(d => d.DepartmentID, d => d.Name, cancellationToken);
 
-                var packageTypeIds = plans.Where(p => p.PackageTypeId.HasValue).Select(p => p.PackageTypeId!.Value).Distinct().ToList();
+                var otPlanIds = plans.Select(p => p.OtPlanId).ToList();
+                var links = await _context.OTPlanPackageTypes
+                    .Where(l => otPlanIds.Contains(l.OtPlanId))
+                    .ToListAsync(cancellationToken);
+
+                var packageTypeIds = links.Select(l => l.PackageTypeId).Distinct().ToList();
                 var packageTypesById = await _context.PackageTypes
                     .Where(pt => packageTypeIds.Contains(pt.PackageTypeId))
                     .ToDictionaryAsync(pt => pt.PackageTypeId, pt => new { pt.Name, pt.Price }, cancellationToken);
+
+                var linksByPlan = links.ToLookup(l => l.OtPlanId);
 
                 response.Plans = plans.Select(p => new OTPlanDataModel
                 {
                     OtPlanId = p.OtPlanId,
                     DepartmentId = p.DepartmentId,
                     DepartmentName = p.DepartmentId.HasValue && departmentNames.TryGetValue(p.DepartmentId.Value, out var name) ? name : null,
-                    PackageTypeId = p.PackageTypeId,
-                    PackageTypeName = p.PackageTypeId.HasValue && packageTypesById.TryGetValue(p.PackageTypeId.Value, out var pkg) ? pkg.Name : null,
-                    PackageTypePrice = p.PackageTypeId.HasValue && packageTypesById.TryGetValue(p.PackageTypeId.Value, out var pkg2) ? pkg2.Price : null,
+                    PackageTypes = linksByPlan[p.OtPlanId]
+                        .Where(l => packageTypesById.ContainsKey(l.PackageTypeId))
+                        .Select(l => new PackageTypeRefDataModel
+                        {
+                            PackageTypeId = l.PackageTypeId,
+                            Name = packageTypesById[l.PackageTypeId].Name,
+                            Price = packageTypesById[l.PackageTypeId].Price,
+                        }).ToList(),
                     PlanName = p.PlanName,
                     ProcedureName = p.ProcedureName,
                     DefaultRoomCategory = p.DefaultRoomCategory,

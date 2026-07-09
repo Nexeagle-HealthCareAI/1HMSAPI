@@ -16,9 +16,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public Guid OtPlanId { get; set; }
         public Guid? DepartmentId { get; set; }
         public string? DepartmentName { get; set; }
-        public Guid? PackageTypeId { get; set; }
-        public string? PackageTypeName { get; set; }
-        public decimal? PackageTypePrice { get; set; }
+        public List<PackageTypeRefDataModel> PackageTypes { get; set; } = new();
         public string? PlanName { get; set; }
         public string? ProcedureName { get; set; }
         public string? DefaultRoomCategory { get; set; }
@@ -27,5 +25,13 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public int DisplayOrder { get; set; }
         public DateTime UpdatedAt { get; set; }
         public string? UpdatedBy { get; set; }
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class PackageTypeRefDataModel
+    {
+        public Guid PackageTypeId { get; set; }
+        public string? Name { get; set; }
+        public decimal? Price { get; set; }
     }
 }
