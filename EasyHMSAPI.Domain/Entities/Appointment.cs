@@ -29,5 +29,8 @@ namespace EasyHMSAPI.Domain.Entities
         public DateTime? ValidUptoDate { get; set; }
         public Guid? ReferredByReferrerId { get; set; }
         public string? ReferrerRelation { get; set; }
+        public string? CancellationReason { get; set; }
+        public DateTime? CancelledAt { get; set; }
+        public string? CancelledBy { get; set; }
     }
 }

@@ -57,6 +57,60 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         }
 
         [Test]
+        public async Task Handle_FlagsSourceAppointmentCancelled_OnlyForPendingReferrals()
+        {
+            var hospitalId = Guid.NewGuid();
+            var user = TestDataFactory.SeedUser(_context);
+            var doctor = TestDataFactory.SeedDoctor(_context, user);
+            var cancelledApptId = Guid.NewGuid();
+            var activeApptId = Guid.NewGuid();
+
+            _context.Appointments.Add(new Appointment
+            {
+                ApptId = cancelledApptId, HospitalId = hospitalId, DoctorId = doctor.DoctorID, PatientId = "PAT1",
+                ApptDate = DateTime.UtcNow.Date, StartAt = DateTime.UtcNow, EndAt = DateTime.UtcNow.AddMinutes(30),
+                CurrentStatusCode = "CANCELLED",
+            });
+            _context.Appointments.Add(new Appointment
+            {
+                ApptId = activeApptId, HospitalId = hospitalId, DoctorId = doctor.DoctorID, PatientId = "PAT2",
+                ApptDate = DateTime.UtcNow.Date, StartAt = DateTime.UtcNow, EndAt = DateTime.UtcNow.AddMinutes(30),
+                CurrentStatusCode = "FUTURE",
+            });
+
+            // PENDING referral whose source appointment is cancelled — should be flagged.
+            _context.AdmissionReferrals.Add(new AdmissionReferral
+            {
+                ReferralId = Guid.NewGuid(), HospitalId = hospitalId, PatientId = "PAT1", AppointmentId = cancelledApptId,
+                ReferringDoctorId = doctor.DoctorID, CaseType = "PLANNED", StatusCode = "PENDING",
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+            });
+            // CONVERTED referral whose source appointment is cancelled — already a terminal outcome, not flagged.
+            _context.AdmissionReferrals.Add(new AdmissionReferral
+            {
+                ReferralId = Guid.NewGuid(), HospitalId = hospitalId, PatientId = "PAT1", AppointmentId = cancelledApptId,
+                ReferringDoctorId = doctor.DoctorID, CaseType = "PLANNED", StatusCode = "CONVERTED",
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+            });
+            // PENDING referral whose source appointment is still active — not flagged.
+            _context.AdmissionReferrals.Add(new AdmissionReferral
+            {
+                ReferralId = Guid.NewGuid(), HospitalId = hospitalId, PatientId = "PAT2", AppointmentId = activeApptId,
+                ReferringDoctorId = doctor.DoctorID, CaseType = "PLANNED", StatusCode = "PENDING",
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+            });
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetAdmissionReferralsRequestModel { HospitalId = hospitalId }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.Referrals, Has.Count.EqualTo(3));
+            Assert.That(response.Referrals.Single(r => r.StatusCode == "PENDING" && r.PatientId == "PAT1").SourceAppointmentCancelled, Is.True);
+            Assert.That(response.Referrals.Single(r => r.StatusCode == "CONVERTED").SourceAppointmentCancelled, Is.False);
+            Assert.That(response.Referrals.Single(r => r.PatientId == "PAT2").SourceAppointmentCancelled, Is.False);
+        }
+
+        [Test]
         public async Task Handle_FilterByStatus_ReturnsOnlyMatching()
         {
             var hospitalId = Guid.NewGuid();

@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -75,6 +76,11 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     .Where(pt => packageTypeIds.Contains(pt.PackageTypeId))
                     .ToDictionaryAsync(pt => pt.PackageTypeId, pt => new { pt.Name, pt.Price }, cancellationToken);
 
+                var appointmentIds = referrals.Where(r => r.AppointmentId.HasValue).Select(r => r.AppointmentId!.Value).Distinct().ToList();
+                var apptStatusById = await _context.Appointments
+                    .Where(a => appointmentIds.Contains(a.ApptId))
+                    .ToDictionaryAsync(a => a.ApptId, a => a.CurrentStatusCode, cancellationToken);
+
                 response.Referrals = referrals.Select(r => new AdmissionReferralDataModel
                 {
                     ReferralId = r.ReferralId,
@@ -83,6 +89,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     PatientMobile = patientByPatientId.TryGetValue(r.PatientId, out var pat2) ? pat2.Mobile : null,
                     ReferringDoctorId = r.ReferringDoctorId,
                     ReferringDoctorName = doctorNameById.TryGetValue(r.ReferringDoctorId, out var dn) ? dn : null,
+                    AppointmentId = r.AppointmentId,
+                    SourceAppointmentCancelled = r.StatusCode == "PENDING" && r.AppointmentId.HasValue
+                        && apptStatusById.TryGetValue(r.AppointmentId.Value, out var apptStatus) && apptStatus == AppConstants.AppointmentStatus_Cancelled,
                     OtPlanId = r.OtPlanId,
                     OtPlanName = r.OtPlanId.HasValue && planNameById.TryGetValue(r.OtPlanId.Value, out var pn) ? pn : null,
                     PackageTypeId = r.PackageTypeId,

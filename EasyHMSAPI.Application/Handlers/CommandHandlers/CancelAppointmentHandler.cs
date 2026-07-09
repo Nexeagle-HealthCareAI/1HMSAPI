@@ -28,10 +28,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             try
             {
                 var appt = await _context.Appointments
-                    .FirstOrDefaultAsync(a => a.ApptId == request.AppointmentId && a.PatientId == request.PatientId, cancellationToken);
+                    .FirstOrDefaultAsync(a => a.ApptId == request.AppointmentId
+                                            && a.PatientId == request.PatientId
+                                            && a.HospitalId == request.HospitalId, cancellationToken);
 
                 if (appt == null)
                     return new CancelAppointmentResponseModel { Success = false, Message = "Appointment not found." };
+
+                if (appt.CurrentStatusCode == AppConstants.AppointmentStatus_Cancelled)
+                    return new CancelAppointmentResponseModel { Success = false, Message = "This appointment is already cancelled." };
+
+                if (appt.CurrentStatusCode == AppConstants.AppointmentStatus_Completed)
+                    return new CancelAppointmentResponseModel { Success = false, Message = "Cannot cancel a completed appointment." };
 
                 bool billVoided = false;
                 bool billRefunded = false;
@@ -39,36 +47,35 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 string? refundReceiptNo = null;
 
                 // Check doctor status before proceeding
-                if (appt != null)
+                var doctorActive = await _context.Doctors.AnyAsync(d => d.DoctorID == appt.DoctorId && d.User.UserStatusId != (int)UserStatusEnum.Revoked, cancellationToken);
+                if (!doctorActive)
                 {
-                    var doctorActive = await _context.Doctors.AnyAsync(d => d.DoctorID == appt.DoctorId && d.User.UserStatusId != (int)UserStatusEnum.Revoked, cancellationToken);
-                    if (!doctorActive)
-                    {
-                        return new CancelAppointmentResponseModel { Success = false, Message = "Doctor is not active or has been revoked." };
-                    }
-
-                    appt.CurrentStatusCode = AppConstants.AppointmentStatus_Cancelled;
-                    appt.LastStatusCodeAt = DateTime.UtcNow;
-                    var history = string.IsNullOrEmpty(appt?.StatusHistoryJson)
-                   ? new List<object>()
-                   : JsonSerializer.Deserialize<List<object>>(appt.StatusHistoryJson) ?? new List<object>();
-                    history.Add(new { status = AppConstants.AppointmentStatus_Cancelled, timestamp = DateTime.UtcNow.ToString("o") });
-                    if(appt?.StatusHistoryJson != null)
-                    {
-                        appt.StatusHistoryJson = JsonSerializer.Serialize(history);
-                        var token = await _context.AppointmentTokens
-                       .Where(t => t.ApptId == appt.ApptId)
-                       .FirstOrDefaultAsync(cancellationToken);
-
-                        if (token != null)
-                        {
-                            token.TokenNo = 0;
-                            _context.AppointmentTokens.Update(token);
-                        }
-
-                        _context.Appointments.Update(appt);
-                    }
+                    return new CancelAppointmentResponseModel { Success = false, Message = "Doctor is not active or has been revoked." };
                 }
+
+                appt.CurrentStatusCode = AppConstants.AppointmentStatus_Cancelled;
+                appt.LastStatusCodeAt = DateTime.UtcNow;
+                appt.CancelledAt = DateTime.UtcNow;
+                appt.CancelledBy = request.LoggedInUserName;
+                appt.CancellationReason = request.Reason;
+
+                var history = string.IsNullOrEmpty(appt.StatusHistoryJson)
+                    ? new List<object>()
+                    : JsonSerializer.Deserialize<List<object>>(appt.StatusHistoryJson) ?? new List<object>();
+                history.Add(new { status = AppConstants.AppointmentStatus_Cancelled, timestamp = DateTime.UtcNow.ToString("o"), reason = request.Reason });
+                appt.StatusHistoryJson = JsonSerializer.Serialize(history);
+
+                var token = await _context.AppointmentTokens
+                    .Where(t => t.ApptId == appt.ApptId)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (token != null)
+                {
+                    token.TokenNo = 0;
+                    _context.AppointmentTokens.Update(token);
+                }
+
+                _context.Appointments.Update(appt);
 
                 // ── Billing cleanup ────────────────────────────────────────────
                 // Booking may have auto-created an OPD encounter with a posted consult
@@ -192,12 +199,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 await _context.SaveChangesAsync(cancellationToken);
 
                 // Send SMS to patient
-                var patientId = appt?.PatientId;
-                var patient = await _context.PatientRegistrations.FirstOrDefaultAsync(p => p.PatientId == patientId, cancellationToken);
+                var patient = await _context.PatientRegistrations.FirstOrDefaultAsync(p => p.PatientId == appt.PatientId, cancellationToken);
                 bool isSmsSent = false;
                 if (patient != null && !string.IsNullOrWhiteSpace(patient.Mobile))
                 {
-                    var smsMsg = $"Dear {patient.FullName}, your appointment on {appt?.ApptDate:yyyy-MM-dd} at {appt?.StartAt:HH:mm} has been cancelled.";
+                    var smsMsg = $"Dear {patient.FullName}, your appointment on {appt.ApptDate:yyyy-MM-dd} at {appt.StartAt:HH:mm} has been cancelled.";
                     isSmsSent = await _smsService.SendInvitationSmsAsync(patient.Mobile, smsMsg);
                 }
 

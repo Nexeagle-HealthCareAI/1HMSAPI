@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using EasyHMSAPI.Domain.Entities;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 
 namespace EasyHMSAPI.Domain.Context
 {
@@ -9,10 +10,54 @@ namespace EasyHMSAPI.Domain.Context
     public class AppDbContext : DbContext
     {
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
-        
+
+        // Against SQL Server this call is translated straight to the real T-SQL SOUNDEX() —
+        // this body never executes there. EF Core's InMemory test provider instead evaluates
+        // DbFunction calls in-process, so without a real implementation here any query using
+        // this predicate throws NotSupportedException under InMemory tests. Standard Soundex
+        // algorithm (first letter + up to 3 digit codes, collapsing adjacent duplicate codes).
         [DbFunction("SOUNDEX", IsBuiltIn = true)]
-        public static string Soundex(string input) => throw new NotSupportedException();
-        
+        public static string Soundex(string input)
+        {
+            if (string.IsNullOrEmpty(input)) return string.Empty;
+
+            static char Code(char c) => c switch
+            {
+                'B' or 'F' or 'P' or 'V' => '1',
+                'C' or 'G' or 'J' or 'K' or 'Q' or 'S' or 'X' or 'Z' => '2',
+                'D' or 'T' => '3',
+                'L' => '4',
+                'M' or 'N' => '5',
+                'R' => '6',
+                _ => '0',
+            };
+
+            var letters = input.ToUpperInvariant().Where(char.IsLetter).ToArray();
+            if (letters.Length == 0) return string.Empty;
+
+            var result = new char[4];
+            result[0] = letters[0];
+            var resultLength = 1;
+            var lastCode = Code(letters[0]);
+
+            for (var i = 1; i < letters.Length && resultLength < 4; i++)
+            {
+                var code = Code(letters[i]);
+                if (code != '0' && code != lastCode)
+                {
+                    result[resultLength++] = code;
+                }
+                if (letters[i] != 'H' && letters[i] != 'W')
+                {
+                    lastCode = code;
+                }
+            }
+
+            for (; resultLength < 4; resultLength++) result[resultLength] = '0';
+            return new string(result);
+        }
+
+
         public DbSet<LookupType> LookupTypes { get; set; }
         public DbSet<LookupMaster> LookupMasters { get; set; }
         public DbSet<LookupPersonal> LookupPersonals { get; set; }

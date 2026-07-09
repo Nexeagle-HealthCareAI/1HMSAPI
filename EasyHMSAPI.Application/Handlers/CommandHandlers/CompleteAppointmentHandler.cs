@@ -30,7 +30,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             && !string.IsNullOrEmpty(x.PatientId)
                             && x.PatientId.ToLower() == patientIdToLower)
                     .FirstOrDefaultAsync(cancellationToken);
-                if (existingAppointment is not null)
+                if (existingAppointment is not null && existingAppointment.CurrentStatusCode == AppConstants.AppointmentStatus_Cancelled)
+                {
+                    response.Success = false;
+                    response.Message = "Cannot complete a cancelled appointment.";
+                }
+                else if (existingAppointment is not null)
                 {
                     existingAppointment.CurrentStatusCode = AppConstants.AppointmentStatus_Completed;
                     existingAppointment.LastStatusCodeAt = DateTime.UtcNow;
