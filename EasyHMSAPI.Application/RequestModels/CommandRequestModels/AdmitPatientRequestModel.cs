@@ -91,5 +91,12 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         // The patient's entitled ward/room category under this scheme/policy (e.g. GENERAL) — drives
         // the bed-entitlement warning at assignment time and the TPA-split proportionate deduction.
         public string? EntitledRoomCategory { get; set; }
+
+        // Optional OT Plan picked in the admit wizard — pre-fills EntitledRoomCategory (when not
+        // explicitly supplied) and snapshots ProcedureName/SuggestedIcuLevel onto the admission.
+        public Guid? OtPlanId { get; set; }
+        // Optional — set when admitting from a Referred Admissions board row. On success, that
+        // referral is atomically marked CONVERTED and linked to this admission.
+        public Guid? ReferralId { get; set; }
     }
 }

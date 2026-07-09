@@ -57,6 +57,13 @@ namespace EasyHMSAPI.Domain.Entities
         public string? AdmissionReason { get; set; }
         public string? Diagnosis { get; set; }
 
+        // OT Plan picked at admit time (if any). ProcedureName/SuggestedIcuLevel are frozen at admit
+        // time — not a live join to OTPlan — so editing/retiring the plan later never changes what
+        // an already-admitted patient's record shows.
+        public Guid? OtPlanId { get; set; }
+        public string? OtPlanProcedureNameSnapshot { get; set; }
+        public string? OtPlanSuggestedIcuLevel { get; set; }   // LEVEL_1 / LEVEL_2 / LEVEL_3
+
         public DateTime? CancelledAt { get; set; }
         public string? CancelledBy { get; set; }
         public string? CancelReason { get; set; }

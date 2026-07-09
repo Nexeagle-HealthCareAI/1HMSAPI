@@ -131,6 +131,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         var isPreRegistration = request.IsPreRegistration && admissionType == "ELECTIVE";
                         var initialStatus = isPreRegistration ? IpdConstants.AdmissionStatus.PreAdmit : IpdConstants.AdmissionStatus.Admitted;
 
+                        // ── OT Plan (optional) — pre-fills room category default + snapshots
+                        //    procedure/ICU onto the admission (never a live join to OTPlan later,
+                        //    so editing/retiring the plan doesn't retroactively change this record) ──
+                        OTPlan? otPlan = null;
+                        if (request.OtPlanId.HasValue && request.OtPlanId != Guid.Empty)
+                        {
+                            otPlan = await _context.OTPlans
+                                .FirstOrDefaultAsync(p => p.OtPlanId == request.OtPlanId && p.HospitalId == request.HospitalId, cancellationToken);
+                        }
+                        var effectiveEntitledRoomCategory = !string.IsNullOrWhiteSpace(request.EntitledRoomCategory)
+                            ? request.EntitledRoomCategory
+                            : otPlan?.DefaultRoomCategory;
+
                         var admittedAt = request.AdmittedAt ?? now;
                         var admission = new Admission
                         {
@@ -154,6 +167,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             StatusCode = initialStatus,
                             AdmissionReason = request.AdmissionReason,
                             Diagnosis = request.Diagnosis,
+                            OtPlanId = otPlan?.OtPlanId,
+                            OtPlanProcedureNameSnapshot = otPlan?.ProcedureName,
+                            OtPlanSuggestedIcuLevel = otPlan?.SuggestedIcuLevel,
                             PayerType = payerType,
                             DepositExpected = request.DepositExpected,
                             EnableIpdBilling = request.EnableIpdBilling,
@@ -206,7 +222,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             || !string.IsNullOrWhiteSpace(request.PolicyOrBeneficiaryNo)
                             || !string.IsNullOrWhiteSpace(request.PreAuthNo)
                             || !string.IsNullOrWhiteSpace(request.PackageCode)
-                            || !string.IsNullOrWhiteSpace(request.EntitledRoomCategory)
+                            || !string.IsNullOrWhiteSpace(effectiveEntitledRoomCategory)
                             || request.SanctionedAmount.HasValue)
                         {
                             _context.AdmissionCoverage.Add(new AdmissionCoverage
@@ -220,7 +236,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 PreAuthNo = request.PreAuthNo?.Trim(),
                                 PackageCode = request.PackageCode?.Trim(),
                                 SanctionedAmount = request.SanctionedAmount,
-                                EntitledRoomCategory = string.IsNullOrWhiteSpace(request.EntitledRoomCategory) ? null : request.EntitledRoomCategory!.Trim().ToUpperInvariant(),
+                                EntitledRoomCategory = string.IsNullOrWhiteSpace(effectiveEntitledRoomCategory) ? null : effectiveEntitledRoomCategory!.Trim().ToUpperInvariant(),
                                 StatusCode = IpdConstants.CoverageStatus.Pending,
                                 CreatedAt = now,
                                 CreatedBy = request.LoggedInUserName,
@@ -257,6 +273,34 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 UpdatedBy = request.LoggedInUserName,
                             };
                             _context.BedAssignment.Add(bedAssignment);
+                        }
+
+                        // ── Convert the referral this admission was created from, if any — atomic
+                        //    with admission creation so a referral can never end up CONVERTED
+                        //    without a linked admission, nor stay PENDING after one exists. A
+                        //    missing/already-converted referral is a soft no-op — it must never
+                        //    block the admission itself. ──
+                        if (request.ReferralId.HasValue && request.ReferralId != Guid.Empty)
+                        {
+                            var referral = await _context.AdmissionReferrals
+                                .FirstOrDefaultAsync(r => r.ReferralId == request.ReferralId && r.HospitalId == request.HospitalId, cancellationToken);
+                            if (referral != null && referral.StatusCode != "CONVERTED")
+                            {
+                                referral.StatusCode = "CONVERTED";
+                                referral.ConvertedAdmissionId = admission.AdmissionId;
+                                referral.UpdatedAt = now;
+                                referral.UpdatedBy = request.LoggedInUserName;
+
+                                _context.AdmissionReferralStatusHistories.Add(new AdmissionReferralStatusHistory
+                                {
+                                    HistoryId = Guid.NewGuid(),
+                                    ReferralId = referral.ReferralId,
+                                    StatusCode = "CONVERTED",
+                                    ChangedAt = now,
+                                    ChangedBy = request.LoggedInUserName,
+                                    Notes = $"Converted via admission {admissionNo}",
+                                });
+                            }
                         }
 
                         try
