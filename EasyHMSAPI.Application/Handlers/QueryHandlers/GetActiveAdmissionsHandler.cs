@@ -140,6 +140,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         PackageCode = coverage?.PackageCode,
                         SanctionedAmount = coverage?.SanctionedAmount,
                         EntitledRoomCategory = coverage?.EntitledRoomCategory,
+                        OtPlanProcedureNameSnapshot = a.OtPlanProcedureNameSnapshot,
+                        OtPlanSuggestedIcuLevel = a.OtPlanSuggestedIcuLevel,
                     };
                 }).ToList();
 
