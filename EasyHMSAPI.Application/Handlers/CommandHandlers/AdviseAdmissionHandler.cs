@@ -66,6 +66,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     ReferringDoctorId = request.ReferringDoctorId,
                     AppointmentId = request.AppointmentId,
                     OtPlanId = request.OtPlanId,
+                    PackageTypeId = request.PackageTypeId,
                     ProcedureName = procedureName,
                     ProbableAdmissionDate = request.ProbableAdmissionDate,
                     CaseType = caseType,

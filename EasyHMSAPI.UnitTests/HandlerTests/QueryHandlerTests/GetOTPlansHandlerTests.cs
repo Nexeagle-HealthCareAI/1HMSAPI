@@ -87,6 +87,44 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         }
 
         [Test]
+        public async Task Handle_ResolvesMultiplePackageTypes_PerPlan()
+        {
+            var hospitalId = Guid.NewGuid();
+            var plan = new OTPlan
+            {
+                OtPlanId = Guid.NewGuid(), HospitalId = hospitalId,
+                PlanName = "PCNL Plan", ProcedureName = "PCNL", IsActive = true,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+            };
+            var fullPackage = new PackageType
+            {
+                PackageTypeId = Guid.NewGuid(), HospitalId = hospitalId,
+                Name = "Full Package", Price = 50000m, IsActive = true,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+            };
+            var nonPackage = new PackageType
+            {
+                PackageTypeId = Guid.NewGuid(), HospitalId = hospitalId,
+                Name = "Non Package", IsActive = true,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+            };
+            _context.OTPlans.Add(plan);
+            _context.PackageTypes.AddRange(fullPackage, nonPackage);
+            _context.OTPlanPackageTypes.AddRange(
+                new OTPlanPackageType { OtPlanId = plan.OtPlanId, PackageTypeId = fullPackage.PackageTypeId, CreatedAt = DateTime.UtcNow },
+                new OTPlanPackageType { OtPlanId = plan.OtPlanId, PackageTypeId = nonPackage.PackageTypeId, CreatedAt = DateTime.UtcNow });
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetOTPlansRequestModel { HospitalId = hospitalId }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            var pcnl = response.Plans.First(p => p.PlanName == "PCNL Plan");
+            Assert.That(pcnl.PackageTypes, Has.Count.EqualTo(2));
+            Assert.That(pcnl.PackageTypes.Select(pt => pt.Name), Is.EquivalentTo(new[] { "Full Package", "Non Package" }));
+            Assert.That(pcnl.PackageTypes.First(pt => pt.Name == "Full Package").Price, Is.EqualTo(50000m));
+        }
+
+        [Test]
         public async Task Handle_FilterByDepartment_ReturnsOnlyThatDepartment()
         {
             var hospitalId = Guid.NewGuid();

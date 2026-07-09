@@ -47,6 +47,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     existing.UpdatedAt = DateTime.UtcNow;
                     existing.UpdatedBy = request.LoggedInUserName;
 
+                    await SyncPackageTypeLinksAsync(existing.OtPlanId, request.PackageTypeIds, cancellationToken);
                     await _context.SaveChangesAsync(cancellationToken);
 
                     response.Success = true;
@@ -74,6 +75,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     UpdatedBy = request.LoggedInUserName,
                 };
                 _context.OTPlans.Add(plan);
+
+                await SyncPackageTypeLinksAsync(plan.OtPlanId, request.PackageTypeIds, cancellationToken);
                 await _context.SaveChangesAsync(cancellationToken);
 
                 response.Success = true;
@@ -88,6 +91,29 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
 
             return response;
+        }
+
+        private async Task SyncPackageTypeLinksAsync(Guid otPlanId, List<Guid>? packageTypeIds, CancellationToken cancellationToken)
+        {
+            var existingLinks = await _context.OTPlanPackageTypes
+                .Where(l => l.OtPlanId == otPlanId)
+                .ToListAsync(cancellationToken);
+            _context.OTPlanPackageTypes.RemoveRange(existingLinks);
+
+            var distinctIds = (packageTypeIds ?? new List<Guid>())
+                .Where(id => id != Guid.Empty)
+                .Distinct()
+                .ToList();
+
+            foreach (var packageTypeId in distinctIds)
+            {
+                _context.OTPlanPackageTypes.Add(new OTPlanPackageType
+                {
+                    OtPlanId = otPlanId,
+                    PackageTypeId = packageTypeId,
+                    CreatedAt = DateTime.UtcNow,
+                });
+            }
         }
     }
 }

@@ -13,6 +13,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public Guid ReferringDoctorId { get; set; }
         public Guid? AppointmentId { get; set; }
         public Guid? OtPlanId { get; set; }
+        public Guid? PackageTypeId { get; set; }
         public string? ProcedureName { get; set; }
         public DateTime? ProbableAdmissionDate { get; set; }
         public string? CaseType { get; set; }   // EMERGENCY / PLANNED / URGENT
