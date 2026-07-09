@@ -178,6 +178,24 @@ namespace EasyHMSAPI.UnitTests.TestUtils
             };
         }
 
+        public static PrescriptionDrawing CreatePrescriptionDrawing(Guid drawingId, Guid appointmentId, Guid doctorId, Guid hospitalId, string patientId, int sequenceNo = 1)
+        {
+            return new PrescriptionDrawing
+            {
+                DrawingId = drawingId,
+                ApptId = appointmentId,
+                DoctorId = doctorId,
+                HospitalId = hospitalId,
+                PatientId = patientId,
+                Label = "Test drawing",
+                FileName = "drawing.png",
+                StorageUrl = "http://example.com/drawing.png",
+                SequenceNo = sequenceNo,
+                UploadedAt = DateTime.UtcNow,
+                UploadedBy = "TestUser"
+            };
+        }
+
         public static LookupPersonal CreateLookupPersonal(Guid personalId, Guid hospitalId, Guid doctorId, int lookupTypeId = 1)
         {
             return new LookupPersonal

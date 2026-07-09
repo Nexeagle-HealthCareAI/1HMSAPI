@@ -54,6 +54,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<UserStatus> UserStatuses { get; set; }
         public DbSet<UserHistory> UserHistories { get; set; }
         public DbSet<PrescriptionAttachment> PrescriptionAttachments { get; set; }
+        public DbSet<PrescriptionDrawing> PrescriptionDrawings { get; set; }
         public DbSet<Prescription> Prescription { get; set; }
         public DbSet<PrescriptionMedicine> PrescriptionMedicine { get; set; }
         public DbSet<PrescriptionInvestigation> PrescriptionInvestigation { get; set; }
@@ -313,6 +314,12 @@ namespace EasyHMSAPI.Domain.Context
             modelBuilder.Entity<PrescriptionAttachment>().HasKey(e => e.AttachmentId);
             modelBuilder.Entity<PrescriptionAttachment>().Property(e => e.UploadedAt).HasColumnType("datetime2").IsRequired(false);
             modelBuilder.Entity<PrescriptionAttachment>().Property(e => e.RowVersion).IsRowVersion();
+
+            // Configure PrescriptionDrawing
+            modelBuilder.Entity<PrescriptionDrawing>().ToTable("PrescriptionDrawing");
+            modelBuilder.Entity<PrescriptionDrawing>().HasKey(e => e.DrawingId);
+            modelBuilder.Entity<PrescriptionDrawing>().Property(e => e.UploadedAt).HasColumnType("datetime2").IsRequired(false);
+            modelBuilder.Entity<PrescriptionDrawing>().Property(e => e.RowVersion).IsRowVersion();
 
             modelBuilder.Entity<UserAuth>()
                 .HasOne(ua => ua.User)

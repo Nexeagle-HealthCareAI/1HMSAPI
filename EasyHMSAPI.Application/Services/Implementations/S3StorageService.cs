@@ -34,6 +34,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
         private readonly TimeSpan _urlExpiry;
         private readonly string _prescriptionAssestsContainer;
         private readonly string _prescriptionAttachmentsContainer;
+        private readonly string _prescriptionDrawingsContainer;
         // True only when every required Storage:S3:* setting is actually present — lets us fail
         // fast with a clear message instead of letting the AWS SDK throw an opaque error deep
         // inside an S3 call (e.g. an empty ServiceURL/credentials producing a cryptic exception).
@@ -55,6 +56,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
             // Match BlobStorageService's container fields (used only for upload/get branching).
             _prescriptionAssestsContainer = configuration["BlobStorage:PrescriptionAssetsContainer"] ?? string.Empty;
             _prescriptionAttachmentsContainer = configuration["BlobStorage:PrescriptionAttachmentsContainer"] ?? string.Empty;
+            _prescriptionDrawingsContainer = configuration["BlobStorage:PrescriptionDrawingsContainer"] ?? string.Empty;
 
             // Auto-detect bucket-specific virtual-hosted endpoint.
             // E2E Networks (and some other providers) give a per-bucket URL like:
@@ -100,7 +102,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
             var folder = FolderFor(containerName);
 
-            if (containerName == _prescriptionAttachmentsContainer)
+            if (containerName == _prescriptionAttachmentsContainer || containerName == _prescriptionDrawingsContainer)
             {
                 var extension = Path.GetExtension(file.FileName);
                 var blobName = $"{entityId}_{Guid.NewGuid()}_{SanitizeToken(containerName)}{extension}";
@@ -168,7 +170,9 @@ namespace EasyHMSAPI.Application.Services.Implementations
         public async Task<bool> DeleteAsync(string entityId, string containerName, CancellationToken cancellationToken)
         {
             var folder = FolderFor(containerName);
-            var relPrefix = containerName == _prescriptionAttachmentsContainer ? $"{entityId}_" : $"{entityId}_{containerName}";
+            var relPrefix = (containerName == _prescriptionAttachmentsContainer || containerName == _prescriptionDrawingsContainer)
+                ? $"{entityId}_"
+                : $"{entityId}_{containerName}";
 
             var listed = await _client.ListObjectsV2Async(
                 new ListObjectsV2Request { BucketName = _bucket, Prefix = $"{folder}/{relPrefix}" }, cancellationToken);
