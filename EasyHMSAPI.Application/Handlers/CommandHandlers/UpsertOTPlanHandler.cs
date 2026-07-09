@@ -38,6 +38,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     }
 
                     existing.DepartmentId = request.DepartmentId;
+                    existing.PackageTypeId = request.PackageTypeId;
                     existing.PlanName = request.PlanName.Trim();
                     existing.ProcedureName = request.ProcedureName.Trim();
                     existing.DefaultRoomCategory = request.DefaultRoomCategory;
@@ -62,6 +63,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     OtPlanId = Guid.NewGuid(),
                     HospitalId = request.HospitalId,
                     DepartmentId = request.DepartmentId,
+                    PackageTypeId = request.PackageTypeId,
                     PlanName = request.PlanName.Trim(),
                     ProcedureName = request.ProcedureName.Trim(),
                     DefaultRoomCategory = request.DefaultRoomCategory,

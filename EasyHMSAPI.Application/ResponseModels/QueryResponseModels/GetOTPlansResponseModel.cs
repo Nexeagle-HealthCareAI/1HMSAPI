@@ -16,6 +16,9 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public Guid OtPlanId { get; set; }
         public Guid? DepartmentId { get; set; }
         public string? DepartmentName { get; set; }
+        public Guid? PackageTypeId { get; set; }
+        public string? PackageTypeName { get; set; }
+        public decimal? PackageTypePrice { get; set; }
         public string? PlanName { get; set; }
         public string? ProcedureName { get; set; }
         public string? DefaultRoomCategory { get; set; }

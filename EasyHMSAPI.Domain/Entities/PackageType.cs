@@ -3,18 +3,16 @@ using System.Diagnostics.CodeAnalysis;
 namespace EasyHMSAPI.Domain.Entities
 {
     [ExcludeFromCodeCoverage]
-    public class OTPlan
+    public class PackageType
     {
-        public Guid OtPlanId { get; set; }
+        public Guid PackageTypeId { get; set; }
         public Guid HospitalId { get; set; }
-        public Guid? DepartmentId { get; set; }
-        public Guid? PackageTypeId { get; set; }
-        public string PlanName { get; set; } = null!;
-        public string ProcedureName { get; set; } = null!;
-        public string? DefaultRoomCategory { get; set; }
-        public string? SuggestedIcuLevel { get; set; }
+        public string Name { get; set; } = null!;
+        public decimal? Price { get; set; }
+        // Free-text labels of what's included (e.g. "OT Med", "Ward Med", "Room Rent",
+        // "Procedure") — stored as a JSON array; no per-component price.
+        public string? ComponentsJson { get; set; }
         public bool IsActive { get; set; } = true;
-        public int DisplayOrder { get; set; }
         public DateTime CreatedAt { get; set; }
         public string? CreatedBy { get; set; }
         public DateTime UpdatedAt { get; set; }

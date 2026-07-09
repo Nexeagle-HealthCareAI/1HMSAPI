@@ -21,6 +21,9 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? ReferringDoctorName { get; set; }
         public Guid? OtPlanId { get; set; }
         public string? OtPlanName { get; set; }
+        public Guid? PackageTypeId { get; set; }
+        public string? PackageTypeName { get; set; }
+        public decimal? PackageTypePrice { get; set; }
         public string? ProcedureName { get; set; }
         public DateTime? ProbableAdmissionDate { get; set; }
         public string? CaseType { get; set; }

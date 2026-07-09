@@ -107,6 +107,58 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task Handle_PackageTypeId_RoundTrips_OnCreateAndUpdate()
+        {
+            var hospitalId = Guid.NewGuid();
+            var packageType = new PackageType
+            {
+                PackageTypeId = Guid.NewGuid(), HospitalId = hospitalId,
+                Name = "Full Package", IsActive = true,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+            };
+            _context.PackageTypes.Add(packageType);
+            await _context.SaveChangesAsync();
+
+            var createRequest = new UpsertOTPlanRequestModel
+            {
+                HospitalId = hospitalId,
+                PackageTypeId = packageType.PackageTypeId,
+                PlanName = "PCNL Plan",
+                ProcedureName = "Percutaneous Nephrolithotomy",
+            };
+
+            var createResponse = await _handler.Handle(createRequest, CancellationToken.None);
+
+            Assert.That(createResponse.Success, Is.True);
+            var created = await _context.OTPlans.FindAsync(createResponse.OtPlanId);
+            Assert.That(created!.PackageTypeId, Is.EqualTo(packageType.PackageTypeId));
+
+            var otherPackageType = new PackageType
+            {
+                PackageTypeId = Guid.NewGuid(), HospitalId = hospitalId,
+                Name = "Non Package", IsActive = true,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+            };
+            _context.PackageTypes.Add(otherPackageType);
+            await _context.SaveChangesAsync();
+
+            var updateRequest = new UpsertOTPlanRequestModel
+            {
+                OtPlanId = created.OtPlanId,
+                HospitalId = hospitalId,
+                PackageTypeId = otherPackageType.PackageTypeId,
+                PlanName = created.PlanName,
+                ProcedureName = created.ProcedureName,
+            };
+
+            var updateResponse = await _handler.Handle(updateRequest, CancellationToken.None);
+
+            Assert.That(updateResponse.Success, Is.True);
+            var updated = await _context.OTPlans.FindAsync(created.OtPlanId);
+            Assert.That(updated!.PackageTypeId, Is.EqualTo(otherPackageType.PackageTypeId));
+        }
+
+        [Test]
         public async Task Handle_PlanIdNotFound_ReturnsError()
         {
             var request = new UpsertOTPlanRequestModel

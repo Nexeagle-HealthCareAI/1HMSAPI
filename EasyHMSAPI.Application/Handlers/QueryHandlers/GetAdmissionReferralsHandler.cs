@@ -70,6 +70,11 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     .Where(p => planIds.Contains(p.OtPlanId))
                     .ToDictionaryAsync(p => p.OtPlanId, p => p.PlanName, cancellationToken);
 
+                var packageTypeIds = referrals.Where(r => r.PackageTypeId.HasValue).Select(r => r.PackageTypeId!.Value).Distinct().ToList();
+                var packageTypesById = await _context.PackageTypes
+                    .Where(pt => packageTypeIds.Contains(pt.PackageTypeId))
+                    .ToDictionaryAsync(pt => pt.PackageTypeId, pt => new { pt.Name, pt.Price }, cancellationToken);
+
                 response.Referrals = referrals.Select(r => new AdmissionReferralDataModel
                 {
                     ReferralId = r.ReferralId,
@@ -80,6 +85,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     ReferringDoctorName = doctorNameById.TryGetValue(r.ReferringDoctorId, out var dn) ? dn : null,
                     OtPlanId = r.OtPlanId,
                     OtPlanName = r.OtPlanId.HasValue && planNameById.TryGetValue(r.OtPlanId.Value, out var pn) ? pn : null,
+                    PackageTypeId = r.PackageTypeId,
+                    PackageTypeName = r.PackageTypeId.HasValue && packageTypesById.TryGetValue(r.PackageTypeId.Value, out var pkg) ? pkg.Name : null,
+                    PackageTypePrice = r.PackageTypeId.HasValue && packageTypesById.TryGetValue(r.PackageTypeId.Value, out var pkg2) ? pkg2.Price : null,
                     ProcedureName = r.ProcedureName,
                     ProbableAdmissionDate = r.ProbableAdmissionDate,
                     CaseType = r.CaseType,

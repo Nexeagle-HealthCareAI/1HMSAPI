@@ -95,6 +95,39 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task Handle_PackageTypeId_PersistsOnReferral_IndependentOfOtPlan()
+        {
+            var hospitalId = Guid.NewGuid();
+            var user = TestDataFactory.SeedUser(_context);
+            var doctor = TestDataFactory.SeedDoctor(_context, user);
+            var packageType = new PackageType
+            {
+                PackageTypeId = Guid.NewGuid(), HospitalId = hospitalId,
+                Name = "Full Package", IsActive = true,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+            };
+            _context.PackageTypes.Add(packageType);
+            await _context.SaveChangesAsync();
+
+            var request = new AdviseAdmissionRequestModel
+            {
+                HospitalId = hospitalId,
+                PatientId = "PAT123",
+                ReferringDoctorId = doctor.DoctorID,
+                PackageTypeId = packageType.PackageTypeId,
+                ProcedureName = "PCNL",
+                CaseType = "PLANNED",
+            };
+
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            var saved = await _context.AdmissionReferrals.FindAsync(response.ReferralId);
+            Assert.That(saved!.PackageTypeId, Is.EqualTo(packageType.PackageTypeId));
+            Assert.That(saved.OtPlanId, Is.Null);
+        }
+
+        [Test]
         public async Task Handle_InvalidCaseType_ReturnsError()
         {
             var request = new AdviseAdmissionRequestModel
