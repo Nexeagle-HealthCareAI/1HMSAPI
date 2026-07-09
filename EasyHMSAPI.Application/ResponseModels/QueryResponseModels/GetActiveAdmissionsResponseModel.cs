@@ -59,5 +59,10 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? PackageCode { get; set; }
         public decimal? SanctionedAmount { get; set; }
         public string? EntitledRoomCategory { get; set; }
+
+        // OT Plan picked at admit time, if any — frozen snapshot, not a live join (see Admission
+        // entity comment). Feeds the Surgery Case procedure-name pre-fill and ICU hint.
+        public string? OtPlanProcedureNameSnapshot { get; set; }
+        public string? OtPlanSuggestedIcuLevel { get; set; }
     }
 }

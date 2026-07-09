@@ -465,6 +465,92 @@ namespace EasyHMSAPI.Api.Controllers
             return Ok(result);
         }
 
+        [HttpPost("drawings/upload")]
+        [Authorize]
+        public async Task<ActionResult<UploadPrescriptionDrawingResponseModel>> UploadDrawing(UploadPrescriptionDrawingRequestModel request)
+        {
+            _logger.LogInformation("UploadDrawing started at {Time} for appointmentId: {AppointmentId}, patientId: {PatientId}, hospitalId: {HospitalId}, doctorId: {DoctorId}", DateTime.UtcNow, request.AppointmentId, request.PatientId, request.HospitalId, request.DoctorId);
+            UploadPrescriptionDrawingResponseModel result = new();
+            try
+            {
+                if (request == null || request.AppointmentId == Guid.Empty || string.IsNullOrEmpty(request.PatientId) || request.HospitalId == Guid.Empty || request.DoctorId == Guid.Empty || request.File == null)
+                {
+                    result.Success = false;
+                    result.Message = "Invalid request parameters.";
+                }
+                else
+                {
+                    request.UserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                    result = await _mediator.Send(request);
+                    _logger.LogInformation("UploadDrawing ended for appointmentId: {AppointmentId}, patientId: {PatientId}", request.AppointmentId, request.PatientId);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in UploadDrawing for appointmentId: {AppointmentId}, patientId: {PatientId}", request.AppointmentId, request.PatientId);
+                result.Success = false;
+                result.Message = "An error occurred while processing your request." + ex.Message + ex.InnerException + ex.StackTrace;
+            }
+
+            return Ok(result);
+        }
+        [HttpGet("drawings/list")]
+        [Authorize]
+        public async Task<ActionResult<GetPrescriptionDrawingsResponseModel>> GetDrawings([FromQuery] Guid appointmentId, Guid hospitalId, Guid doctorId, [FromQuery] string patientId)
+        {
+            _logger.LogInformation("GetDrawings started at {Time} for appointmentId: {AppointmentId}, patientId: {PatientId}", DateTime.UtcNow, appointmentId, patientId);
+            GetPrescriptionDrawingsResponseModel result = new();
+            try
+            {
+                if (appointmentId == Guid.Empty || hospitalId == Guid.Empty || doctorId == Guid.Empty || string.IsNullOrEmpty(patientId))
+                {
+                    result.Success = false;
+                    result.Message = "Invalid request parameters.";
+                }
+                else
+                {
+                    GetPrescriptionDrawingsRequestModel requestModel = new()
+                    {
+                        AppointmentId = appointmentId,
+                        PatientId = patientId,
+                        HospitalId = hospitalId,
+                        DoctorId = doctorId
+                    };
+                    result = await _mediator.Send(requestModel);
+                    _logger.LogInformation("GetDrawings ended at {Time} for appointmentId: {AppointmentId}, patientId: {PatientId}", DateTime.UtcNow, appointmentId, patientId);
+                }
+
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetDrawings for appointmentId: {AppointmentId}, patientId: {PatientId}", appointmentId, patientId);
+                result.Success = false;
+                result.Message = "An error occurred while processing your request." + ex.Message + ex.InnerException + ex.StackTrace;
+            }
+
+            return Ok(result);
+        }
+        [HttpDelete("drawings/delete")]
+        [Authorize]
+        public async Task<ActionResult<DeletePrescriptionDrawingResponseModel>> DeleteDrawing([FromQuery] DeletePrescriptionDrawingRequestModel request)
+        {
+            _logger.LogInformation("DeleteDrawing started at {Time} for drawingId: {DrawingId}", DateTime.UtcNow, request.DrawingId);
+            DeletePrescriptionDrawingResponseModel result = new();
+
+            if (request.DrawingId == Guid.Empty)
+            {
+                result.Success = false;
+                result.Message = "Invalid request parameters.";
+            }
+            else
+            {
+                result = await _mediator.Send(request);
+                _logger.LogInformation("DeleteDrawing ended for drawingId: {DrawingId}", request.DrawingId);
+            }
+
+            return Ok(result);
+        }
+
         [HttpPost("details/actionType={actionType}")]
         [Authorize]
         public async Task<ActionResult<SavePrescriptionDetailsResponseModel>> SavePrescriptionDetails(string actionType, [FromBody] SavePrescriptionDetailsRequestModel request)
