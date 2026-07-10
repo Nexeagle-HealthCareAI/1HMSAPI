@@ -203,55 +203,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             decimal invoiceLevelDiscount = request.InvoiceDiscountAmount ?? existingInvoiceLevelDiscount;
             if (invoiceLevelDiscount < 0) invoiceLevelDiscount = 0;
 
-            // A NEW discount request (not a payment/charge-triggered rebuild) that would reduce
-            // NetAmount below money already collected needs admin sign-off — the same
-            // CreditApproval gate used for advances/refunds — instead of silently discounting
-            // money that's already been paid out.
-            bool isExplicitDiscountRequest = request.InvoiceDiscountAmount.HasValue && !request.SkipCreditApprovalCheck;
-            if (isExplicitDiscountRequest && existingDraft != null)
-            {
-                decimal requestedTotalDiscount = Math.Min(gross, lineDiscount + invoiceLevelDiscount);
-                decimal requestedNet = gross - requestedTotalDiscount;
-                decimal totalPaid = await _context.BillingPaymentAllocation
-                    .Where(bpa => bpa.InvoiceId == invoice.InvoiceId)
-                    .SumAsync(bpa => bpa.AllocatedAmount, cancellationToken);
-
-                if (requestedNet < totalPaid)
-                {
-                    await tx.RollbackAsync(cancellationToken);
-                    _context.ChangeTracker.Clear();
-
-                    var approvalNow = DateTime.UtcNow;
-                    var approval = new CreditApproval
-                    {
-                        CreditApprovalId = Guid.NewGuid(),
-                        HospitalId = request.HospitalId,
-                        EncounterId = request.EncounterId,
-                        PatientId = request.PatientId,
-                        PaymentType = "DISCOUNT",
-                        RequestedAmount = request.InvoiceDiscountAmount!.Value,
-                        ResultingCreditBalance = totalPaid - requestedNet,
-                        Reason = "Discount would reduce the invoice below the amount already collected.",
-                        RequestedBy = request.LoggedInUserName,
-                        RequestedByUserId = request.LoggedInUserId,
-                        RequestedAt = approvalNow,
-                        Status = "PENDING",
-                        CreatedAt = approvalNow,
-                        UpdatedAt = approvalNow,
-                    };
-                    _context.CreditApproval.Add(approval);
-                    await _context.SaveChangesAsync(cancellationToken);
-
-                    return new CreateDraftInvoiceResponseModel
-                    {
-                        Success = true,
-                        Message = $"This discount would leave {totalPaid - requestedNet:0.00} of already-collected money unaccounted for and requires admin approval before it's applied.",
-                        PendingApproval = true,
-                        CreditApprovalId = approval.CreditApprovalId,
-                    };
-                }
-            }
-
+            // A discount that reduces NetAmount below money already collected is now applied
+            // directly — no admin sign-off required (approval gating removed). The excess simply
+            // sits as unallocated credit on the encounter, same as any other overpayment.
             decimal totalDiscount = lineDiscount + invoiceLevelDiscount;
             if (totalDiscount > gross) totalDiscount = gross;
             decimal net = gross - totalDiscount;

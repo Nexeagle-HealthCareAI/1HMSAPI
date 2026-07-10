@@ -67,25 +67,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         };
                     }
 
-                    // Block finalisation if any linked charge has a PENDING discount approval.
-                    var pendingApprovals = await (
-                        from a in _context.DiscountApproval
-                        join bice in _context.BillingInvoiceChargeEvent on a.ChargeEventId equals bice.ChargeEventId
-                        where bice.InvoiceId == billingInvoice.InvoiceId
-                           && a.HospitalId == request.HospitalId
-                           && a.Status == "PENDING"
-                        select a.DiscountApprovalId
-                    ).CountAsync(cancellationToken);
-
-                    if (pendingApprovals > 0)
-                    {
-                        return new FinalizeBillingResponseModel
-                        {
-                            Success = false,
-                            Message = $"Cannot finalize: {pendingApprovals} discount approval(s) pending."
-                        };
-                    }
-
+                    // Discount-approval gating removed — finalize is no longer blocked by any
+                    // pending discount approvals (historical or otherwise).
                     encounter.StatusCode = BillingConstants.EncounterStatus.Finalized;
                     encounter.UpdatedAt = DateTime.UtcNow;
                     encounter.UpdatedBy = request.LoggedInUserName;
