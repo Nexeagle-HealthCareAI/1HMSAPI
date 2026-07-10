@@ -194,7 +194,16 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                     // A partial refund that still leaves the patient in credit is allowed directly
                     // now — no admin sign-off required (approval gating removed).
-                    allocatedAmount = request.Payment.Amount;
+                    //
+                    // Deliberately NOT setting allocatedAmount here: a refund is money paid back OUT
+                    // to the patient, not money applied toward a charge. Setting it would fall into
+                    // the `if (allocatedAmount > 0)` block below and create a BillingPaymentAllocation
+                    // + run it through PaymentAllocationHelper.DistributeToChargesAsync exactly like a
+                    // real payment — inflating each charge's "amount paid" and this invoice's total
+                    // allocated-payments, so a later genuine payment could be wrongly capped/rejected
+                    // as "already fully paid". CreateDraftInvoiceHandler already treats REFUND rows
+                    // this same way (excluded from allocation, see its own comment there) — this just
+                    // makes AddPaymentEventHandler consistent with that.
                 }
 
                 // Allocate the receipt number only after validation passes, so a rejected

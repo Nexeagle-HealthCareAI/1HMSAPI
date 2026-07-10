@@ -146,6 +146,47 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task Handle_Refund_DoesNotCreateBillingPaymentAllocation()
+        {
+            // Charge net 500, pay 700 (500 allocated to the charge + 200 held as unallocated
+            // credit) — same shape as Handle_Advance_ExceedingDue_HoldsExcessAsCredit_NoApprovalNeeded.
+            SeedInvoiceWithCharge(net: 500);
+            var advanceResponse = await _handler.Handle(new AddPaymentEventRequestModel
+            {
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+                Payment = new PaymentDetail { PaymentType = "ADVANCE", PaymentMode = "CASH", Amount = 700 },
+            }, CancellationToken.None);
+            Assert.That(advanceResponse.Success, Is.True);
+
+            var allocationBeforeRefund = _context.BillingPaymentAllocation.Single();
+            Assert.That(allocationBeforeRefund.AllocatedAmount, Is.EqualTo(500));
+            var allocationChargeCountBeforeRefund = _context.BillingPaymentAllocationCharge.Count();
+            Assert.That(allocationChargeCountBeforeRefund, Is.EqualTo(1));
+
+            // Refund part of the 200 credit.
+            var refundResponse = await _handler.Handle(new AddPaymentEventRequestModel
+            {
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+                Payment = new PaymentDetail { PaymentType = "REFUND", PaymentMode = "CASH", Amount = 150 },
+            }, CancellationToken.None);
+            Assert.That(refundResponse.Success, Is.True);
+
+            // A refund must NEVER create its own BillingPaymentAllocation/AllocationCharge (it's
+            // money paid back OUT, not applied toward a charge) — and the original ADVANCE's
+            // allocation must be completely untouched by it.
+            Assert.That(_context.BillingPaymentAllocation.Count(), Is.EqualTo(1),
+                "A refund must not create a new BillingPaymentAllocation row.");
+            Assert.That(_context.BillingPaymentAllocation.Single().AllocatedAmount, Is.EqualTo(500),
+                "The original payment's allocation must be unaffected by a later refund.");
+            Assert.That(_context.BillingPaymentAllocationCharge.Count(), Is.EqualTo(allocationChargeCountBeforeRefund),
+                "A refund must not create any BillingPaymentAllocationCharge rows.");
+        }
+
+        [Test]
         public async Task Handle_Refund_ExceedsAvailableCredit_StillRejected()
         {
             SeedInvoiceWithCharge(net: 500); // no credit available (fully due, nothing collected)
