@@ -1,3 +1,4 @@
+using EasyHMSAPI.Api.Common;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
@@ -220,9 +221,16 @@ namespace EasyHMSAPI.Api.Controllers
 
             try
             {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
                 var response = await _mediator.Send(request);
-                _logger.LogInformation("CancelAppointment successful for AppointmentId: {AppointmentId}", request.AppointmentId);
 
+                if (!response.Success)
+                {
+                    _logger.LogWarning("CancelAppointment rejected for AppointmentId: {AppointmentId}: {Message}", request.AppointmentId, response.Message);
+                    return BadRequest(response);
+                }
+
+                _logger.LogInformation("CancelAppointment successful for AppointmentId: {AppointmentId}", request.AppointmentId);
                 return Ok(response);
             }
             catch (Exception ex)

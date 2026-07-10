@@ -30,6 +30,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (appt == null)
                     return new RescheduleAppointmentResponseModel { Success = false, Message = "Appointment not found." };
 
+                if (appt.CurrentStatusCode == AppConstants.AppointmentStatus_Cancelled)
+                    return new RescheduleAppointmentResponseModel { Success = false, Message = "This appointment was cancelled — book a new appointment instead." };
+
                 if (request.ExpectVersion != 0)
                 {
                     return new RescheduleAppointmentResponseModel { Success = false, Message = "Appointment version mismatch." };

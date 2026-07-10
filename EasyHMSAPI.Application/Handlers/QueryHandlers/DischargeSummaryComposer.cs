@@ -1,5 +1,6 @@
 using System.Text;
 using EasyHMSAPI.Domain.Entities;
+using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 
 namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 {
@@ -57,6 +58,45 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 if (!string.IsNullOrWhiteSpace(detail)) sb.Append(' ').Append(detail);
                 if (l.DurationDays.HasValue) sb.Append(" (" + l.DurationDays.Value + "d)");
                 if (!string.IsNullOrWhiteSpace(l.Instructions)) sb.Append(" — ").Append(l.Instructions);
+                sb.AppendLine();
+            }
+            return sb.ToString().TrimEnd();
+        }
+
+        /// <summary>Structured equivalent of ComposeDischargeMedications — one row per active
+        /// medication order, for the discharge-medications editor's first-ever (never-saved) draft.
+        /// The text-based composer above stays as-is; it's still consumed by
+        /// ComposeNarrativeSourceMaterial for the AI-assist prompt.</summary>
+        public static List<DischargeMedicationModel> ComposeDischargeMedicationRows(List<ClinicalOrderLine> lines) =>
+            lines.Select((l, i) => new DischargeMedicationModel
+            {
+                MedicineName = l.ItemName,
+                Dosage = l.Dose,
+                Route = l.Route,
+                Frequency = l.Frequency,
+                Durations = l.DurationDays.HasValue ? l.DurationDays.Value + "d" : null,
+                Instructions = l.Instructions,
+                SaltName = l.SaltName,
+                DisplayOrder = i,
+            }).ToList();
+
+        /// <summary>Formats a structured discharge-medication list back into the same bullet-point
+        /// text shape ComposeDischargeMedications produces, so the legacy DischargeSummary.
+        /// DischargeMedications column (still read by the AI-narrative prompt / any other text-only
+        /// consumer) stays populated once the structured list becomes the source of truth.</summary>
+        public static string? ComposeDischargeMedicationsText(
+            IEnumerable<(string? Name, string? Dose, string? Route, string? Frequency, string? Duration, string? Instructions)> meds)
+        {
+            var list = meds.ToList();
+            if (list.Count == 0) return null;
+            var sb = new StringBuilder();
+            foreach (var m in list)
+            {
+                sb.Append("- ").Append(m.Name);
+                var detail = string.Join(" ", new[] { m.Dose, m.Route, m.Frequency }.Where(s => !string.IsNullOrWhiteSpace(s)));
+                if (!string.IsNullOrWhiteSpace(detail)) sb.Append(' ').Append(detail);
+                if (!string.IsNullOrWhiteSpace(m.Duration)) sb.Append(" (" + m.Duration + ")");
+                if (!string.IsNullOrWhiteSpace(m.Instructions)) sb.Append(" — ").Append(m.Instructions);
                 sb.AppendLine();
             }
             return sb.ToString().TrimEnd();

@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
@@ -9,6 +10,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 {
     public class SearchPatientHandler : IRequestHandler<SearchPatientRequestModel, SearchPatientResponseModel>
     {
+        private const int MaxResults = 20;
+
         private readonly AppDbContext _context;
 
         public SearchPatientHandler(AppDbContext context)
@@ -25,10 +28,11 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             IQueryable<PatientRegistration> query = _context.PatientRegistrations
                 .Where(p => p.HospitalId == request.HospitalId && p.MergedIntoPatientId == null);
 
+            var searchTerm = request.SearchText?.ToLower() ?? string.Empty;
+
             // Apply search text filter across multiple columns if provided
             if (!string.IsNullOrEmpty(request.SearchText))
             {
-                var searchTerm = request.SearchText.ToLower();
                 query = query.Where(p =>
                     (p.FullName != null && (p.FullName.ToLower().Contains(searchTerm) || AppDbContext.Soundex(p.FullName) == AppDbContext.Soundex(searchTerm))) ||
                     (p.PatientId != null && p.PatientId.ToLower().Contains(searchTerm)) ||
@@ -48,6 +52,17 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
             if (patients.Count == 0)
                 return response;
+
+            // Rank by relevance (exact > starts-with > contains > id match > fuzzy) and cap the
+            // result set — the SQL filter above is a broad candidate net, not a ranked result.
+            if (!string.IsNullOrEmpty(request.SearchText))
+            {
+                var normalizedSearch = FuzzyMatch.Normalize(request.SearchText);
+                patients = patients
+                    .OrderByDescending(p => ScoreCandidate(p, searchTerm, normalizedSearch))
+                    .ToList();
+            }
+            patients = patients.Take(MaxResults).ToList();
 
             // Get all patient IDs for batch operations (exclude nulls)
             var patientIds = patients.Where(p => p.PatientId != null).Select(p => p.PatientId!).ToList();
@@ -126,5 +141,25 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             }
             return response;
         }
+
+        // Tiered relevance score for a candidate against the search term: exact name match highest,
+        // then starts-with, then contains, then a UHID/mobile/aadhaar/abha match, else a Jaro-Winkler
+        // fuzzy score on the name (catches spelling variants the SQL Contains/Soundex filter still let through).
+        private static double ScoreCandidate(PatientRegistration p, string searchTermLower, string normalizedSearch)
+        {
+            var normalizedName = FuzzyMatch.Normalize(p.FullName);
+            if (normalizedSearch.Length > 0 && normalizedName == normalizedSearch) return 4.0;
+            if (normalizedSearch.Length > 0 && normalizedName.StartsWith(normalizedSearch)) return 3.0;
+            if (normalizedSearch.Length > 0 && normalizedName.Contains(normalizedSearch)) return 2.0;
+            if (IdMatches(p, searchTermLower)) return 1.0;
+            return FuzzyMatch.JaroWinkler(p.FullName, searchTermLower);
+        }
+
+        private static bool IdMatches(PatientRegistration p, string searchTermLower) =>
+            (!string.IsNullOrEmpty(p.PatientId) && p.PatientId.ToLower().Contains(searchTermLower)) ||
+            (!string.IsNullOrEmpty(p.Mobile) && p.Mobile.Contains(searchTermLower)) ||
+            (!string.IsNullOrEmpty(p.AlternateMobile) && p.AlternateMobile.Contains(searchTermLower)) ||
+            (!string.IsNullOrEmpty(p.AadhaarNumber) && p.AadhaarNumber.Contains(searchTermLower)) ||
+            (!string.IsNullOrEmpty(p.AbhaId) && p.AbhaId.ToLower().Contains(searchTermLower));
     }
 }

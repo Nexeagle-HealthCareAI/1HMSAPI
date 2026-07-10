@@ -69,6 +69,41 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task Handle_CancelledAppointment_ReturnsError()
+        {
+            var hospitalId = Guid.NewGuid();
+            var patientId = "PAT123";
+            var doctorId = Guid.NewGuid();
+
+            var appointment = new Appointment
+            {
+                ApptId = Guid.NewGuid(),
+                DoctorId = doctorId,
+                HospitalId = hospitalId,
+                PatientId = patientId,
+                CurrentStatusCode = AppConstants.AppointmentStatus_Cancelled,
+            };
+            _context.Appointments.Add(appointment);
+            await _context.SaveChangesAsync();
+
+            var request = new CompleteAppointmentRequestModel
+            {
+                AppointmentId = appointment.ApptId,
+                DoctordId = doctorId,
+                HospitalId = hospitalId,
+                PatientId = patientId,
+            };
+
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("Cannot complete a cancelled appointment."));
+
+            var unchanged = await _context.Appointments.FindAsync(appointment.ApptId);
+            Assert.That(unchanged!.CurrentStatusCode, Is.EqualTo(AppConstants.AppointmentStatus_Cancelled));
+        }
+
+        [Test]
         public async Task Handle_AppointmentNotFound_ReturnsFailure()
         {
             // Arrange

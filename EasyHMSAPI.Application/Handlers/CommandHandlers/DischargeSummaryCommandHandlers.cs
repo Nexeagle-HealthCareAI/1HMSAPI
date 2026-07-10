@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Handlers.QueryHandlers;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Data.Constants;
@@ -56,7 +57,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     existing.CourseInHospital = request.CourseInHospital;
                     existing.ProceduresPerformed = request.ProceduresPerformed;
                     existing.ConditionAtDischarge = condition;
-                    existing.DischargeMedications = request.DischargeMedications;
+                    existing.DischargeMedications = request.Medications != null
+                        ? DischargeSummaryComposer.ComposeDischargeMedicationsText(request.Medications.Select(ToMedTuple))
+                        : request.DischargeMedications;
                     existing.FollowUpInstructions = request.FollowUpInstructions;
                     existing.FollowUpDate = request.FollowUpDate;
                     existing.DietInstructions = request.DietInstructions;
@@ -65,6 +68,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     existing.UpdatedAt = now;
                     existing.UpdatedBy = request.LoggedInUserName;
 
+                    await SyncMedicationsAsync(existing.DischargeSummaryId, request.Medications, cancellationToken);
                     await _context.SaveChangesAsync(cancellationToken);
                     return new SaveDischargeSummaryResponseModel { Success = true, Message = "Discharge summary saved.", DischargeSummaryId = existing.DischargeSummaryId };
                 }
@@ -83,7 +87,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     CourseInHospital = request.CourseInHospital,
                     ProceduresPerformed = request.ProceduresPerformed,
                     ConditionAtDischarge = condition,
-                    DischargeMedications = request.DischargeMedications,
+                    DischargeMedications = request.Medications != null
+                        ? DischargeSummaryComposer.ComposeDischargeMedicationsText(request.Medications.Select(ToMedTuple))
+                        : request.DischargeMedications,
                     FollowUpInstructions = request.FollowUpInstructions,
                     FollowUpDate = request.FollowUpDate,
                     DietInstructions = request.DietInstructions,
@@ -97,12 +103,49 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 };
                 _context.DischargeSummary.Add(summary);
 
+                await SyncMedicationsAsync(summary.DischargeSummaryId, request.Medications, cancellationToken);
                 await _context.SaveChangesAsync(cancellationToken);
                 return new SaveDischargeSummaryResponseModel { Success = true, Message = "Discharge summary saved.", DischargeSummaryId = summary.DischargeSummaryId };
             }
             catch (Exception)
             {
                 return new SaveDischargeSummaryResponseModel { Success = false, Message = "Error saving discharge summary." };
+            }
+        }
+
+        private static (string? Name, string? Dose, string? Route, string? Frequency, string? Duration, string? Instructions) ToMedTuple(DischargeMedicationModel m) =>
+            (m.MedicineName, m.Dosage, m.Route, m.Frequency, m.Durations, m.Instructions);
+
+        // Full delete-and-reinsert per save — same pattern SavePrescriptionDetailsHandler uses for
+        // PrescriptionMedicine, no per-row diffing.
+        private async Task SyncMedicationsAsync(Guid dischargeSummaryId, List<DischargeMedicationModel>? medications, CancellationToken cancellationToken)
+        {
+            if (medications == null) return;
+
+            var existingLines = await _context.DischargeMedication
+                .Where(m => m.DischargeSummaryId == dischargeSummaryId)
+                .ToListAsync(cancellationToken);
+            _context.DischargeMedication.RemoveRange(existingLines);
+
+            var now = DateTime.UtcNow;
+            for (var i = 0; i < medications.Count; i++)
+            {
+                var m = medications[i];
+                _context.DischargeMedication.Add(new DischargeMedication
+                {
+                    DischargeMedicationId = Guid.NewGuid(),
+                    DischargeSummaryId = dischargeSummaryId,
+                    MedicineName = m.MedicineName,
+                    Dosage = m.Dosage,
+                    Route = m.Route,
+                    Frequency = m.Frequency,
+                    Durations = m.Durations,
+                    Instructions = m.Instructions,
+                    SaltName = m.SaltName,
+                    DisplayOrder = m.DisplayOrder ?? i,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                });
             }
         }
 

@@ -19,6 +19,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? PatientMobile { get; set; }
         public Guid ReferringDoctorId { get; set; }
         public string? ReferringDoctorName { get; set; }
+        public Guid? AppointmentId { get; set; }
+        public bool SourceAppointmentCancelled { get; set; }
         public Guid? OtPlanId { get; set; }
         public string? OtPlanName { get; set; }
         public Guid? PackageTypeId { get; set; }
