@@ -42,6 +42,22 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
                 if (existing != null)
                 {
+                    var savedMedications = await _context.DischargeMedication
+                        .Where(m => m.DischargeSummaryId == existing.DischargeSummaryId)
+                        .OrderBy(m => m.DisplayOrder)
+                        .Select(m => new DischargeMedicationModel
+                        {
+                            MedicineName = m.MedicineName,
+                            Dosage = m.Dosage,
+                            Route = m.Route,
+                            Frequency = m.Frequency,
+                            Durations = m.Durations,
+                            Instructions = m.Instructions,
+                            SaltName = m.SaltName,
+                            DisplayOrder = m.DisplayOrder,
+                        })
+                        .ToListAsync(cancellationToken);
+
                     return new GetDischargeSummaryDraftResponseModel
                     {
                         Success = true,
@@ -59,6 +75,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                             ProceduresPerformed = existing.ProceduresPerformed,
                             ConditionAtDischarge = existing.ConditionAtDischarge,
                             DischargeMedications = existing.DischargeMedications,
+                            Medications = savedMedications,
                             FollowUpInstructions = existing.FollowUpInstructions,
                             FollowUpDate = existing.FollowUpDate,
                             DietInstructions = existing.DietInstructions,
@@ -100,6 +117,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         .Where(l => medicationOrderIds.Contains(l.OrderId) && l.StatusCode == IpdConstants.ClinicalOrderLineStatus.Active)
                         .ToListAsync(cancellationToken);
                 var dischargeMedications = DischargeSummaryComposer.ComposeDischargeMedications(activeMedicationLines);
+                var medicationRows = DischargeSummaryComposer.ComposeDischargeMedicationRows(activeMedicationLines);
 
                 return new GetDischargeSummaryDraftResponseModel
                 {
@@ -111,6 +129,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         CourseInHospital = courseInHospital,
                         ProceduresPerformed = proceduresPerformed,
                         DischargeMedications = dischargeMedications,
+                        Medications = medicationRows,
                     },
                 };
             }

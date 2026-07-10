@@ -24,11 +24,27 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? ProceduresPerformed { get; set; }
         public string? ConditionAtDischarge { get; set; }
         public string? DischargeMedications { get; set; }
+        public List<DischargeMedicationModel>? Medications { get; set; }
         public string? FollowUpInstructions { get; set; }
         public DateTime? FollowUpDate { get; set; }
         public string? DietInstructions { get; set; }
         public string? ActivityRestrictions { get; set; }
         public string? AdditionalNotes { get; set; }
+    }
+
+    // Structured discharge/home medication line item — field-for-field matching PrescriptionMedicine,
+    // so the same "search a drug, capture dose/route/frequency/duration/instructions" UX applies here.
+    [ExcludeFromCodeCoverage]
+    public class DischargeMedicationModel
+    {
+        public string? MedicineName { get; set; }
+        public string? Dosage { get; set; }
+        public string? Route { get; set; }
+        public string? Frequency { get; set; }
+        public string? Durations { get; set; }
+        public string? Instructions { get; set; }
+        public string? SaltName { get; set; }
+        public int? DisplayOrder { get; set; }
     }
 
     // Signing locks further edits — a medico-legal document handed to the patient / potentially
