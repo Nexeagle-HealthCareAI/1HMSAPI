@@ -1,0 +1,34 @@
+using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using MediatR;
+using System.Diagnostics.CodeAnalysis;
+using System.Text.Json.Serialization;
+
+namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
+{
+    // Public (Nexeagle) booking request. Deliberately thin compared to RegisterAppointmentRequestModel:
+    // no AppointmentId (always creates), no StartAt/SlotTimeInMinutes/AllocateToken (a public booking
+    // never claims a real time slot — PreferredDate/PreferredTime are non-binding, the receptionist
+    // picks the real StartAt at confirm time).
+    [ExcludeFromCodeCoverage]
+    public class PublicBookAppointmentRequestModel : IRequest<PublicBookAppointmentResponseModel>
+    {
+        // Resolved by PublicApiKeyFilter from the caller's API key — never client-supplied.
+        [JsonIgnore]
+        public Guid HospitalId { get; set; }
+
+        public Patient? Patient { get; set; }
+        public Guid DoctorId { get; set; }
+        public DateTime PreferredDate { get; set; }
+        public TimeSpan? PreferredTime { get; set; }
+        public string? Reason { get; set; }
+
+        // Booking-attribution metadata — where the visitor came from. ReferrerUrl/UtmCampaign are
+        // only knowable client-side (document.referrer, landing-page query string), so the Nexeagle
+        // frontend supplies them. IpAddress is resolved server-side from the request connection
+        // (PublicController) — never trusted from the client body, same reasoning as HospitalId.
+        public string? ReferrerUrl { get; set; }
+        public string? UtmCampaign { get; set; }
+        [JsonIgnore]
+        public string? IpAddress { get; set; }
+    }
+}

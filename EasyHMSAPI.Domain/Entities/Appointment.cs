@@ -32,5 +32,11 @@ namespace EasyHMSAPI.Domain.Entities
         public string? CancellationReason { get; set; }
         public DateTime? CancelledAt { get; set; }
         public string? CancelledBy { get; set; }
+        public string? BookingSource { get; set; }
+
+        // Captured only for public (Nexeagle) bookings — abuse-tracking + marketing attribution.
+        public string? BookingIpAddress { get; set; }
+        public string? BookingReferrerUrl { get; set; }
+        public string? BookingUtmCampaign { get; set; }
     }
 }

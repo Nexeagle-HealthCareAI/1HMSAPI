@@ -56,5 +56,10 @@ namespace EasyHMSAPI.Domain.Entities
         public string? MergedIntoPatientId { get; set; }
         public DateTime? MergedAt { get; set; }
         public string? MergedBy { get; set; }
+
+        // Opt-in for future SMS/email/marketing communication — once true, only ever upgraded,
+        // never silently cleared by a later booking that doesn't explicitly ask again.
+        public bool MarketingConsent { get; set; }
+        public DateTime? MarketingConsentAt { get; set; }
     }
 }

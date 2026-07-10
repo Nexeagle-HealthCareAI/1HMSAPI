@@ -9,7 +9,6 @@ using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Cryptography;
 using System.Text.Json;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
@@ -55,9 +54,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
 
                 // Set status to 'Future' if appointment date is in the future
-                var status = request.ApptDate.Date > DateTime.UtcNow.Date
-                    ? AppConstants.AppointmentStatus_Future
-                    : AppConstants.AppointmentStatus_VitalsRequired;
+                var status = AppointmentBookingHelpers.ResolveInitialStatus(request.ApptDate);
 
                 var (appointment, isNewAppointment) = await CreateOrUpdateAppointment(request, patient, status, cancellationToken);
 
@@ -193,88 +190,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
         }
 
-        private async Task<PatientRegistration> AddOrUpdatePatient(RegisterAppointmentRequestModel request, CancellationToken cancellationToken)
+        private Task<PatientRegistration> AddOrUpdatePatient(RegisterAppointmentRequestModel request, CancellationToken cancellationToken)
         {
-            if (string.IsNullOrWhiteSpace(request.Patient?.Mobile))
-                throw new ArgumentException("Patient mobile number is required");
-
-            // Find patient by both mobile and name
-            var patient = await _context.PatientRegistrations
-                .Where(x => x.Mobile == request.Patient.Mobile && x.FullName == request.Patient.FullName)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (patient != null)
-            {
-                // Update only changed fields
-                if (!string.IsNullOrEmpty(request.Patient?.FullName) && request.Patient?.FullName != patient.FullName)
-                    patient.FullName = request.Patient?.FullName ?? patient.FullName;
-                if (!string.IsNullOrEmpty(request.Patient?.Mobile) && request.Patient?.Mobile != patient.Mobile)
-                    patient.Mobile = request.Patient?.Mobile ?? patient.Mobile;
-                if (request.Patient?.Age != null && request.Patient.Age != patient.Age)
-                    patient.Age = request.Patient.Age;
-                if (!string.IsNullOrEmpty(request.Patient?.AgeUnit) && request.Patient.AgeUnit != patient.AgeUnit)
-                    patient.AgeUnit = request.Patient.AgeUnit;
-                if (!string.IsNullOrEmpty(request.Patient?.Sex) && request.Patient?.Sex != patient.Sex)
-                    patient.Sex = request.Patient?.Sex ?? patient.Sex;
-                if (!string.IsNullOrEmpty(request.Patient?.AddressLine1) && request.Patient?.AddressLine1 != patient.AddressLine)
-                    patient.AddressLine = request.Patient?.AddressLine1 ?? patient.AddressLine;
-                if (!string.IsNullOrEmpty(request.Patient?.City) && request.Patient?.City != patient.City)
-                    patient.City = request.Patient?.City ?? patient.City;
-                if (!string.IsNullOrEmpty(request.Patient?.State) && request.Patient?.State != patient.State)
-                    patient.State = request.Patient?.State ?? patient.State;
-                if (!string.IsNullOrEmpty(request.Patient?.Pincode) && request.Patient?.Pincode != patient.Pincode)
-                    patient.Pincode = request.Patient?.Pincode ?? patient.Pincode;
-                if (!string.IsNullOrWhiteSpace(request.Patient?.InsuranceId) && request.Patient?.InsuranceId != patient.InsuranceId)
-                    patient.InsuranceId = request.Patient?.InsuranceId ?? patient.InsuranceId;
-                if (!string.IsNullOrEmpty(request.Patient?.Country) && request.Patient?.Country != patient.Country)
-                    patient.Country = request.Patient?.Country ?? patient.Country;
-                if (!string.IsNullOrEmpty(request.Patient?.BloodGroup)) patient.BloodGroup = request.Patient?.BloodGroup;
-                if (!string.IsNullOrEmpty(request.Patient?.Block)) patient.Block = request.Patient?.Block;
-                if (!string.IsNullOrEmpty(request.Patient?.AlternateMobile)) patient.AlternateMobile = request.Patient?.AlternateMobile;
-                if (!string.IsNullOrEmpty(request.Patient?.Email)) patient.Email = request.Patient?.Email;
-                if (!string.IsNullOrEmpty(request.Patient?.EmergencyContactName)) patient.EmergencyContactName = request.Patient?.EmergencyContactName;
-                if (!string.IsNullOrEmpty(request.Patient?.EmergencyContactRelation)) patient.EmergencyContactRelation = request.Patient?.EmergencyContactRelation;
-                if (!string.IsNullOrEmpty(request.Patient?.EmergencyContactPhone)) patient.EmergencyContactPhone = request.Patient?.EmergencyContactPhone;
-                if (!string.IsNullOrEmpty(request.Patient?.GuardianName)) patient.GuardianName = request.Patient?.GuardianName;
-                if (!string.IsNullOrEmpty(request.Patient?.GuardianRelation)) patient.GuardianRelation = request.Patient?.GuardianRelation;
-                patient.HospitalId = request.HospitalId;
-                return patient;
-            }
-            else
-            {
-                // Always create new registration if name is new, even if contact exists
-                var newPatientId = GenerateNewPatientId();
-                var newPatient = new PatientRegistration
-                {
-                    RegistrationId = Guid.NewGuid(),
-                    HospitalId = request.HospitalId,
-                    PatientId = newPatientId,
-                    RegisteredAt = DateTime.UtcNow,
-                    RegisteredBy = request.UserId,
-                    FullName = request.Patient?.FullName ?? string.Empty,
-                    Mobile = request.Patient?.Mobile,
-                    Age = (short)(request.Patient?.Age ?? 0),
-                    AgeUnit = request.Patient?.AgeUnit ?? "Y",
-                    Sex = request.Patient?.Sex,
-                    AddressLine = request.Patient?.AddressLine1,
-                    City = request.Patient?.City,
-                    State = request.Patient?.State,
-                    Pincode = request.Patient?.Pincode,
-                    InsuranceId = !string.IsNullOrWhiteSpace(request.Patient?.InsuranceId) ? request.Patient?.InsuranceId : null,
-                    Country = request.Patient?.Country ?? string.Empty,
-                    BloodGroup = request.Patient?.BloodGroup,
-                    Block = request.Patient?.Block,
-                    AlternateMobile = request.Patient?.AlternateMobile,
-                    Email = request.Patient?.Email,
-                    EmergencyContactName = request.Patient?.EmergencyContactName,
-                    EmergencyContactRelation = request.Patient?.EmergencyContactRelation,
-                    EmergencyContactPhone = request.Patient?.EmergencyContactPhone,
-                    GuardianName = request.Patient?.GuardianName,
-                    GuardianRelation = request.Patient?.GuardianRelation,
-                };
-                _context.PatientRegistrations.Add(newPatient);
-                return newPatient;
-            }
+            return AppointmentBookingHelpers.FindOrCreatePatientAsync(_context, request.Patient, request.HospitalId, request.UserId, cancellationToken);
         }
 
         private async Task<(Appointment appointment, bool isNewAppointment)> CreateOrUpdateAppointment(RegisterAppointmentRequestModel request, PatientRegistration patient, string statusCode, CancellationToken cancellationToken)
@@ -314,26 +232,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     if(existingAppointment.ApptDate.Date != request.ApptDate.Date)
                     {
                         existingAppointment.ApptDate = request.ApptDate;
-                        if(request.ApptDate.Date > DateTime.UtcNow.Date)
-                        {
-                            existingAppointment.CurrentStatusCode = AppConstants.AppointmentStatus_Future;
-                            existingAppointment.LastStatusCodeAt = DateTime.UtcNow;
-                            var history = string.IsNullOrEmpty(existingAppointment.StatusHistoryJson)
-                            ? new List<object>()
-                            : JsonSerializer.Deserialize<List<object>>(existingAppointment.StatusHistoryJson) ?? new List<object>();
-                            history.Add(new { status = AppConstants.AppointmentStatus_Future, timestamp = DateTime.UtcNow });
-                            existingAppointment.StatusHistoryJson = JsonSerializer.Serialize(history);
-                        }
-                        else if(request.ApptDate.Date <= DateTime.UtcNow.Date)
-                        {
-                            existingAppointment.CurrentStatusCode = AppConstants.AppointmentStatus_VitalsRequired;
-                            existingAppointment.LastStatusCodeAt = DateTime.UtcNow;
-                            var history = string.IsNullOrEmpty(existingAppointment.StatusHistoryJson)
-                            ? new List<object>()
-                            : JsonSerializer.Deserialize<List<object>>(existingAppointment.StatusHistoryJson) ?? new List<object>();
-                            history.Add(new { status = AppConstants.AppointmentStatus_VitalsRequired, timestamp = DateTime.UtcNow });
-                            existingAppointment.StatusHistoryJson = JsonSerializer.Serialize(history);
-                        }
+                        var newStatus = AppointmentBookingHelpers.ResolveInitialStatus(request.ApptDate);
+                        existingAppointment.CurrentStatusCode = newStatus;
+                        existingAppointment.LastStatusCodeAt = DateTime.UtcNow;
+                        var history = string.IsNullOrEmpty(existingAppointment.StatusHistoryJson)
+                        ? new List<object>()
+                        : JsonSerializer.Deserialize<List<object>>(existingAppointment.StatusHistoryJson) ?? new List<object>();
+                        history.Add(new { status = newStatus, timestamp = DateTime.UtcNow });
+                        existingAppointment.StatusHistoryJson = JsonSerializer.Serialize(history);
                     }
 
                     // A caller that explicitly picks a slot (the full edit form) is honored directly,
@@ -620,23 +526,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             return (billRefunded, refundAmount, refundReceiptNo);
         }
 
-        private string GenerateNewPatientId()
-        {
-            // Generate a unique PatientId: PTID + 8-digit random number
-            string newId;
-            var rng = RandomNumberGenerator.Create();
-            do
-            {
-                var bytes = new byte[4];
-                rng.GetBytes(bytes);
-                int num = Math.Abs(BitConverter.ToInt32(bytes, 0)) % 100000000;
-                newId = $"PTID{num:D8}";
-            }
-            // Ensure uniqueness in DB
-            while (_context.PatientRegistrations.Any(p => p.PatientId == newId));
-            return newId;
-        }
-
         private static DateTime? FindFirstAvailableSlot(List<TimeSpan> bookedSlots, List<ShiftDayDetailsModel> shiftDetails, int slotDurationMinutes, DateTime appointmentDate)
         {
             foreach (var shift in shiftDetails)
@@ -657,66 +546,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             return null;
         }
 
-        private async Task<int?> AllocateAppointmentTokenWithLocking(RegisterAppointmentRequestModel request, Appointment appointment, CancellationToken cancellationToken)
+        private Task<int?> AllocateAppointmentTokenWithLocking(RegisterAppointmentRequestModel request, Appointment appointment, CancellationToken cancellationToken)
         {
-            var queueDate = request.ApptDate.Date;
-            
-            var doctorQueue = await _context.DoctorQueues
-                .Where(dq => dq.DoctorId == request.DoctorId && dq.TokenDate == queueDate)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            int tokenNumber;
-            if (doctorQueue == null)
-            {
-                doctorQueue = new DoctorQueue
-                {
-                    HospitalId = request.HospitalId,
-                    DoctorId = request.DoctorId,
-                    TokenDate = queueDate,
-                    NextTokenNo = 2,
-                    TokenStrategy = AppConstants.TokenStrategy_Sequential,
-                };
-                _context.DoctorQueues.Add(doctorQueue);
-                tokenNumber = 1;
-            }
-            else
-            {
-                tokenNumber = doctorQueue.NextTokenNo;
-                doctorQueue.NextTokenNo++;
-            }
-
-            var appointmentToken = await _context.AppointmentTokens
-                .FirstOrDefaultAsync(t => t.ApptId == appointment.ApptId &&
-                                         t.DoctorId == request.DoctorId &&
-                                         t.TokenDate == queueDate &&
-                                         t.HospitalId == request.HospitalId,
-                                         cancellationToken);
-            
-            if (appointmentToken == null)
-            {
-                appointmentToken = new AppointmentToken
-                {
-                    TokenId = Guid.NewGuid(),
-                    HospitalId = request.HospitalId,
-                    DoctorId = request.DoctorId,
-                    ApptId = appointment.ApptId,
-                    TokenDate = queueDate,
-                    TokenNo = tokenNumber,
-                    IsManual = false,
-                    CreatedAt = DateTime.UtcNow
-                };
-                _context.AppointmentTokens.Add(appointmentToken);
-            }
-            else
-            {
-                appointmentToken.TokenNo = tokenNumber;
-                appointmentToken.IsManual = false;
-                appointmentToken.CreatedAt = DateTime.UtcNow;
-            }
-            
-            await _context.SaveChangesAsync(cancellationToken);
-
-            return tokenNumber;
+            return AppointmentBookingHelpers.AllocateTokenWithLockingAsync(_context, request.HospitalId, request.DoctorId, request.ApptDate, appointment.ApptId, cancellationToken);
         }
     }
 }

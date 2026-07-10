@@ -185,6 +185,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<ChargeMasterPayerRate> ChargeMasterPayerRate { get; set; }
         public DbSet<RoomClassRateMultiplier> RoomClassRateMultiplier { get; set; }
         public DbSet<ConsultantIncentiveLedger> ConsultantIncentiveLedger { get; set; }
+        public DbSet<PublicApiClient> PublicApiClient { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {   
@@ -732,6 +733,15 @@ namespace EasyHMSAPI.Domain.Context
                 entity.HasKey(d => d.DischargeMedicationId);
                 entity.Property(d => d.CreatedAt).HasColumnType("datetime2(3)");
                 entity.Property(d => d.UpdatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<PublicApiClient>(entity =>
+            {
+                entity.ToTable("PublicApiClient");
+                entity.HasKey(p => p.ApiClientId);
+                entity.Property(p => p.LastUsedAt).HasColumnType("datetime2(3)");
+                entity.Property(p => p.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(p => p.UpdatedAt).HasColumnType("datetime2(3)");
             });
 
             modelBuilder.Entity<AdmissionStatusHistory>(entity =>
