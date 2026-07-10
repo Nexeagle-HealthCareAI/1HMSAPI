@@ -8,6 +8,7 @@ using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
@@ -16,11 +17,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     {
         private readonly AppDbContext _context;
         private readonly ISmsService _smsService;
+        private readonly ILogger<CancelAppointmentHandler> _logger;
 
-        public CancelAppointmentHandler(AppDbContext context, ISmsService smsService)
+        public CancelAppointmentHandler(AppDbContext context, ISmsService smsService, ILogger<CancelAppointmentHandler> logger)
         {
             _context = context;
             _smsService = smsService;
+            _logger = logger;
         }
 
         public async Task<CancelAppointmentResponseModel> Handle(CancelAppointmentRequestModel request, CancellationToken cancellationToken)
@@ -222,6 +225,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
             catch (Exception ex)
             {
+                // ex.Message alone (e.g. DbUpdateException's generic "An error occurred while
+                // saving the entity changes") hides the real cause in InnerException — log the
+                // full exception so the actual SQL/constraint error is visible in the container logs.
+                _logger.LogError(ex, "Error cancelling appointment {AppointmentId} for patient {PatientId}", request.AppointmentId, request.PatientId);
                 return new CancelAppointmentResponseModel { Success = false, Message = ex.Message };
             }
         }

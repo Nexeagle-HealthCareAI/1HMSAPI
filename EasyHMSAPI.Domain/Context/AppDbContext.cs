@@ -977,6 +977,19 @@ namespace EasyHMSAPI.Domain.Context
                 entity.HasKey(e => e.AllocationChargeId);
                 entity.Property(e => e.Amount).HasPrecision(18, 2);
                 entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)");
+
+                // The DB has a real FK (FK_PAYALC_Allocation) but until this was added EF's model
+                // didn't know about it, so SaveChanges couldn't order batched deletes correctly —
+                // it could send the BillingPaymentAllocation DELETE before this table's child rows,
+                // even when the code removes children first, causing a REFERENCE constraint
+                // violation (hit in CancelAppointmentHandler / VoidExistingChargesAndRefundAsync /
+                // DeleteBillingEventHandler, all of which delete both in one SaveChanges call).
+                // Restrict (not Cascade): still gives EF correct ordering for explicit deletes of
+                // both sides, without silently auto-deleting children the code didn't ask to remove.
+                entity.HasOne<BillingPaymentAllocation>()
+                      .WithMany()
+                      .HasForeignKey(e => e.AllocationId)
+                      .OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<DiscountApproval>(entity =>
