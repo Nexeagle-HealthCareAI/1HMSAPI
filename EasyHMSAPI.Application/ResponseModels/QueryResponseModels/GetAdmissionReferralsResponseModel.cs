@@ -35,6 +35,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public DateTime? FollowUpDate { get; set; }
         public string? FollowUpNotes { get; set; }
         public Guid? ConvertedAdmissionId { get; set; }
+        public DateTime? AdmittedAt { get; set; }
         public DateTime CreatedAt { get; set; }
     }
 }

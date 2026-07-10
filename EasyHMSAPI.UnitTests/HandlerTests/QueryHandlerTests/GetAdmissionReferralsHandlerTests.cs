@@ -127,5 +127,60 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             Assert.That(response.Referrals, Has.Count.EqualTo(1));
             Assert.That(response.Referrals[0].PatientId, Is.EqualTo("PAT1"));
         }
+
+        [Test]
+        public async Task Handle_FilterByPatientId_ReturnsOnlyThatPatientsReferrals()
+        {
+            var hospitalId = Guid.NewGuid();
+            var user = TestDataFactory.SeedUser(_context);
+            var doctor = TestDataFactory.SeedDoctor(_context, user);
+
+            _context.AdmissionReferrals.Add(new AdmissionReferral { ReferralId = Guid.NewGuid(), HospitalId = hospitalId, PatientId = "PAT1", ReferringDoctorId = doctor.DoctorID, CaseType = "PLANNED", StatusCode = "PENDING", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+            _context.AdmissionReferrals.Add(new AdmissionReferral { ReferralId = Guid.NewGuid(), HospitalId = hospitalId, PatientId = "PAT2", ReferringDoctorId = doctor.DoctorID, CaseType = "PLANNED", StatusCode = "PENDING", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetAdmissionReferralsRequestModel { HospitalId = hospitalId, PatientId = "PAT1" }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.Referrals, Has.Count.EqualTo(1));
+            Assert.That(response.Referrals[0].PatientId, Is.EqualTo("PAT1"));
+        }
+
+        [Test]
+        public async Task Handle_ConvertedReferral_JoinsAdmittedAtFromAdmission()
+        {
+            var hospitalId = Guid.NewGuid();
+            var user = TestDataFactory.SeedUser(_context);
+            var doctor = TestDataFactory.SeedDoctor(_context, user);
+            var admissionId = Guid.NewGuid();
+            var admittedAt = new DateTime(2026, 7, 5, 10, 30, 0, DateTimeKind.Utc);
+
+            _context.Admission.Add(new Admission
+            {
+                AdmissionId = admissionId, HospitalId = hospitalId, PatientId = "PAT1",
+                AdmissionNo = "ADM-1", AdmittedAt = admittedAt, StatusCode = "ADMITTED",
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+            });
+            _context.AdmissionReferrals.Add(new AdmissionReferral
+            {
+                ReferralId = Guid.NewGuid(), HospitalId = hospitalId, PatientId = "PAT1",
+                ReferringDoctorId = doctor.DoctorID, CaseType = "PLANNED", StatusCode = "CONVERTED",
+                ConvertedAdmissionId = admissionId, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+            });
+            // PENDING referral with no ConvertedAdmissionId — AdmittedAt should stay null.
+            _context.AdmissionReferrals.Add(new AdmissionReferral
+            {
+                ReferralId = Guid.NewGuid(), HospitalId = hospitalId, PatientId = "PAT2",
+                ReferringDoctorId = doctor.DoctorID, CaseType = "PLANNED", StatusCode = "PENDING",
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+            });
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetAdmissionReferralsRequestModel { HospitalId = hospitalId }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.Referrals.Single(r => r.PatientId == "PAT1").AdmittedAt, Is.EqualTo(admittedAt));
+            Assert.That(response.Referrals.Single(r => r.PatientId == "PAT2").AdmittedAt, Is.Null);
+        }
     }
 }

@@ -45,7 +45,7 @@ namespace EasyHMSAPI.Api.Controllers
 
         [HttpGet("list")]
         public async Task<ActionResult<GetAdmissionReferralsResponseModel>> GetAdmissionReferrals(
-            [FromQuery] Guid hospitalId, [FromQuery] string? statusCode, [FromQuery] string? caseType,
+            [FromQuery] Guid hospitalId, [FromQuery] string? patientId, [FromQuery] string? statusCode, [FromQuery] string? caseType,
             [FromQuery] Guid? referringDoctorId, [FromQuery] DateTime? fromDate, [FromQuery] DateTime? toDate)
         {
             if (hospitalId == Guid.Empty)
@@ -56,6 +56,7 @@ namespace EasyHMSAPI.Api.Controllers
                 var request = new GetAdmissionReferralsRequestModel
                 {
                     HospitalId = hospitalId,
+                    PatientId = patientId,
                     StatusCode = statusCode,
                     CaseType = caseType,
                     ReferringDoctorId = referringDoctorId,
