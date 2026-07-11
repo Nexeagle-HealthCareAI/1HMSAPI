@@ -61,6 +61,24 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return new UpdateChargeEventResponseModel { Success = false, Message = "Cannot edit a charge on a finalized or cancelled invoice." };
                 }
 
+                // Isolate the invoice-level (overall, not tied to any one line) discount BEFORE this
+                // charge's own DiscountAmount is mutated below — otherwise recomputing
+                // billingInvoice.DiscountAmount from just the per-line sum would silently wipe out
+                // an already-applied "Add Discount" amount every time any charge on the invoice is
+                // edited. Mirrors CreateDraftInvoiceHandler's existingInvoiceLevelDiscount derivation.
+                decimal invoiceLevelDiscount = 0;
+                if (billingInvoice != null)
+                {
+                    var linkedChargeEventIdsForDiscount = await _context.BillingInvoiceChargeEvent
+                        .Where(bice => bice.InvoiceId == billingInvoice.InvoiceId)
+                        .Select(bice => bice.ChargeEventId)
+                        .ToListAsync(cancellationToken);
+                    var priorLineDiscountTotal = await _context.BillingChargeEvent
+                        .Where(bce => linkedChargeEventIdsForDiscount.Contains(bce.ChargeEventId))
+                        .SumAsync(bce => (decimal?)(bce.DiscountAmount ?? 0), cancellationToken) ?? 0m;
+                    invoiceLevelDiscount = Math.Max(0, (billingInvoice.DiscountAmount ?? 0) - priorLineDiscountTotal);
+                }
+
                 // Never let an edit reduce a charge below the money already specifically allocated
                 // to it — that would silently create an unfunded line. Increasing it, or editing
                 // when nothing's been paid against it yet, is always safe.
@@ -146,19 +164,25 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         .Where(bce => remainingChargeEventIds.Contains(bce.ChargeEventId))
                         .ToListAsync(cancellationToken);
 
-                    decimal totalGrossAmount = 0, totalDiscountAmount = 0, totalNetAmount = 0;
+                    decimal totalGrossAmount = 0, totalLineDiscountAmount = 0;
                     decimal totalTaxableAmount = 0, totalCgst = 0, totalSgst = 0, totalIgst = 0, totalTax = 0;
                     foreach (var c in remainingCharges)
                     {
                         totalGrossAmount += c.GrossAmount ?? (c.Qty * c.UnitPrice);
-                        totalDiscountAmount += c.DiscountAmount ?? 0;
-                        totalNetAmount += c.NetAmount;
+                        totalLineDiscountAmount += c.DiscountAmount ?? 0;
                         totalTaxableAmount += c.TaxableAmount ?? 0;
                         totalCgst += c.CgstAmount;
                         totalSgst += c.SgstAmount;
                         totalIgst += c.IgstAmount;
                         totalTax += c.TaxAmount;
                     }
+
+                    // Re-add the preserved invoice-level discount on top of the per-line total —
+                    // same combined-total shape CreateDraftInvoiceHandler uses — and re-derive
+                    // NetAmount from it, capping at gross so a shrunk invoice can't go negative.
+                    decimal totalDiscountAmount = totalLineDiscountAmount + invoiceLevelDiscount;
+                    if (totalDiscountAmount > totalGrossAmount) totalDiscountAmount = totalGrossAmount;
+                    decimal totalNetAmount = totalGrossAmount - totalDiscountAmount;
 
                     billingInvoice.GrossAmount = totalGrossAmount;
                     billingInvoice.DiscountAmount = totalDiscountAmount;

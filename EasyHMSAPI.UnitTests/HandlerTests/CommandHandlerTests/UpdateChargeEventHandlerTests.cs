@@ -199,6 +199,50 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task Handle_PreservesInvoiceLevelDiscount_WhenEditingAChargeThatHasNoLineDiscount()
+        {
+            var charge = SeedCharge(qty: 2, rate: 500, discount: 0); // gross = net = 1000
+            var invoice = new BillingInvoice
+            {
+                InvoiceId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                EncounterId = _encounterId,
+                PatientId = "PT001",
+                InvoiceNo = "INV-1",
+                InvoiceDate = DateTime.UtcNow,
+                StatusCode = BillingConstants.InvoiceStatus.Draft,
+                GrossAmount = charge.GrossAmount,
+                // An overall "Add Discount" applied on top of the (line-discount-free) charge —
+                // mirrors CreateDraftInvoiceHandler's invoiceLevelDiscount having been baked in here.
+                DiscountAmount = 100,
+                NetAmount = (charge.GrossAmount ?? 0) - 100,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            _context.BillingInvoice.Add(invoice);
+            _context.BillingInvoiceChargeEvent.Add(new BillingInvoiceChargeEvent { InvoiceId = invoice.InvoiceId, ChargeEventId = charge.ChargeEventId });
+            await _context.SaveChangesAsync();
+
+            // Edit only the quantity — no discount change on the line itself — should NOT wipe the
+            // invoice's overall discount (the bug this test guards against).
+            var response = await _handler.Handle(new UpdateChargeEventRequestModel
+            {
+                HospitalId = _hospitalId,
+                ChargeEventId = charge.ChargeEventId,
+                Qty = 3,
+                Rate = 500,
+                DiscountPercent = 0,
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+
+            var updatedInvoice = _context.BillingInvoice.First(i => i.InvoiceId == invoice.InvoiceId);
+            // New gross = 3*500 = 1500; the pre-existing 100 overall discount must still apply.
+            Assert.That(updatedInvoice.DiscountAmount, Is.EqualTo(100), "Editing a charge must not silently drop the invoice-level discount.");
+            Assert.That(updatedInvoice.NetAmount, Is.EqualTo(1400));
+        }
+
+        [Test]
         public async Task Handle_ChargeNotFound_ReturnsFailure()
         {
             var response = await _handler.Handle(new UpdateChargeEventRequestModel
