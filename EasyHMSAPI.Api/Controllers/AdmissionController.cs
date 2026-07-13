@@ -268,5 +268,68 @@ namespace EasyHMSAPI.Api.Controllers
                 return StatusCode(500, new { Message = "An error occurred while updating coverage details." });
             }
         }
+
+        // Uploads a general-purpose document (insurance card, ID proof, referral letter, scanned
+        // report, etc.) against the admission -- listed on the Patient Workspace's Documents tab.
+        // Not gated on admission-active status: paperwork routinely arrives after discharge.
+        [HttpPost("document/upload")]
+        public async Task<ActionResult<UploadAdmissionDocumentResponseModel>> UploadDocument(UploadAdmissionDocumentRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty || request.File == null)
+                return BadRequest(new { Message = "hospitalId, admissionId and a file are required." });
+
+            try
+            {
+                request.UploadedByUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in UploadDocument for admissionId: {AdmissionId}", request.AdmissionId);
+                return StatusCode(500, new { Message = "An error occurred while uploading the document." });
+            }
+        }
+
+        [HttpGet("document/list")]
+        public async Task<ActionResult<GetAdmissionDocumentsResponseModel>> GetDocuments([FromQuery] Guid hospitalId, [FromQuery] Guid admissionId)
+        {
+            if (hospitalId == Guid.Empty || admissionId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and admissionId are required." });
+
+            try
+            {
+                var request = new GetAdmissionDocumentsRequestModel { HospitalId = hospitalId, AdmissionId = admissionId };
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetDocuments for admissionId: {AdmissionId}", admissionId);
+                return StatusCode(500, new { Message = "An error occurred while fetching documents." });
+            }
+        }
+
+        [HttpDelete("document/delete")]
+        public async Task<ActionResult<DeleteAdmissionDocumentResponseModel>> DeleteDocument([FromQuery] DeleteAdmissionDocumentRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty || request.DocumentId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId, admissionId and documentId are required." });
+
+            try
+            {
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in DeleteDocument for documentId: {DocumentId}", request.DocumentId);
+                return StatusCode(500, new { Message = "An error occurred while deleting the document." });
+            }
+        }
     }
 }

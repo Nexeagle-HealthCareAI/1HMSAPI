@@ -135,6 +135,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<DischargeMedication> DischargeMedication { get; set; }
         public DbSet<BedAssignment> BedAssignment { get; set; }
         public DbSet<AdmissionDoctorAssignment> AdmissionDoctorAssignment { get; set; }
+        public DbSet<AdmissionDocument> AdmissionDocument { get; set; }
         public DbSet<ClinicalOrder> ClinicalOrder { get; set; }
         public DbSet<ClinicalOrderLine> ClinicalOrderLine { get; set; }
         public DbSet<MedicationAdministration> MedicationAdministration { get; set; }
@@ -779,6 +780,13 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(a => a.CreatedAt).HasColumnType("datetime2(3)");
                 entity.Property(a => a.UpdatedAt).HasColumnType("datetime2(3)");
                 entity.Property(a => a.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<AdmissionDocument>(entity =>
+            {
+                entity.ToTable("AdmissionDocument");
+                entity.HasKey(d => d.DocumentId);
+                entity.Property(d => d.UploadedAt).HasColumnType("datetime2(3)");
             });
 
             modelBuilder.Entity<ClinicalOrder>(entity =>
