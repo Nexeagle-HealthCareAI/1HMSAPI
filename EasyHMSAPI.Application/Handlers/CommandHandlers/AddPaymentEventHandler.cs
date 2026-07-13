@@ -149,14 +149,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                     decimal remainingDue = netAmount - totalPastPayments;
 
-                    // An advance that would leave the patient in credit needs admin sign-off —
-                    // hold it as a CreditApproval instead of posting a BillingPayment.
-                    decimal resultingBalance = remainingDue - request.Payment.Amount;
-                    if (resultingBalance < 0)
-                    {
-                        return await HoldForApprovalAsync(request, normalizedPaymentType, resultingBalance, cancellationToken);
-                    }
-
+                    // Excess over what's due is held directly as unallocated credit on the
+                    // encounter — no admin sign-off required (approval gating removed).
                     if (request.Payment.Amount > remainingDue)
                     {
                         allocatedAmount = Math.Max(0, remainingDue);
@@ -198,14 +192,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         };
                     }
 
-                    // A partial refund that still leaves the patient in credit needs admin sign-off.
-                    decimal resultingBalance = remainingDue + request.Payment.Amount;
-                    if (resultingBalance < 0)
-                    {
-                        return await HoldForApprovalAsync(request, normalizedPaymentType, resultingBalance, cancellationToken);
-                    }
-
-                    allocatedAmount = request.Payment.Amount;
+                    // A partial refund that still leaves the patient in credit is allowed directly
+                    // now — no admin sign-off required (approval gating removed).
+                    //
+                    // Deliberately NOT setting allocatedAmount here: a refund is money paid back OUT
+                    // to the patient, not money applied toward a charge. Setting it would fall into
+                    // the `if (allocatedAmount > 0)` block below and create a BillingPaymentAllocation
+                    // + run it through PaymentAllocationHelper.DistributeToChargesAsync exactly like a
+                    // real payment — inflating each charge's "amount paid" and this invoice's total
+                    // allocated-payments, so a later genuine payment could be wrongly capped/rejected
+                    // as "already fully paid". CreateDraftInvoiceHandler already treats REFUND rows
+                    // this same way (excluded from allocation, see its own comment there) — this just
+                    // makes AddPaymentEventHandler consistent with that.
                 }
 
                 // Allocate the receipt number only after validation passes, so a rejected
@@ -340,42 +338,5 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             };
         }
 
-        // Records a PENDING CreditApproval instead of posting the payment — no BillingPayment
-        // is created until an Admin/AdminDoctor approves it (see CreditApprovalDecideHandler).
-        private async Task<AddPaymentEventResponseModel> HoldForApprovalAsync(
-            AddPaymentEventRequestModel request, string paymentType, decimal resultingBalance, CancellationToken cancellationToken)
-        {
-            var now = DateTime.UtcNow;
-            var approval = new CreditApproval
-            {
-                CreditApprovalId = Guid.NewGuid(),
-                HospitalId = request.HospitalId,
-                EncounterId = request.EncounterId,
-                PatientId = request.PatientId,
-                PaymentType = paymentType,
-                RequestedAmount = request.Payment!.Amount,
-                PaymentMode = request.Payment.PaymentMode,
-                TransactionId = request.Payment.TransactionId,
-                PaymentDescription = request.Payment.Description,
-                ResultingCreditBalance = Math.Abs(resultingBalance),
-                Reason = request.Payment.Description,
-                RequestedBy = request.LoggedInUserName,
-                RequestedByUserId = request.LoggedInUserId,
-                RequestedAt = now,
-                Status = "PENDING",
-                CreatedAt = now,
-                UpdatedAt = now,
-            };
-            _context.CreditApproval.Add(approval);
-            await _context.SaveChangesAsync(cancellationToken);
-
-            return new AddPaymentEventResponseModel
-            {
-                Success = true,
-                Message = $"This would leave the patient with a credit balance of {Math.Abs(resultingBalance):0.00} and requires admin approval before it's recorded.",
-                PendingApproval = true,
-                CreditApprovalId = approval.CreditApprovalId,
-            };
-        }
     }
 }

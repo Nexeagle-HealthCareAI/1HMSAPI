@@ -58,7 +58,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                 HospitalId = hospitalId,
                 AdmissionId = admission.AdmissionId,
                 FinalDiagnosis = "Test",
-                Medications = new List<DischargeMedicationModel>
+                Medications = new List<DischargeMedicationRequestModel>
                 {
                     new() { MedicineName = "Paracetamol", Dosage = "500mg", Frequency = "BD", DisplayOrder = 0 },
                     new() { MedicineName = "Amoxicillin", Dosage = "250mg", Frequency = "TDS", DisplayOrder = 1 },
@@ -74,7 +74,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                 HospitalId = hospitalId,
                 AdmissionId = admission.AdmissionId,
                 FinalDiagnosis = "Test",
-                Medications = new List<DischargeMedicationModel>
+                Medications = new List<DischargeMedicationRequestModel>
                 {
                     new() { MedicineName = "Ibuprofen", Dosage = "400mg", Frequency = "OD", DisplayOrder = 0 },
                 },
@@ -96,7 +96,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             {
                 HospitalId = hospitalId,
                 AdmissionId = admission.AdmissionId,
-                Medications = new List<DischargeMedicationModel> { new() { MedicineName = "Paracetamol" } },
+                Medications = new List<DischargeMedicationRequestModel> { new() { MedicineName = "Paracetamol" } },
             }, CancellationToken.None);
 
             Assert.That(_context.DischargeMedication.Count(m => m.DischargeSummaryId == firstSave.DischargeSummaryId), Is.EqualTo(1));
@@ -105,7 +105,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             {
                 HospitalId = hospitalId,
                 AdmissionId = admission.AdmissionId,
-                Medications = new List<DischargeMedicationModel>(),
+                Medications = new List<DischargeMedicationRequestModel>(),
             }, CancellationToken.None);
 
             Assert.That(secondSave.Success, Is.True);
@@ -122,7 +122,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             {
                 HospitalId = hospitalId,
                 AdmissionId = admission.AdmissionId,
-                Medications = new List<DischargeMedicationModel>
+                Medications = new List<DischargeMedicationRequestModel>
                 {
                     new() { MedicineName = "Paracetamol", Dosage = "500mg", Route = "Oral", Frequency = "BD", Durations = "5d", Instructions = "After food" },
                 },
@@ -144,7 +144,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             {
                 HospitalId = hospitalId,
                 AdmissionId = admission.AdmissionId,
-                Medications = new List<DischargeMedicationModel> { new() { MedicineName = "Paracetamol" } },
+                Medications = new List<DischargeMedicationRequestModel> { new() { MedicineName = "Paracetamol" } },
             }, CancellationToken.None);
 
             var secondSave = await _handler.Handle(new SaveDischargeSummaryRequestModel

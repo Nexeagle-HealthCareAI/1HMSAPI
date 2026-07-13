@@ -183,10 +183,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     // Incentive: per-line override → ChargeMaster default → none.
                     var incentive = charge.IncentiveAmount ?? master?.IncentiveAmount;
 
-                    // Discount cap: per-charge ChargeMaster cap, else no cap (100%).
-                    var effectiveCap = master?.MaxDiscountPercent ?? 100m;
-                    var needsApproval = charge.DiscountPercent > effectiveCap;
-
                     var chargeEvent = new BillingChargeEvent
                     {
                         ChargeEventId = Guid.NewGuid(),
@@ -247,33 +243,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         });
                     }
 
-                    Guid? approvalId = null;
-                    if (needsApproval)
-                    {
-                        var approval = new DiscountApproval
-                        {
-                            DiscountApprovalId = Guid.NewGuid(),
-                            HospitalId = request.HospitalId,
-                            ChargeEventId = chargeEvent.ChargeEventId,
-                            PatientId = request.PatientId,
-                            EncounterId = request.EncounterId,
-                            GrossAmount = gross,
-                            RequestedDiscountPercent = charge.DiscountPercent,
-                            RequestedDiscountAmount = discount,
-                            CapPercent = effectiveCap,
-                            OverByPercent = charge.DiscountPercent - effectiveCap,
-                            Reason = string.IsNullOrWhiteSpace(charge.DiscountReason) ? null : charge.DiscountReason.Trim(),
-                            RequestedBy = request.LoggedInUserName,
-                            RequestedByUserId = request.LoggedInUserId,
-                            RequestedAt = now,
-                            Status = "PENDING",
-                            CreatedAt = now,
-                            UpdatedAt = now,
-                        };
-                        _context.DiscountApproval.Add(approval);
-                        approvalId = approval.DiscountApprovalId;
-                    }
-
                     totalGross += gross;
                     totalDiscount += discount;
                     totalNet += net;
@@ -303,9 +272,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         TaxAmount = taxable.TaxAmount,
                         IsTaxInclusive = taxInclusive,
                         IsInterState = isInterState,
-                        DiscountApprovalId = approvalId,
-                        DiscountApprovalRequired = needsApproval,
-                        DiscountCapPercent = needsApproval ? effectiveCap : (decimal?)null,
+                        DiscountApprovalId = null,
+                        DiscountApprovalRequired = false,
+                        DiscountCapPercent = null,
                     });
                 }
 

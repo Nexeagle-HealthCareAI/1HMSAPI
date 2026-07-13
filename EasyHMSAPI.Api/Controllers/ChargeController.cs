@@ -192,6 +192,26 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        [HttpPut("update-event")]
+        public async Task<ActionResult<UpdateChargeEventResponseModel>> UpdateChargeEvent([FromBody] UpdateChargeEventRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.ChargeEventId == Guid.Empty)
+                return BadRequest(new { Message = "HospitalId and ChargeEventId are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                request.LoggedInUserId = UserContextHelper.GetUserId(User);
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in UpdateChargeEvent for chargeEventId: {ChargeEventId}", request.ChargeEventId);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
         [HttpPatch("cancel-event")]
         public async Task<ActionResult<CancelChargeEventResponseModel>> CancelChargeEvent([FromBody] CancelChargeEventRequestModel request)
         {

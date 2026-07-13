@@ -113,12 +113,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
         }
 
-        private static (string? Name, string? Dose, string? Route, string? Frequency, string? Duration, string? Instructions) ToMedTuple(DischargeMedicationModel m) =>
+        private static (string? Name, string? Dose, string? Route, string? Frequency, string? Duration, string? Instructions) ToMedTuple(DischargeMedicationRequestModel m) =>
             (m.MedicineName, m.Dosage, m.Route, m.Frequency, m.Durations, m.Instructions);
 
         // Full delete-and-reinsert per save — same pattern SavePrescriptionDetailsHandler uses for
         // PrescriptionMedicine, no per-row diffing.
-        private async Task SyncMedicationsAsync(Guid dischargeSummaryId, List<DischargeMedicationModel>? medications, CancellationToken cancellationToken)
+        private async Task SyncMedicationsAsync(Guid dischargeSummaryId, List<DischargeMedicationRequestModel>? medications, CancellationToken cancellationToken)
         {
             if (medications == null) return;
 

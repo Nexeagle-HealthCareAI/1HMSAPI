@@ -8,6 +8,7 @@ namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
     public class GetAdmissionReferralsRequestModel : IRequest<GetAdmissionReferralsResponseModel>
     {
         public Guid HospitalId { get; set; }
+        public string? PatientId { get; set; }
         public string? StatusCode { get; set; }      // PENDING / CONVERTED / NOT_ADMITTED / FOLLOW_UP
         public string? CaseType { get; set; }         // EMERGENCY / PLANNED / URGENT
         public Guid? ReferringDoctorId { get; set; }

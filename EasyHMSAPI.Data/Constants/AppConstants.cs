@@ -19,6 +19,10 @@ namespace EasyHMSAPI.Data.Constants
         public static readonly string AppointmentStatus_LabRequired = "LAB_REQUIRED";
         public static readonly string AppointmentStatus_AwaitingReconsult = "AWAITING_RECONSULT";
         public static readonly string AppointmentStatus_UnderConsult = "UNDER_CONSULT";
+        public static readonly string AppointmentStatus_PreAppointment = "PRE_APPOINTMENT";
+
+        public static readonly string BookingSource_Internal = "INTERNAL";
+        public static readonly string BookingSource_NexeaglePublic = "NEXEAGLE_PUBLIC";
 
         public static readonly string TokenStrategy_Sequential = "SEQUENTIAL";
         

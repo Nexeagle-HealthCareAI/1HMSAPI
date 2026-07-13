@@ -39,6 +39,8 @@ builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 // Multi-tenant guard: blocks a signed-in user from acting on a hospital they don't belong to.
 builder.Services.AddScoped<EasyHMSAPI.Api.Common.HospitalAccessFilter>();
+// Public (Nexeagle) API-key gate — applied per-controller via [ServiceFilter], not globally.
+builder.Services.AddScoped<EasyHMSAPI.Api.Common.PublicApiKeyFilter>();
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<EasyHMSAPI.Api.Common.HospitalAccessFilter>();
@@ -163,6 +165,20 @@ builder.Services.AddRateLimiter(options =>
          factory: key => new FixedWindowRateLimiterOptions
          {
              PermitLimit = 100,
+             Window = TimeSpan.FromMinutes(1),
+             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+             QueueLimit = 0
+         })
+     );
+
+     // Public (Nexeagle) endpoints — external, unauthenticated-by-JWT surface, tighter than
+     // the general per-IP policy above since a leaked/scraped API key is a higher abuse risk.
+     options.AddPolicy("PublicBookingPolicy", context =>
+         RateLimitPartition.GetFixedWindowLimiter(
+         partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+         factory: key => new FixedWindowRateLimiterOptions
+         {
+             PermitLimit = 20,
              Window = TimeSpan.FromMinutes(1),
              QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
              QueueLimit = 0

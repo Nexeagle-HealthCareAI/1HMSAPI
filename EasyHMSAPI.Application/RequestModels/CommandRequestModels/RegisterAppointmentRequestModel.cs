@@ -58,5 +58,10 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         // Guardian / relative info (separate from medical referrals on the appointment).
         public string? GuardianName { get; set; }
         public string? GuardianRelation { get; set; }
+
+        // Opt-in for future SMS/email/marketing communication (e.g. a checkbox on the public
+        // Nexeagle booking form). Null/false is simply "not asked this time" — never downgrades
+        // an existing true consent; see AppointmentBookingHelpers.FindOrCreatePatientAsync.
+        public bool? MarketingConsent { get; set; }
     }
 }

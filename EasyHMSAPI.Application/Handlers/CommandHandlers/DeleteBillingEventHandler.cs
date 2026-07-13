@@ -33,20 +33,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     };
                 }
 
-                if (!request.SkipCreditApprovalCheck)
-                {
-                    if (string.IsNullOrWhiteSpace(request.Reason))
-                    {
-                        return new DeleteBillingEventResponseModel
-                        {
-                            Success = false,
-                            Message = "A reason is required to request deletion of a billing entry."
-                        };
-                    }
-
-                    return await HoldForApprovalAsync(request, isCharge, cancellationToken);
-                }
-
                 if (isCharge)
                 {
                     return await DeleteChargeEvent(request, cancellationToken);
@@ -64,72 +50,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     Message = "Error deleting billing event."
                 };
             }
-        }
-
-        // Deleting a charge or payment now records a PENDING CreditApproval instead of acting
-        // immediately — an Admin/AdminDoctor reviews the requester's reason and decides via
-        // DecideCreditApprovalHandler, which re-invokes this handler with SkipCreditApprovalCheck.
-        private async Task<DeleteBillingEventResponseModel> HoldForApprovalAsync(
-            DeleteBillingEventRequestModel request, bool isCharge, CancellationToken cancellationToken)
-        {
-            Guid encounterId;
-            string? patientId;
-            decimal amount;
-
-            if (isCharge)
-            {
-                var chargeEvent = await _context.BillingChargeEvent
-                    .Where(bce => bce.ChargeEventId == request.EventId)
-                    .FirstOrDefaultAsync(cancellationToken);
-                if (chargeEvent == null)
-                    return new DeleteBillingEventResponseModel { Success = false, Message = "Charge event not found." };
-
-                encounterId = chargeEvent.EncounterId;
-                patientId = chargeEvent.PatientId;
-                amount = chargeEvent.NetAmount;
-            }
-            else
-            {
-                var payment = await _context.BillingPayment
-                    .Where(bp => bp.PaymentId == request.EventId)
-                    .FirstOrDefaultAsync(cancellationToken);
-                if (payment == null)
-                    return new DeleteBillingEventResponseModel { Success = false, Message = "Payment event not found." };
-
-                encounterId = payment.EncounterId;
-                patientId = payment.PatientId;
-                amount = payment.Amount;
-            }
-
-            var now = DateTime.UtcNow;
-            var approval = new CreditApproval
-            {
-                CreditApprovalId = Guid.NewGuid(),
-                HospitalId = request.HospitalId,
-                EncounterId = encounterId,
-                PatientId = patientId,
-                PaymentType = isCharge ? "DELETE_CHARGE" : "DELETE_PAYMENT",
-                TargetEventId = request.EventId,
-                RequestedAmount = amount,
-                ResultingCreditBalance = 0,
-                Reason = request.Reason!.Trim(),
-                RequestedBy = request.LoggedInUserName,
-                RequestedByUserId = request.LoggedInUserId,
-                RequestedAt = now,
-                Status = "PENDING",
-                CreatedAt = now,
-                UpdatedAt = now,
-            };
-            _context.CreditApproval.Add(approval);
-            await _context.SaveChangesAsync(cancellationToken);
-
-            return new DeleteBillingEventResponseModel
-            {
-                Success = true,
-                Message = $"Deletion of this {(isCharge ? "charge" : "payment")} has been submitted for admin approval.",
-                PendingApproval = true,
-                CreditApprovalId = approval.CreditApprovalId,
-            };
         }
 
         private async Task<DeleteBillingEventResponseModel> DeleteChargeEvent(DeleteBillingEventRequestModel request, CancellationToken cancellationToken)

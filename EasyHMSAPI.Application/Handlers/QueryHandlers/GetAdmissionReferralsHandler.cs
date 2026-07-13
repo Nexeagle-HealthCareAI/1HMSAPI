@@ -24,6 +24,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 var query = _context.AdmissionReferrals
                     .Where(r => r.HospitalId == request.HospitalId);
 
+                if (!string.IsNullOrWhiteSpace(request.PatientId))
+                    query = query.Where(r => r.PatientId == request.PatientId);
+
                 if (!string.IsNullOrWhiteSpace(request.StatusCode))
                     query = query.Where(r => r.StatusCode == request.StatusCode);
 
@@ -81,6 +84,11 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     .Where(a => appointmentIds.Contains(a.ApptId))
                     .ToDictionaryAsync(a => a.ApptId, a => a.CurrentStatusCode, cancellationToken);
 
+                var convertedAdmissionIds = referrals.Where(r => r.ConvertedAdmissionId.HasValue).Select(r => r.ConvertedAdmissionId!.Value).Distinct().ToList();
+                var admittedAtById = await _context.Admission
+                    .Where(a => convertedAdmissionIds.Contains(a.AdmissionId))
+                    .ToDictionaryAsync(a => a.AdmissionId, a => a.AdmittedAt, cancellationToken);
+
                 response.Referrals = referrals.Select(r => new AdmissionReferralDataModel
                 {
                     ReferralId = r.ReferralId,
@@ -106,6 +114,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     FollowUpDate = r.FollowUpDate,
                     FollowUpNotes = r.FollowUpNotes,
                     ConvertedAdmissionId = r.ConvertedAdmissionId,
+                    AdmittedAt = r.ConvertedAdmissionId.HasValue && admittedAtById.TryGetValue(r.ConvertedAdmissionId.Value, out var admittedAt) ? admittedAt : null,
                     CreatedAt = r.CreatedAt,
                 }).ToList();
                 response.Success = true;

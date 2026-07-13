@@ -211,6 +211,37 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Front-desk "Confirm" action for a PRE_APPOINTMENT row created via the public booking API.
+        // Real slot commitment happens here — the receptionist picks the StartAt and it's validated
+        // against the doctor's existing bookings, then a token is allocated.
+        [HttpPut("confirm-pre-appointment")]
+        [Authorize]
+        public async Task<IActionResult> ConfirmPreAppointment([FromBody] ConfirmPreAppointmentRequestModel request)
+        {
+            _logger.LogInformation("ConfirmPreAppointment started at {Time} for AppointmentId: {AppointmentId}", DateTime.UtcNow, request.AppointmentId);
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            try
+            {
+                var response = await _mediator.Send(request);
+
+                if (!response.Success)
+                {
+                    _logger.LogWarning("ConfirmPreAppointment rejected for AppointmentId: {AppointmentId}: {Message}", request.AppointmentId, response.Message);
+                    return BadRequest(response);
+                }
+
+                _logger.LogInformation("ConfirmPreAppointment successful for AppointmentId: {AppointmentId}", request.AppointmentId);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in ConfirmPreAppointment for AppointmentId: {AppointmentId}", request.AppointmentId);
+                return StatusCode(500, new { Message = $"Error confirming appointment: {ex.Message}" });
+            }
+        }
+
         [HttpPatch("patient-cancel")]
         [Authorize]
         public async Task<IActionResult> CancelAppointment([FromBody] CancelAppointmentRequestModel request)
