@@ -16,5 +16,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public Guid DoctorId { get; set; }
         public string? FullName { get; set; }
         public string? DepartmentName { get; set; }
+        // Whether this doctor currently shows on the platform-wide public directory (also requires
+        // the hospital itself to be publicly listed — see Hospital.IsPubliclyListed).
+        public bool IsPubliclyListed { get; set; }
     }
 }

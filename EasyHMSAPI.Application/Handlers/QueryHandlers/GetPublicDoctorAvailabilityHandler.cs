@@ -1,6 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
-using EasyHMSAPI.Data.Enums;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -12,8 +12,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
     /// logic (time-off short-circuit, then override/template shift windows) but only reports
     /// whether the doctor is generally working that day, not a granular open-slot list: a public
     /// pre-appointment doesn't claim/lock a real time slot, so there's nothing to reconcile against
-    /// booked appointments here. Additionally scopes the doctor lookup to the caller's own
-    /// HospitalId (from the API key) so a public caller can't probe doctor ids from other hospitals.
+    /// booked appointments here. Resolves HospitalId from the doctor itself via
+    /// PublicDirectoryHelpers (never a client-supplied value) and gates on both Hospital.IsPubliclyListed
+    /// and Doctor.IsPubliclyListed, so a public caller can't reach a doctor/hospital pair that hasn't
+    /// opted into the directory.
     /// </summary>
     public class GetPublicDoctorAvailabilityHandler : IRequestHandler<GetPublicDoctorAvailabilityRequestModel, GetPublicDoctorAvailabilityResponseModel>
     {
@@ -26,21 +28,17 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
         public async Task<GetPublicDoctorAvailabilityResponseModel> Handle(GetPublicDoctorAvailabilityRequestModel request, CancellationToken cancellationToken)
         {
-            var doctorExists = await (from d in _context.Doctors
-                                       join u in _context.Users on d.UserID equals u.UserID
-                                       where d.DoctorID == request.DoctorId
-                                             && d.HospitalId == request.HospitalId
-                                             && u.UserStatusId != (int)UserStatusEnum.Revoked
-                                       select d.DoctorID).AnyAsync(cancellationToken);
+            var doctorHospitalId = await PublicDirectoryHelpers.ResolvePubliclyListedHospitalIdAsync(_context, request.DoctorId, cancellationToken);
 
-            if (!doctorExists)
+            if (doctorHospitalId == null)
                 return new GetPublicDoctorAvailabilityResponseModel { Success = false, Message = "Doctor not found." };
 
+            var hospitalId = doctorHospitalId.Value;
             var requestDate = request.Date.Date;
 
             var timeOff = await _context.DoctorTimeOffs
                 .Where(to => to.DoctorID == request.DoctorId &&
-                           to.HospitalId == request.HospitalId &&
+                           to.HospitalId == hospitalId &&
                            requestDate >= to.FromDate.Date &&
                            requestDate <= to.ToDate.Date)
                 .OrderByDescending(to => to.CreatedAt)
@@ -58,7 +56,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
             var overrideShifts = await _context.DoctorShiftOverrides
                 .Where(o => o.DoctorID == request.DoctorId &&
-                          o.HospitalId == request.HospitalId &&
+                          o.HospitalId == hospitalId &&
                           o.StartDate <= requestDate &&
                           (!o.EndDate.HasValue || o.EndDate >= requestDate))
                 .OrderBy(o => o.StartTime)

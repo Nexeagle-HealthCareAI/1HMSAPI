@@ -22,6 +22,9 @@ namespace EasyHMSAPI.Domain.Entities
         public string Pincode { get; set; } = null!;
         public string? TimeZone { get; set; }
         public bool IsActive { get; set; } = true;
+        // Opt-in: hospital only appears in the platform-wide public doctor directory
+        // (Nexeagle's "find a doctor" page) once this is explicitly turned on.
+        public bool IsPubliclyListed { get; set; } = false;
         public Guid CreatedByUserID { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime LastUpdatedAt { get; set; } = DateTime.UtcNow;

@@ -3,11 +3,9 @@ using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Constants;
-using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
@@ -19,6 +17,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     /// StartAt and token later via ConfirmPreAppointmentHandler. Reuses the same patient-matching
     /// logic RegisterAppointmentHandler uses (via AppointmentBookingHelpers) so a visitor who's
     /// already a hospital patient — matched by mobile+name — doesn't get a duplicate record.
+    /// HospitalId is resolved from DoctorId via PublicDirectoryHelpers (gated on both
+    /// Hospital.IsPubliclyListed and Doctor.IsPubliclyListed) — never client-supplied, same
+    /// reasoning GetPublicDoctorAvailabilityHandler uses.
     /// </summary>
     public class PublicBookAppointmentHandler : IRequestHandler<PublicBookAppointmentRequestModel, PublicBookAppointmentResponseModel>
     {
@@ -33,25 +34,20 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
         public async Task<PublicBookAppointmentResponseModel> Handle(PublicBookAppointmentRequestModel request, CancellationToken cancellationToken)
         {
-            if (request.HospitalId == Guid.Empty)
-                return new PublicBookAppointmentResponseModel { Success = false, Message = "Hospital context missing." };
-
             if (request.DoctorId == Guid.Empty)
                 return new PublicBookAppointmentResponseModel { Success = false, Message = "DoctorId is required." };
 
-            var doctorActive = await (from d in _context.Doctors
-                                       join u in _context.Users on d.UserID equals u.UserID
-                                       where d.DoctorID == request.DoctorId
-                                             && d.HospitalId == request.HospitalId
-                                             && u.UserStatusId != (int)UserStatusEnum.Revoked
-                                       select d.DoctorID).AnyAsync(cancellationToken);
-            if (!doctorActive)
+            var doctorHospitalId = await PublicDirectoryHelpers.ResolvePubliclyListedHospitalIdAsync(_context, request.DoctorId, cancellationToken);
+
+            if (doctorHospitalId == null)
                 return new PublicBookAppointmentResponseModel { Success = false, Message = "Doctor not found." };
+
+            var hospitalId = doctorHospitalId.Value;
 
             PatientRegistration patient;
             try
             {
-                patient = await AppointmentBookingHelpers.FindOrCreatePatientAsync(_context, request.Patient, request.HospitalId, null, cancellationToken);
+                patient = await AppointmentBookingHelpers.FindOrCreatePatientAsync(_context, request.Patient, hospitalId, null, cancellationToken);
             }
             catch (ArgumentException ex)
             {
@@ -69,7 +65,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             var appointment = new Appointment
             {
                 ApptId = Guid.NewGuid(),
-                HospitalId = request.HospitalId,
+                HospitalId = hospitalId,
                 DoctorId = request.DoctorId,
                 PatientId = patient.PatientId,
                 ApptDate = preferredDate,

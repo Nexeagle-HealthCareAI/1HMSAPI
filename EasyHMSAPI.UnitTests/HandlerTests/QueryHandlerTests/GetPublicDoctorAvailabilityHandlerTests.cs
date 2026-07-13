@@ -24,10 +24,11 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             _context = InMemoryDbContextFactory.CreateContext();
             _handler = new GetPublicDoctorAvailabilityHandler(_context);
 
-            _hospitalId = Guid.NewGuid();
             var user = TestDataFactory.SeedUser(_context);
-            _doctor = TestDataFactory.SeedDoctor(_context, user);
-            _doctor.HospitalId = _hospitalId;
+            var hospital = TestDataFactory.SeedHospital(_context, user.UserID, isPubliclyListed: true);
+            _hospitalId = hospital.HospitalID;
+            _doctor = TestDataFactory.SeedDoctor(_context, user, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, _doctor.DoctorID, _hospitalId);
             _context.SaveChanges();
         }
 
@@ -39,12 +40,46 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         }
 
         [Test]
-        public async Task Handle_DoctorFromDifferentHospital_ReturnsFailure()
+        public async Task Handle_DoctorAtNonPubliclyListedHospital_ReturnsFailure()
+        {
+            var otherUser = TestDataFactory.SeedUser(_context, email: "unlisted@example.com", phone: "5555555555");
+            var unlistedHospital = TestDataFactory.SeedHospital(_context, otherUser.UserID, isPubliclyListed: false);
+            var doctorAtUnlistedHospital = TestDataFactory.SeedDoctor(_context, otherUser, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, doctorAtUnlistedHospital.DoctorID, unlistedHospital.HospitalID);
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetPublicDoctorAvailabilityRequestModel
+            {
+                DoctorId = doctorAtUnlistedHospital.DoctorID,
+                Date = DateTime.Today,
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+        }
+
+        [Test]
+        public async Task Handle_DoctorNotPubliclyListedThemselves_ReturnsFailure()
+        {
+            var otherUser = TestDataFactory.SeedUser(_context, email: "private@example.com", phone: "8888888888");
+            var privateDoctor = TestDataFactory.SeedDoctor(_context, otherUser, isPubliclyListed: false);
+            TestDataFactory.SeedDoctorDepartment(_context, privateDoctor.DoctorID, _hospitalId);
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetPublicDoctorAvailabilityRequestModel
+            {
+                DoctorId = privateDoctor.DoctorID,
+                Date = DateTime.Today,
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+        }
+
+        [Test]
+        public async Task Handle_UnknownDoctorId_ReturnsFailure()
         {
             var response = await _handler.Handle(new GetPublicDoctorAvailabilityRequestModel
             {
-                HospitalId = Guid.NewGuid(),
-                DoctorId = _doctor.DoctorID,
+                DoctorId = Guid.NewGuid(),
                 Date = DateTime.Today,
             }, CancellationToken.None);
 
@@ -68,7 +103,6 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
 
             var response = await _handler.Handle(new GetPublicDoctorAvailabilityRequestModel
             {
-                HospitalId = _hospitalId,
                 DoctorId = _doctor.DoctorID,
                 Date = targetDate,
             }, CancellationToken.None);
@@ -97,7 +131,6 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
 
             var response = await _handler.Handle(new GetPublicDoctorAvailabilityRequestModel
             {
-                HospitalId = _hospitalId,
                 DoctorId = _doctor.DoctorID,
                 Date = targetDate,
             }, CancellationToken.None);
@@ -113,7 +146,6 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         {
             var response = await _handler.Handle(new GetPublicDoctorAvailabilityRequestModel
             {
-                HospitalId = _hospitalId,
                 DoctorId = _doctor.DoctorID,
                 Date = DateTime.Today.AddDays(1),
             }, CancellationToken.None);

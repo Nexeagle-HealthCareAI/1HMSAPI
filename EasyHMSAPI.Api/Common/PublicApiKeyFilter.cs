@@ -9,11 +9,10 @@ namespace EasyHMSAPI.Api.Common
 {
     /// <summary>
     /// Gate for the public (Nexeagle-facing) controller. Reads the X-Api-Key header, hashes it,
-    /// and looks up an active PublicApiClient row — the resolved HospitalId is stamped onto
-    /// HttpContext.Items so the controller action can bind it onto the request, mirroring how
-    /// staff-authenticated actions pull HospitalId from a JWT claim. A per-hospital key means a
-    /// leaked key only ever exposes the one hospital it was issued for; the caller can never
-    /// supply a different hospitalId to reach another tenant's data.
+    /// and looks up an active PublicApiClient row — a platform-wide key, not scoped to any one
+    /// hospital. This filter only answers "is this a valid, active key" — every action resolves
+    /// its own HospitalId from the doctor/appointment being acted on (+ Hospital.IsPubliclyListed),
+    /// never from the key itself.
     /// Applied per-controller via [ServiceFilter(typeof(PublicApiKeyFilter))] — unlike
     /// HospitalAccessFilter this isn't registered globally, since only the public controller needs it.
     /// </summary>
@@ -21,7 +20,6 @@ namespace EasyHMSAPI.Api.Common
     public class PublicApiKeyFilter : IAsyncActionFilter
     {
         public const string ApiKeyHeaderName = "X-Api-Key";
-        public const string HospitalIdItemKey = "PublicApiHospitalId";
 
         private readonly AppDbContext _db;
 
@@ -57,8 +55,6 @@ namespace EasyHMSAPI.Api.Common
 
             client.LastUsedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
-
-            context.HttpContext.Items[HospitalIdItemKey] = client.HospitalId;
 
             await next();
         }

@@ -31,10 +31,11 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             _smsServiceMock = new Mock<ISmsService>();
             _handler = new PublicBookAppointmentHandler(_context, _smsServiceMock.Object);
 
-            _hospitalId = Guid.NewGuid();
             var user = TestDataFactory.SeedUser(_context);
-            _doctor = TestDataFactory.SeedDoctor(_context, user);
-            _doctor.HospitalId = _hospitalId;
+            var hospital = TestDataFactory.SeedHospital(_context, user.UserID, isPubliclyListed: true);
+            _hospitalId = hospital.HospitalID;
+            _doctor = TestDataFactory.SeedDoctor(_context, user, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, _doctor.DoctorID, _hospitalId);
             _context.SaveChanges();
         }
 
@@ -50,7 +51,6 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         {
             var request = new PublicBookAppointmentRequestModel
             {
-                HospitalId = _hospitalId,
                 DoctorId = _doctor.DoctorID,
                 PreferredDate = DateTime.Today.AddDays(2),
                 PreferredTime = new TimeSpan(10, 0, 0),
@@ -89,7 +89,6 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 
             var request = new PublicBookAppointmentRequestModel
             {
-                HospitalId = _hospitalId,
                 DoctorId = _doctor.DoctorID,
                 PreferredDate = DateTime.Today.AddDays(1),
                 Patient = new Patient { FullName = "Repeat Visitor", Mobile = "9998887771" },
@@ -104,14 +103,56 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
-        public async Task Handle_DoctorFromDifferentHospital_ReturnsFailure()
+        public async Task Handle_DoctorAtNonPubliclyListedHospital_ReturnsFailure()
+        {
+            var otherUser = TestDataFactory.SeedUser(_context, email: "unlisted@example.com", phone: "5555555555");
+            var unlistedHospital = TestDataFactory.SeedHospital(_context, otherUser.UserID, isPubliclyListed: false);
+            var doctorAtUnlistedHospital = TestDataFactory.SeedDoctor(_context, otherUser, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, doctorAtUnlistedHospital.DoctorID, unlistedHospital.HospitalID);
+            await _context.SaveChangesAsync();
+
+            var request = new PublicBookAppointmentRequestModel
+            {
+                DoctorId = doctorAtUnlistedHospital.DoctorID,
+                PreferredDate = DateTime.Today.AddDays(1),
+                Patient = new Patient { FullName = "Someone", Mobile = "9998887772" },
+            };
+
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(_context.Appointments.Count(), Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task Handle_DoctorNotPubliclyListedThemselves_ReturnsFailure()
+        {
+            var otherUser = TestDataFactory.SeedUser(_context, email: "private@example.com", phone: "8888888888");
+            var privateDoctor = TestDataFactory.SeedDoctor(_context, otherUser, isPubliclyListed: false);
+            TestDataFactory.SeedDoctorDepartment(_context, privateDoctor.DoctorID, _hospitalId);
+            await _context.SaveChangesAsync();
+
+            var request = new PublicBookAppointmentRequestModel
+            {
+                DoctorId = privateDoctor.DoctorID,
+                PreferredDate = DateTime.Today.AddDays(1),
+                Patient = new Patient { FullName = "Someone", Mobile = "9998887798" },
+            };
+
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(_context.Appointments.Count(), Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task Handle_UnknownDoctorId_ReturnsFailure()
         {
             var request = new PublicBookAppointmentRequestModel
             {
-                HospitalId = Guid.NewGuid(), // different hospital than the doctor's
-                DoctorId = _doctor.DoctorID,
+                DoctorId = Guid.NewGuid(),
                 PreferredDate = DateTime.Today.AddDays(1),
-                Patient = new Patient { FullName = "Someone", Mobile = "9998887772" },
+                Patient = new Patient { FullName = "Someone", Mobile = "9998887799" },
             };
 
             var response = await _handler.Handle(request, CancellationToken.None);
@@ -125,7 +166,6 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         {
             var request = new PublicBookAppointmentRequestModel
             {
-                HospitalId = _hospitalId,
                 DoctorId = _doctor.DoctorID,
                 PreferredDate = DateTime.Today.AddDays(1),
                 Patient = new Patient { FullName = "Attributed Visitor", Mobile = "9998887773" },
@@ -147,7 +187,6 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         {
             var request = new PublicBookAppointmentRequestModel
             {
-                HospitalId = _hospitalId,
                 DoctorId = _doctor.DoctorID,
                 PreferredDate = DateTime.Today.AddDays(1),
                 Patient = new Patient { FullName = "Consenting Visitor", Mobile = "9998887774", MarketingConsent = true },
@@ -180,7 +219,6 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 
             var request = new PublicBookAppointmentRequestModel
             {
-                HospitalId = _hospitalId,
                 DoctorId = _doctor.DoctorID,
                 PreferredDate = DateTime.Today.AddDays(1),
                 Patient = new Patient { FullName = "Already Consented", Mobile = "9998887775" }, // MarketingConsent not set this time

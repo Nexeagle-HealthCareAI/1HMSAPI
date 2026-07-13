@@ -50,6 +50,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 TimeZone = hospital.TimeZone,
                 
                 IsActive = hospital.IsActive,
+                IsPubliclyListed = hospital.IsPubliclyListed,
                 CreatedAt = hospital.CreatedAt,
                 LastUpdatedAt = hospital.LastUpdatedAt,
                 ProfileStatus = profileStatus == null ? null : new HospitalProfileStatusDto

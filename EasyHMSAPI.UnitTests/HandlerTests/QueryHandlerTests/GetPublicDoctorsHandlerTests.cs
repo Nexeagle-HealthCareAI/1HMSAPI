@@ -45,10 +45,10 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         [Test]
         public async Task Handle_ReturnsPublicSafeFields_WithPhotoUrl_NoLicenseOrInternalFields()
         {
-            var hospitalId = Guid.NewGuid();
             var user = TestDataFactory.SeedUser(_context);
-            var doctor = TestDataFactory.SeedDoctor(_context, user);
-            doctor.HospitalId = hospitalId;
+            var hospital = TestDataFactory.SeedHospital(_context, user.UserID);
+            var doctor = TestDataFactory.SeedDoctor(_context, user, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, hospital.HospitalID);
             doctor.Bio = "Cardiologist with 10 years experience";
             await _context.SaveChangesAsync();
 
@@ -62,7 +62,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             });
             await _context.SaveChangesAsync();
 
-            var response = await _handler.Handle(new GetPublicDoctorsRequestModel { HospitalId = hospitalId }, CancellationToken.None);
+            var response = await _handler.Handle(new GetPublicDoctorsRequestModel(), CancellationToken.None);
 
             Assert.That(response.Success, Is.True);
             Assert.That(response.Doctors, Has.Count.EqualTo(1));
@@ -71,28 +71,99 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             Assert.That(d.FullName, Is.EqualTo("Dr. Jane Doe"));
             Assert.That(d.PhotoUrl, Is.EqualTo("http://example.com/photo.jpg"));
             Assert.That(d.Bio, Is.EqualTo("Cardiologist with 10 years experience"));
+            Assert.That(d.HospitalId, Is.EqualTo(hospital.HospitalID));
+            Assert.That(d.HospitalName, Is.EqualTo(hospital.Name));
+            Assert.That(d.City, Is.EqualTo(hospital.City));
+            Assert.That(d.State, Is.EqualTo(hospital.State));
         }
 
         [Test]
-        public async Task Handle_ScopesToRequestedHospital_ExcludesOtherHospitalsDoctors()
+        public async Task Handle_ExcludesDoctorsFromNonPubliclyListedHospitals()
         {
-            var hospitalId = Guid.NewGuid();
-            var otherHospitalId = Guid.NewGuid();
-
             var user1 = TestDataFactory.SeedUser(_context, email: "a@example.com", phone: "1111111111");
-            var doctor1 = TestDataFactory.SeedDoctor(_context, user1);
-            doctor1.HospitalId = hospitalId;
+            var listedHospital = TestDataFactory.SeedHospital(_context, user1.UserID, isPubliclyListed: true);
+            var doctor1 = TestDataFactory.SeedDoctor(_context, user1, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor1.DoctorID, listedHospital.HospitalID);
 
             var user2 = TestDataFactory.SeedUser(_context, email: "b@example.com", phone: "2222222222");
-            var doctor2 = TestDataFactory.SeedDoctor(_context, user2);
-            doctor2.HospitalId = otherHospitalId;
+            var unlistedHospital = TestDataFactory.SeedHospital(_context, user2.UserID, isPubliclyListed: false);
+            var doctor2 = TestDataFactory.SeedDoctor(_context, user2, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor2.DoctorID, unlistedHospital.HospitalID);
 
             await _context.SaveChangesAsync();
 
-            var response = await _handler.Handle(new GetPublicDoctorsRequestModel { HospitalId = hospitalId }, CancellationToken.None);
+            var response = await _handler.Handle(new GetPublicDoctorsRequestModel(), CancellationToken.None);
 
             Assert.That(response.Doctors, Has.Count.EqualTo(1));
             Assert.That(response.Doctors[0].DoctorId, Is.EqualTo(doctor1.DoctorID));
+        }
+
+        [Test]
+        public async Task Handle_ExcludesDoctorsNotPubliclyListedThemselves()
+        {
+            var user1 = TestDataFactory.SeedUser(_context, email: "e@example.com", phone: "6666666666");
+            var hospital = TestDataFactory.SeedHospital(_context, user1.UserID, isPubliclyListed: true);
+            var listedDoctor = TestDataFactory.SeedDoctor(_context, user1, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, listedDoctor.DoctorID, hospital.HospitalID);
+
+            var user2 = TestDataFactory.SeedUser(_context, email: "f@example.com", phone: "7777777777");
+            var unlistedDoctor = TestDataFactory.SeedDoctor(_context, user2, isPubliclyListed: false);
+            TestDataFactory.SeedDoctorDepartment(_context, unlistedDoctor.DoctorID, hospital.HospitalID);
+
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetPublicDoctorsRequestModel(), CancellationToken.None);
+
+            Assert.That(response.Doctors, Has.Count.EqualTo(1));
+            Assert.That(response.Doctors[0].DoctorId, Is.EqualTo(listedDoctor.DoctorID));
+        }
+
+        [Test]
+        public async Task Handle_ReturnsDoctorsAcrossMultiplePubliclyListedHospitals()
+        {
+            var user1 = TestDataFactory.SeedUser(_context, email: "c@example.com", phone: "3333333333");
+            var hospital1 = TestDataFactory.SeedHospital(_context, user1.UserID, city: "Kolkata", state: "West Bengal");
+            var doctor1 = TestDataFactory.SeedDoctor(_context, user1, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor1.DoctorID, hospital1.HospitalID);
+
+            var user2 = TestDataFactory.SeedUser(_context, email: "d@example.com", phone: "4444444444");
+            var hospital2 = TestDataFactory.SeedHospital(_context, user2.UserID, city: "Mumbai", state: "Maharashtra");
+            var doctor2 = TestDataFactory.SeedDoctor(_context, user2, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor2.DoctorID, hospital2.HospitalID);
+
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetPublicDoctorsRequestModel(), CancellationToken.None);
+
+            Assert.That(response.Doctors, Has.Count.EqualTo(2));
+            Assert.That(response.Doctors.Select(d => d.HospitalId), Is.EquivalentTo(new[] { hospital1.HospitalID, hospital2.HospitalID }));
+        }
+
+        [Test]
+        public async Task Handle_ExcludesDoctorsFromInactiveHospital()
+        {
+            var user = TestDataFactory.SeedUser(_context);
+            var hospital = TestDataFactory.SeedHospital(_context, user.UserID, isPubliclyListed: true, isActive: false);
+            var doctor = TestDataFactory.SeedDoctor(_context, user, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, hospital.HospitalID);
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetPublicDoctorsRequestModel(), CancellationToken.None);
+
+            Assert.That(response.Doctors, Is.Empty);
+        }
+
+        [Test]
+        public async Task Handle_ExcludesDoctorsWithNoHospitalDepartmentAssignment()
+        {
+            var user = TestDataFactory.SeedUser(_context);
+            TestDataFactory.SeedDoctor(_context, user, isPubliclyListed: true);
+            // No SeedDoctorDepartment call — doctor has no hospital affiliation at all.
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetPublicDoctorsRequestModel(), CancellationToken.None);
+
+            Assert.That(response.Doctors, Is.Empty);
         }
     }
 }

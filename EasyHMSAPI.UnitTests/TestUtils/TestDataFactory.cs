@@ -52,7 +52,32 @@ namespace EasyHMSAPI.UnitTests.TestUtils
             return user;
         }
 
-        public static Doctor SeedDoctor(AppDbContext context, User user)
+        public static Hospital SeedHospital(AppDbContext context, Guid createdByUserId, string city = "Test City", string state = "Test State", bool isPubliclyListed = true, bool isActive = true)
+        {
+            var hospital = new Hospital
+            {
+                HospitalID = Guid.NewGuid(),
+                Name = "Test Hospital",
+                Type = "General",
+                RegistrationNumber = $"REG{Guid.NewGuid():N}"[..12],
+                Contact = "9999999999",
+                Location = "123 Test Street",
+                City = city,
+                State = state,
+                Country = "India",
+                Pincode = "700001",
+                IsActive = isActive,
+                IsPubliclyListed = isPubliclyListed,
+                CreatedByUserID = createdByUserId,
+                CreatedAt = DateTime.UtcNow,
+                LastUpdatedAt = DateTime.UtcNow,
+            };
+            context.Hospitals.Add(hospital);
+            context.SaveChanges();
+            return hospital;
+        }
+
+        public static Doctor SeedDoctor(AppDbContext context, User user, bool isPubliclyListed = false)
         {
             var doctor = new Doctor
             {
@@ -65,11 +90,31 @@ namespace EasyHMSAPI.UnitTests.TestUtils
                 RegistrationYear = 2015,
                 Bio = "Test Bio",
                 CreatedAt = DateTime.UtcNow,
-                ProfileCompletionPercent = 100
+                ProfileCompletionPercent = 100,
+                IsPubliclyListed = isPubliclyListed,
             };
             context.Doctors.Add(doctor);
             context.SaveChanges();
             return doctor;
+        }
+
+        // DoctorDepartments is the source of truth for "which hospital(s) a doctor belongs to" —
+        // NOT the single retrofitted Doctor.HospitalId field (see GetDoctorFeesHandler). Tests that
+        // need a doctor to resolve to a hospital in the public-directory handlers must seed this,
+        // not just set doctor.HospitalId.
+        public static DoctorDepartment SeedDoctorDepartment(AppDbContext context, Guid doctorId, Guid hospitalId, Guid? departmentId = null)
+        {
+            var doctorDepartment = new DoctorDepartment
+            {
+                DoctorDepartmentID = Guid.NewGuid(),
+                DoctorID = doctorId,
+                DepartmentID = departmentId ?? Guid.NewGuid(),
+                HospitalId = hospitalId,
+                AssignedAt = DateTime.UtcNow,
+            };
+            context.DoctorDepartments.Add(doctorDepartment);
+            context.SaveChanges();
+            return doctorDepartment;
         }
 
         public static UserAuth GetOrCreateUserAuth(AppDbContext context, User user, string otp = "123456", DateTime? otpExpireAt = null)
