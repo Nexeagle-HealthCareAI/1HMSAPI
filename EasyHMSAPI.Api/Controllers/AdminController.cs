@@ -153,64 +153,10 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
-        // Issues a new per-hospital public API key (e.g. for the Nexeagle booking website). The raw
-        // key is returned once here and never retrievable again — only its hash is stored.
-        [HttpPost("public-api-clients")]
-        public async Task<ActionResult<CreatePublicApiClientResponseModel>> CreatePublicApiClient([FromBody] CreatePublicApiClientRequestModel request)
-        {
-            var userId = EasyHMSAPI.Api.Common.UserContextHelper.GetUserId(HttpContext.User);
-            if (userId == null) return Unauthorized(new { Message = "Could not resolve the signed-in user." });
-            try
-            {
-                request.CallerUserId = userId.Value;
-                var response = await _mediator.Send(request);
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error in CreatePublicApiClient for hospitalId: {HospitalId}", request.HospitalId);
-                return StatusCode(500, new { Message = "An error occurred while creating the API key." });
-            }
-        }
-
-        [HttpGet("public-api-clients")]
-        public async Task<ActionResult<GetPublicApiClientsResponseModel>> GetPublicApiClients([FromQuery] Guid hospitalId)
-        {
-            try
-            {
-                if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
-                var response = await _mediator.Send(new GetPublicApiClientsRequestModel { HospitalId = hospitalId });
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error in GetPublicApiClients for hospitalId: {HospitalId}", hospitalId);
-                return StatusCode(500, new { Message = "An error occurred while fetching API keys." });
-            }
-        }
-
-        [HttpPatch("public-api-clients/{apiClientId:guid}/revoke")]
-        public async Task<ActionResult<RevokePublicApiClientResponseModel>> RevokePublicApiClient(Guid apiClientId, [FromQuery] Guid hospitalId)
-        {
-            var userId = EasyHMSAPI.Api.Common.UserContextHelper.GetUserId(HttpContext.User);
-            if (userId == null) return Unauthorized(new { Message = "Could not resolve the signed-in user." });
-            try
-            {
-                if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
-                var response = await _mediator.Send(new RevokePublicApiClientRequestModel
-                {
-                    ApiClientId = apiClientId,
-                    HospitalId = hospitalId,
-                    CallerUserId = userId.Value,
-                });
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error in RevokePublicApiClient for apiClientId: {ApiClientId}", apiClientId);
-                return StatusCode(500, new { Message = "An error occurred while revoking the API key." });
-            }
-        }
+        // Public API keys (for the Nexeagle booking website) are no longer issued via this
+        // self-service endpoint — a key is now platform-wide (spans every opted-in hospital),
+        // so any hospital admin minting one would be a privilege escalation. Keys are created
+        // via the tools/IssuePublicApiKey ops console tool instead — see its runbook.
 
         [HttpGet("user-onboarding/allusers")]
         public async Task<ActionResult<HospitalUsersListResponseModel>> GetAllHospitalUsers([FromQuery] Guid hospitalId)

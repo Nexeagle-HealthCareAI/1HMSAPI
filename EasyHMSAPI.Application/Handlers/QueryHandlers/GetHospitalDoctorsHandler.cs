@@ -7,7 +7,10 @@ using Microsoft.EntityFrameworkCore;
 namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 {
     /// <summary>Flat, hospital-wide doctor list (no department filter) — for simple pickers like
-    /// the admit form's admitting-consultant selector.</summary>
+    /// the admit form's admitting-consultant selector, and the public-directory doctor toggle list.
+    /// Resolves doctors via DoctorDepartments, not the single retrofitted Doctor.HospitalId field
+    /// (see GetDoctorFeesHandler) — a doctor with Doctor.HospitalId unset but a real DoctorDepartments
+    /// row at this hospital must still show up here.</summary>
     public class GetHospitalDoctorsHandler : IRequestHandler<GetHospitalDoctorsRequestModel, GetHospitalDoctorsResponseModel>
     {
         private readonly AppDbContext _context;
@@ -24,10 +27,16 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 if (request.HospitalId == Guid.Empty)
                     return new GetHospitalDoctorsResponseModel { Success = false, Message = "HospitalId is required." };
 
+                var doctorIds = await _context.DoctorDepartments
+                    .Where(dd => dd.HospitalId == request.HospitalId)
+                    .Select(dd => dd.DoctorID)
+                    .Distinct()
+                    .ToListAsync(cancellationToken);
+
                 var rows = await (
                     from d in _context.Doctors
-                    where d.HospitalId == request.HospitalId
-                    select new { d.DoctorID, d.UserID, d.PrimaryDepartmentID }
+                    where doctorIds.Contains(d.DoctorID)
+                    select new { d.DoctorID, d.UserID, d.PrimaryDepartmentID, d.IsPubliclyListed }
                 ).ToListAsync(cancellationToken);
 
                 var userIds = rows.Select(r => r.UserID).Distinct().ToList();
@@ -51,6 +60,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         DoctorId = r.DoctorID,
                         FullName = nameLookup.TryGetValue(r.UserID, out var n) ? n : null,
                         DepartmentName = r.PrimaryDepartmentID.HasValue && deptNameById.TryGetValue(r.PrimaryDepartmentID.Value, out var dn) ? dn : null,
+                        IsPubliclyListed = r.IsPubliclyListed,
                     })
                     .OrderBy(d => d.FullName)
                     .ToList();

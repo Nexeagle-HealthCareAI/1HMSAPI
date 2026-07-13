@@ -23,5 +23,12 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? Bio { get; set; }
         public string? DepartmentName { get; set; }
         public List<string> Specializations { get; set; } = new();
+
+        // Which (publicly-listed) hospital this doctor belongs to — needed now that the
+        // directory spans every opted-in hospital, not just one scoped by an API key.
+        public Guid HospitalId { get; set; }
+        public string? HospitalName { get; set; }
+        public string? City { get; set; }
+        public string? State { get; set; }
     }
 }

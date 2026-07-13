@@ -156,5 +156,30 @@ namespace EasyHMSAPI.Api.Controllers
                 return StatusCode(500, new { Message = "An error occurred while retrieving hospital doctors." });
             }
         }
+
+        // Toggles whether one doctor shows on the platform-wide public directory. hospitalId as a
+        // query param (not the body) so the global HospitalAccessFilter gates this to callers who
+        // are members of that hospital — same pattern as DoctorFeesController.
+        [HttpPatch("public-listing")]
+        [Authorize]
+        public async Task<ActionResult<UpdateDoctorPublicListingResponseModel>> UpdateDoctorPublicListing([FromQuery] Guid hospitalId, [FromBody] UpdateDoctorPublicListingRequestModel request)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+            if (request.DoctorId == Guid.Empty)
+                return BadRequest(new { Message = "doctorId is required." });
+
+            try
+            {
+                request.HospitalId = hospitalId;
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in UpdateDoctorPublicListing for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while updating the doctor's public-listing preference." });
+            }
+        }
     }
 }

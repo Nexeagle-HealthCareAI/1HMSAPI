@@ -8,14 +8,11 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     // Public (Nexeagle) booking request. Deliberately thin compared to RegisterAppointmentRequestModel:
     // no AppointmentId (always creates), no StartAt/SlotTimeInMinutes/AllocateToken (a public booking
     // never claims a real time slot — PreferredDate/PreferredTime are non-binding, the receptionist
-    // picks the real StartAt at confirm time).
+    // picks the real StartAt at confirm time). HospitalId is not a field here at all — the handler
+    // resolves it from DoctorId (+ Hospital.IsPubliclyListed), never from a client-supplied value.
     [ExcludeFromCodeCoverage]
     public class PublicBookAppointmentRequestModel : IRequest<PublicBookAppointmentResponseModel>
     {
-        // Resolved by PublicApiKeyFilter from the caller's API key — never client-supplied.
-        [JsonIgnore]
-        public Guid HospitalId { get; set; }
-
         public Patient? Patient { get; set; }
         public Guid DoctorId { get; set; }
         public DateTime PreferredDate { get; set; }

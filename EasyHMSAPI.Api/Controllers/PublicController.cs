@@ -13,9 +13,10 @@ namespace EasyHMSAPI.Api.Controllers
 {
     /// <summary>
     /// Public, API-key-gated surface for external integrations (the Nexeagle booking website).
-    /// No staff JWT — PublicApiKeyFilter resolves HospitalId from the X-Api-Key header and stamps
-    /// it onto HttpContext.Items; every action here pulls it from there, never from the request
-    /// body/query, so a caller can never reach another hospital's data by supplying a different id.
+    /// No staff JWT — PublicApiKeyFilter only validates the X-Api-Key header is a valid, active
+    /// platform-wide key. It is no longer scoped to one hospital: GetDoctors returns every
+    /// publicly-listed hospital's doctors, and GetDoctorAvailability/BookAppointment resolve
+    /// HospitalId from the doctor being acted on, never from the key or the request body.
     /// </summary>
     [ExcludeFromCodeCoverage]
     [ApiController]
@@ -35,14 +36,12 @@ namespace EasyHMSAPI.Api.Controllers
             _logger = logger;
         }
 
-        private Guid ResolveHospitalId() => (Guid)HttpContext.Items[PublicApiKeyFilter.HospitalIdItemKey]!;
-
         [HttpGet("doctors")]
         public async Task<ActionResult<GetPublicDoctorsResponseModel>> GetDoctors()
         {
             try
             {
-                var response = await _mediator.Send(new GetPublicDoctorsRequestModel { HospitalId = ResolveHospitalId() });
+                var response = await _mediator.Send(new GetPublicDoctorsRequestModel());
                 return Ok(response);
             }
             catch (Exception ex)
@@ -59,7 +58,6 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 var response = await _mediator.Send(new GetPublicDoctorAvailabilityRequestModel
                 {
-                    HospitalId = ResolveHospitalId(),
                     DoctorId = doctorId,
                     Date = date,
                 });
@@ -77,7 +75,6 @@ namespace EasyHMSAPI.Api.Controllers
         {
             try
             {
-                request.HospitalId = ResolveHospitalId();
                 request.IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
                 var response = await _mediator.Send(request);
                 if (!response.Success) return BadRequest(response);

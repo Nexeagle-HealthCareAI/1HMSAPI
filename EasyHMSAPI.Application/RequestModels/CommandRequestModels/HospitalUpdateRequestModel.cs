@@ -25,5 +25,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModel
         public string? GstIn { get; set; }
         public string? PanNumber { get; set; }
         public string? NabhNabl { get; set; }
+        // Nullable bool, not the string-empty-means-unset sentinel every other field here
+        // uses — the handler checks .HasValue explicitly before applying it.
+        public bool? IsPubliclyListed { get; set; }
     }
 } 

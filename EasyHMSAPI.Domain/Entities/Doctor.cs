@@ -19,6 +19,9 @@ namespace EasyHMSAPI.Domain.Entities
         public string? ObjectURL { get; set; }
         public Guid? PrimaryDepartmentID { get; set; }
         public Guid? HospitalId { get; set; } // Added hospitalId
+        // Opt-in: doctor only appears in the platform-wide public directory when BOTH
+        // their hospital (Hospital.IsPubliclyListed) AND this flag are true.
+        public bool IsPubliclyListed { get; set; } = false;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public User User { get; set; } = null!;
         public Department? PrimaryDepartment { get; set; }
