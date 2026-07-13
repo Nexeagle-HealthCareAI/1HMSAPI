@@ -36,6 +36,12 @@ namespace EasyHMSAPI.Data.Constants
             public const string Released = "RELEASED";
         }
 
+        public static class DoctorAssignmentStatus
+        {
+            public const string Active = "ACTIVE";
+            public const string Replaced = "REPLACED";
+        }
+
         /// <summary>Bed master live status.</summary>
         public static class BedStatus
         {

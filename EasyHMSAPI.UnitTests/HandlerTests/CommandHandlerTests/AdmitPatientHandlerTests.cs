@@ -70,6 +70,26 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task Handle_PrimaryDoctorIdSupplied_SeedsInitialAdmissionDoctorAssignmentRow()
+        {
+            var (hospitalId, doctorId, patientId) = SeedBasics();
+            var request = new AdmitPatientRequestModel
+            {
+                HospitalId = hospitalId, PatientId = patientId, PrimaryDoctorId = doctorId,
+                AdmissionType = "ELECTIVE", EnableIpdBilling = false, LoggedInUserName = "Front Desk",
+            };
+
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True, response.Message);
+            var rows = _context.AdmissionDoctorAssignment.Where(a => a.AdmissionId == response.AdmissionId).ToList();
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(rows[0].DoctorId, Is.EqualTo(doctorId));
+            Assert.That(rows[0].StatusCode, Is.EqualTo("ACTIVE"));
+            Assert.That(rows[0].UnassignedAt, Is.Null);
+        }
+
+        [Test]
         public async Task Handle_OtPlanIdSupplied_SnapshotsProcedureAndIcuLevel_AndDefaultsRoomCategory()
         {
             var (hospitalId, doctorId, patientId) = SeedBasics();

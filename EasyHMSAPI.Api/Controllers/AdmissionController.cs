@@ -201,6 +201,51 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Reassigns the admission's admitting doctor: releases the current ACTIVE
+        // AdmissionDoctorAssignment row and creates a new one atomically, and updates
+        // Admission.PrimaryDoctorId. Only while the admission is still active.
+        [HttpPost("doctor")]
+        public async Task<ActionResult<ChangeAdmittingDoctorResponseModel>> ChangeDoctor([FromBody] ChangeAdmittingDoctorRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty || request.DoctorId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId, admissionId and doctorId are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in ChangeDoctor for admissionId: {AdmissionId}", request.AdmissionId);
+                return StatusCode(500, new { Message = "An error occurred while changing the admitting doctor." });
+            }
+        }
+
+        // Full assignment history for the admission's admitting doctor -- each row is one doctor's
+        // tenure span (AssignedAt -> UnassignedAt, or "current" while ACTIVE).
+        [HttpGet("doctor/history")]
+        public async Task<ActionResult<GetAdmissionDoctorHistoryResponseModel>> GetDoctorHistory([FromQuery] Guid hospitalId, [FromQuery] Guid admissionId)
+        {
+            if (hospitalId == Guid.Empty || admissionId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and admissionId are required." });
+
+            try
+            {
+                var request = new GetAdmissionDoctorHistoryRequestModel { HospitalId = hospitalId, AdmissionId = admissionId };
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetDoctorHistory for admissionId: {AdmissionId}", admissionId);
+                return StatusCode(500, new { Message = "An error occurred while fetching doctor history." });
+            }
+        }
+
         // Upserts the admission's coverage row (payer name, policy/pre-auth/package, sanctioned
         // amount, entitled room category) — only while the admission is still active.
         [HttpPut("coverage")]

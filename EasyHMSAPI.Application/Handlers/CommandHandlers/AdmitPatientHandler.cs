@@ -216,6 +216,27 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             Reason = isPreRegistration ? "Pre-registered" : "Admission created",
                         });
 
+                        // ── Seed the initial doctor-assignment history row, if a consultant was picked
+                        //    at admit time (AdmissionDoctorAssignmentHelper handles every reassignment
+                        //    after this point) ──
+                        if (request.PrimaryDoctorId.HasValue && request.PrimaryDoctorId.Value != Guid.Empty)
+                        {
+                            _context.AdmissionDoctorAssignment.Add(new AdmissionDoctorAssignment
+                            {
+                                AssignmentId = Guid.NewGuid(),
+                                HospitalId = request.HospitalId,
+                                AdmissionId = admission.AdmissionId,
+                                DoctorId = request.PrimaryDoctorId.Value,
+                                AssignedAt = now,
+                                AssignedBy = request.LoggedInUserName,
+                                StatusCode = IpdConstants.DoctorAssignmentStatus.Active,
+                                CreatedAt = now,
+                                CreatedBy = request.LoggedInUserName,
+                                UpdatedAt = now,
+                                UpdatedBy = request.LoggedInUserName,
+                            });
+                        }
+
                         // ── Coverage detail: always for TPA/SCHEME, or whenever any detail is supplied ──
                         if (payerType != IpdConstants.PayerType.Cash
                             || !string.IsNullOrWhiteSpace(request.PayerName)
