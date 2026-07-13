@@ -202,7 +202,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             LicenseNumber = "PENDING", // Needs to be updated later
                             HospitalId = hospitalId,
                             CreatedAt = DateTime.UtcNow,
-                            PrimaryDepartmentID = defaultDeptId
+                            PrimaryDepartmentID = defaultDeptId,
+                            ProfileCompletionPercent = 0
                         };
                         _context.Doctors.Add(doctor);
                     }
