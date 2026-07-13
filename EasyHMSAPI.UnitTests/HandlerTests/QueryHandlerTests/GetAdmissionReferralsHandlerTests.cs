@@ -182,5 +182,75 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             Assert.That(response.Referrals.Single(r => r.PatientId == "PAT1").AdmittedAt, Is.EqualTo(admittedAt));
             Assert.That(response.Referrals.Single(r => r.PatientId == "PAT2").AdmittedAt, Is.Null);
         }
+
+        private void SeedReferrals(Guid hospitalId, Guid doctorId, int count, string statusCode = "PENDING", string caseType = "PLANNED")
+        {
+            for (var i = 0; i < count; i++)
+            {
+                _context.AdmissionReferrals.Add(new AdmissionReferral
+                {
+                    ReferralId = Guid.NewGuid(), HospitalId = hospitalId, PatientId = $"PAT{i}",
+                    ReferringDoctorId = doctorId, CaseType = caseType, StatusCode = statusCode,
+                    CreatedAt = DateTime.UtcNow.AddMinutes(-i), UpdatedAt = DateTime.UtcNow,
+                });
+            }
+        }
+
+        [Test]
+        public async Task Handle_Pagination_ReturnsCorrectPageAndTotalCount()
+        {
+            var hospitalId = Guid.NewGuid();
+            var user = TestDataFactory.SeedUser(_context);
+            var doctor = TestDataFactory.SeedDoctor(_context, user);
+            SeedReferrals(hospitalId, doctor.DoctorID, 7);
+            await _context.SaveChangesAsync();
+
+            var page1 = await _handler.Handle(new GetAdmissionReferralsRequestModel { HospitalId = hospitalId, Page = 1, PageSize = 5 }, CancellationToken.None);
+            var page2 = await _handler.Handle(new GetAdmissionReferralsRequestModel { HospitalId = hospitalId, Page = 2, PageSize = 5 }, CancellationToken.None);
+
+            Assert.That(page1.Success, Is.True);
+            Assert.That(page1.TotalCount, Is.EqualTo(7));
+            Assert.That(page1.Referrals, Has.Count.EqualTo(5));
+            Assert.That(page2.Referrals, Has.Count.EqualTo(2));
+        }
+
+        [Test]
+        public async Task Handle_StatusCounts_IncludesZeroCountStatuses_AndIgnoresStatusFilter()
+        {
+            var hospitalId = Guid.NewGuid();
+            var user = TestDataFactory.SeedUser(_context);
+            var doctor = TestDataFactory.SeedDoctor(_context, user);
+            SeedReferrals(hospitalId, doctor.DoctorID, 3, statusCode: "PENDING");
+            SeedReferrals(hospitalId, doctor.DoctorID, 2, statusCode: "CONVERTED");
+            // No FOLLOW_UP or NOT_ADMITTED referrals seeded — their counts should still appear, at zero.
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetAdmissionReferralsRequestModel { HospitalId = hospitalId, StatusCode = "PENDING" }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.StatusCounts, Has.Count.EqualTo(4));
+            Assert.That(response.StatusCounts.Single(c => c.StatusCode == "PENDING").Count, Is.EqualTo(3));
+            Assert.That(response.StatusCounts.Single(c => c.StatusCode == "CONVERTED").Count, Is.EqualTo(2));
+            Assert.That(response.StatusCounts.Single(c => c.StatusCode == "FOLLOW_UP").Count, Is.EqualTo(0));
+            Assert.That(response.StatusCounts.Single(c => c.StatusCode == "NOT_ADMITTED").Count, Is.EqualTo(0));
+            // Listing itself IS filtered to PENDING even though StatusCounts covers all statuses.
+            Assert.That(response.Referrals, Has.Count.EqualTo(3));
+        }
+
+        [Test]
+        public async Task Handle_StatusCounts_RespectsCaseTypeFilter()
+        {
+            var hospitalId = Guid.NewGuid();
+            var user = TestDataFactory.SeedUser(_context);
+            var doctor = TestDataFactory.SeedDoctor(_context, user);
+            SeedReferrals(hospitalId, doctor.DoctorID, 2, statusCode: "PENDING", caseType: "EMERGENCY");
+            SeedReferrals(hospitalId, doctor.DoctorID, 5, statusCode: "PENDING", caseType: "PLANNED");
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetAdmissionReferralsRequestModel { HospitalId = hospitalId, CaseType = "EMERGENCY" }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.StatusCounts.Single(c => c.StatusCode == "PENDING").Count, Is.EqualTo(2));
+        }
     }
 }

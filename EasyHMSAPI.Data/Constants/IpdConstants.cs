@@ -36,6 +36,36 @@ namespace EasyHMSAPI.Data.Constants
             public const string Released = "RELEASED";
         }
 
+        public static class DoctorAssignmentStatus
+        {
+            public const string Active = "ACTIVE";
+            public const string Replaced = "REPLACED";
+        }
+
+        /// <summary>AdmissionReferral.StatusCode — previously soft/undocumented server-side (the
+        /// column has no DB CHECK constraint); centralized here so the Referred Admissions board's
+        /// KPI counts can be seeded at zero for every known status before merging in real counts,
+        /// instead of a status with zero referrals silently having no chip at all.</summary>
+        public static class ReferralStatus
+        {
+            public const string Pending = "PENDING";
+            public const string Converted = "CONVERTED";
+            public const string NotAdmitted = "NOT_ADMITTED";
+            public const string FollowUp = "FOLLOW_UP";
+
+            public static readonly string[] All = { Pending, Converted, NotAdmitted, FollowUp };
+        }
+
+        /// <summary>AdmissionReferral.CaseType — same soft-validated posture as ReferralStatus above.</summary>
+        public static class ReferralCaseType
+        {
+            public const string Emergency = "EMERGENCY";
+            public const string Urgent = "URGENT";
+            public const string Planned = "PLANNED";
+
+            public static readonly string[] All = { Emergency, Urgent, Planned };
+        }
+
         /// <summary>Bed master live status.</summary>
         public static class BedStatus
         {

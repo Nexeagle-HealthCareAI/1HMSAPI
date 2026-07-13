@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
@@ -267,7 +268,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (!IpdConstants.AdmissionStatus.Active.Contains(admission.StatusCode))
                     return new UpdateAdmissionDetailsResponseModel { Success = false, Message = "Admission is closed — its details can no longer be edited." };
 
-                if (request.PrimaryDoctorId.HasValue) admission.PrimaryDoctorId = request.PrimaryDoctorId;
+                var now = DateTime.UtcNow;
+                if (request.PrimaryDoctorId.HasValue && request.PrimaryDoctorId.Value != Guid.Empty)
+                    await AdmissionDoctorAssignmentHelper.ChangeDoctorAsync(_context, admission, request.PrimaryDoctorId.Value, request.LoggedInUserName, now, cancellationToken);
                 if (!string.IsNullOrWhiteSpace(request.AdmissionReason)) admission.AdmissionReason = request.AdmissionReason.Trim();
                 if (!string.IsNullOrWhiteSpace(request.Diagnosis)) admission.Diagnosis = request.Diagnosis.Trim();
                 if (request.ExpectedDischargeAt.HasValue) admission.ExpectedDischargeAt = request.ExpectedDischargeAt;
@@ -287,7 +290,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (!string.IsNullOrWhiteSpace(request.ReferringFacilityType)) admission.ReferringFacilityType = request.ReferringFacilityType.Trim().ToUpperInvariant();
                 if (!string.IsNullOrWhiteSpace(request.ReferringFacilityContact)) admission.ReferringFacilityContact = request.ReferringFacilityContact.Trim();
 
-                admission.UpdatedAt = DateTime.UtcNow;
+                admission.UpdatedAt = now;
                 admission.UpdatedBy = request.LoggedInUserName;
 
                 await _context.SaveChangesAsync(cancellationToken);

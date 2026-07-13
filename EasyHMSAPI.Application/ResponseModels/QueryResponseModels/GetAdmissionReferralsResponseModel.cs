@@ -8,6 +8,21 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public bool Success { get; set; }
         public string? Message { get; set; }
         public List<AdmissionReferralDataModel> Referrals { get; set; } = new();
+        public int Page { get; set; }
+        public int PageSize { get; set; }
+        public int TotalCount { get; set; }
+        // Counts per StatusCode -- ignores the request's own StatusCode filter (so switching status
+        // chips never hides sibling counts) but respects every other filter (CaseType etc.). Seeded
+        // with every known status at zero first, so a status with no matching referrals still shows
+        // its chip instead of silently disappearing -- see IpdConstants.ReferralStatus.All.
+        public List<ReferralStatusCountItem> StatusCounts { get; set; } = new();
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class ReferralStatusCountItem
+    {
+        public string StatusCode { get; set; } = null!;
+        public int Count { get; set; }
     }
 
     [ExcludeFromCodeCoverage]
@@ -37,5 +52,6 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public Guid? ConvertedAdmissionId { get; set; }
         public DateTime? AdmittedAt { get; set; }
         public DateTime CreatedAt { get; set; }
+        public int CommentCount { get; set; }
     }
 }

@@ -105,6 +105,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<OTPlanPackageType> OTPlanPackageTypes { get; set; }
         public DbSet<AdmissionReferral> AdmissionReferrals { get; set; }
         public DbSet<AdmissionReferralStatusHistory> AdmissionReferralStatusHistories { get; set; }
+        public DbSet<AdmissionReferralComment> AdmissionReferralComment { get; set; }
         public DbSet<Prescription> Prescription { get; set; }
         public DbSet<PrescriptionMedicine> PrescriptionMedicine { get; set; }
         public DbSet<PrescriptionInvestigation> PrescriptionInvestigation { get; set; }
@@ -133,6 +134,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<DischargeSummary> DischargeSummary { get; set; }
         public DbSet<DischargeMedication> DischargeMedication { get; set; }
         public DbSet<BedAssignment> BedAssignment { get; set; }
+        public DbSet<AdmissionDoctorAssignment> AdmissionDoctorAssignment { get; set; }
         public DbSet<ClinicalOrder> ClinicalOrder { get; set; }
         public DbSet<ClinicalOrderLine> ClinicalOrderLine { get; set; }
         public DbSet<MedicationAdministration> MedicationAdministration { get; set; }
@@ -403,6 +405,11 @@ namespace EasyHMSAPI.Domain.Context
             modelBuilder.Entity<AdmissionReferralStatusHistory>().ToTable("AdmissionReferralStatusHistory");
             modelBuilder.Entity<AdmissionReferralStatusHistory>().HasKey(e => e.HistoryId);
             modelBuilder.Entity<AdmissionReferralStatusHistory>().Property(e => e.ChangedAt).HasColumnType("datetime2");
+
+            // Configure AdmissionReferralComment
+            modelBuilder.Entity<AdmissionReferralComment>().ToTable("AdmissionReferralComment");
+            modelBuilder.Entity<AdmissionReferralComment>().HasKey(e => e.CommentId);
+            modelBuilder.Entity<AdmissionReferralComment>().Property(e => e.CreatedAt).HasColumnType("datetime2(3)");
 
             modelBuilder.Entity<UserAuth>()
                 .HasOne(ua => ua.User)
@@ -758,6 +765,17 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(a => a.DailyRateSnapshot).HasPrecision(18, 2);
                 entity.Property(a => a.AssignedAt).HasColumnType("datetime2(3)");
                 entity.Property(a => a.ReleasedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<AdmissionDoctorAssignment>(entity =>
+            {
+                entity.ToTable("AdmissionDoctorAssignment");
+                entity.HasKey(a => a.AssignmentId);
+                entity.Property(a => a.AssignedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.UnassignedAt).HasColumnType("datetime2(3)");
                 entity.Property(a => a.CreatedAt).HasColumnType("datetime2(3)");
                 entity.Property(a => a.UpdatedAt).HasColumnType("datetime2(3)");
                 entity.Property(a => a.RowVersion).IsRowVersion();
