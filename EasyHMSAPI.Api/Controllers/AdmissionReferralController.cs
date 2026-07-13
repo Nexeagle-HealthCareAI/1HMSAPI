@@ -46,7 +46,8 @@ namespace EasyHMSAPI.Api.Controllers
         [HttpGet("list")]
         public async Task<ActionResult<GetAdmissionReferralsResponseModel>> GetAdmissionReferrals(
             [FromQuery] Guid hospitalId, [FromQuery] string? patientId, [FromQuery] string? statusCode, [FromQuery] string? caseType,
-            [FromQuery] Guid? referringDoctorId, [FromQuery] DateTime? fromDate, [FromQuery] DateTime? toDate)
+            [FromQuery] Guid? referringDoctorId, [FromQuery] DateTime? fromDate, [FromQuery] DateTime? toDate,
+            [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
         {
             if (hospitalId == Guid.Empty)
                 return BadRequest(new { Message = "hospitalId is required." });
@@ -62,6 +63,8 @@ namespace EasyHMSAPI.Api.Controllers
                     ReferringDoctorId = referringDoctorId,
                     FromDate = fromDate,
                     ToDate = toDate,
+                    Page = page < 1 ? 1 : page,
+                    PageSize = pageSize < 1 ? 5 : pageSize,
                 };
                 var response = await _mediator.Send(request);
                 return Ok(response);
@@ -69,6 +72,48 @@ namespace EasyHMSAPI.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in GetAdmissionReferrals for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
+        // Adds a timestamped, author-attributed comment against a referral row.
+        [HttpPost("comment")]
+        public async Task<ActionResult<AddAdmissionReferralCommentResponseModel>> AddComment([FromBody] AddAdmissionReferralCommentRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.ReferralId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and referralId are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in AddComment for referralId: {ReferralId}", request.ReferralId);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
+        // All comments for one referral, newest first.
+        [HttpGet("comments")]
+        public async Task<ActionResult<GetAdmissionReferralCommentsResponseModel>> GetComments([FromQuery] Guid hospitalId, [FromQuery] Guid referralId)
+        {
+            if (hospitalId == Guid.Empty || referralId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and referralId are required." });
+
+            try
+            {
+                var request = new GetAdmissionReferralCommentsRequestModel { HospitalId = hospitalId, ReferralId = referralId };
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetComments for referralId: {ReferralId}", referralId);
                 return StatusCode(500, new { Message = "An error occurred." });
             }
         }

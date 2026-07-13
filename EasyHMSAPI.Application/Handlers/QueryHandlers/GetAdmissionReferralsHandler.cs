@@ -21,29 +21,47 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             GetAdmissionReferralsResponseModel response = new() { Success = false };
             try
             {
-                var query = _context.AdmissionReferrals
+                // Every filter except StatusCode -- reused both for the paginated listing (with
+                // StatusCode applied on top) and for the StatusCounts breakdown (without it, so
+                // switching status chips never hides sibling counts -- same "faceted filter" UX as
+                // email inbox category tabs).
+                var baseQuery = _context.AdmissionReferrals
                     .Where(r => r.HospitalId == request.HospitalId);
 
                 if (!string.IsNullOrWhiteSpace(request.PatientId))
-                    query = query.Where(r => r.PatientId == request.PatientId);
+                    baseQuery = baseQuery.Where(r => r.PatientId == request.PatientId);
 
+                if (!string.IsNullOrWhiteSpace(request.CaseType))
+                    baseQuery = baseQuery.Where(r => r.CaseType == request.CaseType);
+
+                if (request.ReferringDoctorId.HasValue && request.ReferringDoctorId != Guid.Empty)
+                    baseQuery = baseQuery.Where(r => r.ReferringDoctorId == request.ReferringDoctorId);
+
+                if (request.FromDate.HasValue)
+                    baseQuery = baseQuery.Where(r => r.CreatedAt >= request.FromDate.Value);
+
+                if (request.ToDate.HasValue)
+                    baseQuery = baseQuery.Where(r => r.CreatedAt <= request.ToDate.Value);
+
+                var statusCounts = IpdConstants.ReferralStatus.All
+                    .ToDictionary(s => s, _ => 0);
+                var realCounts = await baseQuery
+                    .GroupBy(r => r.StatusCode)
+                    .Select(g => new { StatusCode = g.Key, Count = g.Count() })
+                    .ToListAsync(cancellationToken);
+                foreach (var c in realCounts)
+                    statusCounts[c.StatusCode] = c.Count;
+
+                var query = baseQuery;
                 if (!string.IsNullOrWhiteSpace(request.StatusCode))
                     query = query.Where(r => r.StatusCode == request.StatusCode);
 
-                if (!string.IsNullOrWhiteSpace(request.CaseType))
-                    query = query.Where(r => r.CaseType == request.CaseType);
-
-                if (request.ReferringDoctorId.HasValue && request.ReferringDoctorId != Guid.Empty)
-                    query = query.Where(r => r.ReferringDoctorId == request.ReferringDoctorId);
-
-                if (request.FromDate.HasValue)
-                    query = query.Where(r => r.CreatedAt >= request.FromDate.Value);
-
-                if (request.ToDate.HasValue)
-                    query = query.Where(r => r.CreatedAt <= request.ToDate.Value);
+                var totalCount = await query.CountAsync(cancellationToken);
 
                 var referrals = await query
                     .OrderByDescending(r => r.CreatedAt)
+                    .Skip((request.Page - 1) * request.PageSize)
+                    .Take(request.PageSize)
                     .ToListAsync(cancellationToken);
 
                 var patientIds = referrals.Select(r => r.PatientId).Distinct().ToList();
@@ -89,6 +107,15 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     .Where(a => convertedAdmissionIds.Contains(a.AdmissionId))
                     .ToDictionaryAsync(a => a.AdmissionId, a => a.AdmittedAt, cancellationToken);
 
+                // Comment count for this page only -- avoids the frontend needing a second round trip
+                // just to know whether a card should show a comment badge; full text lazy-loads on toggle.
+                var referralIds = referrals.Select(r => r.ReferralId).ToList();
+                var commentCountByReferral = await _context.AdmissionReferralComment
+                    .Where(c => referralIds.Contains(c.ReferralId))
+                    .GroupBy(c => c.ReferralId)
+                    .Select(g => new { ReferralId = g.Key, Count = g.Count() })
+                    .ToDictionaryAsync(g => g.ReferralId, g => g.Count, cancellationToken);
+
                 response.Referrals = referrals.Select(r => new AdmissionReferralDataModel
                 {
                     ReferralId = r.ReferralId,
@@ -116,7 +143,12 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     ConvertedAdmissionId = r.ConvertedAdmissionId,
                     AdmittedAt = r.ConvertedAdmissionId.HasValue && admittedAtById.TryGetValue(r.ConvertedAdmissionId.Value, out var admittedAt) ? admittedAt : null,
                     CreatedAt = r.CreatedAt,
+                    CommentCount = commentCountByReferral.TryGetValue(r.ReferralId, out var cc) ? cc : 0,
                 }).ToList();
+                response.Page = request.Page;
+                response.PageSize = request.PageSize;
+                response.TotalCount = totalCount;
+                response.StatusCounts = statusCounts.Select(kv => new ReferralStatusCountItem { StatusCode = kv.Key, Count = kv.Value }).ToList();
                 response.Success = true;
             }
             catch (Exception ex)
