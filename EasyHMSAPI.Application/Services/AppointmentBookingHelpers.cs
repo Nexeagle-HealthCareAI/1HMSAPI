@@ -3,6 +3,7 @@ using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using System.Linq;
 using System.Security.Cryptography;
 
 namespace EasyHMSAPI.Application.Services
@@ -136,6 +137,12 @@ namespace EasyHMSAPI.Application.Services
             return newId;
         }
 
+        // Despite the name, this previously did a plain read-modify-write with no concurrency
+        // protection at all: two simultaneous bookings for the same doctor/date could both read the
+        // same NextTokenNo and race to save it — a silent lost update (no exception), producing
+        // duplicate or skipped token numbers. DoctorQueue now carries a RowVersion concurrency
+        // token, so a losing concurrent write throws DbUpdateConcurrencyException instead of
+        // silently corrupting the counter; this retries against a fresh read when that happens.
         public static async Task<int?> AllocateTokenWithLockingAsync(
             AppDbContext context,
             Guid hospitalId,
@@ -145,63 +152,83 @@ namespace EasyHMSAPI.Application.Services
             CancellationToken cancellationToken)
         {
             var queueDate = apptDate.Date;
+            const int maxAttempts = 5;
 
-            var doctorQueue = await context.DoctorQueues
-                .Where(dq => dq.DoctorId == doctorId && dq.TokenDate == queueDate)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            int tokenNumber;
-            if (doctorQueue == null)
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                doctorQueue = new DoctorQueue
+                try
                 {
-                    HospitalId = hospitalId,
-                    DoctorId = doctorId,
-                    TokenDate = queueDate,
-                    NextTokenNo = 2,
-                    TokenStrategy = AppConstants.TokenStrategy_Sequential,
-                };
-                context.DoctorQueues.Add(doctorQueue);
-                tokenNumber = 1;
-            }
-            else
-            {
-                tokenNumber = doctorQueue.NextTokenNo;
-                doctorQueue.NextTokenNo++;
-            }
+                    var doctorQueue = await context.DoctorQueues
+                        .FirstOrDefaultAsync(dq => dq.HospitalId == hospitalId && dq.DoctorId == doctorId && dq.TokenDate == queueDate, cancellationToken);
 
-            var appointmentToken = await context.AppointmentTokens
-                .FirstOrDefaultAsync(t => t.ApptId == apptId &&
-                                         t.DoctorId == doctorId &&
-                                         t.TokenDate == queueDate &&
-                                         t.HospitalId == hospitalId,
-                                         cancellationToken);
+                    int tokenNumber;
+                    if (doctorQueue == null)
+                    {
+                        doctorQueue = new DoctorQueue
+                        {
+                            HospitalId = hospitalId,
+                            DoctorId = doctorId,
+                            TokenDate = queueDate,
+                            NextTokenNo = 2,
+                            TokenStrategy = AppConstants.TokenStrategy_Sequential,
+                        };
+                        context.DoctorQueues.Add(doctorQueue);
+                        tokenNumber = 1;
+                    }
+                    else
+                    {
+                        tokenNumber = doctorQueue.NextTokenNo;
+                        doctorQueue.NextTokenNo++;
+                    }
 
-            if (appointmentToken == null)
-            {
-                appointmentToken = new AppointmentToken
+                    var appointmentToken = await context.AppointmentTokens
+                        .FirstOrDefaultAsync(t => t.ApptId == apptId, cancellationToken);
+
+                    if (appointmentToken == null)
+                    {
+                        appointmentToken = new AppointmentToken
+                        {
+                            TokenId = Guid.NewGuid(),
+                            HospitalId = hospitalId,
+                            DoctorId = doctorId,
+                            ApptId = apptId,
+                            TokenDate = queueDate,
+                            TokenNo = tokenNumber,
+                            IsManual = false,
+                            CreatedAt = DateTime.UtcNow
+                        };
+                        context.AppointmentTokens.Add(appointmentToken);
+                    }
+                    else
+                    {
+                        appointmentToken.HospitalId = hospitalId;
+                        appointmentToken.DoctorId = doctorId;
+                        appointmentToken.TokenDate = queueDate;
+                        appointmentToken.TokenNo = tokenNumber;
+                        appointmentToken.IsManual = false;
+                        appointmentToken.CreatedAt = DateTime.UtcNow;
+                    }
+
+                    await context.SaveChangesAsync(cancellationToken);
+                    return tokenNumber;
+                }
+                catch (DbUpdateException) when (attempt < maxAttempts)
                 {
-                    TokenId = Guid.NewGuid(),
-                    HospitalId = hospitalId,
-                    DoctorId = doctorId,
-                    ApptId = apptId,
-                    TokenDate = queueDate,
-                    TokenNo = tokenNumber,
-                    IsManual = false,
-                    CreatedAt = DateTime.UtcNow
-                };
-                context.AppointmentTokens.Add(appointmentToken);
-            }
-            else
-            {
-                appointmentToken.TokenNo = tokenNumber;
-                appointmentToken.IsManual = false;
-                appointmentToken.CreatedAt = DateTime.UtcNow;
+                    // Another concurrent booking claimed this slot first — either a PK collision
+                    // creating a brand-new DoctorQueues row, or a RowVersion mismatch updating an
+                    // existing one. Discard whatever this attempt tracked and retry against a fresh
+                    // read; the next attempt sees the other booking's committed NextTokenNo and
+                    // claims the number right after it instead of colliding with it.
+                    foreach (var entry in context.ChangeTracker.Entries()
+                        .Where(e => e.Entity is DoctorQueue || e.Entity is AppointmentToken)
+                        .ToList())
+                    {
+                        entry.State = EntityState.Detached;
+                    }
+                }
             }
 
-            await context.SaveChangesAsync(cancellationToken);
-
-            return tokenNumber;
+            throw new InvalidOperationException("Could not allocate a token number after multiple attempts — please try again.");
         }
     }
 }
