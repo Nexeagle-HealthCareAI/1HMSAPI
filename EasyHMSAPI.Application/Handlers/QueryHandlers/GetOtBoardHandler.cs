@@ -22,13 +22,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
         {
             var todayStart = DateTime.UtcNow.Date;
 
-            // Every active case, plus completed ones only from today — keeps the board a "what's
-            // happening now" view instead of an ever-growing history (full history lives in
+            // Every active case, plus completed/cancelled ones only from today — keeps the board a
+            // "what's happening now" view instead of an ever-growing history (full history lives in
             // SurgeryStatusHistory for reporting).
             var cases = await _context.SurgeryCase
                 .Where(s => s.HospitalId == request.HospitalId
-                         && s.StatusCode != IpdConstants.SurgeryStatus.Cancelled
-                         && (s.StatusCode != IpdConstants.SurgeryStatus.Completed || s.UpdatedAt >= todayStart))
+                         && ((s.StatusCode != IpdConstants.SurgeryStatus.Cancelled && s.StatusCode != IpdConstants.SurgeryStatus.Completed)
+                             || s.UpdatedAt >= todayStart))
                 .OrderBy(s => s.RequestedAt)
                 .ToListAsync(cancellationToken);
 
