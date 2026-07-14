@@ -242,6 +242,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
             if (c.Contains("prescription")) return "Prescription";   // templates, attachments, visit summaries
             if (c.Contains("profile")) return "ProfilePicture";
             if (c.Contains("invoice")) return "Invoice";
+            if (c.Contains("dischargesummary")) return "DischargeSummary";
             if (c.Contains("discharge")) return "DischargeLetterhead";
             if (c.Contains("labreports")) return "LabReports";
             if (c.Contains("admissiondocument")) return "AdmissionDocument";

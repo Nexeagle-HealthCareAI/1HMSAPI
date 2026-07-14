@@ -69,6 +69,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                             SignedByDoctorName = existing.SignedByDoctorName,
                             AdmittingDiagnosis = existing.AdmittingDiagnosis,
                             FinalDiagnosis = existing.FinalDiagnosis,
+                            FinalDiagnosisIcd10Code = existing.FinalDiagnosisIcd10Code,
+                            FinalDiagnosisIcd10Name = existing.FinalDiagnosisIcd10Name,
                             ChiefComplaint = existing.ChiefComplaint,
                             HistoryOfPresentIllness = existing.HistoryOfPresentIllness,
                             CourseInHospital = existing.CourseInHospital,

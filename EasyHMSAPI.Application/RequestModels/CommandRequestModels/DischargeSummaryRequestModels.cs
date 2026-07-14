@@ -18,6 +18,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
 
         public string? AdmittingDiagnosis { get; set; }
         public string? FinalDiagnosis { get; set; }
+        public string? FinalDiagnosisIcd10Code { get; set; }
+        public string? FinalDiagnosisIcd10Name { get; set; }
         public string? ChiefComplaint { get; set; }
         public string? HistoryOfPresentIllness { get; set; }
         public string? CourseInHospital { get; set; }

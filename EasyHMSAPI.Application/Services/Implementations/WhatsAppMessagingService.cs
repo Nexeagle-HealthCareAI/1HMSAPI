@@ -265,6 +265,49 @@ namespace EasyHMSAPI.Application.Services.Implementations
             return SendAsync(nameof(SendPrescriptionAsync), mobileNumber, payload);
         }
 
+        public Task<bool> SendDischargeSummaryAsync(string mobileNumber, string documentLink, string fileName, string hospitalName, string doctorName)
+        {
+            if (!IsEnabled)
+            {
+                _logger.LogInformation("WhatsApp is disabled (WhatsApp:IsEnabled); skipping {Method} for {Mobile}", nameof(SendDischargeSummaryAsync), MaskMobile(mobileNumber));
+                return Task.FromResult(false);
+            }
+
+            var payload = new
+            {
+                messaging_product = "whatsapp",
+                to = mobileNumber,
+                type = "template",
+                template = new
+                {
+                    name = "discharge_summary_sent",
+                    language = new { code = "en" },
+                    components = new object[]
+                    {
+                        new
+                        {
+                            type = "header",
+                            parameters = new object[]
+                            {
+                                new { type = "document", document = new { link = documentLink, filename = fileName } }
+                            }
+                        },
+                        new
+                        {
+                            type = "body",
+                            parameters = new object[]
+                            {
+                                new { type = "text", text = hospitalName, parameter_name = "hospital_name" },
+                                new { type = "text", text = doctorName, parameter_name = "doctor_name" }
+                            }
+                        }
+                    }
+                }
+            };
+
+            return SendAsync(nameof(SendDischargeSummaryAsync), mobileNumber, payload);
+        }
+
         public Task<bool> SendDischargeNotificationAsync(string mobileNumber, string patientName, string hospitalName, string dischargeDate)
         {
             if (!IsEnabled)
