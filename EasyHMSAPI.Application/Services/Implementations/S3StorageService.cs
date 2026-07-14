@@ -35,6 +35,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
         private readonly string _prescriptionAssestsContainer;
         private readonly string _prescriptionAttachmentsContainer;
         private readonly string _prescriptionDrawingsContainer;
+        private readonly string _admissionDocumentsContainer;
         // True only when every required Storage:S3:* setting is actually present — lets us fail
         // fast with a clear message instead of letting the AWS SDK throw an opaque error deep
         // inside an S3 call (e.g. an empty ServiceURL/credentials producing a cryptic exception).
@@ -57,6 +58,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
             _prescriptionAssestsContainer = configuration["BlobStorage:PrescriptionAssetsContainer"] ?? string.Empty;
             _prescriptionAttachmentsContainer = configuration["BlobStorage:PrescriptionAttachmentsContainer"] ?? string.Empty;
             _prescriptionDrawingsContainer = configuration["BlobStorage:PrescriptionDrawingsContainer"] ?? string.Empty;
+            _admissionDocumentsContainer = configuration["BlobStorage:AdmissionDocumentsContainer"] ?? string.Empty;
 
             // Auto-detect bucket-specific virtual-hosted endpoint.
             // E2E Networks (and some other providers) give a per-bucket URL like:
@@ -102,7 +104,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
             var folder = FolderFor(containerName);
 
-            if (containerName == _prescriptionAttachmentsContainer || containerName == _prescriptionDrawingsContainer)
+            if (containerName == _prescriptionAttachmentsContainer || containerName == _prescriptionDrawingsContainer || containerName == _admissionDocumentsContainer)
             {
                 var extension = Path.GetExtension(file.FileName);
                 var blobName = $"{entityId}_{Guid.NewGuid()}_{SanitizeToken(containerName)}{extension}";
@@ -170,7 +172,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
         public async Task<bool> DeleteAsync(string entityId, string containerName, CancellationToken cancellationToken)
         {
             var folder = FolderFor(containerName);
-            var relPrefix = (containerName == _prescriptionAttachmentsContainer || containerName == _prescriptionDrawingsContainer)
+            var relPrefix = (containerName == _prescriptionAttachmentsContainer || containerName == _prescriptionDrawingsContainer || containerName == _admissionDocumentsContainer)
                 ? $"{entityId}_"
                 : $"{entityId}_{containerName}";
 
@@ -242,6 +244,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
             if (c.Contains("invoice")) return "Invoice";
             if (c.Contains("discharge")) return "DischargeLetterhead";
             if (c.Contains("labreports")) return "LabReports";
+            if (c.Contains("admissiondocument")) return "AdmissionDocument";
             return string.IsNullOrWhiteSpace(c) ? "Misc" : char.ToUpperInvariant(c[0]) + c.Substring(1);
         }
 
