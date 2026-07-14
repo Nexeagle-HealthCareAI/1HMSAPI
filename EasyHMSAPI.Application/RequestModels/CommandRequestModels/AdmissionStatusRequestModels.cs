@@ -73,6 +73,9 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         // Links the admission to a real Referrer master record (same entity the admit wizard's
         // search-or-create picker uses) — distinct from ReferralName, which is just the display label.
         public Guid? ReferredByReferrerId { get; set; }
+        // Snapshotted onto the AdmissionReferrerAssignment history row alongside ReferralName —
+        // not persisted directly on Admission itself.
+        public string? ReferrerType { get; set; }
         public string? ReferringFacilityName { get; set; }
         public string? ReferringFacilityType { get; set; }
         public string? ReferringFacilityContact { get; set; }

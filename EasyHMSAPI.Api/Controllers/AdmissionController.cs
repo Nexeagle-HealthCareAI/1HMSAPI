@@ -246,6 +246,52 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Reassigns the admission's "Referred by": releases the current ACTIVE
+        // AdmissionReferrerAssignment row and creates a new one atomically, and updates
+        // Admission.ReferralSource/ReferralName/ReferredByReferrerId. Only while the admission is
+        // still active.
+        [HttpPost("referrer")]
+        public async Task<ActionResult<ChangeAdmissionReferrerResponseModel>> ChangeReferrer([FromBody] ChangeAdmissionReferrerRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty || string.IsNullOrWhiteSpace(request.ReferralSource))
+                return BadRequest(new { Message = "hospitalId, admissionId and referralSource are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in ChangeReferrer for admissionId: {AdmissionId}", request.AdmissionId);
+                return StatusCode(500, new { Message = "An error occurred while changing the referrer." });
+            }
+        }
+
+        // Full assignment history for the admission's "Referred by" -- each row is one referrer's
+        // tenure span (AssignedAt -> UnassignedAt, or "current" while ACTIVE).
+        [HttpGet("referrer/history")]
+        public async Task<ActionResult<GetAdmissionReferrerHistoryResponseModel>> GetReferrerHistory([FromQuery] Guid hospitalId, [FromQuery] Guid admissionId)
+        {
+            if (hospitalId == Guid.Empty || admissionId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and admissionId are required." });
+
+            try
+            {
+                var request = new GetAdmissionReferrerHistoryRequestModel { HospitalId = hospitalId, AdmissionId = admissionId };
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetReferrerHistory for admissionId: {AdmissionId}", admissionId);
+                return StatusCode(500, new { Message = "An error occurred while fetching referrer history." });
+            }
+        }
+
         // Upserts the admission's coverage row (payer name, policy/pre-auth/package, sanctioned
         // amount, entitled room category) — only while the admission is still active.
         [HttpPut("coverage")]

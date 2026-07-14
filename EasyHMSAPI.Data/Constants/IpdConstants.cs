@@ -42,6 +42,25 @@ namespace EasyHMSAPI.Data.Constants
             public const string Replaced = "REPLACED";
         }
 
+        public static class ReferrerAssignmentStatus
+        {
+            public const string Active = "ACTIVE";
+            public const string Replaced = "REPLACED";
+        }
+
+        /// <summary>Admission.ReferralSource — same soft-validated posture as ReferringFacilityType.
+        /// HOSPITAL is intentionally excluded from AdmissionReferrerAssignment's audit trail (see that
+        /// entity's doc comment) but stays a valid Admission.ReferralSource value.</summary>
+        public static class ReferralSourceType
+        {
+            public const string Self = "SELF";
+            public const string Doctor = "DOCTOR";
+            public const string Hospital = "HOSPITAL";
+            public const string Other = "OTHER";
+
+            public static readonly string[] All = { Self, Doctor, Hospital, Other };
+        }
+
         /// <summary>AdmissionReferral.StatusCode — previously soft/undocumented server-side (the
         /// column has no DB CHECK constraint); centralized here so the Referred Admissions board's
         /// KPI counts can be seeded at zero for every known status before merging in real counts,
