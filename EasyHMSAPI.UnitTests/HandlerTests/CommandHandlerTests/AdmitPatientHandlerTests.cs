@@ -124,6 +124,34 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task Handle_PackageTypeIdSupplied_SnapshotsName()
+        {
+            var (hospitalId, doctorId, patientId) = SeedBasics();
+            var packageType = new PackageType
+            {
+                PackageTypeId = Guid.NewGuid(), HospitalId = hospitalId,
+                Name = "Full Package", IsActive = true,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+            };
+            _context.PackageTypes.Add(packageType);
+            await _context.SaveChangesAsync();
+
+            var request = new AdmitPatientRequestModel
+            {
+                HospitalId = hospitalId, PatientId = patientId, PrimaryDoctorId = doctorId,
+                AdmissionType = "ELECTIVE", PackageTypeId = packageType.PackageTypeId, EnableIpdBilling = false,
+                LoggedInUserName = "Front Desk",
+            };
+
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True, response.Message);
+            var admission = await _context.Admission.FindAsync(response.AdmissionId);
+            Assert.That(admission!.PackageTypeId, Is.EqualTo(packageType.PackageTypeId));
+            Assert.That(admission.PackageTypeNameSnapshot, Is.EqualTo("Full Package"));
+        }
+
+        [Test]
         public async Task Handle_ExplicitEntitledRoomCategory_OverridesOtPlanDefault()
         {
             var (hospitalId, doctorId, patientId) = SeedBasics();

@@ -143,6 +143,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         EntitledRoomCategory = coverage?.EntitledRoomCategory,
                         OtPlanProcedureNameSnapshot = a.OtPlanProcedureNameSnapshot,
                         OtPlanSuggestedIcuLevel = a.OtPlanSuggestedIcuLevel,
+                        PackageTypeNameSnapshot = a.PackageTypeNameSnapshot,
                     };
                 }).ToList();
 

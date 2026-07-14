@@ -88,10 +88,13 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             // "Smith"/"Smyth" is a textbook Soundex-equivalent pair (same phonetic code), so "Smyth"
             // passes the SQL candidate filter via Soundex even though it doesn't contain "smith" as a
             // substring — it should still come back, ranked below the exact match via Jaro-Winkler.
+            // FullNameSoundex is a DB-computed PERSISTED column in production (see
+            // alter_patientregistrations_add_soundex_index) — the InMemory provider doesn't emulate
+            // computed columns, so tests must set it explicitly the same way the DB would.
             var hospitalId = Guid.NewGuid();
             _context.PatientRegistrations.AddRange(
-                new PatientRegistration { PatientId = "PAT-EXACT", HospitalId = hospitalId, FullName = "Smith" },
-                new PatientRegistration { PatientId = "PAT-FUZZY", HospitalId = hospitalId, FullName = "Smyth" }
+                new PatientRegistration { PatientId = "PAT-EXACT", HospitalId = hospitalId, FullName = "Smith", FullNameSoundex = AppDbContext.Soundex("Smith") },
+                new PatientRegistration { PatientId = "PAT-FUZZY", HospitalId = hospitalId, FullName = "Smyth", FullNameSoundex = AppDbContext.Soundex("Smyth") }
             );
             await _context.SaveChangesAsync();
 

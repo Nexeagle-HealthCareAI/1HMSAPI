@@ -935,6 +935,18 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(r => r.RowVersion).IsRowVersion();
             });
 
+            modelBuilder.Entity<PatientRegistration>(entity =>
+            {
+                entity.ToTable("PatientRegistrations");
+                entity.HasKey(p => p.RegistrationId);
+                // FullNameSoundex is a computed PERSISTED column in the DB (SOUNDEX(FullName)) —
+                // see SearchPatientHandler for why this needs to be an indexed column, not an
+                // inline SOUNDEX() call.
+                entity.Property(p => p.FullNameSoundex)
+                      .ValueGeneratedOnAddOrUpdate()
+                      .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Ignore);
+            });
+
             modelBuilder.Entity<BillingChargeEvent>(entity =>
             {
                 entity.ToTable("BillingChargeEvent");
