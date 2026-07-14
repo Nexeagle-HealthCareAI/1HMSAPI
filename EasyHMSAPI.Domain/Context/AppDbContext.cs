@@ -185,6 +185,11 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<IcuLevelOfCare> IcuLevelOfCare { get; set; }
         public DbSet<ApacheIIScore> ApacheIIScore { get; set; }
         public DbSet<SofaScore> SofaScore { get; set; }
+        public DbSet<EarlyWarningScore> EarlyWarningScore { get; set; }
+        public DbSet<RapidResponseActivation> RapidResponseActivation { get; set; }
+        public DbSet<DeviceAssignment> DeviceAssignment { get; set; }
+        public DbSet<DeviceCareBundleCheck> DeviceCareBundleCheck { get; set; }
+        public DbSet<InfectionEvent> InfectionEvent { get; set; }
         public DbSet<ChargeMasterPayerRate> ChargeMasterPayerRate { get; set; }
         public DbSet<RoomClassRateMultiplier> RoomClassRateMultiplier { get; set; }
         public DbSet<ConsultantIncentiveLedger> ConsultantIncentiveLedger { get; set; }
@@ -1442,6 +1447,58 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(s => s.ScoredAt).HasColumnType("datetime2(3)");
                 entity.Property(s => s.CreatedAt).HasColumnType("datetime2(3)");
                 entity.Property(s => s.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<EarlyWarningScore>(entity =>
+            {
+                entity.ToTable("EarlyWarningScore");
+                entity.HasKey(e => e.ScoreId);
+                entity.Property(e => e.Spo2).HasPrecision(5, 2);
+                entity.Property(e => e.TemperatureC).HasPrecision(5, 2);
+                entity.Property(e => e.ScoredAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<RapidResponseActivation>(entity =>
+            {
+                entity.ToTable("RapidResponseActivation");
+                entity.HasKey(r => r.ActivationId);
+                entity.Property(r => r.CalledAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.ArrivedAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.ResolvedAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<DeviceAssignment>(entity =>
+            {
+                entity.ToTable("DeviceAssignment");
+                entity.HasKey(d => d.DeviceAssignmentId);
+                entity.Property(d => d.InsertedAt).HasColumnType("datetime2(3)");
+                entity.Property(d => d.RemovedAt).HasColumnType("datetime2(3)");
+                entity.Property(d => d.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(d => d.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(d => d.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<DeviceCareBundleCheck>(entity =>
+            {
+                entity.ToTable("DeviceCareBundleCheck");
+                entity.HasKey(c => c.CheckId);
+                entity.Property(c => c.CheckedAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<InfectionEvent>(entity =>
+            {
+                entity.ToTable("InfectionEvent");
+                entity.HasKey(i => i.InfectionEventId);
+                entity.Property(i => i.DiagnosedAt).HasColumnType("datetime2(3)");
+                entity.Property(i => i.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(i => i.RowVersion).IsRowVersion();
             });
 
             modelBuilder.Entity<ChargeMasterPayerRate>(entity =>

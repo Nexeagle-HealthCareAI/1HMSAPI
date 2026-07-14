@@ -65,7 +65,45 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .GroupBy(s => s.AdmissionId)
                 .Select(g => g.OrderByDescending(x => x.ScoredAt).First())
                 .ToDictionaryAsync(s => s.AdmissionId, cancellationToken);
-                
+
+            // Latest Early Warning Score
+            var latestEws = await _context.EarlyWarningScore
+                .Where(s => admissionIds.Contains(s.AdmissionId))
+                .GroupBy(s => s.AdmissionId)
+                .Select(g => g.OrderByDescending(x => x.ScoredAt).First())
+                .ToDictionaryAsync(s => s.AdmissionId, cancellationToken);
+
+            // Admissions with a currently-open Rapid Response activation
+            var openRrtAdmissionIds = (await _context.RapidResponseActivation
+                    .Where(r => admissionIds.Contains(r.AdmissionId) && r.ResolvedAt == null)
+                    .Select(r => r.AdmissionId)
+                    .ToListAsync(cancellationToken))
+                .ToHashSet();
+
+            // Active devices (central line/catheter/ETT) per admission, plus each device's latest
+            // bundle-compliance check time -- a device is "overdue" once >24h have passed since its
+            // last check (or since insertion, if never checked). Plain UTC comparison, no timezone math.
+            var activeDevices = await _context.DeviceAssignment
+                .Where(d => admissionIds.Contains(d.AdmissionId) && d.StatusCode == IpdConstants.DeviceStatus.Active)
+                .ToListAsync(cancellationToken);
+
+            var activeDeviceIds = activeDevices.Select(d => d.DeviceAssignmentId).ToList();
+            var latestCheckByDevice = await _context.DeviceCareBundleCheck
+                .Where(c => activeDeviceIds.Contains(c.DeviceAssignmentId))
+                .GroupBy(c => c.DeviceAssignmentId)
+                .Select(g => g.OrderByDescending(x => x.CheckedAt).First())
+                .ToDictionaryAsync(c => c.DeviceAssignmentId, cancellationToken);
+
+            var nowForBundleCheck = DateTime.UtcNow;
+            var overdueAdmissionIds = activeDevices
+                .Where(d =>
+                {
+                    var lastChecked = latestCheckByDevice.TryGetValue(d.DeviceAssignmentId, out var check) ? check.CheckedAt : d.InsertedAt;
+                    return nowForBundleCheck - lastChecked > TimeSpan.FromHours(24);
+                })
+                .Select(d => d.AdmissionId)
+                .ToHashSet();
+
             var icuCases = new List<IcuBoardCaseDataModel>();
             
             foreach (var a in activeAdmissions)
@@ -86,6 +124,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 
                 latestApache.TryGetValue(a.AdmissionId, out var apache);
                 latestSofa.TryGetValue(a.AdmissionId, out var sofa);
+                latestEws.TryGetValue(a.AdmissionId, out var ews);
 
                 icuCases.Add(new IcuBoardCaseDataModel
                 {
@@ -98,7 +137,12 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     ApacheScore = apache?.TotalScore,
                     SofaScore = sofa?.TotalScore,
                     OnVentilator = sofa?.OnRespiratorySupport ?? false,
-                    PrimaryDiagnosis = null // Admission doesn't have ProvisionalDiagnosis in EasyHMS
+                    PrimaryDiagnosis = null, // Admission doesn't have ProvisionalDiagnosis in EasyHMS
+                    EwsScore = ews?.TotalScore,
+                    EwsRiskBand = ews?.RiskBand,
+                    HasOpenRapidResponse = openRrtAdmissionIds.Contains(a.AdmissionId),
+                    ActiveDeviceCount = activeDevices.Count(d => d.AdmissionId == a.AdmissionId),
+                    HasOverdueBundleCheck = overdueAdmissionIds.Contains(a.AdmissionId),
                 });
             }
             

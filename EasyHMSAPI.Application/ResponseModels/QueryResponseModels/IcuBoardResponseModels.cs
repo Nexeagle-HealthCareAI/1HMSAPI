@@ -21,5 +21,10 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public decimal? SofaScore { get; set; }
         public bool OnVentilator { get; set; }
         public string? PrimaryDiagnosis { get; set; }
+        public int? EwsScore { get; set; }
+        public string? EwsRiskBand { get; set; }
+        public bool HasOpenRapidResponse { get; set; }
+        public int ActiveDeviceCount { get; set; }
+        public bool HasOverdueBundleCheck { get; set; }
     }
 }
