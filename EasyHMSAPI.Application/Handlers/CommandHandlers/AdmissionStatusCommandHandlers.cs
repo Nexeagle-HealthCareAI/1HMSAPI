@@ -286,6 +286,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 if (!string.IsNullOrWhiteSpace(request.ReferralSource)) admission.ReferralSource = request.ReferralSource.Trim().ToUpperInvariant();
                 if (!string.IsNullOrWhiteSpace(request.ReferralName)) admission.ReferralName = request.ReferralName.Trim();
+                if (request.ReferredByReferrerId.HasValue && request.ReferredByReferrerId != Guid.Empty) admission.ReferredByReferrerId = request.ReferredByReferrerId;
                 if (!string.IsNullOrWhiteSpace(request.ReferringFacilityName)) admission.ReferringFacilityName = request.ReferringFacilityName.Trim();
                 if (!string.IsNullOrWhiteSpace(request.ReferringFacilityType)) admission.ReferringFacilityType = request.ReferringFacilityType.Trim().ToUpperInvariant();
                 if (!string.IsNullOrWhiteSpace(request.ReferringFacilityContact)) admission.ReferringFacilityContact = request.ReferringFacilityContact.Trim();

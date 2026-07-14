@@ -168,7 +168,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             AdmissionReason = request.AdmissionReason,
                             Diagnosis = request.Diagnosis,
                             OtPlanId = otPlan?.OtPlanId,
-                            OtPlanProcedureNameSnapshot = otPlan?.ProcedureName,
+                            OtPlanProcedureNameSnapshot = otPlan?.ProcedureName
+                                ?? (string.IsNullOrWhiteSpace(request.CustomOtPlanText) ? null : request.CustomOtPlanText.Trim()),
                             OtPlanSuggestedIcuLevel = otPlan?.SuggestedIcuLevel,
                             PayerType = payerType,
                             DepositExpected = request.DepositExpected,

@@ -70,6 +70,9 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public decimal? DepositExpected { get; set; }
         public string? ReferralSource { get; set; }
         public string? ReferralName { get; set; }
+        // Links the admission to a real Referrer master record (same entity the admit wizard's
+        // search-or-create picker uses) — distinct from ReferralName, which is just the display label.
+        public Guid? ReferredByReferrerId { get; set; }
         public string? ReferringFacilityName { get; set; }
         public string? ReferringFacilityType { get; set; }
         public string? ReferringFacilityContact { get; set; }

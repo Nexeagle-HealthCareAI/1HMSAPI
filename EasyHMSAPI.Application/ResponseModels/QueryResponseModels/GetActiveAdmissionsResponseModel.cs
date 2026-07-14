@@ -33,6 +33,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
 
         public string? ReferralSource { get; set; }
         public string? ReferralName { get; set; }
+        public Guid? ReferredByReferrerId { get; set; }
         public string? ReferringFacilityName { get; set; }
         public string? ReferringFacilityType { get; set; }
         public string? ReferringFacilityContact { get; set; }
