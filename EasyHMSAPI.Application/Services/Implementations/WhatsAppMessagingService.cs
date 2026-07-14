@@ -63,6 +63,10 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
         public Task<bool> SendOtpAsync(string mobileNumber, string otp)
         {
+            // OTP always attempts delivery regardless of WhatsApp:IsEnabled — it's the primary
+            // auth channel, unlike the other template sends here which are non-critical and
+            // gated behind that flag.
+
             // Normalize to E.164 style (no '+') as required by the Meta Cloud API.
             // e.g. "9876543210" -> "919876543210" (country code prepended)
             var to = NormalizeToE164(mobileNumber);
@@ -184,11 +188,9 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
         public Task<bool> SendAppointmentConfirmationAsync(string mobileNumber, string patientName, string hospitalName, string doctorName, string tokenNumber, string appointmentDate, string appointmentTime)
         {
-            if (!IsEnabled)
-            {
-                _logger.LogInformation("WhatsApp is disabled (WhatsApp:IsEnabled); skipping {Method} for {Mobile}", nameof(SendAppointmentConfirmationAsync), MaskMobile(mobileNumber));
-                return Task.FromResult(false);
-            }
+            // Same as SendOtpAsync — appointment confirmation always attempts delivery regardless
+            // of WhatsApp:IsEnabled, since this is a patient-facing confirmation the hospital
+            // relies on, not one of the non-critical/not-yet-approved template sends below.
 
             doctorName = FormatDoctorName(doctorName);
             var appointmentDateTime = $"{appointmentDate} at {appointmentTime}";

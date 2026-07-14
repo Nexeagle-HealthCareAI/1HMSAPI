@@ -1,6 +1,7 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services;
+using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
@@ -15,15 +16,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     /// moment — nothing was reserved when the pre-appointment was booked publicly — so this is
     /// where the conflict check belongs (mirrors DoctorBookedSlotsHandler's own booked-slots query),
     /// and where status resolution + token allocation reuse the same shared helpers
-    /// RegisterAppointmentHandler uses, so the rules never drift between the two paths.
+    /// RegisterAppointmentHandler uses, so the rules never drift between the two paths. This is also
+    /// the right point for the WhatsApp confirmation — a public pre-appointment has no real
+    /// doctor/date/time/token yet to confirm, only this step does.
     /// </summary>
     public class ConfirmPreAppointmentHandler : IRequestHandler<ConfirmPreAppointmentRequestModel, ConfirmPreAppointmentResponseModel>
     {
         private readonly AppDbContext _context;
+        private readonly IWhatsAppMessagingService _whatsAppMessagingService;
 
-        public ConfirmPreAppointmentHandler(AppDbContext context)
+        public ConfirmPreAppointmentHandler(AppDbContext context, IWhatsAppMessagingService whatsAppMessagingService)
         {
             _context = context;
+            _whatsAppMessagingService = whatsAppMessagingService;
         }
 
         public async Task<ConfirmPreAppointmentResponseModel> Handle(ConfirmPreAppointmentRequestModel request, CancellationToken cancellationToken)
@@ -73,6 +78,47 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             var tokenNumber = await AppointmentBookingHelpers.AllocateTokenWithLockingAsync(
                 _context, request.HospitalId, appointment.DoctorId, appointment.ApptDate, appointment.ApptId, cancellationToken);
 
+            var isReminderSent = false;
+            try
+            {
+                var patient = await _context.PatientRegistrations
+                    .FirstOrDefaultAsync(p => p.PatientId == appointment.PatientId, cancellationToken);
+
+                if (patient != null && !string.IsNullOrWhiteSpace(patient.Mobile))
+                {
+                    var hospitalName = await _context.Hospitals
+                        .Where(h => h.HospitalID == request.HospitalId)
+                        .Select(h => h.Name)
+                        .FirstOrDefaultAsync(cancellationToken);
+                    var doctorName = await _context.Doctors
+                        .Where(d => d.DoctorID == appointment.DoctorId)
+                        .Select(d => d.User.UserProfiles.FirstOrDefault()!.FullName)
+                        .FirstOrDefaultAsync(cancellationToken);
+
+                    var token = string.Empty;
+                    if (tokenNumber.HasValue && tokenNumber.Value > 0)
+                    {
+                        var groupIndex = (tokenNumber.Value - 1) / 30;
+                        var prefix = (char)(65 + groupIndex);
+                        var num = ((tokenNumber.Value - 1) % 30) + 1;
+                        token = $"{prefix}-{num}";
+                    }
+
+                    isReminderSent = await _whatsAppMessagingService.SendAppointmentConfirmationAsync(
+                        patient.Mobile,
+                        patient.FullName ?? string.Empty,
+                        hospitalName ?? string.Empty,
+                        doctorName ?? string.Empty,
+                        token,
+                        appointment.ApptDate.ToString("dd-MM-yyyy"),
+                        appointment.StartAt.ToString("HH:mm"));
+                }
+            }
+            catch
+            {
+                // Best-effort — never fail the confirmation because WhatsApp delivery threw.
+            }
+
             return new ConfirmPreAppointmentResponseModel
             {
                 Success = true,
@@ -80,6 +126,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 AppointmentId = appointment.ApptId,
                 Status = newStatus,
                 TokenNumber = tokenNumber,
+                IsReminderSent = isReminderSent,
             };
         }
     }
