@@ -22,6 +22,8 @@ namespace EasyHMSAPI.Domain.Entities
 
         public string? AdmittingDiagnosis { get; set; }
         public string? FinalDiagnosis { get; set; }
+        public string? FinalDiagnosisIcd10Code { get; set; }
+        public string? FinalDiagnosisIcd10Name { get; set; }
         public string? ChiefComplaint { get; set; }
         public string? HistoryOfPresentIllness { get; set; }
         public string? CourseInHospital { get; set; }
@@ -41,6 +43,13 @@ namespace EasyHMSAPI.Domain.Entities
         public string? SignedBy { get; set; }
         public Guid? SignedByDoctorId { get; set; }
         public string? SignedByDoctorName { get; set; }
+
+        // Stable object-key prefix for re-signing a fresh presigned URL on every view (never a raw
+        // URL — those expire). AccessToken is the long random opaque string a QR/WhatsApp link
+        // encodes — lets the patient view the PDF without logging in, without being guessable.
+        public string? PdfBlobKey { get; set; }
+        public string? AccessToken { get; set; }
+        public DateTime? PdfUploadedAt { get; set; }
 
         public DateTime CreatedAt { get; set; }
         public string? CreatedBy { get; set; }

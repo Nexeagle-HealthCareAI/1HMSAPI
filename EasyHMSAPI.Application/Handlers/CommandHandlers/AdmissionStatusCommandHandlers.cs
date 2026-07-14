@@ -284,8 +284,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     admission.PayerType = payerType;
                 }
 
-                if (!string.IsNullOrWhiteSpace(request.ReferralSource)) admission.ReferralSource = request.ReferralSource.Trim().ToUpperInvariant();
-                if (!string.IsNullOrWhiteSpace(request.ReferralName)) admission.ReferralName = request.ReferralName.Trim();
+                // Routed through the same helper the dedicated "Change referrer" action uses, so
+                // both entry points write one consistent AdmissionReferrerAssignment history trail.
+                // Only acts when ReferralSource is actually supplied — callers that don't touch the
+                // referral section at all leave these fields untouched, same as before.
+                if (!string.IsNullOrWhiteSpace(request.ReferralSource))
+                {
+                    var normalizedSource = request.ReferralSource.Trim().ToUpperInvariant();
+                    var referrerId = normalizedSource == "SELF" ? null : request.ReferredByReferrerId;
+                    var referrerName = normalizedSource == "SELF" ? null : request.ReferralName;
+                    var referrerType = normalizedSource == "SELF" ? null : request.ReferrerType;
+                    await AdmissionReferrerAssignmentHelper.ChangeReferrerAsync(
+                        _context, admission, normalizedSource, referrerId, referrerName, referrerType, request.LoggedInUserName, now, cancellationToken);
+                }
                 if (!string.IsNullOrWhiteSpace(request.ReferringFacilityName)) admission.ReferringFacilityName = request.ReferringFacilityName.Trim();
                 if (!string.IsNullOrWhiteSpace(request.ReferringFacilityType)) admission.ReferringFacilityType = request.ReferringFacilityType.Trim().ToUpperInvariant();
                 if (!string.IsNullOrWhiteSpace(request.ReferringFacilityContact)) admission.ReferringFacilityContact = request.ReferringFacilityContact.Trim();

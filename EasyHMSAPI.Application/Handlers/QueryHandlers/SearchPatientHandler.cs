@@ -30,20 +30,24 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
             var searchTerm = request.SearchText?.ToLower() ?? string.Empty;
 
-            // Apply search text filter across multiple columns if provided
+            // Apply search text filter across multiple columns if provided.
+            // Performance note: the phonetic-match branch compares against FullNameSoundex (an
+            // indexed, persisted computed column — see alter_patientregistrations_add_soundex_index
+            // migration), not an inline SOUNDEX(p.FullName) call. A per-row scalar SOUNDEX() forces
+            // a full table scan since it can't use the (HospitalID, FullName) index; the persisted
+            // column turns it into a plain indexed equality lookup. This previously also carried a
+            // correlated Appointments subquery converting ApptId to a string per candidate row on
+            // every keystroke — removed, since the search box no longer offers "by appointment ID".
             if (!string.IsNullOrEmpty(request.SearchText))
             {
+                var searchSoundex = AppDbContext.Soundex(request.SearchText);
                 query = query.Where(p =>
-                    (p.FullName != null && (p.FullName.ToLower().Contains(searchTerm) || AppDbContext.Soundex(p.FullName) == AppDbContext.Soundex(searchTerm))) ||
+                    (p.FullName != null && (p.FullName.ToLower().Contains(searchTerm) || p.FullNameSoundex == searchSoundex)) ||
                     (p.PatientId != null && p.PatientId.ToLower().Contains(searchTerm)) ||
                     (p.Mobile != null && p.Mobile.Contains(searchTerm)) ||
                     (p.AlternateMobile != null && p.AlternateMobile.Contains(searchTerm)) ||
                     (p.AadhaarNumber != null && p.AadhaarNumber.Contains(searchTerm)) ||
-                    (p.AbhaId != null && p.AbhaId.ToLower().Contains(searchTerm)) ||
-                    _context.Appointments.Any(a =>
-                        a.PatientId == p.PatientId &&
-                        a.HospitalId == request.HospitalId &&
-                        a.ApptId.ToString().Contains(searchTerm))
+                    (p.AbhaId != null && p.AbhaId.ToLower().Contains(searchTerm))
                 );
             }
 

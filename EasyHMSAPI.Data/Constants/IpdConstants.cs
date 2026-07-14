@@ -42,6 +42,25 @@ namespace EasyHMSAPI.Data.Constants
             public const string Replaced = "REPLACED";
         }
 
+        public static class ReferrerAssignmentStatus
+        {
+            public const string Active = "ACTIVE";
+            public const string Replaced = "REPLACED";
+        }
+
+        /// <summary>Admission.ReferralSource — same soft-validated posture as ReferringFacilityType.
+        /// HOSPITAL is intentionally excluded from AdmissionReferrerAssignment's audit trail (see that
+        /// entity's doc comment) but stays a valid Admission.ReferralSource value.</summary>
+        public static class ReferralSourceType
+        {
+            public const string Self = "SELF";
+            public const string Doctor = "DOCTOR";
+            public const string Hospital = "HOSPITAL";
+            public const string Other = "OTHER";
+
+            public static readonly string[] All = { Self, Doctor, Hospital, Other };
+        }
+
         /// <summary>AdmissionReferral.StatusCode — previously soft/undocumented server-side (the
         /// column has no DB CHECK constraint); centralized here so the Referred Admissions board's
         /// KPI counts can be seeded at zero for every known status before merging in real counts,
@@ -777,6 +796,104 @@ namespace EasyHMSAPI.Data.Constants
             public const string DopamineMedOrEpiLowOrNorepiLow = "DOPAMINE_MED_OR_EPI_LOW_OR_NOREPI_LOW";
             public const string DopamineHighOrEpiHighOrNorepiHigh = "DOPAMINE_HIGH_OR_EPI_HIGH_OR_NOREPI_HIGH";
             public static readonly string[] All = { None, MapLow, DopamineLowOrDobutamine, DopamineMedOrEpiLowOrNorepiLow, DopamineHighOrEpiHighOrNorepiHigh };
+        }
+
+        // ---- Early Warning Score (NEWS2-style) + Rapid Response ----
+
+        public static class EwsConsciousnessLevel
+        {
+            public const string Alert = "ALERT";
+            public const string Voice = "VOICE";
+            public const string Pain = "PAIN";
+            public const string Unresponsive = "UNRESPONSIVE";
+            public const string ConfusionNew = "CONFUSION_NEW";
+            public static readonly string[] All = { Alert, Voice, Pain, Unresponsive, ConfusionNew };
+        }
+
+        public static class EwsRiskBand
+        {
+            public const string Low = "LOW";
+            public const string LowMedium = "LOW_MEDIUM";
+            public const string Medium = "MEDIUM";
+            public const string High = "HIGH";
+        }
+
+        public static class RrtTriggerReason
+        {
+            public const string HighEws = "HIGH_EWS";
+            public const string NurseConcern = "NURSE_CONCERN";
+            public const string Other = "OTHER";
+            public static readonly string[] All = { HighEws, NurseConcern, Other };
+        }
+
+        public static class RrtOutcome
+        {
+            public const string StabilizedOnWard = "STABILIZED_ON_WARD";
+            public const string TransferredIcu = "TRANSFERRED_ICU";
+            public const string Other = "OTHER";
+            public static readonly string[] All = { StabilizedOnWard, TransferredIcu, Other };
+        }
+
+        public static class IcuDeviceType
+        {
+            public const string CentralLine = "CENTRAL_LINE";
+            public const string UrinaryCatheter = "URINARY_CATHETER";
+            public const string Ett = "ETT";
+            public static readonly string[] All = { CentralLine, UrinaryCatheter, Ett };
+        }
+
+        public static class DeviceStatus
+        {
+            public const string Active = "ACTIVE";
+            public const string Removed = "REMOVED";
+            public static readonly string[] All = { Active, Removed };
+        }
+
+        public static class InfectionType
+        {
+            public const string Clabsi = "CLABSI";
+            public const string Cauti = "CAUTI";
+            public const string Vap = "VAP";
+            public const string Other = "OTHER";
+            public static readonly string[] All = { Clabsi, Cauti, Vap, Other };
+        }
+
+        public record CareBundleItemDef(string Key, string Label);
+
+        /// <summary>Fixed CLABSI/CAUTI/VAP daily care-bundle checklists, keyed by
+        /// IcuDeviceType. Single source of truth for both validating a submitted check's
+        /// item keys and serving item labels to the frontend, so the list isn't duplicated
+        /// across codebases (mirrors the WHO_CHECKLIST_PHASES checklist-items-as-data
+        /// pattern on the OT Board).</summary>
+        public static class CareBundleItems
+        {
+            public static readonly IReadOnlyDictionary<string, CareBundleItemDef[]> All = new Dictionary<string, CareBundleItemDef[]>
+            {
+                [IcuDeviceType.CentralLine] = new[]
+                {
+                    new CareBundleItemDef("hand_hygiene", "Hand hygiene performed before line access"),
+                    new CareBundleItemDef("dressing_intact", "Dressing clean, dry, and intact (occlusive)"),
+                    new CareBundleItemDef("hub_disinfection", "Hub/needleless connector disinfected before access"),
+                    new CareBundleItemDef("daily_necessity", "Line necessity reviewed — still clinically indicated"),
+                    new CareBundleItemDef("site_inspection", "Insertion site inspected for redness/swelling/discharge"),
+                },
+                [IcuDeviceType.UrinaryCatheter] = new[]
+                {
+                    new CareBundleItemDef("catheter_indicated", "Catheter still clinically indicated"),
+                    new CareBundleItemDef("closed_system", "Closed drainage system intact, no breaks"),
+                    new CareBundleItemDef("bag_below_bladder", "Drainage bag kept below bladder level"),
+                    new CareBundleItemDef("securement_device", "Securement device in place, no traction on tubing"),
+                    new CareBundleItemDef("meatal_care", "Meatal/perineal care performed"),
+                },
+                [IcuDeviceType.Ett] = new[]
+                {
+                    new CareBundleItemDef("head_of_bed", "Head of bed elevated 30–45°"),
+                    new CareBundleItemDef("sedation_review", "Daily sedation interruption / SAT assessed"),
+                    new CareBundleItemDef("oral_care", "Oral care with chlorhexidine performed"),
+                    new CareBundleItemDef("subglottic_suction", "Subglottic secretion suctioning performed (if applicable)"),
+                    new CareBundleItemDef("dvt_ulcer_prophylaxis", "DVT and stress-ulcer prophylaxis in place"),
+                },
+            };
         }
 
         // ---- Billing / GST ----

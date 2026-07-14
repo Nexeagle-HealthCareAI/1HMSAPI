@@ -95,6 +95,14 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         // Optional OT Plan picked in the admit wizard — pre-fills EntitledRoomCategory (when not
         // explicitly supplied) and snapshots ProcedureName/SuggestedIcuLevel onto the admission.
         public Guid? OtPlanId { get; set; }
+        // Free-text plan name used only when the desired plan isn't in the OT Plan master list and
+        // OtPlanId is left empty — stored directly into OtPlanProcedureNameSnapshot, same as a real
+        // OT Plan's ProcedureName would be. Ignored if OtPlanId is also supplied.
+        public string? CustomOtPlanText { get; set; }
+        // Optional Package Type picked in the admit wizard, from the hospital's Package Type master
+        // (same master used by Advise Admission / OT Plan editor) — snapshotted (name) onto the
+        // admission at admit time, same freeze pattern as OT Plan.
+        public Guid? PackageTypeId { get; set; }
         // Optional — set when admitting from a Referred Admissions board row. On success, that
         // referral is atomically marked CONVERTED and linked to this admission.
         public Guid? ReferralId { get; set; }

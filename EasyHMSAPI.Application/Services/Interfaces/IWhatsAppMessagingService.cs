@@ -13,5 +13,11 @@
         /// Business Manager; returns false (no-op, matches SendLoginDetailsAsync's behavior today)
         /// until that template exists.</summary>
         Task<bool> SendDischargeNotificationAsync(string mobileNumber, string patientName, string hospitalName, string dischargeDate);
+
+        /// <summary>Sends the discharge summary PDF as a WhatsApp document attachment — same
+        /// document-header template shape as SendPrescriptionAsync. Requires a
+        /// "discharge_summary_sent" template approved in Meta Business Manager; returns false
+        /// (no-op) until that template exists.</summary>
+        Task<bool> SendDischargeSummaryAsync(string mobileNumber, string documentLink, string fileName, string hospitalName, string doctorName);
     }
 }

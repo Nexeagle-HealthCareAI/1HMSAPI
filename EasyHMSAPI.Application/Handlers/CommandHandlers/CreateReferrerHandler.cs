@@ -47,6 +47,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             return new CreateReferrerResponseModel
             {
                 ReferrerId = referrer.ReferrerId,
+                ReferrerName = referrer.ReferrerName,
                 Message = "Referrer created successfully"
             };
         }

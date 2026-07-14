@@ -52,6 +52,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                     existing.AdmittingDiagnosis = request.AdmittingDiagnosis;
                     existing.FinalDiagnosis = request.FinalDiagnosis;
+                    existing.FinalDiagnosisIcd10Code = request.FinalDiagnosisIcd10Code;
+                    existing.FinalDiagnosisIcd10Name = request.FinalDiagnosisIcd10Name;
                     existing.ChiefComplaint = request.ChiefComplaint;
                     existing.HistoryOfPresentIllness = request.HistoryOfPresentIllness;
                     existing.CourseInHospital = request.CourseInHospital;
@@ -82,6 +84,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     PatientId = admission.PatientId,
                     AdmittingDiagnosis = request.AdmittingDiagnosis,
                     FinalDiagnosis = request.FinalDiagnosis,
+                    FinalDiagnosisIcd10Code = request.FinalDiagnosisIcd10Code,
+                    FinalDiagnosisIcd10Name = request.FinalDiagnosisIcd10Name,
                     ChiefComplaint = request.ChiefComplaint,
                     HistoryOfPresentIllness = request.HistoryOfPresentIllness,
                     CourseInHospital = request.CourseInHospital,

@@ -144,6 +144,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             ? request.EntitledRoomCategory
                             : otPlan?.DefaultRoomCategory;
 
+                        // ── Package Type (optional) — snapshots its name onto the admission, same
+                        //    freeze-at-admit-time rule as OT Plan above ──
+                        PackageType? packageType = null;
+                        if (request.PackageTypeId.HasValue && request.PackageTypeId != Guid.Empty)
+                        {
+                            packageType = await _context.PackageTypes
+                                .FirstOrDefaultAsync(p => p.PackageTypeId == request.PackageTypeId && p.HospitalId == request.HospitalId, cancellationToken);
+                        }
+
                         var admittedAt = request.AdmittedAt ?? now;
                         var admission = new Admission
                         {
@@ -168,8 +177,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             AdmissionReason = request.AdmissionReason,
                             Diagnosis = request.Diagnosis,
                             OtPlanId = otPlan?.OtPlanId,
-                            OtPlanProcedureNameSnapshot = otPlan?.ProcedureName,
+                            OtPlanProcedureNameSnapshot = otPlan?.ProcedureName
+                                ?? (string.IsNullOrWhiteSpace(request.CustomOtPlanText) ? null : request.CustomOtPlanText.Trim()),
                             OtPlanSuggestedIcuLevel = otPlan?.SuggestedIcuLevel,
+                            PackageTypeId = packageType?.PackageTypeId,
+                            PackageTypeNameSnapshot = packageType?.Name,
                             PayerType = payerType,
                             DepositExpected = request.DepositExpected,
                             EnableIpdBilling = request.EnableIpdBilling,

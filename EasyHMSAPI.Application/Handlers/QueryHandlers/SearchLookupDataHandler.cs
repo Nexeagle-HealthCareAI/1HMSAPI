@@ -73,11 +73,15 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 {
                     var searchTextLower = request.SearchText?.ToLower() ?? string.Empty;
 
+                    // Matches on Name OR Code — code matters most for lookups like ICD-10, where
+                    // staff often search by the exact code (e.g. "J18") rather than the condition
+                    // name; Name-only matching made a code search always return zero results.
                     var personalLookupData = await _dbContext.LookupPersonals
                         .Where(x => x.HospitalID == request.HospitalId
                                     && x.DoctorID == request.DoctorId
                                     && x.LookupTypeId == lookupTypeDetails.LookupTypeId
-                                    && (x.NameLower != null && x.NameLower.Contains(searchTextLower)))
+                                    && ((x.NameLower != null && x.NameLower.Contains(searchTextLower))
+                                        || (x.Code != null && x.Code.ToLower().Contains(searchTextLower))))
                         .Select(x => new PersonalLookupDataModel
                         {
                             PersonalId = x.PersonalId,
@@ -90,7 +94,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         .ToListAsync(cancellationToken);
                     var masterLookupData = await _dbContext.LookupMasters
                         .Where(x => x.LookupTypeId == lookupTypeDetails.LookupTypeId
-                                    && (x.NameLower != null && x.NameLower.Contains(searchTextLower)))
+                                    && ((x.NameLower != null && x.NameLower.Contains(searchTextLower))
+                                        || (x.Code != null && x.Code.ToLower().Contains(searchTextLower))))
                         .Select(x => new MasterLookupDataModel
                         {
                             LookupId = x.LookupId,

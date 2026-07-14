@@ -15,6 +15,9 @@ namespace EasyHMSAPI.Domain.Entities
         public DateTime? RegisteredAt { get; set; }
         public Guid? RegisteredBy { get; set; }
         public string? FullName { get; set; }
+        // Computed PERSISTED column (SOUNDEX(FullName)) — lets phonetic-name search use an index
+        // instead of computing SOUNDEX per row on every search. Never set from C#.
+        public string? FullNameSoundex { get; set; }
         public string? Mobile { get; set; }
         public short? Age { get; set; }
         public string? AgeUnit { get; set; }

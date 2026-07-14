@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Data.Enums;
@@ -83,24 +84,25 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 _context.Appointments.Update(appt);
 
-                // Get and update token for this appointment
-                var token = await _context.AppointmentTokens
-                    .FirstOrDefaultAsync(t => t.ApptId == appt.ApptId, cancellationToken);
-                if (token != null)
+                // Reassign the token via the same safe, single-source-of-truth allocator
+                // RegisterAppointmentHandler uses — the previous COUNT(AppointmentTokens)+1 here was
+                // a second, divergent algorithm that never advanced DoctorQueues.NextTokenNo
+                // (leaving it out of sync for future bookings) and counted cancelled (TokenNo=0)
+                // rows toward the count, either of which could hand out a number already in use by
+                // another patient. Only reallocate if this appointment already had a token — a
+                // reschedule of one that never got one (e.g. AllocateToken was false at booking)
+                // still doesn't get one here.
+                var hadToken = await _context.AppointmentTokens.AnyAsync(t => t.ApptId == appt.ApptId, cancellationToken);
+                int? tokenNo = null;
+                if (hadToken)
                 {
-                    token.DoctorId = appt.DoctorId;
-                    token.HospitalId = appt.HospitalId;
-                    token.TokenDate = appt.ApptDate.Date;
-                    token.CreatedAt = DateTime.UtcNow;
-
-                    var otherTokensCount = await _context.AppointmentTokens
-                        .CountAsync(t => t.DoctorId == appt.DoctorId && t.TokenDate == appt.ApptDate.Date && t.ApptId != appt.ApptId, cancellationToken);
-                    token.TokenNo = otherTokensCount == 0 ? 1 : otherTokensCount + 1;
-
-                    _context.AppointmentTokens.Update(token);
+                    tokenNo = await AppointmentBookingHelpers.AllocateTokenWithLockingAsync(
+                        _context, appt.HospitalId, appt.DoctorId, appt.ApptDate, appt.ApptId, cancellationToken);
                 }
 
                 await _context.SaveChangesAsync(cancellationToken);
+
+                var token = tokenNo.HasValue ? new TokenInfo { TokenNo = tokenNo.Value, TokenDate = appt.ApptDate.Date } : null;
 
                 // Send SMS to patient
                 var patient = await _context.PatientRegistrations.FirstOrDefaultAsync(p => p.PatientId == appt.PatientId, cancellationToken);

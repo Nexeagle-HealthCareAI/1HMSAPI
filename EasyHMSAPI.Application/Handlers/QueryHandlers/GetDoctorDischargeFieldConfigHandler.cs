@@ -8,9 +8,12 @@ using System.Text.Json;
 namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 {
     /// <summary>
-    /// Returns a doctor's personalized discharge-summary field layout (global per doctor). If they
-    /// have no saved layout yet, returns an empty list and the client falls back to its built-in
-    /// defaults. Mirrors GetDoctorPrescriptionFieldConfigHandler.
+    /// Returns a doctor's personalized discharge-summary field layout, scoped to one hospital. If
+    /// no hospital-specific row exists yet, falls back to the doctor's pre-migration legacy row
+    /// (HospitalId IS NULL) so nobody's existing customization silently disappears the first time
+    /// they load a hospital after this became hospital-scoped. If neither exists, returns an empty
+    /// list and the client falls back to its built-in defaults. Mirrors
+    /// GetDoctorPrescriptionFieldConfigHandler (still doctor-global, unlike this one).
     /// </summary>
     public class GetDoctorDischargeFieldConfigHandler
         : IRequestHandler<GetDoctorDischargeFieldConfigRequestModel, GetDoctorDischargeFieldConfigResponseModel>
@@ -31,7 +34,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
             var row = await _context.DoctorDischargeFieldConfigs
                 .AsNoTracking()
-                .FirstOrDefaultAsync(c => c.DoctorId == request.DoctorId, cancellationToken);
+                .FirstOrDefaultAsync(c => c.DoctorId == request.DoctorId && c.HospitalId == request.HospitalId, cancellationToken)
+                ?? await _context.DoctorDischargeFieldConfigs
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.DoctorId == request.DoctorId && c.HospitalId == null, cancellationToken);
 
             var fields = new List<DischargeFieldConfigItemModel>();
             if (row != null && !string.IsNullOrWhiteSpace(row.ConfigJson))

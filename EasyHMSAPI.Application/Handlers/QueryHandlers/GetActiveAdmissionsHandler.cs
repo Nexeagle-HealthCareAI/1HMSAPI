@@ -122,6 +122,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         PrimaryDoctorName = a.PrimaryDoctorId.HasValue && doctorNameById.TryGetValue(a.PrimaryDoctorId.Value, out var dn) ? dn : null,
                         ReferralSource = a.ReferralSource,
                         ReferralName = a.ReferralName,
+                        ReferredByReferrerId = a.ReferredByReferrerId,
                         ReferringFacilityName = a.ReferringFacilityName,
                         ReferringFacilityType = a.ReferringFacilityType,
                         ReferringFacilityContact = a.ReferringFacilityContact,
@@ -142,6 +143,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         EntitledRoomCategory = coverage?.EntitledRoomCategory,
                         OtPlanProcedureNameSnapshot = a.OtPlanProcedureNameSnapshot,
                         OtPlanSuggestedIcuLevel = a.OtPlanSuggestedIcuLevel,
+                        PackageTypeNameSnapshot = a.PackageTypeNameSnapshot,
                     };
                 }).ToList();
 

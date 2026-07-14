@@ -10,5 +10,6 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public Guid? AppointmentId { get; set; }
         public string? Status { get; set; }
         public int? TokenNumber { get; set; }
+        public bool IsReminderSent { get; set; }
     }
 }

@@ -33,6 +33,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
 
         public string? ReferralSource { get; set; }
         public string? ReferralName { get; set; }
+        public Guid? ReferredByReferrerId { get; set; }
         public string? ReferringFacilityName { get; set; }
         public string? ReferringFacilityType { get; set; }
         public string? ReferringFacilityContact { get; set; }
@@ -64,5 +65,9 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         // entity comment). Feeds the Surgery Case procedure-name pre-fill and ICU hint.
         public string? OtPlanProcedureNameSnapshot { get; set; }
         public string? OtPlanSuggestedIcuLevel { get; set; }
+
+        // Package Type picked at admit time, if any — frozen snapshot, not a live join (see
+        // Admission entity comment).
+        public string? PackageTypeNameSnapshot { get; set; }
     }
 }

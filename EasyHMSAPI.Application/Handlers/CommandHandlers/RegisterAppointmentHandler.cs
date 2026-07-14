@@ -98,28 +98,35 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 {
                     tokenNumber = await AllocateAppointmentTokenWithLocking(request, appointment, cancellationToken);
                 }
-                else if(request.AppointmentId is not null)
+                else if (request.AppointmentId is not null)
                 {
                     var existingToken = await _context.AppointmentTokens
-                        .Where(x => x.ApptId == request.AppointmentId)
-                        .FirstOrDefaultAsync(cancellationToken);
-                    if(existingToken is not null) 
+                        .FirstOrDefaultAsync(x => x.ApptId == request.AppointmentId, cancellationToken);
+
+                    // A same-day edit of unrelated fields (payment mode, insurance, reason, ...)
+                    // must never touch the token — it previously reallocated on EVERY edit
+                    // regardless of what changed, silently reassigning the patient to whatever
+                    // number the queue counter was currently at (out of sequence with everyone
+                    // already called) and permanently orphaning their original number as a gap.
+                    // Only a genuine move to a different day/doctor (the token is scoped to
+                    // (DoctorId, TokenDate)) — or there being no token yet with one explicitly
+                    // requested — warrants drawing a new number.
+                    var needsReallocation = existingToken == null
+                        ? request.AllocateToken
+                        : (existingToken.TokenDate != appointment.ApptDate.Date || existingToken.DoctorId != appointment.DoctorId);
+
+                    if (needsReallocation)
                     {
-                        _context.Remove(existingToken); 
+                        if (existingToken is not null)
+                        {
+                            _context.Remove(existingToken);
+                        }
+                        tokenNumber = await AllocateAppointmentTokenWithLocking(request, appointment, cancellationToken);
                     }
-                    tokenNumber = await AllocateAppointmentTokenWithLocking(request, appointment, cancellationToken);
-                }
-                else if (request.AllocateToken && !isNewAppointment)
-                {
-                    // Get existing token number if appointment is being updated
-                    var existingToken = await _context.AppointmentTokens
-                        .FirstOrDefaultAsync(t => t.ApptId == appointment.ApptId &&
-                                                 t.DoctorId == request.DoctorId &&
-                                                 t.TokenDate == request.ApptDate.Date &&
-                                                 t.HospitalId == request.HospitalId,
-                                                 cancellationToken);
-                    if (existingToken != null)
-                        tokenNumber = existingToken.TokenNo;
+                    else
+                    {
+                        tokenNumber = existingToken?.TokenNo;
+                    }
                 }
 
                 // Send SMS reminder

@@ -4,11 +4,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.CommandHandlers;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
+using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using EasyHMSAPI.UnitTests.TestUtils;
 using Microsoft.EntityFrameworkCore;
+using Moq;
 using NUnit.Framework;
 
 namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
@@ -18,6 +20,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
     {
         private AppDbContext _context = null!;
         private ConfirmPreAppointmentHandler _handler = null!;
+        private Mock<IWhatsAppMessagingService> _whatsAppServiceMock = null!;
         private Guid _hospitalId;
         private Doctor _doctor = null!;
 
@@ -25,7 +28,8 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public void SetUp()
         {
             _context = InMemoryDbContextFactory.CreateContext();
-            _handler = new ConfirmPreAppointmentHandler(_context);
+            _whatsAppServiceMock = new Mock<IWhatsAppMessagingService>();
+            _handler = new ConfirmPreAppointmentHandler(_context, _whatsAppServiceMock.Object);
 
             _hospitalId = Guid.NewGuid();
             var user = TestDataFactory.SeedUser(_context);
@@ -88,6 +92,42 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 
             var token = await _context.AppointmentTokens.FirstOrDefaultAsync(t => t.ApptId == appointment.ApptId);
             Assert.That(token, Is.Not.Null);
+        }
+
+        [Test]
+        public async Task Handle_ConfirmsPendingPreAppointment_SendsWhatsAppConfirmation()
+        {
+            var futureDate = DateTime.Today.AddDays(3).AddHours(11);
+            var appointment = SeedPreAppointment(futureDate);
+            _context.PatientRegistrations.Add(new PatientRegistration
+            {
+                RegistrationId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                PatientId = appointment.PatientId,
+                FullName = "Test Patient",
+                Mobile = "9999999999",
+            });
+            await _context.SaveChangesAsync();
+
+            _whatsAppServiceMock
+                .Setup(x => x.SendAppointmentConfirmationAsync(
+                    "9999999999", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync(true);
+
+            var request = new ConfirmPreAppointmentRequestModel
+            {
+                AppointmentId = appointment.ApptId,
+                HospitalId = _hospitalId,
+                StartAt = futureDate,
+            };
+
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.IsReminderSent, Is.True);
+            _whatsAppServiceMock.Verify(x => x.SendAppointmentConfirmationAsync(
+                "9999999999", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()),
+                Times.Once);
         }
 
         [Test]

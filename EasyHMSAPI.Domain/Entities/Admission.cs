@@ -64,6 +64,11 @@ namespace EasyHMSAPI.Domain.Entities
         public string? OtPlanProcedureNameSnapshot { get; set; }
         public string? OtPlanSuggestedIcuLevel { get; set; }   // LEVEL_1 / LEVEL_2 / LEVEL_3
 
+        // Package Type picked at admit time (if any), from the hospital's Package Type master —
+        // same freeze-at-admit-time pattern as OT Plan above (not a live join).
+        public Guid? PackageTypeId { get; set; }
+        public string? PackageTypeNameSnapshot { get; set; }
+
         public DateTime? CancelledAt { get; set; }
         public string? CancelledBy { get; set; }
         public string? CancelReason { get; set; }

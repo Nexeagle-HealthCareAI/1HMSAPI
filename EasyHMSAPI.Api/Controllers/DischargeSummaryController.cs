@@ -108,6 +108,47 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Uploads the client-rendered discharge PDF for the QR "view anytime" link + WhatsApp send.
+        [HttpPost("upload-pdf")]
+        public async Task<ActionResult<UploadDischargeSummaryPdfResponseModel>> UploadPdf(UploadDischargeSummaryPdfRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and admissionId are required." });
+
+            try
+            {
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in UploadPdf for admissionId: {AdmissionId}", request.AdmissionId);
+                return StatusCode(500, new { Message = "An error occurred while uploading the discharge summary PDF." });
+            }
+        }
+
+        [HttpPost("send-whatsapp")]
+        public async Task<ActionResult<SendDischargeSummaryWhatsAppResponseModel>> SendWhatsApp([FromBody] SendDischargeSummaryWhatsAppRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and admissionId are required." });
+
+            try
+            {
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in SendWhatsApp for admissionId: {AdmissionId}", request.AdmissionId);
+                return StatusCode(500, new { Message = "An error occurred while sending the discharge summary via WhatsApp." });
+            }
+        }
+
         [HttpPost("narrate")]
         public async Task<ActionResult<GenerateDischargeNarrativeResponseModel>> Narrate([FromBody] GenerateDischargeNarrativeRequestModel request)
         {
@@ -134,19 +175,19 @@ namespace EasyHMSAPI.Api.Controllers
 
         // Personalized discharge-summary field layout (global per doctor): rename / reorder /
         // show-hide built-in fields and add custom fields. Mirrors EPrescriptionController's
-        // configuration/field-layout routes.
+        // configuration/field-layout routes — scoped per (doctorId, hospitalId).
         [HttpGet("configuration/field-layout/doctorId={doctorId}")]
-        public async Task<ActionResult<GetDoctorDischargeFieldConfigResponseModel>> GetFieldLayout(Guid doctorId)
+        public async Task<ActionResult<GetDoctorDischargeFieldConfigResponseModel>> GetFieldLayout(Guid doctorId, [FromQuery] Guid hospitalId)
         {
             if (doctorId == Guid.Empty)
                 return BadRequest(new { Message = "Invalid doctorId." });
 
-            var result = await _mediator.Send(new GetDoctorDischargeFieldConfigRequestModel { DoctorId = doctorId });
+            var result = await _mediator.Send(new GetDoctorDischargeFieldConfigRequestModel { DoctorId = doctorId, HospitalId = hospitalId });
             return Ok(result);
         }
 
         [HttpPut("configuration/field-layout/doctorId={doctorId}")]
-        public async Task<ActionResult<UpdateDoctorDischargeFieldConfigResponseModel>> UpdateFieldLayout(Guid doctorId, [FromBody] UpdateDoctorDischargeFieldConfigRequestModel model)
+        public async Task<ActionResult<UpdateDoctorDischargeFieldConfigResponseModel>> UpdateFieldLayout(Guid doctorId, [FromQuery] Guid hospitalId, [FromBody] UpdateDoctorDischargeFieldConfigRequestModel model)
         {
             if (model == null)
                 return BadRequest(new { Message = "Invalid request body." });
@@ -154,6 +195,7 @@ namespace EasyHMSAPI.Api.Controllers
                 return BadRequest(new { Message = "Invalid doctorId." });
 
             model.DoctorId = doctorId;
+            model.HospitalId = hospitalId;
             var result = await _mediator.Send(model);
             return Ok(result);
         }
