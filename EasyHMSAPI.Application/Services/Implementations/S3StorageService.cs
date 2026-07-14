@@ -243,7 +243,15 @@ namespace EasyHMSAPI.Application.Services.Implementations
             if (c.Contains("profile")) return "ProfilePicture";
             if (c.Contains("invoice")) return "Invoice";
             if (c.Contains("dischargesummary")) return "DischargeSummary";
-            if (c.Contains("discharge")) return "DischargeLetterhead";
+            // "Dischargetemplates" (not "DischargeLetterhead") deliberately matches what the
+            // fallback branch below used to produce for this container BEFORE the dischargesummary
+            // collision fix was added — every letterhead template uploaded before that fix
+            // physically lives under 1HMS_Dischargetemplates/ in the bucket. Mapping this to any
+            // other folder name makes RefreshUrlAsync's lookup miss those objects entirely, and it
+            // silently falls back to the (expired) stored URL — a 403 "Request has expired" on
+            // every read, forever, until the doctor re-uploads. Don't rename this without migrating
+            // the existing objects to match.
+            if (c.Contains("discharge")) return "Dischargetemplates";
             if (c.Contains("labreports")) return "LabReports";
             if (c.Contains("admissiondocument")) return "AdmissionDocument";
             return string.IsNullOrWhiteSpace(c) ? "Misc" : char.ToUpperInvariant(c[0]) + c.Substring(1);
