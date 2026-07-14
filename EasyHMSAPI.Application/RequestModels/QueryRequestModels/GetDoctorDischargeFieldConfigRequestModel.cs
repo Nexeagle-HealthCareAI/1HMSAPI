@@ -8,5 +8,6 @@ namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
     public class GetDoctorDischargeFieldConfigRequestModel : IRequest<GetDoctorDischargeFieldConfigResponseModel>
     {
         public Guid DoctorId { get; set; }
+        public Guid HospitalId { get; set; }
     }
 }

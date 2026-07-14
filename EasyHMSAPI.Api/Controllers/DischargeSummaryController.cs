@@ -175,19 +175,19 @@ namespace EasyHMSAPI.Api.Controllers
 
         // Personalized discharge-summary field layout (global per doctor): rename / reorder /
         // show-hide built-in fields and add custom fields. Mirrors EPrescriptionController's
-        // configuration/field-layout routes.
+        // configuration/field-layout routes — scoped per (doctorId, hospitalId).
         [HttpGet("configuration/field-layout/doctorId={doctorId}")]
-        public async Task<ActionResult<GetDoctorDischargeFieldConfigResponseModel>> GetFieldLayout(Guid doctorId)
+        public async Task<ActionResult<GetDoctorDischargeFieldConfigResponseModel>> GetFieldLayout(Guid doctorId, [FromQuery] Guid hospitalId)
         {
             if (doctorId == Guid.Empty)
                 return BadRequest(new { Message = "Invalid doctorId." });
 
-            var result = await _mediator.Send(new GetDoctorDischargeFieldConfigRequestModel { DoctorId = doctorId });
+            var result = await _mediator.Send(new GetDoctorDischargeFieldConfigRequestModel { DoctorId = doctorId, HospitalId = hospitalId });
             return Ok(result);
         }
 
         [HttpPut("configuration/field-layout/doctorId={doctorId}")]
-        public async Task<ActionResult<UpdateDoctorDischargeFieldConfigResponseModel>> UpdateFieldLayout(Guid doctorId, [FromBody] UpdateDoctorDischargeFieldConfigRequestModel model)
+        public async Task<ActionResult<UpdateDoctorDischargeFieldConfigResponseModel>> UpdateFieldLayout(Guid doctorId, [FromQuery] Guid hospitalId, [FromBody] UpdateDoctorDischargeFieldConfigRequestModel model)
         {
             if (model == null)
                 return BadRequest(new { Message = "Invalid request body." });
@@ -195,6 +195,7 @@ namespace EasyHMSAPI.Api.Controllers
                 return BadRequest(new { Message = "Invalid doctorId." });
 
             model.DoctorId = doctorId;
+            model.HospitalId = hospitalId;
             var result = await _mediator.Send(model);
             return Ok(result);
         }

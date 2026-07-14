@@ -9,9 +9,10 @@ using System.Text.Json;
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
     /// <summary>
-    /// Saves a doctor's personalized discharge-summary field layout (global per doctor) — upserts
-    /// the single row, storing the ordered field list as JSON. Mirrors
-    /// UpdateDoctorPrescriptionFieldConfigHandler.
+    /// Saves a doctor's personalized discharge-summary field layout, scoped to one hospital —
+    /// upserts the (DoctorId, HospitalId) row, storing the ordered field list as JSON. Always
+    /// writes a hospital-specific row, never the pre-migration legacy (HospitalId IS NULL) row.
+    /// Mirrors UpdateDoctorPrescriptionFieldConfigHandler (still doctor-global, unlike this one).
     /// </summary>
     public class UpdateDoctorDischargeFieldConfigHandler
         : IRequestHandler<UpdateDoctorDischargeFieldConfigRequestModel, UpdateDoctorDischargeFieldConfigResponseModel>
@@ -28,12 +29,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         {
             if (request.DoctorId == Guid.Empty)
                 return new UpdateDoctorDischargeFieldConfigResponseModel { Success = false, Message = "Doctor is required." };
+            if (request.HospitalId == Guid.Empty)
+                return new UpdateDoctorDischargeFieldConfigResponseModel { Success = false, Message = "Hospital is required." };
 
             var configJson = JsonSerializer.Serialize(request.Fields ?? new());
             var now = DateTime.UtcNow;
 
             var row = await _context.DoctorDischargeFieldConfigs
-                .FirstOrDefaultAsync(c => c.DoctorId == request.DoctorId, cancellationToken);
+                .FirstOrDefaultAsync(c => c.DoctorId == request.DoctorId && c.HospitalId == request.HospitalId, cancellationToken);
 
             if (row == null)
             {
@@ -41,6 +44,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 {
                     ConfigId = Guid.NewGuid(),
                     DoctorId = request.DoctorId,
+                    HospitalId = request.HospitalId,
                     ConfigJson = configJson,
                     CreatedAtUtc = now,
                     UpdatedAtUtc = now,

@@ -11,6 +11,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     {
         [JsonIgnore]
         public Guid DoctorId { get; set; }   // taken from the route, not the body
+        [JsonIgnore]
+        public Guid HospitalId { get; set; } // taken from the query string, not the body
         public List<DischargeFieldConfigItemModel> Fields { get; set; } = new();
     }
 }
