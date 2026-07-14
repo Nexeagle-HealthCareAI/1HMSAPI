@@ -37,6 +37,11 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     .FirstOrDefaultAsync(d => d.AccessToken == request.AccessToken, cancellationToken);
                 if (summary == null || string.IsNullOrEmpty(summary.PdfBlobKey))
                     return new GetPublicDischargeSummaryPdfResponseModel { Success = false, Message = "This link is no longer valid." };
+                // Live check, not just a mint-time gate — if the summary is later unsigned (e.g. a
+                // correction is needed), the public link stops resolving immediately, even though
+                // the token itself still exists.
+                if (!summary.IsSigned)
+                    return new GetPublicDischargeSummaryPdfResponseModel { Success = false, Message = "This discharge summary is not yet finalized." };
 
                 var url = await _blobStorageService.RefreshUrlAsync(_containerName, summary.PdfBlobKey, null, cancellationToken);
                 if (string.IsNullOrEmpty(url))
