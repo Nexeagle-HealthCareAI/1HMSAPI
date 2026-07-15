@@ -32,6 +32,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 response.Success = false;
                 response.ProfilePictureUrl = string.Empty;
             }
+            else if (request.HospitalId.HasValue && !await _context.DoctorDepartments
+                .AnyAsync(dd => dd.HospitalId == request.HospitalId.Value && dd.Doctor.UserID == request.UserId, cancellationToken))
+            {
+                response.Success = false;
+                response.ProfilePictureUrl = string.Empty;
+            }
             else
             {
                 var url = await _blobService.UploadAsync(request.UserId.ToString(), request.File, _containerName, cancellationToken);

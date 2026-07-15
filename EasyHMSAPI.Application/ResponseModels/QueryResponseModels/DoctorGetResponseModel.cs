@@ -13,6 +13,11 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? MedicalCouncil { get; set; }
         public int? RegistrationYear { get; set; }
         public string? Bio { get; set; }
+        public List<string> Languages { get; set; } = new List<string>();
+        public string? PublicContactEmail { get; set; }
+        public string? PublicContactPhone { get; set; }
+        public string? PhotoUrl { get; set; }
+        public bool IsPubliclyListed { get; set; }
         public Guid? PrimaryDepartmentID { get; set; }
         public string? PrimaryDepartmentName { get; set; }
         public int ProfileCompletionPercentage { get; set; }

@@ -6,6 +6,7 @@ using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using System.Text.Json;
 
 namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 {
@@ -69,13 +70,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 where candidateDoctorIds.Contains(d.DoctorID) && d.IsPubliclyListed
                 join u in _context.Users on d.UserID equals u.UserID
                 where u.UserStatusId != (int)UserStatusEnum.Revoked
-                select new { d.DoctorID, d.UserID, d.PrimaryDepartmentID, d.Qualification, d.ExperienceYears, d.Bio }
+                select new { d.DoctorID, d.UserID, d.PrimaryDepartmentID, d.Qualification, d.ExperienceYears, d.Bio, d.LanguagesJson }
             ).ToListAsync(cancellationToken);
 
             var hospitalIdsUsed = rows.Select(r => doctorHospital[r.DoctorID]).Distinct().ToList();
             var hospitalById = await _context.Hospitals
                 .Where(h => hospitalIdsUsed.Contains(h.HospitalID))
-                .Select(h => new { h.HospitalID, h.Name, h.City, h.State })
+                .Select(h => new { h.HospitalID, h.Name, h.City, h.State, h.Latitude, h.Longitude })
                 .ToDictionaryAsync(h => h.HospitalID, cancellationToken);
 
             var userIds = rows.Select(r => r.UserID).Distinct().ToList();
@@ -93,6 +94,14 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .Where(dept => deptIds.Contains(dept.DepartmentID))
                 .ToDictionaryAsync(dept => dept.DepartmentID, dept => dept.Name, cancellationToken);
 
+            // One batched aggregate query for the whole platform-wide listing rather than a
+            // per-doctor round trip.
+            var reviewAggregates = await _context.DoctorReviews
+                .Where(r => candidateDoctorIds.Contains(r.DoctorId) && !r.IsHidden)
+                .GroupBy(r => r.DoctorId)
+                .Select(g => new { DoctorId = g.Key, Average = g.Average(r => r.Rating), Count = g.Count() })
+                .ToDictionaryAsync(g => g.DoctorId, cancellationToken);
+
             // Photo-URL resolution now scales with platform-wide doctor count rather than one
             // hospital's — fetch presigned URLs concurrently instead of one await per doctor.
             var photoUrls = await Task.WhenAll(
@@ -105,6 +114,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 var r = rows[i];
                 var hospitalId = doctorHospital[r.DoctorID];
                 hospitalById.TryGetValue(hospitalId, out var hospital);
+                reviewAggregates.TryGetValue(r.DoctorID, out var reviewAgg);
                 var specializations = _context.DoctorSpecializations
                     .Where(ds => ds.DoctorID == r.DoctorID && ds.Specialization != null && ds.Specialization.IsActive)
                     .Select(ds => ds.Specialization.Name)
@@ -127,10 +137,17 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     Bio = r.Bio,
                     DepartmentName = r.PrimaryDepartmentID.HasValue && deptNameById.TryGetValue(r.PrimaryDepartmentID.Value, out var dn) ? dn : null,
                     Specializations = specializations,
+                    Languages = string.IsNullOrWhiteSpace(r.LanguagesJson)
+                        ? new List<string>()
+                        : (JsonSerializer.Deserialize<List<string>>(r.LanguagesJson) ?? new List<string>()),
                     HospitalId = hospitalId,
                     HospitalName = hospital?.Name,
                     City = hospital?.City,
                     State = hospital?.State,
+                    Latitude = hospital?.Latitude,
+                    Longitude = hospital?.Longitude,
+                    Rating = reviewAgg != null ? Math.Round(reviewAgg.Average, 1) : (double?)null,
+                    ReviewCount = reviewAgg?.Count ?? 0,
                 });
             }
 

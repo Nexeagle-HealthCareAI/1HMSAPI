@@ -51,6 +51,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 
                 IsActive = hospital.IsActive,
                 IsPubliclyListed = hospital.IsPubliclyListed,
+                Latitude = hospital.Latitude,
+                Longitude = hospital.Longitude,
                 CreatedAt = hospital.CreatedAt,
                 LastUpdatedAt = hospital.LastUpdatedAt,
                 ProfileStatus = profileStatus == null ? null : new HospitalProfileStatusDto

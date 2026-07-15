@@ -5,6 +5,7 @@ using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
@@ -83,6 +84,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     MedicalCouncil = request.MedicalCouncil,
                     RegistrationYear = request.RegistrationYear,
                     Bio = request.Bio,
+                    LanguagesJson = JoinLanguages(request.Languages),
+                    PublicContactEmail = string.IsNullOrWhiteSpace(request.PublicContactEmail) ? null : request.PublicContactEmail.Trim(),
+                    PublicContactPhone = string.IsNullOrWhiteSpace(request.PublicContactPhone) ? null : request.PublicContactPhone.Trim(),
                     PrimaryDepartmentID = primaryDepartmentId,
                     CreatedAt = createdAt,
                     HospitalId = request.HospitalId ?? userWithHospital.HospitalId
@@ -263,6 +267,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 .ToList();
             if (parts.Count == 0) return null;
             return string.Join(", ", parts);
+        }
+
+        private static string? JoinLanguages(List<string>? languages)
+        {
+            if (languages == null) return null;
+            var parts = languages
+                .Select(l => (l ?? string.Empty).Trim())
+                .Where(l => !string.IsNullOrWhiteSpace(l))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            return parts.Count == 0 ? null : JsonSerializer.Serialize(parts);
         }
 
         private void SaveDefaultPrescriptionSettings(Guid doctorId, Guid? hospitalId, Guid userId, DateTime createdAt)

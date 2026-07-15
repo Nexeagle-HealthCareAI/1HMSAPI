@@ -48,6 +48,96 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(response.Message, Is.EqualTo("Doctor not found."));
         }
 
+        [Test]
+        public async Task Handle_ValidUpdate_PersistsLanguagesAndPublicContactFields()
+        {
+            // Arrange
+            var user = TestDataFactory.SeedUser(_context);
+            var doctor = TestDataFactory.SeedDoctor(_context, user);
+            // The handler attaches its own stub Doctor instance for the same key — detach the
+            // seeded one first, or EF's identity map throws ("already being tracked"), a collision
+            // that can't happen in production since each request gets a fresh DbContext.
+            _context.Entry(doctor).State = EntityState.Detached;
+
+            var request = new DoctorUpdateRequestModel
+            {
+                UserId = user.UserID,
+                Languages = new List<string> { "English", "Hindi" },
+                PublicContactEmail = "doctor@example.com",
+                PublicContactPhone = "9876543210",
+            };
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.Success, Is.True, $"{response.Message} | {string.Join(", ", response.Errors ?? new List<string>())}");
+            Assert.That(response.UpdatedFields, Does.Contain("Languages"));
+            Assert.That(response.UpdatedFields, Does.Contain("PublicContactEmail"));
+            Assert.That(response.UpdatedFields, Does.Contain("PublicContactPhone"));
+
+            var updated = await _context.Doctors.FindAsync(doctor.DoctorID);
+            Assert.That(updated!.LanguagesJson, Is.EqualTo("[\"English\",\"Hindi\"]"));
+            Assert.That(updated.PublicContactEmail, Is.EqualTo("doctor@example.com"));
+            Assert.That(updated.PublicContactPhone, Is.EqualTo("9876543210"));
+        }
+
+        [Test]
+        public async Task Handle_AdminEditingDoctorNotAtSpecifiedHospital_RejectsUpdate()
+        {
+            // Arrange
+            var user = TestDataFactory.SeedUser(_context);
+            var doctor = TestDataFactory.SeedDoctor(_context, user);
+            var otherHospitalId = Guid.NewGuid();
+            // No DoctorDepartment row links this doctor to otherHospitalId.
+
+            var request = new DoctorUpdateRequestModel
+            {
+                UserId = user.UserID,
+                HospitalId = otherHospitalId,
+                Bio = "Should not be applied",
+            };
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("Doctor not found at this hospital."));
+
+            var unchanged = await _context.Doctors.FindAsync(doctor.DoctorID);
+            Assert.That(unchanged!.Bio, Is.EqualTo(doctor.Bio));
+        }
+
+        [Test]
+        public async Task Handle_AdminEditingDoctorAtOwnHospital_AllowsUpdate()
+        {
+            // Arrange
+            var user = TestDataFactory.SeedUser(_context);
+            var doctor = TestDataFactory.SeedDoctor(_context, user);
+            var hospital = TestDataFactory.SeedHospital(_context, user.UserID);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, hospital.HospitalID);
+            // The handler attaches its own stub Doctor instance for the same key — detach the
+            // seeded one first, or EF's identity map throws ("already being tracked"), a collision
+            // that can't happen in production since each request gets a fresh DbContext.
+            _context.Entry(doctor).State = EntityState.Detached;
+
+            var request = new DoctorUpdateRequestModel
+            {
+                UserId = user.UserID,
+                HospitalId = hospital.HospitalID,
+                Bio = "Updated by admin",
+            };
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.Success, Is.True, $"{response.Message} | {string.Join(", ", response.Errors ?? new List<string>())}");
+            var updated = await _context.Doctors.FindAsync(doctor.DoctorID);
+            Assert.That(updated!.Bio, Is.EqualTo("Updated by admin"));
+        }
+
         //[Test]
         //public async Task Handle_BasicProfileUpdate_ReturnsSuccess()
         //{

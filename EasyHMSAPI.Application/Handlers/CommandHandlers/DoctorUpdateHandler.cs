@@ -6,6 +6,7 @@ using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
+using System.Text.Json;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
@@ -50,6 +51,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         d.MedicalCouncil,
                         d.RegistrationYear,
                         d.Bio,
+                        d.LanguagesJson,
+                        d.PublicContactEmail,
+                        d.PublicContactPhone,
                         d.PrimaryDepartmentID,
                         HospitalId = userWithHospital
                     })
@@ -66,6 +70,26 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
 
                 var doctorId = current.DoctorID;
+
+                // Admin-on-behalf-of edit (Public Directory tile editor): confirm the doctor
+                // genuinely belongs to the acting admin's hospital before letting them write to
+                // another doctor's profile — same DoctorDepartments ownership check
+                // UpdateDoctorPublicListingHandler already uses. Self-service edits (HospitalId
+                // omitted) are unaffected.
+                if (request.HospitalId.HasValue)
+                {
+                    var belongsToHospital = await _context.DoctorDepartments
+                        .AnyAsync(dd => dd.DoctorID == doctorId && dd.HospitalId == request.HospitalId.Value, cancellationToken);
+                    if (!belongsToHospital)
+                    {
+                        return new DoctorUpdateResponseModel
+                        {
+                            Success = false,
+                            Message = "Doctor not found at this hospital.",
+                            Errors = new List<string> { "Doctor does not belong to the specified hospital" }
+                        };
+                    }
+                }
 
                 var doctor = new Doctor { DoctorID = doctorId };
                 _context.Doctors.Attach(doctor);
@@ -115,6 +139,31 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     doctor.Bio = request.Bio;
                     updatedFields.Add("Bio");
                     _context.Entry(doctor).Property(d => d.Bio).IsModified = true;
+                }
+
+                if (request.Languages != null)
+                {
+                    var languagesJson = JoinLanguages(request.Languages);
+                    if (languagesJson != current.LanguagesJson)
+                    {
+                        doctor.LanguagesJson = languagesJson;
+                        updatedFields.Add("Languages");
+                        _context.Entry(doctor).Property(d => d.LanguagesJson).IsModified = true;
+                    }
+                }
+
+                if (request.PublicContactEmail != null && request.PublicContactEmail != current.PublicContactEmail)
+                {
+                    doctor.PublicContactEmail = string.IsNullOrWhiteSpace(request.PublicContactEmail) ? null : request.PublicContactEmail.Trim();
+                    updatedFields.Add("PublicContactEmail");
+                    _context.Entry(doctor).Property(d => d.PublicContactEmail).IsModified = true;
+                }
+
+                if (request.PublicContactPhone != null && request.PublicContactPhone != current.PublicContactPhone)
+                {
+                    doctor.PublicContactPhone = string.IsNullOrWhiteSpace(request.PublicContactPhone) ? null : request.PublicContactPhone.Trim();
+                    updatedFields.Add("PublicContactPhone");
+                    _context.Entry(doctor).Property(d => d.PublicContactPhone).IsModified = true;
                 }
 
                 if (!string.IsNullOrEmpty(request.PrimaryDepartment))
@@ -342,6 +391,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 .ToList();
             if (parts.Count == 0) return null;
             return string.Join(", ", parts);
+        }
+
+        private static string? JoinLanguages(List<string>? languages)
+        {
+            if (languages == null) return null;
+            var parts = languages
+                .Select(l => (l ?? string.Empty).Trim())
+                .Where(l => !string.IsNullOrWhiteSpace(l))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            return parts.Count == 0 ? null : JsonSerializer.Serialize(parts);
         }
     }
 }

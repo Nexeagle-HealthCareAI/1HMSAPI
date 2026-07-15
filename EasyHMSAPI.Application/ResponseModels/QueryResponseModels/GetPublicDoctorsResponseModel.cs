@@ -23,6 +23,11 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? Bio { get; set; }
         public string? DepartmentName { get; set; }
         public List<string> Specializations { get; set; } = new();
+        public List<string> Languages { get; set; } = new();
+        // Computed from non-hidden DoctorReviews — null/0 when the doctor has no reviews yet, so
+        // the frontend's existing "hide the badge when falsy" rendering is unaffected.
+        public double? Rating { get; set; }
+        public int ReviewCount { get; set; }
 
         // Which (publicly-listed) hospital this doctor belongs to — needed now that the
         // directory spans every opted-in hospital, not just one scoped by an API key.
@@ -30,5 +35,9 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? HospitalName { get; set; }
         public string? City { get; set; }
         public string? State { get; set; }
+        // GPS pin for a "get directions" link — inherited from the hospital, since a doctor
+        // doesn't have their own address (see Hospital.Latitude/Longitude).
+        public decimal? Latitude { get; set; }
+        public decimal? Longitude { get; set; }
     }
 }

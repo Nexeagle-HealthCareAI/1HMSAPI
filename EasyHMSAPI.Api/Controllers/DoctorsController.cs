@@ -157,6 +157,73 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Rich, hospital-scoped doctor list for the admin Public Directory tile editor (photo,
+        // license, qualification, bio, specializations, languages, contact fields) — deliberately
+        // separate from GetHospitalDoctors above so that hot, simple picker never carries the extra
+        // blob-storage/specialization lookups this needs.
+        [HttpGet("public-directory")]
+        [Authorize]
+        public async Task<ActionResult<GetPublicDirectoryDoctorsResponseModel>> GetPublicDirectoryDoctors([FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetPublicDirectoryDoctorsRequestModel { HospitalId = hospitalId });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetPublicDirectoryDoctors for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while retrieving public directory doctors." });
+            }
+        }
+
+        // Admin moderation list for one doctor's reviews (hidden + visible) — Public Directory's
+        // review panel.
+        [HttpGet("{doctorId:guid}/reviews")]
+        [Authorize]
+        public async Task<ActionResult<GetHospitalDoctorReviewsResponseModel>> GetDoctorReviews(Guid doctorId, [FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetHospitalDoctorReviewsRequestModel { HospitalId = hospitalId, DoctorId = doctorId });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetDoctorReviews for doctorId: {DoctorId}", doctorId);
+                return StatusCode(500, new { Message = "An error occurred while retrieving reviews." });
+            }
+        }
+
+        // Hide/unhide one review. hospitalId as a query param so HospitalAccessFilter gates this
+        // to callers who are members of that hospital; the handler additionally confirms the
+        // review itself belongs to that hospital.
+        [HttpPatch("{doctorId:guid}/reviews/{reviewId:guid}/moderate")]
+        [Authorize]
+        public async Task<ActionResult<ModerateDoctorReviewResponseModel>> ModerateDoctorReview(Guid doctorId, Guid reviewId, [FromQuery] Guid hospitalId, [FromBody] ModerateReviewRequestBody body)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var response = await _mediator.Send(new ModerateDoctorReviewRequestModel { HospitalId = hospitalId, ReviewId = reviewId, IsHidden = body.IsHidden });
+                if (!response.Success) return BadRequest(response);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in ModerateDoctorReview for reviewId: {ReviewId}", reviewId);
+                return StatusCode(500, new { Message = "An error occurred while moderating the review." });
+            }
+        }
+
         // Toggles whether one doctor shows on the platform-wide public directory. hospitalId as a
         // query param (not the body) so the global HospitalAccessFilter gates this to callers who
         // are members of that hospital — same pattern as DoctorFeesController.

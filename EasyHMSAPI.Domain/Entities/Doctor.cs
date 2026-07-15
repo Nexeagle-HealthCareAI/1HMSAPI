@@ -17,6 +17,13 @@ namespace EasyHMSAPI.Domain.Entities
         public string? Bio { get; set; }
         public int? ProfileCompletionPercent { get; set; }
         public string? ObjectURL { get; set; }
+        // JSON array of spoken languages, e.g. ["English","Hindi"]. Kept as JSON (not CSV) so
+        // the DB-level ISJSON() check constraint gives free integrity validation.
+        public string? LanguagesJson { get; set; }
+        // Deliberately separate from User.Email/User.MobileNumber, which are login/OTP
+        // credentials — these are optional, admin-set fields for public display only.
+        public string? PublicContactEmail { get; set; }
+        public string? PublicContactPhone { get; set; }
         public Guid? PrimaryDepartmentID { get; set; }
         public Guid? HospitalId { get; set; } // Added hospitalId
         // Opt-in: doctor only appears in the platform-wide public directory when BOTH

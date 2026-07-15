@@ -60,6 +60,32 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task Handle_ValidUpdate_UpdatesGeolocation()
+        {
+            // Arrange
+            var hospitalId = Guid.NewGuid();
+            var hospital = new Hospital { HospitalID = hospitalId, Name = "Old Name", Email = "old@h.com", Type = "General", RegistrationNumber = "REG001", Contact = "1234567890", Location = "Test Location", City = "Test City", State = "Test State", Country = "Test Country", Pincode = "123456", CreatedByUserID = Guid.NewGuid() };
+            _context.Hospitals.Add(hospital);
+            await _context.SaveChangesAsync();
+
+            var request = new HospitalUpdateRequestModel
+            {
+                HospitalId = hospitalId,
+                Latitude = 22.5726m,
+                Longitude = 88.3639m,
+            };
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.Success, Is.True);
+            var updatedHospital = await _context.Hospitals.FindAsync(hospitalId);
+            Assert.That(updatedHospital!.Latitude, Is.EqualTo(22.5726m));
+            Assert.That(updatedHospital.Longitude, Is.EqualTo(88.3639m));
+        }
+
+        [Test]
         public async Task Handle_HospitalNotFound_ReturnsFailure()
         {
             // Arrange
