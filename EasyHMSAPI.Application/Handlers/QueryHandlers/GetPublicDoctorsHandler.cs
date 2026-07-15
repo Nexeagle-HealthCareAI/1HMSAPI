@@ -24,6 +24,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
     /// </summary>
     public class GetPublicDoctorsHandler : IRequestHandler<GetPublicDoctorsRequestModel, GetPublicDoctorsResponseModel>
     {
+        private const string OpdConsultFeeType = "OPD_CONSULT";
+
         private readonly AppDbContext _context;
         private readonly IBlobStorageService _blobService;
         private readonly string _containerName;
@@ -102,6 +104,16 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .Select(g => new { DoctorId = g.Key, Average = g.Average(r => r.Rating), Count = g.Count() })
                 .ToDictionaryAsync(g => g.DoctorId, cancellationToken);
 
+            // Keyed by (DoctorId, HospitalId) — not DoctorId alone — since a doctor could have a
+            // DoctorFees row at more than one hospital; must match the SAME canonical hospital
+            // doctorHospital picked for this listing, not just any fee row for the doctor.
+            var feeLookup = (await _context.DoctorFees
+                .Where(f => f.FeeType == OpdConsultFeeType && f.IsActive
+                         && candidateDoctorIds.Contains(f.DoctorId) && hospitalIdsUsed.Contains(f.HospitalId))
+                .Select(f => new { f.DoctorId, f.HospitalId, f.Amount })
+                .ToListAsync(cancellationToken))
+                .ToDictionary(f => (f.DoctorId, f.HospitalId), f => f.Amount);
+
             // Photo-URL resolution now scales with platform-wide doctor count rather than one
             // hospital's — fetch presigned URLs concurrently instead of one await per doctor.
             var photoUrls = await Task.WhenAll(
@@ -148,6 +160,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     Longitude = hospital?.Longitude,
                     Rating = reviewAgg != null ? Math.Round(reviewAgg.Average, 1) : (double?)null,
                     ReviewCount = reviewAgg?.Count ?? 0,
+                    Fee = feeLookup.TryGetValue((r.DoctorID, hospitalId), out var fee) ? fee : (decimal?)null,
                 });
             }
 
