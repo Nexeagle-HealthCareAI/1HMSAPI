@@ -88,7 +88,9 @@ builder.Services.AddCors(options =>
                 "http://localhost:3000",
                 "http://localhost:5173",
                 "https://1hms.nexeagle.com",
-                "http://1hms.nexeagle.com"
+                "http://1hms.nexeagle.com",
+                "https://nexeagle.com",
+                "http://nexeagle.com"
               )
               .AllowAnyHeader()
               .AllowAnyMethod()
