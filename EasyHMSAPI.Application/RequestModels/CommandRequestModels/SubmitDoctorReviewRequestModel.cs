@@ -12,6 +12,11 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public int Rating { get; set; }
         // Optional -- a quick "tap a star" rating can be submitted with no comment.
         public string? Comment { get; set; }
+        // Optional -- only sent by the post-booking rating flow, which already collects a
+        // phone number for booking (NOT OTP-verified). Hashed before storage, used as a soft
+        // one-rating-per-doctor guard for that flow only. Never sent by the anonymous
+        // doctor-page quick-rate flow, which has no phone number to offer.
+        public string? PatientMobile { get; set; }
         // Set server-side by the controller from the connection, never trusted from the body.
         public string? IpAddress { get; set; }
     }

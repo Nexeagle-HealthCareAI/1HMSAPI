@@ -4,6 +4,7 @@ using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
@@ -15,6 +16,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     /// UpdateReviewCommentHandler, using the ReviewId this call returns. Goes live immediately;
     /// a hospital admin can hide it afterward from Public Directory (see
     /// ModerateDoctorReviewHandler), there is no pre-publish approval queue.
+    /// When PatientMobile is provided (post-booking rating flow only), a second submission
+    /// with the same number for the same doctor is rejected — a soft guard, not real identity
+    /// verification, since that number is never OTP-checked (see SubmittedMobileHash on the
+    /// entity). The primary defense against accidental double-rating is client-side
+    /// (localStorage), this is only a server-side backstop for that one flow.
     /// </summary>
     public class SubmitDoctorReviewHandler : IRequestHandler<SubmitDoctorReviewRequestModel, SubmitDoctorReviewResponseModel>
     {
@@ -36,6 +42,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             if (hospitalId == null)
                 return new SubmitDoctorReviewResponseModel { Success = false, Message = "Doctor not found." };
 
+            var mobileHash = NormalizeAndHashMobile(request.PatientMobile);
+            if (mobileHash != null)
+            {
+                var alreadyRated = await _context.DoctorReviews
+                    .AnyAsync(r => r.DoctorId == request.DoctorId && r.SubmittedMobileHash == mobileHash, cancellationToken);
+                if (alreadyRated)
+                    return new SubmitDoctorReviewResponseModel { Success = false, Message = "You've already rated this doctor." };
+            }
+
             var review = new DoctorReview
             {
                 ReviewId = Guid.NewGuid(),
@@ -47,12 +62,24 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 HelpfulCount = 0,
                 IsHidden = false,
                 SubmittedIp = request.IpAddress,
+                SubmittedMobileHash = mobileHash,
                 CreatedAt = DateTime.UtcNow,
             };
             _context.DoctorReviews.Add(review);
             await _context.SaveChangesAsync(cancellationToken);
 
             return new SubmitDoctorReviewResponseModel { Success = true, Message = "Review submitted.", ReviewId = review.ReviewId };
+        }
+
+        // Keeps only the last 10 digits so "+91 9876543210" and "9876543210" hash identically
+        // regardless of whether a country code was typed.
+        private static string? NormalizeAndHashMobile(string? mobile)
+        {
+            if (string.IsNullOrWhiteSpace(mobile)) return null;
+            var digits = new string(mobile.Where(char.IsDigit).ToArray());
+            if (digits.Length == 0) return null;
+            var normalized = digits.Length > 10 ? digits[^10..] : digits;
+            return ApiKeyHasher.Hash(normalized);
         }
     }
 }
