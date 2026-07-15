@@ -12,7 +12,9 @@ namespace EasyHMSAPI.Domain.Entities
         public Guid DoctorId { get; set; }
         public string? AuthorName { get; set; }
         public int Rating { get; set; }
-        public string Comment { get; set; } = null!;
+        // Optional -- a quick "tap a star" rating has no comment; one can be attached
+        // afterward via UpdateReviewCommentHandler.
+        public string? Comment { get; set; }
         public int HelpfulCount { get; set; }
         public bool IsHidden { get; set; }
         // Posted by the hospital admin from Public Directory, not a patient — always

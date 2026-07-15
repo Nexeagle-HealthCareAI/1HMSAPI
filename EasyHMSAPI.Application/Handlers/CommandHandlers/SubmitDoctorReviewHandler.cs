@@ -9,9 +9,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
     /// <summary>
     /// Public, anonymous review submission — anyone visiting the doctor's page can post a
-    /// rating + comment, no login/verified-appointment check (accepted product trade-off).
-    /// Goes live immediately; a hospital admin can hide it afterward from Public Directory
-    /// (see ModerateDoctorReviewHandler), there is no pre-publish approval queue.
+    /// rating, no login/verified-appointment check (accepted product trade-off). Comment is
+    /// optional: a quick "tap a star" rating (from the doctor page or right after a NexEagle
+    /// booking) submits with no comment; one can be attached afterward via
+    /// UpdateReviewCommentHandler, using the ReviewId this call returns. Goes live immediately;
+    /// a hospital admin can hide it afterward from Public Directory (see
+    /// ModerateDoctorReviewHandler), there is no pre-publish approval queue.
     /// </summary>
     public class SubmitDoctorReviewHandler : IRequestHandler<SubmitDoctorReviewRequestModel, SubmitDoctorReviewResponseModel>
     {
@@ -27,9 +30,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             if (request.Rating < 1 || request.Rating > 5)
                 return new SubmitDoctorReviewResponseModel { Success = false, Message = "Rating must be between 1 and 5." };
 
-            if (string.IsNullOrWhiteSpace(request.Comment))
-                return new SubmitDoctorReviewResponseModel { Success = false, Message = "Comment is required." };
-
             // Only accept reviews for doctors genuinely visible on the public directory — same
             // rule PublicBookAppointmentHandler/GetPublicDoctorAvailabilityHandler already apply.
             var hospitalId = await PublicDirectoryHelpers.ResolvePubliclyListedHospitalIdAsync(_context, request.DoctorId, cancellationToken);
@@ -43,7 +43,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 DoctorId = request.DoctorId,
                 AuthorName = string.IsNullOrWhiteSpace(request.AuthorName) ? null : request.AuthorName.Trim(),
                 Rating = request.Rating,
-                Comment = request.Comment.Trim(),
+                Comment = string.IsNullOrWhiteSpace(request.Comment) ? null : request.Comment.Trim(),
                 HelpfulCount = 0,
                 IsHidden = false,
                 SubmittedIp = request.IpAddress,

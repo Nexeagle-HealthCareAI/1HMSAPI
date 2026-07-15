@@ -98,14 +98,27 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
-        public async Task Handle_BlankComment_ReturnsFailure()
+        public async Task Handle_BlankComment_SavesRatingOnlyReview()
         {
             var doctorId = SeedPublicDoctor();
             var request = new SubmitDoctorReviewRequestModel { DoctorId = doctorId, Rating = 5, Comment = "  " };
 
             var response = await _handler.Handle(request, CancellationToken.None);
 
-            Assert.That(response.Success, Is.False);
+            Assert.That(response.Success, Is.True);
+            Assert.That(_context.DoctorReviews.Single().Comment, Is.Null);
+        }
+
+        [Test]
+        public async Task Handle_NoCommentProvided_SavesRatingOnlyReview()
+        {
+            var doctorId = SeedPublicDoctor();
+            var request = new SubmitDoctorReviewRequestModel { DoctorId = doctorId, Rating = 4 };
+
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(_context.DoctorReviews.Single().Comment, Is.Null);
         }
 
         [Test]
