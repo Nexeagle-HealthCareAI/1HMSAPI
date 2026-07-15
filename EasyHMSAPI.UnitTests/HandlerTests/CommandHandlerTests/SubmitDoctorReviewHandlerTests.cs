@@ -122,6 +122,58 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task Handle_SamePatientMobile_SecondRatingForSameDoctor_ReturnsFailure()
+        {
+            var doctorId = SeedPublicDoctor();
+            var first = await _handler.Handle(new SubmitDoctorReviewRequestModel { DoctorId = doctorId, Rating = 5, PatientMobile = "9876543210" }, CancellationToken.None);
+            Assert.That(first.Success, Is.True);
+
+            var second = await _handler.Handle(new SubmitDoctorReviewRequestModel { DoctorId = doctorId, Rating = 2, PatientMobile = "9876543210" }, CancellationToken.None);
+
+            Assert.That(second.Success, Is.False);
+            Assert.That(second.Message, Is.EqualTo("You've already rated this doctor."));
+            Assert.That(_context.DoctorReviews.Count(), Is.EqualTo(1));
+        }
+
+        [Test]
+        public async Task Handle_SamePatientMobile_WithAndWithoutCountryCode_TreatedAsSameNumber()
+        {
+            var doctorId = SeedPublicDoctor();
+            var first = await _handler.Handle(new SubmitDoctorReviewRequestModel { DoctorId = doctorId, Rating = 5, PatientMobile = "9876543210" }, CancellationToken.None);
+            Assert.That(first.Success, Is.True);
+
+            var second = await _handler.Handle(new SubmitDoctorReviewRequestModel { DoctorId = doctorId, Rating = 3, PatientMobile = "+91 9876543210" }, CancellationToken.None);
+
+            Assert.That(second.Success, Is.False);
+            Assert.That(_context.DoctorReviews.Count(), Is.EqualTo(1));
+        }
+
+        [Test]
+        public async Task Handle_DifferentPatientMobile_BothRatingsPersist()
+        {
+            var doctorId = SeedPublicDoctor();
+            var first = await _handler.Handle(new SubmitDoctorReviewRequestModel { DoctorId = doctorId, Rating = 5, PatientMobile = "9876543210" }, CancellationToken.None);
+            var second = await _handler.Handle(new SubmitDoctorReviewRequestModel { DoctorId = doctorId, Rating = 4, PatientMobile = "9876543211" }, CancellationToken.None);
+
+            Assert.That(first.Success, Is.True);
+            Assert.That(second.Success, Is.True);
+            Assert.That(_context.DoctorReviews.Count(), Is.EqualTo(2));
+        }
+
+        [Test]
+        public async Task Handle_NoPatientMobile_NoDedupCheckApplied()
+        {
+            var doctorId = SeedPublicDoctor();
+            var first = await _handler.Handle(new SubmitDoctorReviewRequestModel { DoctorId = doctorId, Rating = 5 }, CancellationToken.None);
+            var second = await _handler.Handle(new SubmitDoctorReviewRequestModel { DoctorId = doctorId, Rating = 3 }, CancellationToken.None);
+
+            Assert.That(first.Success, Is.True);
+            Assert.That(second.Success, Is.True);
+            Assert.That(_context.DoctorReviews.Count(), Is.EqualTo(2));
+            Assert.That(_context.DoctorReviews.All(r => r.SubmittedMobileHash == null), Is.True);
+        }
+
+        [Test]
         public async Task Handle_DoctorNotPubliclyListed_ReturnsFailure()
         {
             var user = TestDataFactory.SeedUser(_context);

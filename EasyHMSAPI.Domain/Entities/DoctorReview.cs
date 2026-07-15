@@ -21,6 +21,12 @@ namespace EasyHMSAPI.Domain.Entities
         // labeled "Hospital Response" client-side, excluded from rating/count aggregates.
         public bool IsHospitalResponse { get; set; }
         public string? SubmittedIp { get; set; }
+        // SHA-256 hash of the (unverified) phone number entered during a NexEagle booking —
+        // used as a soft one-rating-per-doctor guard for the post-booking rating. Never real
+        // identity verification (the number isn't OTP-checked), just a free defense-in-depth
+        // signal since that flow already collects a phone number for booking. Null for the
+        // anonymous doctor-page quick-rate flow.
+        public string? SubmittedMobileHash { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public Doctor Doctor { get; set; } = null!;
     }
