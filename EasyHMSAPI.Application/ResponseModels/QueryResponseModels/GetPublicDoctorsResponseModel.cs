@@ -28,6 +28,9 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         // the frontend's existing "hide the badge when falsy" rendering is unaffected.
         public double? Rating { get; set; }
         public int ReviewCount { get; set; }
+        // OPD_CONSULT DoctorFees.Amount at this doctor's (canonical) hospital — null when no
+        // active fee is configured, so the frontend falls back to "Accepting patients".
+        public decimal? Fee { get; set; }
 
         // Which (publicly-listed) hospital this doctor belongs to — needed now that the
         // directory spans every opted-in hospital, not just one scoped by an API key.

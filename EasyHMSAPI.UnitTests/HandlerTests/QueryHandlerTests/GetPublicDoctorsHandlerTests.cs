@@ -118,6 +118,38 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         }
 
         [Test]
+        public async Task Handle_ReturnsOpdConsultFee_AtDoctorsCanonicalHospital()
+        {
+            var user = TestDataFactory.SeedUser(_context);
+            var hospital = TestDataFactory.SeedHospital(_context, user.UserID);
+            var doctor = TestDataFactory.SeedDoctor(_context, user, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, hospital.HospitalID);
+            _context.DoctorFees.Add(new DoctorFee { DoctorFeeId = Guid.NewGuid(), HospitalId = hospital.HospitalID, DoctorId = doctor.DoctorID, FeeType = "OPD_CONSULT", Amount = 500m, IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+            // A different fee type must not be picked up as the consultation fee.
+            _context.DoctorFees.Add(new DoctorFee { DoctorFeeId = Guid.NewGuid(), HospitalId = hospital.HospitalID, DoctorId = doctor.DoctorID, FeeType = "IPD_VISIT", Amount = 1200m, IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetPublicDoctorsRequestModel(), CancellationToken.None);
+
+            Assert.That(response.Doctors[0].Fee, Is.EqualTo(500m));
+        }
+
+        [Test]
+        public async Task Handle_InactiveOpdConsultFee_IsNotReturned()
+        {
+            var user = TestDataFactory.SeedUser(_context);
+            var hospital = TestDataFactory.SeedHospital(_context, user.UserID);
+            var doctor = TestDataFactory.SeedDoctor(_context, user, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, hospital.HospitalID);
+            _context.DoctorFees.Add(new DoctorFee { DoctorFeeId = Guid.NewGuid(), HospitalId = hospital.HospitalID, DoctorId = doctor.DoctorID, FeeType = "OPD_CONSULT", Amount = 500m, IsActive = false, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetPublicDoctorsRequestModel(), CancellationToken.None);
+
+            Assert.That(response.Doctors[0].Fee, Is.Null);
+        }
+
+        [Test]
         public async Task Handle_ExcludesHospitalResponses_FromRatingAggregate()
         {
             var user = TestDataFactory.SeedUser(_context);
