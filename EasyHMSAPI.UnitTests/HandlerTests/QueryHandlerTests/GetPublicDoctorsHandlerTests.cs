@@ -118,6 +118,24 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         }
 
         [Test]
+        public async Task Handle_ExcludesHospitalResponses_FromRatingAggregate()
+        {
+            var user = TestDataFactory.SeedUser(_context);
+            var hospital = TestDataFactory.SeedHospital(_context, user.UserID);
+            var doctor = TestDataFactory.SeedDoctor(_context, user, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, hospital.HospitalID);
+            _context.DoctorReviews.Add(new DoctorReview { ReviewId = Guid.NewGuid(), HospitalId = hospital.HospitalID, DoctorId = doctor.DoctorID, Rating = 4, Comment = "x", CreatedAt = DateTime.UtcNow });
+            _context.DoctorReviews.Add(new DoctorReview { ReviewId = Guid.NewGuid(), HospitalId = hospital.HospitalID, DoctorId = doctor.DoctorID, Rating = 1, Comment = "Thanks for the feedback.", IsHospitalResponse = true, CreatedAt = DateTime.UtcNow });
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetPublicDoctorsRequestModel(), CancellationToken.None);
+
+            var d = response.Doctors[0];
+            Assert.That(d.Rating, Is.EqualTo(4.0));
+            Assert.That(d.ReviewCount, Is.EqualTo(1));
+        }
+
+        [Test]
         public async Task Handle_ExcludesDoctorsFromNonPubliclyListedHospitals()
         {
             var user1 = TestDataFactory.SeedUser(_context, email: "a@example.com", phone: "1111111111");

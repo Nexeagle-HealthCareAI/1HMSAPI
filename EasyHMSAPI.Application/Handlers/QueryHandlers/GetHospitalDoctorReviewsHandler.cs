@@ -39,12 +39,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     Comment = r.Comment,
                     HelpfulCount = r.HelpfulCount,
                     IsHidden = r.IsHidden,
+                    IsHospitalResponse = r.IsHospitalResponse,
                     SubmittedIp = r.SubmittedIp,
                     CreatedAt = r.CreatedAt,
                 })
                 .ToListAsync(cancellationToken);
 
-            var visible = reviews.Where(r => !r.IsHidden).ToList();
+            var visible = reviews.Where(r => !r.IsHidden && !r.IsHospitalResponse).ToList();
 
             return new GetHospitalDoctorReviewsResponseModel
             {

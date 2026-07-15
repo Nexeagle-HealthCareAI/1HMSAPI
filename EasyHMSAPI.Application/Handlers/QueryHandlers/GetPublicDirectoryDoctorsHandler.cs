@@ -92,7 +92,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
             var doctorIdsForReviews = rows.Select(r => r.DoctorID).ToList();
             var reviewAggregates = await _context.DoctorReviews
-                .Where(r => doctorIdsForReviews.Contains(r.DoctorId) && !r.IsHidden)
+                .Where(r => doctorIdsForReviews.Contains(r.DoctorId) && !r.IsHidden && !r.IsHospitalResponse)
                 .GroupBy(r => r.DoctorId)
                 .Select(g => new { DoctorId = g.Key, Average = g.Average(r => r.Rating), Count = g.Count() })
                 .ToDictionaryAsync(g => g.DoctorId, cancellationToken);

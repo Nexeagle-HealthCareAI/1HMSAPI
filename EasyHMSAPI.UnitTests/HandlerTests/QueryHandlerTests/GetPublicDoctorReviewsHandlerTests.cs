@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.QueryHandlers;
@@ -65,6 +66,25 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             Assert.That(response.Reviews, Is.Empty);
             Assert.That(response.ReviewCount, Is.EqualTo(0));
             Assert.That(response.AverageRating, Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task Handle_HospitalResponse_IncludedInListButExcludedFromAverage()
+        {
+            var doctorId = Guid.NewGuid();
+            _context.DoctorReviews.Add(MakeReview(doctorId, 4));
+            var response = MakeReview(doctorId, 1);
+            response.IsHospitalResponse = true;
+            response.Comment = "Thanks for the feedback.";
+            _context.DoctorReviews.Add(response);
+            await _context.SaveChangesAsync();
+
+            var result = await _handler.Handle(new GetPublicDoctorReviewsRequestModel { DoctorId = doctorId }, CancellationToken.None);
+
+            Assert.That(result.Reviews, Has.Count.EqualTo(2));
+            Assert.That(result.Reviews.Single(r => r.IsHospitalResponse).Comment, Is.EqualTo("Thanks for the feedback."));
+            Assert.That(result.ReviewCount, Is.EqualTo(1));
+            Assert.That(result.AverageRating, Is.EqualTo(4.0));
         }
 
         [Test]

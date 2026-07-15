@@ -224,6 +224,29 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Admin write — posts an official "Hospital Response" comment against a doctor. hospitalId
+        // as a query param so HospitalAccessFilter gates this to callers who are members of that
+        // hospital; the handler additionally confirms the doctor belongs to that hospital.
+        [HttpPost("{doctorId:guid}/reviews")]
+        [Authorize]
+        public async Task<ActionResult<SubmitHospitalResponseResponseModel>> SubmitHospitalResponse(Guid doctorId, [FromQuery] Guid hospitalId, [FromBody] SubmitHospitalResponseRequestBody body)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var response = await _mediator.Send(new SubmitHospitalResponseRequestModel { HospitalId = hospitalId, DoctorId = doctorId, Comment = body.Comment });
+                if (!response.Success) return BadRequest(response);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in SubmitHospitalResponse for doctorId: {DoctorId}", doctorId);
+                return StatusCode(500, new { Message = "An error occurred while posting the response." });
+            }
+        }
+
         // Toggles whether one doctor shows on the platform-wide public directory. hospitalId as a
         // query param (not the body) so the global HospitalAccessFilter gates this to callers who
         // are members of that hospital — same pattern as DoctorFeesController.

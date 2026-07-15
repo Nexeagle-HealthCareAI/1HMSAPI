@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.QueryHandlers;
@@ -47,6 +48,26 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             Assert.That(response.Success, Is.True);
             Assert.That(response.Reviews, Has.Count.EqualTo(2));
             // Average/count computed over visible reviews only.
+            Assert.That(response.ReviewCount, Is.EqualTo(1));
+            Assert.That(response.AverageRating, Is.EqualTo(5.0));
+        }
+
+        [Test]
+        public async Task Handle_HospitalResponse_ListedButExcludedFromAverage()
+        {
+            var user = TestDataFactory.SeedUser(_context);
+            var doctor = TestDataFactory.SeedDoctor(_context, user);
+            var hospital = TestDataFactory.SeedHospital(_context, user.UserID);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, hospital.HospitalID);
+
+            _context.DoctorReviews.Add(new DoctorReview { ReviewId = Guid.NewGuid(), HospitalId = hospital.HospitalID, DoctorId = doctor.DoctorID, Rating = 5, Comment = "Great", IsHidden = false, CreatedAt = DateTime.UtcNow });
+            _context.DoctorReviews.Add(new DoctorReview { ReviewId = Guid.NewGuid(), HospitalId = hospital.HospitalID, DoctorId = doctor.DoctorID, Rating = 5, Comment = "Thanks for the feedback.", IsHidden = false, IsHospitalResponse = true, CreatedAt = DateTime.UtcNow });
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetHospitalDoctorReviewsRequestModel { HospitalId = hospital.HospitalID, DoctorId = doctor.DoctorID }, CancellationToken.None);
+
+            Assert.That(response.Reviews, Has.Count.EqualTo(2));
+            Assert.That(response.Reviews.Single(r => r.IsHospitalResponse).Comment, Is.EqualTo("Thanks for the feedback."));
             Assert.That(response.ReviewCount, Is.EqualTo(1));
             Assert.That(response.AverageRating, Is.EqualTo(5.0));
         }

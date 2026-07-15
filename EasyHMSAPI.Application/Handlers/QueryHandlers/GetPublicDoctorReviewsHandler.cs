@@ -32,16 +32,19 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     Rating = r.Rating,
                     Comment = r.Comment,
                     HelpfulCount = r.HelpfulCount,
+                    IsHospitalResponse = r.IsHospitalResponse,
                     CreatedAt = r.CreatedAt,
                 })
                 .ToListAsync(cancellationToken);
+
+            var ratedReviews = reviews.Where(r => !r.IsHospitalResponse).ToList();
 
             return new GetPublicDoctorReviewsResponseModel
             {
                 Success = true,
                 Reviews = reviews,
-                ReviewCount = reviews.Count,
-                AverageRating = reviews.Count > 0 ? Math.Round(reviews.Average(r => r.Rating), 1) : 0,
+                ReviewCount = ratedReviews.Count,
+                AverageRating = ratedReviews.Count > 0 ? Math.Round(ratedReviews.Average(r => r.Rating), 1) : 0,
             };
         }
     }
