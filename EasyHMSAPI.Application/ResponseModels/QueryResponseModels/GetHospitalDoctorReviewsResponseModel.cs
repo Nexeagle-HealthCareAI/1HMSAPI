@@ -20,7 +20,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public Guid ReviewId { get; set; }
         public string? AuthorName { get; set; }
         public int Rating { get; set; }
-        public string Comment { get; set; } = null!;
+        public string? Comment { get; set; }
         public int HelpfulCount { get; set; }
         public bool IsHidden { get; set; }
         public bool IsHospitalResponse { get; set; }

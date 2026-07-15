@@ -6,6 +6,7 @@ using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
@@ -25,11 +26,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     {
         private readonly AppDbContext _context;
         private readonly ISmsService _smsService;
+        private readonly IWhatsAppMessagingService _whatsAppMessagingService;
 
-        public PublicBookAppointmentHandler(AppDbContext context, ISmsService smsService)
+        public PublicBookAppointmentHandler(AppDbContext context, ISmsService smsService, IWhatsAppMessagingService whatsAppMessagingService)
         {
             _context = context;
             _smsService = smsService;
+            _whatsAppMessagingService = whatsAppMessagingService;
         }
 
         public async Task<PublicBookAppointmentResponseModel> Handle(PublicBookAppointmentRequestModel request, CancellationToken cancellationToken)
@@ -86,6 +89,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             _context.Appointments.Add(appointment);
             await _context.SaveChangesAsync(cancellationToken);
 
+            var isReminderSent = false;
             if (!string.IsNullOrWhiteSpace(patient.Mobile))
             {
                 try
@@ -97,6 +101,36 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 {
                     // Best-effort — never fail the booking because the SMS provider is down.
                 }
+
+                try
+                {
+                    // Same "appointment confirmation" WhatsApp template ConfirmPreAppointmentHandler
+                    // sends later — reused here for the immediate NexEagle booking-success moment too.
+                    // No real token exists yet (that's only allocated at staff confirmation), so it's
+                    // left blank here, and the date/time shown is the patient's PREFERRED slot, not a
+                    // locked one — the hospital may still adjust it, same caveat the SMS above states.
+                    var hospitalName = await _context.Hospitals
+                        .Where(h => h.HospitalID == hospitalId)
+                        .Select(h => h.Name)
+                        .FirstOrDefaultAsync(cancellationToken);
+                    var doctorName = await _context.Doctors
+                        .Where(d => d.DoctorID == request.DoctorId)
+                        .Select(d => d.User.UserProfiles.FirstOrDefault()!.FullName)
+                        .FirstOrDefaultAsync(cancellationToken);
+
+                    isReminderSent = await _whatsAppMessagingService.SendAppointmentConfirmationAsync(
+                        patient.Mobile,
+                        patient.FullName ?? string.Empty,
+                        hospitalName ?? string.Empty,
+                        doctorName ?? string.Empty,
+                        string.Empty,
+                        appointment.ApptDate.ToString("dd-MM-yyyy"),
+                        appointment.StartAt.ToString("HH:mm"));
+                }
+                catch
+                {
+                    // Best-effort — never fail the booking because WhatsApp delivery threw.
+                }
             }
 
             return new PublicBookAppointmentResponseModel
@@ -105,6 +139,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 Message = "Your appointment request has been received. Our team will confirm your slot shortly.",
                 AppointmentId = appointment.ApptId,
                 PatientId = patient.PatientId,
+                IsReminderSent = isReminderSent,
             };
         }
     }

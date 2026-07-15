@@ -20,6 +20,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
     {
         private AppDbContext _context = null!;
         private Mock<ISmsService> _smsServiceMock = null!;
+        private Mock<IWhatsAppMessagingService> _whatsAppMessagingServiceMock = null!;
         private PublicBookAppointmentHandler _handler = null!;
         private Guid _hospitalId;
         private Doctor _doctor = null!;
@@ -29,7 +30,12 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         {
             _context = InMemoryDbContextFactory.CreateContext();
             _smsServiceMock = new Mock<ISmsService>();
-            _handler = new PublicBookAppointmentHandler(_context, _smsServiceMock.Object);
+            _whatsAppMessagingServiceMock = new Mock<IWhatsAppMessagingService>();
+            _whatsAppMessagingServiceMock
+                .Setup(w => w.SendAppointmentConfirmationAsync(
+                    It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync(true);
+            _handler = new PublicBookAppointmentHandler(_context, _smsServiceMock.Object, _whatsAppMessagingServiceMock.Object);
 
             var user = TestDataFactory.SeedUser(_context);
             var hospital = TestDataFactory.SeedHospital(_context, user.UserID, isPubliclyListed: true);
@@ -70,6 +76,31 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 
             var token = await _context.AppointmentTokens.FirstOrDefaultAsync(t => t.ApptId == appointment.ApptId);
             Assert.That(token, Is.Null, "Public booking must not allocate a token — that happens only at confirm time.");
+        }
+
+        [Test]
+        public async Task Handle_NewPatient_SendsWhatsAppAppointmentConfirmation()
+        {
+            var request = new PublicBookAppointmentRequestModel
+            {
+                DoctorId = _doctor.DoctorID,
+                PreferredDate = DateTime.Today.AddDays(2),
+                PreferredTime = new TimeSpan(10, 0, 0),
+                Patient = new Patient { FullName = "WhatsApp Visitor", Mobile = "9998887776", Sex = "Male" },
+            };
+
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.IsReminderSent, Is.True);
+            _whatsAppMessagingServiceMock.Verify(w => w.SendAppointmentConfirmationAsync(
+                "9998887776",
+                "WhatsApp Visitor",
+                "Test Hospital",
+                It.IsAny<string>(),
+                string.Empty,
+                It.IsAny<string>(),
+                It.IsAny<string>()), Times.Once);
         }
 
         [Test]

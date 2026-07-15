@@ -122,6 +122,22 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        [HttpPatch("doctors/{doctorId:guid}/reviews/{reviewId:guid}")]
+        public async Task<ActionResult<UpdateReviewCommentResponseModel>> UpdateReviewComment(Guid doctorId, Guid reviewId, [FromBody] UpdateReviewCommentRequestBody body)
+        {
+            try
+            {
+                var response = await _mediator.Send(new UpdateReviewCommentRequestModel { DoctorId = doctorId, ReviewId = reviewId, Comment = body.Comment });
+                if (!response.Success) return BadRequest(response);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.UpdateReviewComment for reviewId: {ReviewId}", reviewId);
+                return StatusCode(500, new { Message = "An error occurred while updating the review." });
+            }
+        }
+
         [HttpPost("doctors/{doctorId:guid}/reviews/{reviewId:guid}/helpful")]
         public async Task<ActionResult<MarkReviewHelpfulResponseModel>> MarkReviewHelpful(Guid doctorId, Guid reviewId)
         {
