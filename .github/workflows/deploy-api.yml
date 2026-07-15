@@ -224,7 +224,21 @@ jobs:
 
             IMAGE_LC=$(printf '%s' "$IMAGE" | tr '[:upper:]' '[:lower:]')
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
-            docker pull "$IMAGE_LC"
+
+            # docker pull occasionally hits a transient containerd content-store race
+            # ("failed commit on ref ... rename ... no such file or directory") — retry
+            # a couple of times before giving up, rather than failing the whole deploy.
+            PULLED=0
+            for i in 1 2 3; do
+              if docker pull "$IMAGE_LC"; then PULLED=1; break; fi
+              echo "docker pull attempt $i failed, retrying in 5s..."
+              sleep 5
+            done
+            if [ "$PULLED" != 1 ]; then
+              echo "docker pull failed after 3 attempts — aborting without touching the running container" >&2
+              exit 1
+            fi
+
             docker rm -f easyhms-api-dev 2>/dev/null || true
             docker run -d --name easyhms-api-dev --restart unless-stopped \
               --network host --env-file "$ENVFILE" "$IMAGE_LC"
@@ -334,9 +348,16 @@ jobs:
           IMAGE_LC=$(printf '%s' "$IMAGE" | tr '[:upper:]' '[:lower:]')
           ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
               ${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }} \
-              "docker pull '$IMAGE_LC' && docker rm -f easyhms-api-prod 2>/dev/null; \
+              "set -e; \
+               PULLED=0; \
+               for i in 1 2 3; do \
+                 if docker pull '$IMAGE_LC'; then PULLED=1; break; fi; \
+                 sleep 5; \
+               done; \
+               if [ \"\$PULLED\" != 1 ]; then echo 'docker pull failed after 3 attempts, aborting without touching the running container' >&2; exit 1; fi; \
+               docker rm -f easyhms-api-prod 2>/dev/null || true; \
                docker run -d --name easyhms-api-prod --restart unless-stopped \
-               --network host --env-file /opt/easyhms-prod/prod.env '$IMAGE_LC' && \
+                 --network host --env-file /opt/easyhms-prod/prod.env '$IMAGE_LC'; \
                docker image prune -f"
 
       - name: Health check
