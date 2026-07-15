@@ -90,7 +90,9 @@ builder.Services.AddCors(options =>
                 "https://1hms.nexeagle.com",
                 "http://1hms.nexeagle.com",
                 "https://nexeagle.com",
-                "http://nexeagle.com"
+                "http://nexeagle.com",
+                "http://151.185.45.77:81",
+                "http://151.185.45.67:81"
               )
               .AllowAnyHeader()
               .AllowAnyMethod()
