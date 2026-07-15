@@ -97,7 +97,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             // One batched aggregate query for the whole platform-wide listing rather than a
             // per-doctor round trip.
             var reviewAggregates = await _context.DoctorReviews
-                .Where(r => candidateDoctorIds.Contains(r.DoctorId) && !r.IsHidden)
+                .Where(r => candidateDoctorIds.Contains(r.DoctorId) && !r.IsHidden && !r.IsHospitalResponse)
                 .GroupBy(r => r.DoctorId)
                 .Select(g => new { DoctorId = g.Key, Average = g.Average(r => r.Rating), Count = g.Count() })
                 .ToDictionaryAsync(g => g.DoctorId, cancellationToken);

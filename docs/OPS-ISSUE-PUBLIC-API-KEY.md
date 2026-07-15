@@ -1,15 +1,21 @@
 # Issuing a public API key (platform directory)
 
-`/public/*` (doctor directory + booking, used by the Nexeagle website) is gated by a
-platform-wide API key — not scoped to any one hospital. Because a leaked/self-issued key
-would reach every hospital that has opted into the public directory (`Hospital.IsPubliclyListed`),
-there is **deliberately no HTTP endpoint** for creating or revoking these keys — a hospital
-admin self-issuing one would be a privilege escalation. Use the `tools/IssuePublicApiKey`
-console tool instead, run directly against the database by whoever already has DB access
-(same trust tier as running a manual migration).
+`/public/*` (doctor directory, booking, reviews — used by NexEagleWebsite and, generically,
+any site wanting to list/book/review publicly-listed doctors) does **not require** an API
+key. Anonymous callers with no `X-Api-Key` header are let through untracked (see
+`PublicApiKeyFilter`) — this is deliberately zero-configuration, since the data behind it
+is only ever what a hospital has already opted into showing publicly
+(`Hospital.IsPubliclyListed`). Abuse protection is a separate, always-on IP rate limit
+(`PublicBookingPolicy` in `Program.cs`), unaffected by whether a key is sent.
 
-This is expected to run rarely — realistically once or twice ever per environment (a prod
-key, a staging key for NexEagleWebsite).
+A key is only useful if you want one specific consumer's traffic identified and
+individually revocable later (e.g. a distinct partner integration) — most deployments,
+including NexEagleWebsite today, don't need one. Because a leaked/self-issued key would
+reach every hospital that has opted into the public directory, there is **deliberately no
+HTTP endpoint** for creating or revoking these keys — a hospital admin self-issuing one
+would be a privilege escalation. Use the `tools/IssuePublicApiKey` console tool instead,
+run directly against the database by whoever already has DB access (same trust tier as
+running a manual migration).
 
 ## Create a key
 

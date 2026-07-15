@@ -12,11 +12,13 @@ using System.Diagnostics.CodeAnalysis;
 namespace EasyHMSAPI.Api.Controllers
 {
     /// <summary>
-    /// Public, API-key-gated surface for external integrations (the Nexeagle booking website).
-    /// No staff JWT — PublicApiKeyFilter only validates the X-Api-Key header is a valid, active
-    /// platform-wide key. It is no longer scoped to one hospital: GetDoctors returns every
-    /// publicly-listed hospital's doctors, and GetDoctorAvailability/BookAppointment resolve
-    /// HospitalId from the doctor being acted on, never from the key or the request body.
+    /// Public surface for external integrations (the Nexeagle booking website and, generically,
+    /// any site wanting to list/book/review publicly-listed doctors). No staff JWT — the
+    /// X-Api-Key header is optional (see PublicApiKeyFilter): anonymous callers are let through,
+    /// a header is only needed if a consumer wants its traffic identified/revocable. Not scoped
+    /// to one hospital: GetDoctors returns every publicly-listed hospital's doctors, and
+    /// GetDoctorAvailability/BookAppointment resolve HospitalId from the doctor being acted on,
+    /// never from the key or the request body.
     /// </summary>
     [ExcludeFromCodeCoverage]
     [ApiController]

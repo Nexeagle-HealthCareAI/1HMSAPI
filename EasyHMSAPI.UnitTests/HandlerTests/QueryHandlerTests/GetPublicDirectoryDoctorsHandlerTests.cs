@@ -129,5 +129,23 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             Assert.That(d.Rating, Is.EqualTo(4.0));
             Assert.That(d.ReviewCount, Is.EqualTo(2));
         }
+
+        [Test]
+        public async Task Handle_ExcludesHospitalResponses_FromRatingAggregate()
+        {
+            var user = TestDataFactory.SeedUser(_context);
+            var hospital = TestDataFactory.SeedHospital(_context, user.UserID);
+            var doctor = TestDataFactory.SeedDoctor(_context, user);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, hospital.HospitalID);
+            _context.DoctorReviews.Add(new DoctorReview { ReviewId = Guid.NewGuid(), HospitalId = hospital.HospitalID, DoctorId = doctor.DoctorID, Rating = 5, Comment = "x", CreatedAt = DateTime.UtcNow });
+            _context.DoctorReviews.Add(new DoctorReview { ReviewId = Guid.NewGuid(), HospitalId = hospital.HospitalID, DoctorId = doctor.DoctorID, Rating = 1, Comment = "Thanks for the feedback.", IsHospitalResponse = true, CreatedAt = DateTime.UtcNow });
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetPublicDirectoryDoctorsRequestModel { HospitalId = hospital.HospitalID }, CancellationToken.None);
+
+            var d = response.Doctors[0];
+            Assert.That(d.Rating, Is.EqualTo(5.0));
+            Assert.That(d.ReviewCount, Is.EqualTo(1));
+        }
     }
 }

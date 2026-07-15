@@ -20,6 +20,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public int Rating { get; set; }
         public string Comment { get; set; } = null!;
         public int HelpfulCount { get; set; }
+        public bool IsHospitalResponse { get; set; }
         public DateTime CreatedAt { get; set; }
     }
 }
