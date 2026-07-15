@@ -86,5 +86,54 @@ namespace EasyHMSAPI.Api.Controllers
                 return StatusCode(500, new { Message = "An error occurred while booking the appointment." });
             }
         }
+
+        [HttpGet("doctors/{doctorId:guid}/reviews")]
+        public async Task<ActionResult<GetPublicDoctorReviewsResponseModel>> GetDoctorReviews(Guid doctorId)
+        {
+            try
+            {
+                var response = await _mediator.Send(new GetPublicDoctorReviewsRequestModel { DoctorId = doctorId });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetDoctorReviews for doctorId: {DoctorId}", doctorId);
+                return StatusCode(500, new { Message = "An error occurred while fetching reviews." });
+            }
+        }
+
+        [HttpPost("doctors/{doctorId:guid}/reviews")]
+        public async Task<ActionResult<SubmitDoctorReviewResponseModel>> SubmitDoctorReview(Guid doctorId, [FromBody] SubmitDoctorReviewRequestModel request)
+        {
+            try
+            {
+                request.DoctorId = doctorId;
+                request.IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
+                var response = await _mediator.Send(request);
+                if (!response.Success) return BadRequest(response);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.SubmitDoctorReview for doctorId: {DoctorId}", doctorId);
+                return StatusCode(500, new { Message = "An error occurred while submitting the review." });
+            }
+        }
+
+        [HttpPost("doctors/{doctorId:guid}/reviews/{reviewId:guid}/helpful")]
+        public async Task<ActionResult<MarkReviewHelpfulResponseModel>> MarkReviewHelpful(Guid doctorId, Guid reviewId)
+        {
+            try
+            {
+                var response = await _mediator.Send(new MarkReviewHelpfulRequestModel { ReviewId = reviewId });
+                if (!response.Success) return NotFound(response);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.MarkReviewHelpful for reviewId: {ReviewId}", reviewId);
+                return StatusCode(500, new { Message = "An error occurred while marking the review helpful." });
+            }
+        }
     }
 }

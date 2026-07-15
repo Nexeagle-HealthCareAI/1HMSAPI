@@ -54,6 +54,10 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             // Arrange
             var user = TestDataFactory.SeedUser(_context);
             var doctor = TestDataFactory.SeedDoctor(_context, user);
+            // The handler attaches its own stub Doctor instance for the same key — detach the
+            // seeded one first, or EF's identity map throws ("already being tracked"), a collision
+            // that can't happen in production since each request gets a fresh DbContext.
+            _context.Entry(doctor).State = EntityState.Detached;
 
             var request = new DoctorUpdateRequestModel
             {
@@ -67,7 +71,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var response = await _handler.Handle(request, CancellationToken.None);
 
             // Assert
-            Assert.That(response.Success, Is.True);
+            Assert.That(response.Success, Is.True, $"{response.Message} | {string.Join(", ", response.Errors ?? new List<string>())}");
             Assert.That(response.UpdatedFields, Does.Contain("Languages"));
             Assert.That(response.UpdatedFields, Does.Contain("PublicContactEmail"));
             Assert.That(response.UpdatedFields, Does.Contain("PublicContactPhone"));
@@ -113,6 +117,10 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var doctor = TestDataFactory.SeedDoctor(_context, user);
             var hospital = TestDataFactory.SeedHospital(_context, user.UserID);
             TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, hospital.HospitalID);
+            // The handler attaches its own stub Doctor instance for the same key — detach the
+            // seeded one first, or EF's identity map throws ("already being tracked"), a collision
+            // that can't happen in production since each request gets a fresh DbContext.
+            _context.Entry(doctor).State = EntityState.Detached;
 
             var request = new DoctorUpdateRequestModel
             {
@@ -125,7 +133,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var response = await _handler.Handle(request, CancellationToken.None);
 
             // Assert
-            Assert.That(response.Success, Is.True);
+            Assert.That(response.Success, Is.True, $"{response.Message} | {string.Join(", ", response.Errors ?? new List<string>())}");
             var updated = await _context.Doctors.FindAsync(doctor.DoctorID);
             Assert.That(updated!.Bio, Is.EqualTo("Updated by admin"));
         }

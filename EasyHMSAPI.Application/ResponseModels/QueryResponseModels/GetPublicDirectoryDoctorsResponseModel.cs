@@ -30,6 +30,9 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public List<string> Languages { get; set; } = new();
         public string? PublicContactEmail { get; set; }
         public string? PublicContactPhone { get; set; }
+        // Computed from non-hidden DoctorReviews.
+        public double? Rating { get; set; }
+        public int ReviewCount { get; set; }
         // Whether this doctor currently shows on the platform-wide public directory (also requires
         // the hospital itself to be publicly listed — see Hospital.IsPubliclyListed).
         public bool IsPubliclyListed { get; set; }

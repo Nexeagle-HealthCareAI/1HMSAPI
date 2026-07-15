@@ -90,10 +90,18 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 rows.Select(r => _blobService.GetUrlAsync(r.UserID, _containerName, cancellationToken))
             );
 
+            var doctorIdsForReviews = rows.Select(r => r.DoctorID).ToList();
+            var reviewAggregates = await _context.DoctorReviews
+                .Where(r => doctorIdsForReviews.Contains(r.DoctorId) && !r.IsHidden)
+                .GroupBy(r => r.DoctorId)
+                .Select(g => new { DoctorId = g.Key, Average = g.Average(r => r.Rating), Count = g.Count() })
+                .ToDictionaryAsync(g => g.DoctorId, cancellationToken);
+
             var doctors = new List<PublicDirectoryDoctorItem>();
             for (var i = 0; i < rows.Count; i++)
             {
                 var r = rows[i];
+                reviewAggregates.TryGetValue(r.DoctorID, out var reviewAgg);
                 var specializations = await _context.DoctorSpecializations
                     .Where(ds => ds.DoctorID == r.DoctorID && ds.Specialization != null && ds.Specialization.IsActive)
                     .Select(ds => ds.Specialization.Name)
@@ -124,6 +132,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     PublicContactEmail = r.PublicContactEmail,
                     PublicContactPhone = r.PublicContactPhone,
                     IsPubliclyListed = r.IsPubliclyListed,
+                    Rating = reviewAgg != null ? Math.Round(reviewAgg.Average, 1) : (double?)null,
+                    ReviewCount = reviewAgg?.Count ?? 0,
                 });
             }
 

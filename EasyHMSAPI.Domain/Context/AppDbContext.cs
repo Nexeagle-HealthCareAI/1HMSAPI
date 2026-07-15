@@ -80,6 +80,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<Doctor> Doctors { get; set; }
         public DbSet<DoctorDepartment> DoctorDepartments { get; set; }
         public DbSet<DoctorSpecialization> DoctorSpecializations { get; set; }
+        public DbSet<DoctorReview> DoctorReviews { get; set; }
         public DbSet<PrescriptionHeaderFooter> PrescriptionHeaderFooters { get; set; }
         public DbSet<UserInvitation> UserInvitations { get; set; }
         public DbSet<DoctorShiftTemplate> DoctorShiftTemplates { get; set; }
