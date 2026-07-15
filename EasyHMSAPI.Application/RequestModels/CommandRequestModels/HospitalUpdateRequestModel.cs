@@ -28,5 +28,9 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModel
         // Nullable bool, not the string-empty-means-unset sentinel every other field here
         // uses — the handler checks .HasValue explicitly before applying it.
         public bool? IsPubliclyListed { get; set; }
+        // GPS pin for the public doctor directory's "get directions" link. Same .HasValue-guarded
+        // convention as IsPubliclyListed above.
+        public decimal? Latitude { get; set; }
+        public decimal? Longitude { get; set; }
     }
 } 

@@ -78,6 +78,27 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         }
 
         [Test]
+        public async Task Handle_ReturnsLanguages_AndHospitalGeolocation()
+        {
+            var user = TestDataFactory.SeedUser(_context);
+            var hospital = TestDataFactory.SeedHospital(_context, user.UserID);
+            hospital.Latitude = 22.5726m;
+            hospital.Longitude = 88.3639m;
+            var doctor = TestDataFactory.SeedDoctor(_context, user, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, hospital.HospitalID);
+            doctor.LanguagesJson = "[\"English\",\"Hindi\"]";
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetPublicDoctorsRequestModel(), CancellationToken.None);
+
+            Assert.That(response.Doctors, Has.Count.EqualTo(1));
+            var d = response.Doctors[0];
+            Assert.That(d.Languages, Is.EquivalentTo(new[] { "English", "Hindi" }));
+            Assert.That(d.Latitude, Is.EqualTo(22.5726m));
+            Assert.That(d.Longitude, Is.EqualTo(88.3639m));
+        }
+
+        [Test]
         public async Task Handle_ExcludesDoctorsFromNonPubliclyListedHospitals()
         {
             var user1 = TestDataFactory.SeedUser(_context, email: "a@example.com", phone: "1111111111");

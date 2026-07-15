@@ -88,5 +88,63 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             // Assert
             Assert.That(response.Success, Is.False);
         }
+
+        [Test]
+        public async Task Handle_AdminUploadForDoctorNotAtSpecifiedHospital_RejectsUpload()
+        {
+            // Arrange — admin (Public Directory tile editor) passes HospitalId, but the target
+            // doctor has no DoctorDepartment row at that hospital.
+            var user = TestDataFactory.SeedUser(_context);
+            var userProfile = new UserProfile { UserID = user.UserID, FullName = "Test User" };
+            _context.UserProfiles.Add(userProfile);
+            TestDataFactory.SeedDoctor(_context, user);
+            await _context.SaveChangesAsync();
+
+            var fileMock = new Mock<IFormFile>();
+            var request = new UploadProfilePictureRequestModel
+            {
+                UserId = user.UserID,
+                File = fileMock.Object,
+                HospitalId = Guid.NewGuid(),
+            };
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.Success, Is.False);
+            _blobStorageServiceMock.Verify(x => x.UploadAsync(It.IsAny<string>(), It.IsAny<IFormFile>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Test]
+        public async Task Handle_AdminUploadForDoctorAtOwnHospital_AllowsUpload()
+        {
+            // Arrange
+            var user = TestDataFactory.SeedUser(_context);
+            var userProfile = new UserProfile { UserID = user.UserID, FullName = "Test User" };
+            _context.UserProfiles.Add(userProfile);
+            var doctor = TestDataFactory.SeedDoctor(_context, user);
+            var hospital = TestDataFactory.SeedHospital(_context, user.UserID);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, hospital.HospitalID);
+            await _context.SaveChangesAsync();
+
+            var fileMock = new Mock<IFormFile>();
+            _blobStorageServiceMock.Setup(x => x.UploadAsync(It.IsAny<string>(), It.IsAny<IFormFile>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync("http://blob.url/photo.jpg");
+
+            var request = new UploadProfilePictureRequestModel
+            {
+                UserId = user.UserID,
+                File = fileMock.Object,
+                HospitalId = hospital.HospitalID,
+            };
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.ProfilePictureUrl, Is.EqualTo("http://blob.url/photo.jpg"));
+        }
     }
 }

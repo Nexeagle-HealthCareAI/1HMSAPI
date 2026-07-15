@@ -17,5 +17,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? Department { get; set; }
         public List<string>? Specializations { get; set; }
         public Guid? HospitalId { get; set; }
+        public List<string>? Languages { get; set; }
+        public string? PublicContactEmail { get; set; }
+        public string? PublicContactPhone { get; set; }
     }
 }

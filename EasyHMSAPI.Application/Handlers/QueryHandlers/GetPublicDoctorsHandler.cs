@@ -6,6 +6,7 @@ using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using System.Text.Json;
 
 namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 {
@@ -69,13 +70,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 where candidateDoctorIds.Contains(d.DoctorID) && d.IsPubliclyListed
                 join u in _context.Users on d.UserID equals u.UserID
                 where u.UserStatusId != (int)UserStatusEnum.Revoked
-                select new { d.DoctorID, d.UserID, d.PrimaryDepartmentID, d.Qualification, d.ExperienceYears, d.Bio }
+                select new { d.DoctorID, d.UserID, d.PrimaryDepartmentID, d.Qualification, d.ExperienceYears, d.Bio, d.LanguagesJson }
             ).ToListAsync(cancellationToken);
 
             var hospitalIdsUsed = rows.Select(r => doctorHospital[r.DoctorID]).Distinct().ToList();
             var hospitalById = await _context.Hospitals
                 .Where(h => hospitalIdsUsed.Contains(h.HospitalID))
-                .Select(h => new { h.HospitalID, h.Name, h.City, h.State })
+                .Select(h => new { h.HospitalID, h.Name, h.City, h.State, h.Latitude, h.Longitude })
                 .ToDictionaryAsync(h => h.HospitalID, cancellationToken);
 
             var userIds = rows.Select(r => r.UserID).Distinct().ToList();
@@ -127,10 +128,15 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     Bio = r.Bio,
                     DepartmentName = r.PrimaryDepartmentID.HasValue && deptNameById.TryGetValue(r.PrimaryDepartmentID.Value, out var dn) ? dn : null,
                     Specializations = specializations,
+                    Languages = string.IsNullOrWhiteSpace(r.LanguagesJson)
+                        ? new List<string>()
+                        : (JsonSerializer.Deserialize<List<string>>(r.LanguagesJson) ?? new List<string>()),
                     HospitalId = hospitalId,
                     HospitalName = hospital?.Name,
                     City = hospital?.City,
                     State = hospital?.State,
+                    Latitude = hospital?.Latitude,
+                    Longitude = hospital?.Longitude,
                 });
             }
 

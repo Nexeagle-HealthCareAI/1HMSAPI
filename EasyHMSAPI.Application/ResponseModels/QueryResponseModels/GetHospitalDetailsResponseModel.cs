@@ -22,6 +22,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? TimeZone { get; set; }
         public bool IsActive { get; set; }
         public bool IsPubliclyListed { get; set; }
+        public decimal? Latitude { get; set; }
+        public decimal? Longitude { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime LastUpdatedAt { get; set; }
         public HospitalProfileStatusDto? ProfileStatus { get; set; }

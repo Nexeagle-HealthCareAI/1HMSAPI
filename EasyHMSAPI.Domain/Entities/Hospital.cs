@@ -25,6 +25,10 @@ namespace EasyHMSAPI.Domain.Entities
         // Opt-in: hospital only appears in the platform-wide public doctor directory
         // (Nexeagle's "find a doctor" page) once this is explicitly turned on.
         public bool IsPubliclyListed { get; set; } = false;
+        // GPS pin for the public doctor directory's "get directions" link — shared by every
+        // doctor publicly listed at this hospital, since a doctor doesn't have their own address.
+        public decimal? Latitude { get; set; }
+        public decimal? Longitude { get; set; }
         public Guid CreatedByUserID { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime LastUpdatedAt { get; set; } = DateTime.UtcNow;

@@ -1,20 +1,27 @@
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Data.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using System.Linq;
+using System.Text.Json;
 
 namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 {
     public class DoctorGetHandler : IRequestHandler<DoctorGetRequestModel, DoctorGetResponseModel?>
     {
         private readonly AppDbContext _context;
+        private readonly IBlobStorageService _blobService;
+        private readonly string _containerName;
 
-        public DoctorGetHandler(AppDbContext context)
+        public DoctorGetHandler(AppDbContext context, IBlobStorageService blobService, IConfiguration configuration)
         {
             _context = context;
+            _blobService = blobService;
+            _containerName = configuration["BlobStorage:ProfilePhotosContainer"] ?? string.Empty;
         }
 
         public async Task<DoctorGetResponseModel?> Handle(DoctorGetRequestModel request, CancellationToken cancellationToken)
@@ -33,6 +40,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                                   d.MedicalCouncil,
                                   d.RegistrationYear,
                                   d.Bio,
+                                  d.LanguagesJson,
+                                  d.PublicContactEmail,
+                                  d.PublicContactPhone,
+                                  d.IsPubliclyListed,
                                   d.PrimaryDepartmentID,
                                   PrimaryDepartmentName = d.PrimaryDepartment != null ? d.PrimaryDepartment.Name : null,
                                   d.CreatedAt,
@@ -75,6 +86,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 HospitalDepartmentMappingId = hospitalDepartmentMappings.FirstOrDefault(hdm => hdm.DepartmentID == dd.DepartmentId)?.MappingID
             }).ToList();
 
+            var photoUrl = await _blobService.GetUrlAsync(temp.UserId, _containerName, cancellationToken) as string;
+
             var response = new DoctorGetResponseModel
             {
                 DoctorId = temp.DoctorId,
@@ -84,6 +97,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 MedicalCouncil = temp.MedicalCouncil,
                 RegistrationYear = temp.RegistrationYear,
                 Bio = temp.Bio,
+                Languages = string.IsNullOrWhiteSpace(temp.LanguagesJson)
+                    ? []
+                    : (JsonSerializer.Deserialize<List<string>>(temp.LanguagesJson) ?? []),
+                PublicContactEmail = temp.PublicContactEmail,
+                PublicContactPhone = temp.PublicContactPhone,
+                PhotoUrl = photoUrl,
+                IsPubliclyListed = temp.IsPubliclyListed,
                 PrimaryDepartmentID = temp.PrimaryDepartmentID,
                 PrimaryDepartmentName = temp.PrimaryDepartmentName,
                 CreatedAt = temp.CreatedAt,

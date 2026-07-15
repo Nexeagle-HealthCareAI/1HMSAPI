@@ -157,6 +157,29 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Rich, hospital-scoped doctor list for the admin Public Directory tile editor (photo,
+        // license, qualification, bio, specializations, languages, contact fields) — deliberately
+        // separate from GetHospitalDoctors above so that hot, simple picker never carries the extra
+        // blob-storage/specialization lookups this needs.
+        [HttpGet("public-directory")]
+        [Authorize]
+        public async Task<ActionResult<GetPublicDirectoryDoctorsResponseModel>> GetPublicDirectoryDoctors([FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetPublicDirectoryDoctorsRequestModel { HospitalId = hospitalId });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetPublicDirectoryDoctors for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while retrieving public directory doctors." });
+            }
+        }
+
         // Toggles whether one doctor shows on the platform-wide public directory. hospitalId as a
         // query param (not the body) so the global HospitalAccessFilter gates this to callers who
         // are members of that hospital — same pattern as DoctorFeesController.
