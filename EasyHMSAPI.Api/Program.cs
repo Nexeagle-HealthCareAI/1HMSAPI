@@ -1,4 +1,4 @@
-﻿using EasyHMSAPI.Application.Handlers.CommandHandlers;
+using EasyHMSAPI.Application.Handlers.CommandHandlers;
 using EasyHMSAPI.Application.Helpers.Implementations;
 using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.Services.Implementations;
@@ -84,9 +84,15 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendCors", policy =>
     {
-        policy.AllowAnyOrigin()
+        policy.WithOrigins(
+                "http://localhost:3000",
+                "http://localhost:5173",
+                "https://1hms.nexeagle.com",
+                "http://1hms.nexeagle.com"
+              )
               .AllowAnyHeader()
-              .AllowAnyMethod();
+              .AllowAnyMethod()
+              .AllowCredentials(); // Explicit origins allow for credentials if needed
     });
 });
 
