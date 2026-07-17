@@ -126,7 +126,12 @@ builder.Services
             ValidIssuer = jwtIssuer,
             ValidAudience = jwtAudience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
-            ClockSkew = TimeSpan.Zero
+            // Zero tolerance here means any clock drift between the process that issued a token
+            // and the process validating it (e.g. a container clock a few seconds off host time)
+            // rejects an otherwise-valid, non-expired token outright. A small buffer is the
+            // standard mitigation — tokens still expire on schedule (see JwtAuthService, 1 hour),
+            // this only forgives a few seconds/minutes of clock disagreement at the edges.
+            ClockSkew = TimeSpan.FromMinutes(2)
         };
     });
 
