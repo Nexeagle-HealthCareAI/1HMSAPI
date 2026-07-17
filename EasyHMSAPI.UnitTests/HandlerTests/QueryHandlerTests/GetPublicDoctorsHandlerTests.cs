@@ -73,8 +73,10 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             Assert.That(d.Bio, Is.EqualTo("Cardiologist with 10 years experience"));
             Assert.That(d.HospitalId, Is.EqualTo(hospital.HospitalID));
             Assert.That(d.HospitalName, Is.EqualTo(hospital.Name));
+            Assert.That(d.Address, Is.EqualTo(hospital.Location));
             Assert.That(d.City, Is.EqualTo(hospital.City));
             Assert.That(d.State, Is.EqualTo(hospital.State));
+            Assert.That(d.Pincode, Is.EqualTo(hospital.Pincode));
         }
 
         [Test]

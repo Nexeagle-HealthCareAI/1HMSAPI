@@ -36,8 +36,13 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         // directory spans every opted-in hospital, not just one scoped by an API key.
         public Guid HospitalId { get; set; }
         public string? HospitalName { get; set; }
+        // Full street-level address as entered on the hospital's own profile (Hospital.Location)
+        // — previously only City/State reached the public API, so doctor cards could never show
+        // more than "City, State". Address/Pincode fill that gap.
+        public string? Address { get; set; }
         public string? City { get; set; }
         public string? State { get; set; }
+        public string? Pincode { get; set; }
         // GPS pin for a "get directions" link — inherited from the hospital, since a doctor
         // doesn't have their own address (see Hospital.Latitude/Longitude).
         public decimal? Latitude { get; set; }

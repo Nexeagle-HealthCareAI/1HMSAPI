@@ -78,7 +78,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             var hospitalIdsUsed = rows.Select(r => doctorHospital[r.DoctorID]).Distinct().ToList();
             var hospitalById = await _context.Hospitals
                 .Where(h => hospitalIdsUsed.Contains(h.HospitalID))
-                .Select(h => new { h.HospitalID, h.Name, h.City, h.State, h.Latitude, h.Longitude })
+                .Select(h => new { h.HospitalID, h.Name, h.Location, h.City, h.State, h.Pincode, h.Latitude, h.Longitude })
                 .ToDictionaryAsync(h => h.HospitalID, cancellationToken);
 
             var userIds = rows.Select(r => r.UserID).Distinct().ToList();
@@ -154,8 +154,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         : (JsonSerializer.Deserialize<List<string>>(r.LanguagesJson) ?? new List<string>()),
                     HospitalId = hospitalId,
                     HospitalName = hospital?.Name,
+                    Address = hospital?.Location,
                     City = hospital?.City,
                     State = hospital?.State,
+                    Pincode = hospital?.Pincode,
                     Latitude = hospital?.Latitude,
                     Longitude = hospital?.Longitude,
                     Rating = reviewAgg != null ? Math.Round(reviewAgg.Average, 1) : (double?)null,
