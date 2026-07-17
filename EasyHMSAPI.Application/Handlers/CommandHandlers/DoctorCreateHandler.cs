@@ -73,6 +73,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     }
                 }
 
+                Guid? primaryMedicalSpecialityId = null;
+                if (request.PrimaryMedicalSpecialityId.HasValue)
+                {
+                    var exists = await _context.MedicalSpecialities
+                        .AnyAsync(s => s.SpecialityId == request.PrimaryMedicalSpecialityId.Value && s.IsActive, cancellationToken);
+                    if (exists)
+                        primaryMedicalSpecialityId = request.PrimaryMedicalSpecialityId.Value;
+                    else
+                        errors.Add("Selected primary speciality was not found.");
+                }
+
                 var doctorId = Guid.NewGuid();
                 var doctor = new Doctor
                 {
@@ -88,6 +99,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     PublicContactEmail = string.IsNullOrWhiteSpace(request.PublicContactEmail) ? null : request.PublicContactEmail.Trim(),
                     PublicContactPhone = string.IsNullOrWhiteSpace(request.PublicContactPhone) ? null : request.PublicContactPhone.Trim(),
                     PrimaryDepartmentID = primaryDepartmentId,
+                    PrimaryMedicalSpecialityId = primaryMedicalSpecialityId,
                     CreatedAt = createdAt,
                     HospitalId = request.HospitalId ?? userWithHospital.HospitalId
                 };

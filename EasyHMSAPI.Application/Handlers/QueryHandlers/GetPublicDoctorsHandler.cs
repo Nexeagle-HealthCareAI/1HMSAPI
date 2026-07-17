@@ -72,7 +72,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 where candidateDoctorIds.Contains(d.DoctorID) && d.IsPubliclyListed
                 join u in _context.Users on d.UserID equals u.UserID
                 where u.UserStatusId != (int)UserStatusEnum.Revoked
-                select new { d.DoctorID, d.UserID, d.PrimaryDepartmentID, d.Qualification, d.ExperienceYears, d.Bio, d.LanguagesJson }
+                select new { d.DoctorID, d.UserID, d.PrimaryDepartmentID, d.PrimaryMedicalSpecialityId, d.Qualification, d.ExperienceYears, d.Bio, d.LanguagesJson }
             ).ToListAsync(cancellationToken);
 
             var hospitalIdsUsed = rows.Select(r => doctorHospital[r.DoctorID]).Distinct().ToList();
@@ -95,6 +95,12 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             var deptNameById = await _context.Departments
                 .Where(dept => deptIds.Contains(dept.DepartmentID))
                 .ToDictionaryAsync(dept => dept.DepartmentID, dept => dept.Name, cancellationToken);
+
+            var specialityIds = rows.Where(r => r.PrimaryMedicalSpecialityId.HasValue).Select(r => r.PrimaryMedicalSpecialityId!.Value).Distinct().ToList();
+            var specialityById = await _context.MedicalSpecialities
+                .Where(s => specialityIds.Contains(s.SpecialityId))
+                .Select(s => new { s.SpecialityId, s.PatientFacingName, s.PatientFacingCategory })
+                .ToDictionaryAsync(s => s.SpecialityId, cancellationToken);
 
             // One batched aggregate query for the whole platform-wide listing rather than a
             // per-doctor round trip.
@@ -127,6 +133,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 var hospitalId = doctorHospital[r.DoctorID];
                 hospitalById.TryGetValue(hospitalId, out var hospital);
                 reviewAggregates.TryGetValue(r.DoctorID, out var reviewAgg);
+                specialityById.TryGetValue(r.PrimaryMedicalSpecialityId ?? Guid.Empty, out var speciality);
                 var specializations = _context.DoctorSpecializations
                     .Where(ds => ds.DoctorID == r.DoctorID && ds.Specialization != null && ds.Specialization.IsActive)
                     .Select(ds => ds.Specialization.Name)
@@ -148,6 +155,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     ExperienceYears = r.ExperienceYears,
                     Bio = r.Bio,
                     DepartmentName = r.PrimaryDepartmentID.HasValue && deptNameById.TryGetValue(r.PrimaryDepartmentID.Value, out var dn) ? dn : null,
+                    PrimaryMedicalSpecialityPatientFacingName = speciality?.PatientFacingName,
+                    PrimaryMedicalSpecialityCategory = speciality?.PatientFacingCategory,
                     Specializations = specializations,
                     Languages = string.IsNullOrWhiteSpace(r.LanguagesJson)
                         ? new List<string>()

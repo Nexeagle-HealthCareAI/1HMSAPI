@@ -55,6 +55,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         d.PublicContactEmail,
                         d.PublicContactPhone,
                         d.PrimaryDepartmentID,
+                        d.PrimaryMedicalSpecialityId,
                         HospitalId = userWithHospital
                     })
                     .FirstOrDefaultAsync(cancellationToken);
@@ -182,6 +183,23 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     else if (primaryDepartmentId == Guid.Empty)
                     {
                         errors.Add($"Primary department '{request.PrimaryDepartment}' not found.");
+                    }
+                }
+
+                if (request.PrimaryMedicalSpecialityId.HasValue && request.PrimaryMedicalSpecialityId != current.PrimaryMedicalSpecialityId)
+                {
+                    var specialityExists = await _context.MedicalSpecialities
+                        .AnyAsync(s => s.SpecialityId == request.PrimaryMedicalSpecialityId.Value && s.IsActive, cancellationToken);
+
+                    if (specialityExists)
+                    {
+                        doctor.PrimaryMedicalSpecialityId = request.PrimaryMedicalSpecialityId.Value;
+                        updatedFields.Add("PrimaryMedicalSpecialityId");
+                        _context.Entry(doctor).Property(d => d.PrimaryMedicalSpecialityId).IsModified = true;
+                    }
+                    else
+                    {
+                        errors.Add("Selected primary speciality was not found.");
                     }
                 }
 

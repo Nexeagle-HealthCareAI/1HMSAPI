@@ -25,6 +25,12 @@ namespace EasyHMSAPI.Domain.Entities
         public string? PublicContactEmail { get; set; }
         public string? PublicContactPhone { get; set; }
         public Guid? PrimaryDepartmentID { get; set; }
+        // Optional link into the NMC qualification-ladder catalog (dbo.MedicalSpecialities) —
+        // e.g. "DM Cardiology". Additive: sits alongside the free-text Qualification field and
+        // the separate Department/Specialization system above, replacing neither. Its only
+        // consumer today is GetPublicDoctorsHandler, which prefers this speciality's
+        // PatientFacingCategory over fuzzy-matching Department.Name for Doctor Dekho search.
+        public Guid? PrimaryMedicalSpecialityId { get; set; }
         public Guid? HospitalId { get; set; } // Added hospitalId
         // Opt-in: doctor only appears in the platform-wide public directory when BOTH
         // their hospital (Hospital.IsPubliclyListed) AND this flag are true.
@@ -33,6 +39,7 @@ namespace EasyHMSAPI.Domain.Entities
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public User User { get; set; } = null!;
         public Department? PrimaryDepartment { get; set; }
+        public MedicalSpeciality? PrimaryMedicalSpeciality { get; set; }
         public ICollection<DoctorDepartment> DoctorDepartments { get; set; } = new List<DoctorDepartment>();
         public ICollection<DoctorSpecialization> DoctorSpecializations { get; set; } = new List<DoctorSpecialization>();
         public ICollection<DoctorShiftOverride> DoctorShiftOverrides { get; set; } = new List<DoctorShiftOverride>();

@@ -105,6 +105,24 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Full NMC qualification-ladder catalog (MD/MS/DM/MCh), for the doctor-profile "primary
+        // speciality" picker. Small, rarely-changing global reference list — no filters.
+        [HttpGet("medical-specialities")]
+        [Authorize]
+        public async Task<ActionResult<GetMedicalSpecialitiesResponseModel>> GetMedicalSpecialities()
+        {
+            try
+            {
+                var response = await _mediator.Send(new GetMedicalSpecialitiesRequestModel());
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetMedicalSpecialities");
+                return StatusCode(500, new { Message = "An error occurred while retrieving medical specialities." });
+            }
+        }
+
         [HttpGet("specializations")]
         [Authorize]
         public async Task<ActionResult<DoctorSpecializationsResponseModel>> GetSpecializations([FromQuery] Guid departmentId, [FromQuery] Guid? hospitalId, [FromQuery] bool includeGlobal = true)

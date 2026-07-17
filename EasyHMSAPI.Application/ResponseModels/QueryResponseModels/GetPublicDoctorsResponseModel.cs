@@ -22,6 +22,12 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public int? ExperienceYears { get; set; }
         public string? Bio { get; set; }
         public string? DepartmentName { get; set; }
+        // Patient-facing NMC speciality info (dbo.MedicalSpecialities), when the doctor has one
+        // linked — a cleaner, authoritative alternative to fuzzy-matching DepartmentName for
+        // Doctor Dekho's specialty categorization. Null when unset; consumers fall back to
+        // DepartmentName as before.
+        public string? PrimaryMedicalSpecialityPatientFacingName { get; set; }
+        public string? PrimaryMedicalSpecialityCategory { get; set; }
         public List<string> Specializations { get; set; } = new();
         public List<string> Languages { get; set; } = new();
         // Computed from non-hidden DoctorReviews — null/0 when the doctor has no reviews yet, so

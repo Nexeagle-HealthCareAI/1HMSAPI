@@ -160,6 +160,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             PrimaryDepartment = request.Department,   // mark the chosen department as primary too
                             Department = request.Department,
                             Specializations = request.Specializations,
+                            PrimaryMedicalSpecialityId = request.PrimaryMedicalSpecialityId,
                             HospitalId = request.HospitalId,
                         }, cancellationToken);
 

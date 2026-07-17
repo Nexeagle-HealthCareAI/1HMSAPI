@@ -130,6 +130,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             doc.ExperienceYears = request.ExperienceYears;
                             doc.MedicalCouncil = request.MedicalCouncil;
                             // Qualifications and specializations could be updated similarly, skipping for brevity or delegating to another handler
+                            if (request.PrimaryMedicalSpecialityId.HasValue)
+                            {
+                                var specialityExists = await _context.MedicalSpecialities
+                                    .AnyAsync(s => s.SpecialityId == request.PrimaryMedicalSpecialityId.Value && s.IsActive, cancellationToken);
+                                if (specialityExists)
+                                    doc.PrimaryMedicalSpecialityId = request.PrimaryMedicalSpecialityId.Value;
+                            }
                             await _context.SaveChangesAsync(cancellationToken);
                         }
                         else
@@ -144,6 +151,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 PrimaryDepartment = request.Department,
                                 Department = request.Department,
                                 Specializations = request.Specializations,
+                                PrimaryMedicalSpecialityId = request.PrimaryMedicalSpecialityId,
                                 HospitalId = request.HospitalId,
                             }, cancellationToken);
 

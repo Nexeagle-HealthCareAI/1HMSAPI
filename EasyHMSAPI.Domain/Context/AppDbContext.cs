@@ -77,6 +77,9 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<Department> Departments { get; set; }
         public DbSet<HospitalDepartmentMapping> HospitalDepartmentMappings { get; set; }
         public DbSet<Specialization> Specializations { get; set; }
+        public DbSet<MedicalQualificationType> MedicalQualificationTypes { get; set; }
+        public DbSet<MedicalSpeciality> MedicalSpecialities { get; set; }
+        public DbSet<MedicalSpecialityFeeder> MedicalSpecialityFeeders { get; set; }
         public DbSet<Doctor> Doctors { get; set; }
         public DbSet<DoctorDepartment> DoctorDepartments { get; set; }
         public DbSet<DoctorSpecialization> DoctorSpecializations { get; set; }
@@ -216,6 +219,22 @@ namespace EasyHMSAPI.Domain.Context
             modelBuilder.Entity<Department>().ToTable("Departments");
             modelBuilder.Entity<HospitalDepartmentMapping>().ToTable("HospitalDepartmentMappings");
             modelBuilder.Entity<Specialization>().ToTable("Specializations");
+
+            modelBuilder.Entity<MedicalQualificationType>().ToTable("MedicalQualificationTypes");
+            modelBuilder.Entity<MedicalSpeciality>().ToTable("MedicalSpecialities");
+            modelBuilder.Entity<MedicalSpecialityFeeder>(entity =>
+            {
+                entity.ToTable("MedicalSpecialityFeeders");
+                entity.HasKey(f => new { f.SpecialityId, f.FeederSpecialityId });
+                entity.HasOne(f => f.Speciality)
+                    .WithMany(s => s.Feeders)
+                    .HasForeignKey(f => f.SpecialityId)
+                    .OnDelete(DeleteBehavior.NoAction);
+                entity.HasOne(f => f.FeederSpeciality)
+                    .WithMany(s => s.FeedsInto)
+                    .HasForeignKey(f => f.FeederSpecialityId)
+                    .OnDelete(DeleteBehavior.NoAction);
+            });
 
             // Lookup entities
             modelBuilder.Entity<LookupType>().ToTable("LookupTypes");
