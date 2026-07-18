@@ -31,7 +31,12 @@ namespace EasyHMSAPI.Domain.Entities
         public string? PaymentReference { get; set; }
         
         public DateTime? PaymentDate { get; set; }
-        
+
+        // Copied from the CMS plan catalog when a payment is approved. NULL = unlimited
+        // (used for the Enterprise tier, and for hospitals that predate this column).
+        public int? MaxDoctors { get; set; }
+        public int? MaxBeds { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }

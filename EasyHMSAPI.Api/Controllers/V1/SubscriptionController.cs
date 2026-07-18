@@ -45,7 +45,7 @@ namespace EasyHMSAPI.Api.Controllers.V1
             try
             {
                 var client = _httpClientFactory.CreateClient();
-                var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl.TrimEnd('/')}/api/v1/SubscriptionPlans/service");
+                var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl.TrimEnd('/')}/api/v1/EasyHmsSubscriptionPlans/service");
                 request.Headers.Add("X-Service-Key", serviceKey);
                 request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
@@ -76,7 +76,7 @@ namespace EasyHMSAPI.Api.Controllers.V1
 
             if (sub == null)
             {
-                return Ok(new { Status = "Trial", DaysLeft = 14 }); // Fallback
+                return Ok(new { Status = "Trial", DaysLeft = 30 }); // Fallback
             }
 
             var daysLeft = 0;

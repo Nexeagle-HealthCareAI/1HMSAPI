@@ -168,6 +168,7 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IWhatsAppMessagingService, WhatsAppMessagingService>();
 builder.Services.AddScoped<IVoiceRxService, VoiceRxService>();
 builder.Services.AddScoped<IDoctorValidationHelper, DoctorValidationHelper>();
+builder.Services.AddScoped<ISubscriptionLimitHelper, SubscriptionLimitHelper>();
 
 // ------------------------------------------------------------
 // Rate Limiting

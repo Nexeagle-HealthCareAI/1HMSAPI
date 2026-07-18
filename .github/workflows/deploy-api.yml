@@ -162,6 +162,8 @@ jobs:
           ACTOR: ${{ github.actor }}
           DB_CONN:         ${{ secrets.DEV_DB_CONNECTION }}
           JWT_SECRET:      ${{ secrets.JWT_SECRET }}
+          JWT_ISSUER:      ${{ vars.DEV_JWT_ISSUER || 'NexEagle Dev' }}
+          JWT_AUDIENCE:    ${{ vars.DEV_JWT_AUDIENCE || 'NexEagle EasyHMS Dev' }}
           OTP_PEPPER:      ${{ secrets.OTP_PEPPER }}
           SMTP_PW:         ${{ secrets.SMTP_APP_PASSWORD }}
           TWILIO_SID:      ${{ secrets.TWILIO_ACCOUNT_SID }}
@@ -187,7 +189,7 @@ jobs:
           password: ${{ secrets.DEV_SSH_PASSWORD }}
           port: 22
           command_timeout: 10m
-          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,OTP_PEPPER,SMTP_PW,TWILIO_SID,TWILIO_TOKEN,TWILIO_PHONE,WHATSAPP_TOKEN,WHATSAPP_ENABLED,WHATSAPP_API_URL,OPENAI_KEY,DEEPGRAM_KEY,INVITATION_URL,STORAGE_PROVIDER,S3_SERVICE_URL,S3_ACCESS_KEY,S3_SECRET_KEY,S3_BUCKET,S3_PREFIX,CMS_SERVICE_KEY,CMS_BASE_URL
+          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,JWT_ISSUER,JWT_AUDIENCE,OTP_PEPPER,SMTP_PW,TWILIO_SID,TWILIO_TOKEN,TWILIO_PHONE,WHATSAPP_TOKEN,WHATSAPP_ENABLED,WHATSAPP_API_URL,OPENAI_KEY,DEEPGRAM_KEY,INVITATION_URL,STORAGE_PROVIDER,S3_SERVICE_URL,S3_ACCESS_KEY,S3_SECRET_KEY,S3_BUCKET,S3_PREFIX,CMS_SERVICE_KEY,CMS_BASE_URL
           script: |
             set -e
             : "${DB_CONN:?DEV_DB_CONNECTION is empty}"
@@ -202,6 +204,8 @@ jobs:
             add(){ if [ -n "$2" ]; then printf '%s=%s\n' "$1" "$2" >> "$ENVFILE"; fi; }
             add 'ConnectionStrings__DefaultConnection'  "$DB_CONN"
             add 'Jwt__SecretKey'                        "$JWT_SECRET"
+            add 'Jwt__Issuer'                           "$JWT_ISSUER"
+            add 'Jwt__Audience'                         "$JWT_AUDIENCE"
             add 'Security__OtpPepper'                   "$OTP_PEPPER"
             add 'Smtp__AppPassword'                     "$SMTP_PW"
             add 'Twilio__AccountSid'                    "$TWILIO_SID"
@@ -277,6 +281,8 @@ jobs:
           JWT_SECRET:      ${{ secrets.JWT_SECRET }}
           OTP_PEPPER:      ${{ secrets.OTP_PEPPER }}
           SMTP_PW:         ${{ secrets.SMTP_APP_PASSWORD }}
+          JWT_ISSUER:      ${{ vars.PROD_JWT_ISSUER || 'NexEagle EasyHMS' }}
+          JWT_AUDIENCE:    ${{ vars.PROD_JWT_AUDIENCE || 'NexEagle EasyHMS Users' }}
           TWILIO_SID:      ${{ secrets.TWILIO_ACCOUNT_SID }}
           TWILIO_TOKEN:    ${{ secrets.TWILIO_AUTH_TOKEN }}
           TWILIO_PHONE:    ${{ secrets.TWILIO_PHONE_NUMBER }}
@@ -305,6 +311,8 @@ jobs:
           add(){ if [ -n "$2" ]; then printf '%s=%s\n' "$1" "$2" >> "$ENVFILE"; fi; }
           add 'ConnectionStrings__DefaultConnection'  "$DB_CONN"
           add 'Jwt__SecretKey'                        "$JWT_SECRET"
+          add 'Jwt__Issuer'                           "$JWT_ISSUER"
+          add 'Jwt__Audience'                         "$JWT_AUDIENCE"
           add 'Security__OtpPepper'                   "$OTP_PEPPER"
           add 'Smtp__AppPassword'                     "$SMTP_PW"
           add 'Twilio__AccountSid'                    "$TWILIO_SID"

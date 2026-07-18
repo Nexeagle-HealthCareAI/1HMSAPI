@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.CommandHandlers;
+using EasyHMSAPI.Application.Helpers.Implementations;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
@@ -24,7 +25,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public void SetUp()
         {
             _context = InMemoryDbContextFactory.CreateContext();
-            _handler = new DoctorCreateHandler(_context);
+            _handler = new DoctorCreateHandler(_context, new SubscriptionLimitHelper(_context));
         }
 
         [TearDown]

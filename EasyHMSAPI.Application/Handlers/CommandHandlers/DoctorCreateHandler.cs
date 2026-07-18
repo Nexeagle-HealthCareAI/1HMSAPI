@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Data.Enums;
@@ -12,10 +13,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     public class DoctorCreateHandler : IRequestHandler<DoctorCreateRequestModel, DoctorCreateResponseModel>
     {
         private readonly AppDbContext _context;
+        private readonly ISubscriptionLimitHelper _subscriptionLimitHelper;
 
-        public DoctorCreateHandler(AppDbContext context)
+        public DoctorCreateHandler(AppDbContext context, ISubscriptionLimitHelper subscriptionLimitHelper)
         {
             _context = context;
+            _subscriptionLimitHelper = subscriptionLimitHelper;
         }
 
         public async Task<DoctorCreateResponseModel> Handle(DoctorCreateRequestModel request, CancellationToken cancellationToken)
@@ -55,6 +58,22 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         Message = "Doctor profile already exists for this user.",
                         Errors = ["Duplicate doctor profile"]
                     };
+                }
+
+                var targetHospitalId = request.HospitalId ?? userWithHospital.HospitalId;
+                if (targetHospitalId.HasValue)
+                {
+                    var limitCheck = await _subscriptionLimitHelper.CanAddDoctorAsync(targetHospitalId.Value, cancellationToken);
+                    if (!limitCheck.Allowed)
+                    {
+                        return new DoctorCreateResponseModel
+                        {
+                            Success = false,
+                            Message = limitCheck.Reason,
+                            Errors = new List<string> { limitCheck.Reason! },
+                            UserId = request.UserId
+                        };
+                    }
                 }
 
                 Guid? primaryDepartmentId = null;

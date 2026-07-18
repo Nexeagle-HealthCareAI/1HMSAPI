@@ -144,14 +144,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
                 // --- End UserRoles update ---
 
-                // --- Initialize 14-Day Trial Subscription ---
+                // --- Initialize 1-Month Trial Subscription ---
                 var trialSub = new HospitalSubscription
                 {
                     HospitalSubscriptionId = Guid.NewGuid(),
                     HospitalId = hospitalId,
                     Status = "Trial",
                     TrialStartDate = DateTime.UtcNow,
-                    TrialEndDate = DateTime.UtcNow.AddDays(14),
+                    TrialEndDate = DateTime.UtcNow.AddMonths(1),
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
