@@ -22,6 +22,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                                      join d in _context.Doctors on a.DoctorId equals d.DoctorID
                                      join u in _context.Users on d.UserID equals u.UserID
                                      where a.DoctorId == request.DoctorId && a.HospitalId == request.HospitalId && a.ApptDate.Date == request.Date.Date && u.UserStatusId != (int)UserStatusEnum.Revoked && a.CurrentStatusCode != AppConstants.AppointmentStatus_Cancelled
+                                           && (request.ExcludeAppointmentId == null || a.ApptId != request.ExcludeAppointmentId.Value)
                                      select a.StartAt.TimeOfDay)
                                      .ToListAsync(cancellationToken);
 

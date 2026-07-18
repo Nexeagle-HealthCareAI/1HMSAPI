@@ -305,7 +305,7 @@ namespace EasyHMSAPI.Api.Controllers
 
         [HttpGet("patient-booked-slots")]
         [Authorize]
-        public async Task<IActionResult> GetPatientBookedSlots([FromQuery] Guid doctorId, [FromQuery] Guid hospitalId, [FromQuery] DateTime date)
+        public async Task<IActionResult> GetPatientBookedSlots([FromQuery] Guid doctorId, [FromQuery] Guid hospitalId, [FromQuery] DateTime date, [FromQuery] Guid? excludeAppointmentId = null)
         {
             _logger.LogInformation("GetPatientBookedSlots started at {Time} for doctorId: {DoctorId}, hospitalId: {HospitalId}, date: {Date}", DateTime.UtcNow, doctorId, hospitalId, date);
             if (doctorId == Guid.Empty)
@@ -319,7 +319,8 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 DoctorId = doctorId,
                 HospitalId = hospitalId,
-                Date = date
+                Date = date,
+                ExcludeAppointmentId = excludeAppointmentId
             };
             var response = await _mediator.Send(request);
             _logger.LogInformation("GetPatientBookedSlots ended for doctorId: {DoctorId}, hospitalId: {HospitalId}", doctorId, hospitalId);
