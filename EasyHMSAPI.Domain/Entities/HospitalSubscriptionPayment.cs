@@ -38,5 +38,16 @@ namespace EasyHMSAPI.Domain.Entities
         public string? RejectionReason { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        // Set when this submission is a mid-cycle plan switch (upgrade/downgrade) from an
+        // already-Active subscription: the unused days on PreviousPlanId were credited (prorated
+        // off what the hospital actually paid for it) against the new plan's price, and Amount
+        // above already reflects that discount. Lets CMS see/verify the breakdown before
+        // approving instead of just a bare, unexplained Amount.
+        public bool IsProratedSwitch { get; set; }
+        public Guid? PreviousPlanId { get; set; }
+        [MaxLength(200)]
+        public string? PreviousPlanName { get; set; }
+        public decimal? ProratedCreditAmount { get; set; }
     }
 }

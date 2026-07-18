@@ -1144,6 +1144,8 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(e => e.SubmittedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
                 entity.Property(e => e.ReviewedAt).HasColumnType("datetime2(3)").IsRequired(false);
                 entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+                entity.Property(e => e.ProratedCreditAmount).HasPrecision(18, 2);
+                entity.Property(e => e.IsProratedSwitch).HasDefaultValue(false);
             });
 
             modelBuilder.Entity<Store>(entity =>

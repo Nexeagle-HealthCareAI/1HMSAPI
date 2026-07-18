@@ -202,6 +202,18 @@ namespace EasyHMSAPI.Api.Controllers.V1
             sub.RejectedAt = null;
             sub.UpdatedAt = DateTime.UtcNow;
 
+            // A hospital submitting a new switch while an earlier submission is still awaiting
+            // review (e.g. they changed their mind about which plan to switch to) shouldn't leave
+            // two conflicting PendingApproval rows for CMS to see — supersede the old one(s).
+            var stillPending = await _context.HospitalSubscriptionPayments
+                .Where(p => p.HospitalId == hospitalId && p.Status == "PendingApproval")
+                .ToListAsync();
+            foreach (var stale in stillPending)
+            {
+                stale.Status = "Superseded";
+                stale.ReviewedAt = DateTime.UtcNow;
+            }
+
             _context.HospitalSubscriptionPayments.Add(new Domain.Entities.HospitalSubscriptionPayment
             {
                 PaymentId = Guid.NewGuid(),
@@ -213,7 +225,11 @@ namespace EasyHMSAPI.Api.Controllers.V1
                 PaymentMode = request.PaymentMode,
                 Status = "PendingApproval",
                 SubmittedAt = DateTime.UtcNow,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                IsProratedSwitch = request.IsProratedSwitch,
+                PreviousPlanId = request.PreviousPlanId,
+                PreviousPlanName = request.PreviousPlanName,
+                ProratedCreditAmount = request.ProratedCreditAmount
             });
 
             await _context.SaveChangesAsync();
@@ -243,7 +259,10 @@ namespace EasyHMSAPI.Api.Controllers.V1
                     p.Status,
                     p.SubmittedAt,
                     p.ReviewedAt,
-                    p.RejectionReason
+                    p.RejectionReason,
+                    p.IsProratedSwitch,
+                    p.PreviousPlanName,
+                    p.ProratedCreditAmount
                 })
                 .ToListAsync();
 
@@ -279,5 +298,13 @@ namespace EasyHMSAPI.Api.Controllers.V1
         public decimal Amount { get; set; }
         public string Reference { get; set; }
         public string? PaymentMode { get; set; }
+
+        // Present when this submission is a mid-cycle plan switch (upgrade/downgrade) from an
+        // already-Active subscription — Amount above already has the credit applied; these are
+        // carried through purely so CMS can see/verify the breakdown before approving.
+        public bool IsProratedSwitch { get; set; }
+        public Guid? PreviousPlanId { get; set; }
+        public string? PreviousPlanName { get; set; }
+        public decimal? ProratedCreditAmount { get; set; }
     }
 }
