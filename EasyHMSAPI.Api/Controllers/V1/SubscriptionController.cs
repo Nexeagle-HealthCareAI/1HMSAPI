@@ -1,4 +1,5 @@
 using EasyHMSAPI.Api.Common;
+using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Domain.Context;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -16,13 +17,15 @@ namespace EasyHMSAPI.Api.Controllers.V1
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _configuration;
         private readonly ILogger<SubscriptionController> _logger;
+        private readonly ISubscriptionLimitHelper _subscriptionLimitHelper;
 
-        public SubscriptionController(AppDbContext context, IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<SubscriptionController> logger)
+        public SubscriptionController(AppDbContext context, IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<SubscriptionController> logger, ISubscriptionLimitHelper subscriptionLimitHelper)
         {
             _context = context;
             _httpClientFactory = httpClientFactory;
             _configuration = configuration;
             _logger = logger;
+            _subscriptionLimitHelper = subscriptionLimitHelper;
         }
 
         // Server-to-server proxy to CMSAPI's plan catalog: the browser never talks to CMSAPI
@@ -245,6 +248,24 @@ namespace EasyHMSAPI.Api.Controllers.V1
                 .ToListAsync();
 
             return Ok(history);
+        }
+
+        // Lets the frontend show "X of Y doctors/beds used" banners in Bed Management and User
+        // Management without duplicating the counting rules that live in SubscriptionLimitHelper
+        // (e.g. revoked users don't count against the doctor limit). Null Max* means unlimited.
+        [HttpGet("{hospitalId}/usage")]
+        [SkipHospitalAccessCheck]
+        public async Task<IActionResult> GetUsage(Guid hospitalId)
+        {
+            var usage = await _subscriptionLimitHelper.GetUsageAsync(hospitalId, HttpContext.RequestAborted);
+
+            return Ok(new
+            {
+                usage.MaxDoctors,
+                usage.CurrentDoctors,
+                usage.MaxBeds,
+                usage.CurrentBeds
+            });
         }
     }
 
