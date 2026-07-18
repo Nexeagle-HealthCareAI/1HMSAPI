@@ -58,7 +58,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 return new PatientTokenValidationResult(false, null, "Invalid session.");
             }
 
-            var mobile = principal.FindFirst(ClaimTypes.MobilePhone)?.Value;
+            var mobile = principal.FindFirst("mobile")?.Value;
             var epochClaim = principal.FindFirst("sessionEpoch")?.Value;
             if (string.IsNullOrEmpty(mobile) || !int.TryParse(epochClaim, out var tokenEpoch))
             {

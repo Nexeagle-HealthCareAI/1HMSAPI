@@ -73,9 +73,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 auth.UpdatedAt = now;
                 await _context.SaveChangesAsync(cancellationToken);
 
+                // Plain custom claim names throughout, deliberately NOT ClaimTypes.MobilePhone —
+                // this token is only ever read back by PatientTokenValidator's own manual
+                // JwtSecurityTokenHandler call, never through ASP.NET Core's [Authorize]/JWT-bearer
+                // pipeline, so there's no reason to use a "well-known" claim URI that Microsoft.
+                // IdentityModel's inbound/outbound claim-type maps might rewrite. A custom string
+                // is guaranteed to round-trip byte-for-byte with no remapping ambiguity.
                 var claims = new List<Claim>
                 {
-                    new(ClaimTypes.MobilePhone, mobile),
+                    new("mobile", mobile),
                     new("scope", "patient_public"),
                     new("sessionEpoch", auth.SessionEpoch.ToString()),
                 };
