@@ -1,4 +1,5 @@
 using EasyHMSAPI.Application.Helpers.Interfaces;
+using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,8 +22,12 @@ namespace EasyHMSAPI.Application.Helpers.Implementations
 
             if (sub?.MaxDoctors == null) return new SubscriptionLimitResult(true, null);
 
+            // Doctor has no active/inactive flag of its own — a departed team member's row
+            // persists forever, so count only doctors whose linked User account isn't revoked
+            // (mirrors the check DoctorCreateHandler/DeactivateUserHandler already use), so
+            // deactivating someone actually frees their slot against the plan's doctor limit.
             var currentDoctorCount = await _context.Doctors
-                .CountAsync(d => d.HospitalId == hospitalId, cancellationToken);
+                .CountAsync(d => d.HospitalId == hospitalId && d.User.UserStatusId != (int)UserStatusEnum.Revoked, cancellationToken);
 
             if (currentDoctorCount >= sub.MaxDoctors.Value)
             {
