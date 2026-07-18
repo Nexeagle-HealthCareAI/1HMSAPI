@@ -67,11 +67,14 @@ namespace EasyHMSAPI.Api.Controllers.V1
             }
         }
 
+        // [SkipHospitalAccessCheck] because a hospital whose trial/subscription has expired must
+        // still be able to see its own status (that's how the admin knows to renew) — this endpoint
+        // is read-only about the hospital's own subscription, not a tenant-scoped feature.
         [HttpGet("{hospitalId}")]
+        [SkipHospitalAccessCheck]
         public async Task<IActionResult> GetSubscriptionStatus(Guid hospitalId)
         {
             var sub = await _context.HospitalSubscriptions
-                .AsNoTracking()
                 .FirstOrDefaultAsync(s => s.HospitalId == hospitalId);
 
             if (sub == null)
@@ -79,13 +82,23 @@ namespace EasyHMSAPI.Api.Controllers.V1
                 return Ok(new { Status = "Trial", DaysLeft = 30 }); // Fallback
             }
 
+            var effectiveStatus = sub.GetEffectiveStatus(DateTime.UtcNow);
+            if (effectiveStatus != sub.Status)
+            {
+                // Persist the transition so other consumers (e.g. the CMS approval dashboard) see
+                // an accurate status instead of a stale "Trial"/"Active" row.
+                sub.Status = effectiveStatus;
+                sub.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+            }
+
             var daysLeft = 0;
-            if (sub.Status == "Trial" && sub.TrialEndDate.HasValue)
+            if (effectiveStatus == "Trial" && sub.TrialEndDate.HasValue)
             {
                 daysLeft = (sub.TrialEndDate.Value - DateTime.UtcNow).Days;
                 if (daysLeft < 0) daysLeft = 0;
             }
-            else if (sub.Status == "Active" && sub.SubscriptionEndDate.HasValue)
+            else if (effectiveStatus == "Active" && sub.SubscriptionEndDate.HasValue)
             {
                 daysLeft = (sub.SubscriptionEndDate.Value - DateTime.UtcNow).Days;
                 if (daysLeft < 0) daysLeft = 0;
@@ -95,7 +108,7 @@ namespace EasyHMSAPI.Api.Controllers.V1
             {
                 sub.HospitalSubscriptionId,
                 sub.PlanId,
-                sub.Status,
+                Status = effectiveStatus,
                 sub.TrialStartDate,
                 sub.TrialEndDate,
                 sub.SubscriptionStartDate,
@@ -103,7 +116,9 @@ namespace EasyHMSAPI.Api.Controllers.V1
                 DaysLeft = daysLeft,
                 sub.PaymentAmount,
                 sub.PaymentReference,
-                sub.PaymentDate
+                sub.PaymentDate,
+                sub.RejectionReason,
+                sub.RejectedAt
             });
         }
 
@@ -177,6 +192,9 @@ namespace EasyHMSAPI.Api.Controllers.V1
             sub.PaymentReference = request.Reference;
             sub.PaymentDate = DateTime.UtcNow;
             sub.Status = "PendingApproval";
+            // Clear any previous rejection now that a fresh payment has been submitted for review.
+            sub.RejectionReason = null;
+            sub.RejectedAt = null;
             sub.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();

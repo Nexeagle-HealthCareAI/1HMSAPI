@@ -37,7 +37,25 @@ namespace EasyHMSAPI.Domain.Entities
         public int? MaxDoctors { get; set; }
         public int? MaxBeds { get; set; }
 
+        // Set when a CMS admin rejects a submitted payment (Status becomes "Rejected"); surfaced
+        // back to the hospital admin on the EasyHMS subscription page.
+        [MaxLength(500)]
+        public string? RejectionReason { get; set; }
+        public DateTime? RejectedAt { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+        // Trial/Active are only true while their end date hasn't passed — nothing flips Status to
+        // "Expired" in the background, so callers must compute this instead of trusting the raw
+        // column. Blocked/PendingApproval/Pending pass through unchanged.
+        public string GetEffectiveStatus(DateTime utcNow)
+        {
+            if (Status.Equals("Trial", StringComparison.OrdinalIgnoreCase) && TrialEndDate.HasValue && TrialEndDate.Value <= utcNow)
+                return "Expired";
+            if (Status.Equals("Active", StringComparison.OrdinalIgnoreCase) && SubscriptionEndDate.HasValue && SubscriptionEndDate.Value <= utcNow)
+                return "Expired";
+            return Status;
+        }
     }
 }
