@@ -174,11 +174,19 @@ builder.Services.AddScoped<ISubscriptionLimitHelper, SubscriptionLimitHelper>();
 // ------------------------------------------------------------
 // Rate Limiting
 // ------------------------------------------------------------
+// NexEagleWebsite proxies every public/patient-auth call server-to-server (see easyhmsFetch) —
+// both apps run in separate Docker containers on the same VM, so RemoteIpAddress alone sees the
+// Docker bridge address for ALL of that traffic, not the actual visitor's IP. TrustedProxyIpResolver
+// recovers the real IP from a header, but only trusts it when a shared secret also matches —
+// unset by default (see appsettings.json), in which case every policy below behaves exactly as
+// before (falls back to RemoteIpAddress).
+var proxyForwardingSecret = builder.Configuration["Internal:ProxyForwardingSecret"];
+
 builder.Services.AddRateLimiter(options =>
 {
      options.AddPolicy("PerIpPolicy", context =>
          RateLimitPartition.GetFixedWindowLimiter(
-         partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+         partitionKey: EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(context, proxyForwardingSecret),
          factory: key => new FixedWindowRateLimiterOptions
          {
              PermitLimit = 100,
@@ -192,7 +200,7 @@ builder.Services.AddRateLimiter(options =>
      // the general per-IP policy above since a leaked/scraped API key is a higher abuse risk.
      options.AddPolicy("PublicBookingPolicy", context =>
          RateLimitPartition.GetFixedWindowLimiter(
-         partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+         partitionKey: EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(context, proxyForwardingSecret),
          factory: key => new FixedWindowRateLimiterOptions
          {
              PermitLimit = 20,
@@ -208,7 +216,7 @@ builder.Services.AddRateLimiter(options =>
      // the handler-level check stops any single number from being spammed regardless of IP rotation.
      options.AddPolicy("PatientAuthPolicy", context =>
          RateLimitPartition.GetFixedWindowLimiter(
-         partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+         partitionKey: EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(context, proxyForwardingSecret),
          factory: key => new FixedWindowRateLimiterOptions
          {
              PermitLimit = 8,

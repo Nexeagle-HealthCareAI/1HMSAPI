@@ -53,6 +53,13 @@
 #                           EASYHMS_SERVICE_KEY in the CMSAPI repo's secrets.
 #     CMS_BASE_URL          Cms:BaseUrl — CMSAPI's base URL per environment (repo variable, e.g.
 #                           http://151.185.45.77:5002 for dev, http://151.185.45.67:5002 for prod)
+#     INTERNAL_PROXY_SECRET Internal:ProxyForwardingSecret — lets the public-API rate limiters
+#                           (PerIpPolicy/PublicBookingPolicy/PatientAuthPolicy) see each real
+#                           visitor's IP instead of NexEagleWebsite's own container IP for every
+#                           request it proxies server-to-server. Same value must also be set as
+#                           EASYHMS_TRUSTED_PROXY_SECRET in the NexEagleWebsite repo's secrets —
+#                           if unset here (or mismatched), rate limiting just falls back to its
+#                           previous per-connection-IP behavior; nothing breaks either way.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 name: EasyHMS API — CI/CD
@@ -183,13 +190,14 @@ jobs:
           S3_PREFIX:       ${{ vars.S3_PREFIX || '1HMS' }}
           CMS_SERVICE_KEY: ${{ secrets.CMS_SERVICE_KEY }}
           CMS_BASE_URL:    ${{ vars.CMS_BASE_URL || 'http://151.185.45.77:5002' }}
+          PROXY_SECRET:    ${{ secrets.INTERNAL_PROXY_SECRET }}
         with:
           host: ${{ secrets.DEV_SSH_HOST }}
           username: ${{ secrets.DEV_SSH_USER }}
           password: ${{ secrets.DEV_SSH_PASSWORD }}
           port: 22
           command_timeout: 10m
-          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,JWT_ISSUER,JWT_AUDIENCE,OTP_PEPPER,SMTP_PW,TWILIO_SID,TWILIO_TOKEN,TWILIO_PHONE,WHATSAPP_TOKEN,WHATSAPP_ENABLED,WHATSAPP_API_URL,OPENAI_KEY,DEEPGRAM_KEY,INVITATION_URL,STORAGE_PROVIDER,S3_SERVICE_URL,S3_ACCESS_KEY,S3_SECRET_KEY,S3_BUCKET,S3_PREFIX,CMS_SERVICE_KEY,CMS_BASE_URL
+          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,JWT_ISSUER,JWT_AUDIENCE,OTP_PEPPER,SMTP_PW,TWILIO_SID,TWILIO_TOKEN,TWILIO_PHONE,WHATSAPP_TOKEN,WHATSAPP_ENABLED,WHATSAPP_API_URL,OPENAI_KEY,DEEPGRAM_KEY,INVITATION_URL,STORAGE_PROVIDER,S3_SERVICE_URL,S3_ACCESS_KEY,S3_SECRET_KEY,S3_BUCKET,S3_PREFIX,CMS_SERVICE_KEY,CMS_BASE_URL,PROXY_SECRET
           script: |
             set -e
             : "${DB_CONN:?DEV_DB_CONNECTION is empty}"
@@ -225,6 +233,7 @@ jobs:
             add 'Storage__S3__Prefix'                   "$S3_PREFIX"
             add 'Cms__ServiceApiKey'                     "$CMS_SERVICE_KEY"
             add 'Cms__BaseUrl'                           "$CMS_BASE_URL"
+            add 'Internal__ProxyForwardingSecret'        "$PROXY_SECRET"
 
             IMAGE_LC=$(printf '%s' "$IMAGE" | tr '[:upper:]' '[:lower:]')
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
@@ -300,6 +309,7 @@ jobs:
           S3_PREFIX:       ${{ vars.S3_PREFIX || '1HMS' }}
           CMS_SERVICE_KEY: ${{ secrets.CMS_SERVICE_KEY }}
           CMS_BASE_URL:    ${{ vars.CMS_BASE_URL || 'http://151.185.45.67:5002' }}
+          PROXY_SECRET:    ${{ secrets.INTERNAL_PROXY_SECRET }}
         run: |
           : "${DB_CONN:?PROD_DB_CONNECTION is empty}"
           : "${JWT_SECRET:?JWT_SECRET is empty}"
@@ -332,6 +342,7 @@ jobs:
           add 'Storage__S3__Prefix'                   "$S3_PREFIX"
           add 'Cms__ServiceApiKey'                     "$CMS_SERVICE_KEY"
           add 'Cms__BaseUrl'                           "$CMS_BASE_URL"
+          add 'Internal__ProxyForwardingSecret'        "$PROXY_SECRET"
 
       - name: Copy prod.env to Prod VM
         run: |

@@ -170,6 +170,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     PatientSex = p?.Sex,
                     PatientAge = p?.Age,
                     PatientAgeUnit = p?.AgeUnit,
+                    PatientEmail = p?.Email,
                     DoctorId = a.DoctorId,
                     DoctorName = doctorName,
                     DepartmentId = departmentId ?? Guid.Empty,
