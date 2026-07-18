@@ -166,6 +166,7 @@ builder.Services.AddScoped<IBlobStorageService, S3StorageService>();
 builder.Services.AddScoped<ISmsService, SmsService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IWhatsAppMessagingService, WhatsAppMessagingService>();
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IPatientTokenValidator, EasyHMSAPI.Application.Services.Implementations.PatientTokenValidator>();
 builder.Services.AddScoped<IVoiceRxService, VoiceRxService>();
 builder.Services.AddScoped<IDoctorValidationHelper, DoctorValidationHelper>();
 builder.Services.AddScoped<ISubscriptionLimitHelper, SubscriptionLimitHelper>();
@@ -195,6 +196,22 @@ builder.Services.AddRateLimiter(options =>
          factory: key => new FixedWindowRateLimiterOptions
          {
              PermitLimit = 20,
+             Window = TimeSpan.FromMinutes(1),
+             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+             QueueLimit = 0
+         })
+     );
+
+     // Patient WhatsApp-OTP login (Doctor Dekho) — tighter per-IP ceiling than PublicBookingPolicy.
+     // This is on top of, not instead of, the per-mobile-number cooldown/daily-cap enforced inside
+     // PatientOtpSendHandler itself: this policy stops one IP from hammering many different numbers,
+     // the handler-level check stops any single number from being spammed regardless of IP rotation.
+     options.AddPolicy("PatientAuthPolicy", context =>
+         RateLimitPartition.GetFixedWindowLimiter(
+         partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+         factory: key => new FixedWindowRateLimiterOptions
+         {
+             PermitLimit = 8,
              Window = TimeSpan.FromMinutes(1),
              QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
              QueueLimit = 0

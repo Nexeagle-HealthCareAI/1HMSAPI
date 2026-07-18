@@ -3,6 +3,7 @@ using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Application.Services.Interfaces;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -31,11 +32,13 @@ namespace EasyHMSAPI.Api.Controllers
     {
         private readonly IMediator _mediator;
         private readonly ILogger<PublicController> _logger;
+        private readonly IPatientTokenValidator _patientTokenValidator;
 
-        public PublicController(IMediator mediator, ILogger<PublicController> logger)
+        public PublicController(IMediator mediator, ILogger<PublicController> logger, IPatientTokenValidator patientTokenValidator)
         {
             _mediator = mediator;
             _logger = logger;
+            _patientTokenValidator = patientTokenValidator;
         }
 
         [HttpGet("doctors")]
@@ -86,6 +89,49 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 _logger.LogError(ex, "Error in PublicController.BookAppointment");
                 return StatusCode(500, new { Message = "An error occurred while booking the appointment." });
+            }
+        }
+
+        // Guest "my booking" lookup — gated purely by knowing the AppointmentId (unguessable GUID),
+        // no login required. See GetPublicAppointmentHandler for why the response stays minimal.
+        [HttpGet("appointments/{appointmentId:guid}")]
+        public async Task<ActionResult<GetPublicAppointmentResponseModel>> GetAppointment(Guid appointmentId)
+        {
+            try
+            {
+                var response = await _mediator.Send(new GetPublicAppointmentRequestModel { AppointmentId = appointmentId });
+                if (!response.Success) return NotFound(response);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetAppointment for appointmentId: {AppointmentId}", appointmentId);
+                return StatusCode(500, new { Message = "An error occurred while fetching the appointment." });
+            }
+        }
+
+        // Authenticated "my appointments" across every hospital — requires a patient JWT from
+        // PatientAuthController's otp/verify. Validated manually here (never via [Authorize]/the
+        // app's staff JWT-bearer pipeline) so a patient token can never be mistaken for a staff
+        // session anywhere else in the app.
+        [HttpGet("appointments/mine")]
+        public async Task<ActionResult<GetPublicAppointmentsByMobileResponseModel>> GetMyAppointments(CancellationToken cancellationToken)
+        {
+            var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
+            if (!auth.IsValid || auth.Mobile == null)
+            {
+                return Unauthorized(new { Message = auth.Reason ?? "Please log in again." });
+            }
+
+            try
+            {
+                var response = await _mediator.Send(new GetPublicAppointmentsByMobileRequestModel { Mobile = auth.Mobile });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetMyAppointments");
+                return StatusCode(500, new { Message = "An error occurred while fetching your appointments." });
             }
         }
 

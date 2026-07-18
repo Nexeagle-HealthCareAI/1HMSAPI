@@ -65,6 +65,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<MedicineMaster> MedicineMaster { get; set; }
         public DbSet<User> Users { get; set; }
         public DbSet<UserAuth> UserAuths { get; set; }
+        public DbSet<PublicPatientAuth> PublicPatientAuths { get; set; }
         public DbSet<UserProfile> UserProfiles { get; set; }
         public DbSet<Role> Roles { get; set; }
         public DbSet<RolePermission> RolePermissions { get; set; }
@@ -1146,6 +1147,18 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
                 entity.Property(e => e.ProratedCreditAmount).HasPrecision(18, 2);
                 entity.Property(e => e.IsProratedSwitch).HasDefaultValue(false);
+            });
+
+            modelBuilder.Entity<PublicPatientAuth>(entity =>
+            {
+                entity.ToTable("PublicPatientAuth");
+                entity.HasKey(e => e.Mobile);
+                entity.Property(e => e.Mobile).HasMaxLength(20);
+                entity.Property(e => e.OtpSentAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.OtpExpireAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.OtpWindowStartAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+                entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
             });
 
             modelBuilder.Entity<Store>(entity =>
