@@ -61,6 +61,42 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     };
                 }
 
+                // Process any Extra Charges (e.g. Night Charges) included with this payment
+                if (request.ExtraCharges != null && request.ExtraCharges.Any())
+                {
+                    foreach (var extraCharge in request.ExtraCharges)
+                    {
+                        if (extraCharge.Amount <= 0) continue;
+                        
+                        var chargeEvent = new BillingChargeEvent
+                        {
+                            ChargeEventId = Guid.NewGuid(),
+                            HospitalId = request.HospitalId,
+                            PatientId = request.PatientId,
+                            EncounterId = request.EncounterId,
+                            CategoryCode = "EXTRA_CHARGE",
+                            DisplayName = string.IsNullOrWhiteSpace(extraCharge.Reason) ? "Extra Charge" : extraCharge.Reason,
+                            Qty = 1,
+                            UnitPrice = extraCharge.Amount,
+                            GrossAmount = extraCharge.Amount,
+                            DiscountAmount = 0,
+                            NetAmount = extraCharge.Amount,
+                            StatusCode = BillingConstants.ChargeEventStatus.Posted,
+                            ServiceDate = DateTime.UtcNow,
+                            PostedAt = DateTime.UtcNow,
+                            PostedBy = request.LoggedInUserName,
+                            CreatedAt = DateTime.UtcNow,
+                            CreatedBy = request.LoggedInUserName,
+                            UpdatedAt = DateTime.UtcNow,
+                            UpdatedBy = request.LoggedInUserName
+                        };
+                        _context.BillingChargeEvent.Add(chargeEvent);
+                    }
+                    
+                    // Persist the charges so that the CreateDraftInvoiceRequestModel (which queries the DB) picks them up.
+                    await _context.SaveChangesAsync(cancellationToken);
+                }
+
                 // Prefer the DRAFT invoice (still mutable); fall back to the latest invoice.
                 async Task<BillingInvoice?> LoadInvoiceAsync() => await _context.BillingInvoice
                     .Where(bi => bi.EncounterId == request.EncounterId)
