@@ -30,7 +30,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 issuer: _jwtIssuer,
                 audience: _jwtAudience,
                 claims: claims,
-                expires: DateTime.UtcNow.AddHours(1),
+                expires: DateTime.UtcNow.AddDays(30),
                 signingCredentials: creds
             );
             return new JwtSecurityTokenHandler().WriteToken(token);

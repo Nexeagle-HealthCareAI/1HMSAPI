@@ -29,8 +29,11 @@ namespace EasyHMSAPI.Domain.Entities
         
         [MaxLength(100)]
         public string? PaymentReference { get; set; }
-        
+
         public DateTime? PaymentDate { get; set; }
+
+        [MaxLength(50)]
+        public string? PaymentMode { get; set; } // UPI, Bank Transfer, Cheque, Card, Cash
 
         // Copied from the CMS plan catalog when a payment is approved. NULL = unlimited
         // (used for the Enterprise tier, and for hospitals that predate this column).

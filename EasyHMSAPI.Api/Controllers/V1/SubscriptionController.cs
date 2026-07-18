@@ -116,6 +116,7 @@ namespace EasyHMSAPI.Api.Controllers.V1
                 DaysLeft = daysLeft,
                 sub.PaymentAmount,
                 sub.PaymentReference,
+                sub.PaymentMode,
                 sub.PaymentDate,
                 sub.RejectionReason,
                 sub.RejectedAt
@@ -190,6 +191,7 @@ namespace EasyHMSAPI.Api.Controllers.V1
 
             sub.PaymentAmount = request.Amount;
             sub.PaymentReference = request.Reference;
+            sub.PaymentMode = request.PaymentMode;
             sub.PaymentDate = DateTime.UtcNow;
             sub.Status = "PendingApproval";
             // Clear any previous rejection now that a fresh payment has been submitted for review.
@@ -197,9 +199,52 @@ namespace EasyHMSAPI.Api.Controllers.V1
             sub.RejectedAt = null;
             sub.UpdatedAt = DateTime.UtcNow;
 
+            _context.HospitalSubscriptionPayments.Add(new Domain.Entities.HospitalSubscriptionPayment
+            {
+                PaymentId = Guid.NewGuid(),
+                HospitalId = hospitalId,
+                HospitalSubscriptionId = sub.HospitalSubscriptionId,
+                PlanId = sub.PlanId,
+                Amount = request.Amount,
+                Reference = request.Reference,
+                PaymentMode = request.PaymentMode,
+                Status = "PendingApproval",
+                SubmittedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow
+            });
+
             await _context.SaveChangesAsync();
 
             return Ok(new { Message = "Payment submitted and pending approval." });
+        }
+
+        // [SkipHospitalAccessCheck] for the same reason as GetSubscriptionStatus — a hospital that's
+        // currently locked out still needs to see its own payment history (e.g. to confirm a
+        // rejected payment's details before resubmitting).
+        [HttpGet("{hospitalId}/payment-history")]
+        [SkipHospitalAccessCheck]
+        public async Task<IActionResult> GetPaymentHistory(Guid hospitalId)
+        {
+            var history = await _context.HospitalSubscriptionPayments
+                .AsNoTracking()
+                .Where(p => p.HospitalId == hospitalId)
+                .OrderByDescending(p => p.SubmittedAt)
+                .Select(p => new
+                {
+                    p.PaymentId,
+                    p.PlanId,
+                    p.PlanName,
+                    p.Amount,
+                    p.Reference,
+                    p.PaymentMode,
+                    p.Status,
+                    p.SubmittedAt,
+                    p.ReviewedAt,
+                    p.RejectionReason
+                })
+                .ToListAsync();
+
+            return Ok(history);
         }
     }
 
@@ -212,5 +257,6 @@ namespace EasyHMSAPI.Api.Controllers.V1
     {
         public decimal Amount { get; set; }
         public string Reference { get; set; }
+        public string? PaymentMode { get; set; }
     }
 }
