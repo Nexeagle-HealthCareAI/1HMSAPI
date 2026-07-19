@@ -92,10 +92,14 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
             var rows = await (
                 from d in _context.Doctors
-                where candidateDoctorIds.Contains(d.DoctorID) && d.IsPubliclyListed
+                where candidateDoctorIds.Contains(d.DoctorID) && d.IsPubliclyListed && !d.IsDelistedByAdmin
                 join u in _context.Users on d.UserID equals u.UserID
                 where u.UserStatusId != (int)UserStatusEnum.Revoked
-                select new { d.DoctorID, d.UserID, d.PrimaryDepartmentID, d.PrimaryMedicalSpecialityId, d.Qualification, d.ExperienceYears, d.Bio, d.LanguagesJson }
+                select new
+                {
+                    d.DoctorID, d.UserID, d.PrimaryDepartmentID, d.PrimaryMedicalSpecialityId, d.Qualification, d.ExperienceYears, d.Bio, d.LanguagesJson,
+                    d.IsFeatured, d.DiscountPercent, d.DiscountStartAt, d.DiscountEndAt
+                }
             ).ToListAsync(cancellationToken);
 
             var hospitalIdsUsed = rows.Select(r => doctorHospital[r.DoctorID]).Distinct().ToList();
@@ -169,6 +173,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
                         .ToList());
 
+            var nowUtc = DateTime.UtcNow;
             var doctors = new List<PublicDoctorInfo>();
             for (var i = 0; i < rows.Count; i++)
             {
@@ -178,6 +183,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 reviewAggregates.TryGetValue(r.DoctorID, out var reviewAgg);
                 specialityById.TryGetValue(r.PrimaryMedicalSpecialityId ?? Guid.Empty, out var speciality);
                 var specializations = specializationsByDoctor.TryGetValue(r.DoctorID, out var specs) ? specs : new List<string>();
+                var fee = feeLookup.TryGetValue((r.DoctorID, hospitalId), out var feeAmount) ? feeAmount : (decimal?)null;
+                var discountActive = DoctorMarketingHelpers.IsDiscountActive(r.DiscountPercent, r.DiscountStartAt, r.DiscountEndAt, nowUtc);
 
                 doctors.Add(new PublicDoctorInfo
                 {
@@ -204,11 +211,22 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     Longitude = hospital?.Longitude,
                     Rating = reviewAgg != null ? Math.Round(reviewAgg.Average, 1) : (double?)null,
                     ReviewCount = reviewAgg?.Count ?? 0,
-                    Fee = feeLookup.TryGetValue((r.DoctorID, hospitalId), out var fee) ? fee : (decimal?)null,
+                    Fee = fee,
+                    DiscountPercent = discountActive ? r.DiscountPercent : null,
+                    DiscountedFee = discountActive && fee.HasValue
+                        ? fee.Value - DoctorMarketingHelpers.ComputeDiscountAmount(fee.Value, r.DiscountPercent!.Value)
+                        : null,
+                    IsFeatured = r.IsFeatured,
                 });
             }
 
-            var response = new GetPublicDoctorsResponseModel { Success = true, Doctors = doctors.OrderBy(d => d.FullName).ToList() };
+            // Featured doctors first, alphabetical within each group — matches the sort NexEagle's
+            // own DoctorDirectory.tsx already applies client-side for its "promoted" doctors.
+            var response = new GetPublicDoctorsResponseModel
+            {
+                Success = true,
+                Doctors = doctors.OrderByDescending(d => d.IsFeatured).ThenBy(d => d.FullName).ToList()
+            };
             _cache.Set(cacheKey, response, CacheTtl);
             return response;
         }

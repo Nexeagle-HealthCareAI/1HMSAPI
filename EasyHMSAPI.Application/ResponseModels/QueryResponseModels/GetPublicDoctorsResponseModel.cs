@@ -37,6 +37,12 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         // OPD_CONSULT DoctorFees.Amount at this doctor's (canonical) hospital — null when no
         // active fee is configured, so the frontend falls back to "Accepting patients".
         public decimal? Fee { get; set; }
+        // CMS-controlled marketing fields — DiscountPercent/DiscountedFee are only populated
+        // (non-null) when the doctor's scheduled discount window is currently active; the
+        // frontend's existing "null means nothing to show" convention (see Fee) applies here too.
+        public decimal? DiscountPercent { get; set; }
+        public decimal? DiscountedFee { get; set; }
+        public bool IsFeatured { get; set; }
 
         // Which (publicly-listed) hospital this doctor belongs to — needed now that the
         // directory spans every opted-in hospital, not just one scoped by an API key.

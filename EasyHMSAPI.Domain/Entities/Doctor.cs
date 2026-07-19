@@ -36,6 +36,21 @@ namespace EasyHMSAPI.Domain.Entities
         // their hospital (Hospital.IsPubliclyListed) AND this flag are true.
         public bool IsPubliclyListed { get; set; } = false;
 
+        // ── CMS-controlled Doctor Dekho marketing/moderation fields ──────────────────
+        // Scheduled consultation-fee discount. "Active" is never stored as its own bool —
+        // always computed at read time from these three (see DoctorMarketingHelpers) so it
+        // can't drift out of sync with the date window.
+        public decimal? DiscountPercent { get; set; }
+        public DateTime? DiscountStartAt { get; set; }
+        public DateTime? DiscountEndAt { get; set; }
+        // Top-of-listing placement on the public Doctor Dekho directory.
+        public bool IsFeatured { get; set; } = false;
+        // Platform-level override, deliberately SEPARATE from IsPubliclyListed above (which is
+        // the hospital's own opt-in). A hospital re-enabling IsPubliclyListed must never silently
+        // undo a CMS delisting, and vice versa — final visibility is
+        // Hospital.IsPubliclyListed && Doctor.IsPubliclyListed && !Doctor.IsDelistedByAdmin.
+        public bool IsDelistedByAdmin { get; set; } = false;
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public User User { get; set; } = null!;
         public Department? PrimaryDepartment { get; set; }

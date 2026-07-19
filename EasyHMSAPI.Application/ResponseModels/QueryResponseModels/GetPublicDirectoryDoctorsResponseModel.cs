@@ -36,5 +36,14 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         // Whether this doctor currently shows on the platform-wide public directory (also requires
         // the hospital itself to be publicly listed — see Hospital.IsPubliclyListed).
         public bool IsPubliclyListed { get; set; }
+        // CMS-only-controlled marketing/moderation fields — read-only here. This hospital-scoped
+        // tile editor deliberately doesn't let a hospital admin change these (see
+        // Doctor.IsDelistedByAdmin's doc comment); they're surfaced so an admin can at least see
+        // WHY a doctor they've enabled still isn't appearing publicly, rather than a silent gap.
+        public bool IsFeatured { get; set; }
+        public bool IsDelistedByAdmin { get; set; }
+        public decimal? DiscountPercent { get; set; }
+        public DateTime? DiscountStartAt { get; set; }
+        public DateTime? DiscountEndAt { get; set; }
     }
 }

@@ -23,7 +23,7 @@ namespace EasyHMSAPI.Application.Services
             AppDbContext context, Guid doctorId, CancellationToken cancellationToken)
         {
             var doctor = await context.Doctors
-                .Where(d => d.DoctorID == doctorId && d.IsPubliclyListed)
+                .Where(d => d.DoctorID == doctorId && d.IsPubliclyListed && !d.IsDelistedByAdmin)
                 .Select(d => new { d.DoctorID, d.UserID })
                 .FirstOrDefaultAsync(cancellationToken);
             if (doctor == null) return null;
