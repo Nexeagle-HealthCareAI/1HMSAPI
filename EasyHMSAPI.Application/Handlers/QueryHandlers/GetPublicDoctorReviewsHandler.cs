@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -36,6 +37,16 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     CreatedAt = r.CreatedAt,
                 })
                 .ToListAsync(cancellationToken);
+
+            // A lone/unpaired UTF-16 surrogate in an older AuthorName/Comment (stores fine in SQL
+            // Server, throws on JSON serialization) would otherwise 500 every read of this doctor's
+            // whole review list over one bad character — sanitize defensively regardless of how it
+            // got there. See TextSanitizer.
+            foreach (var r in reviews)
+            {
+                r.AuthorName = TextSanitizer.StripInvalidSurrogates(r.AuthorName);
+                r.Comment = TextSanitizer.StripInvalidSurrogates(r.Comment);
+            }
 
             var ratedReviews = reviews.Where(r => !r.IsHospitalResponse).ToList();
 

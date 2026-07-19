@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -34,7 +35,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             if (review == null)
                 return new UpdateReviewCommentResponseModel { Success = false, Message = "Review not found." };
 
-            review.Comment = request.Comment.Trim();
+            review.Comment = TextSanitizer.StripInvalidSurrogates(request.Comment.Trim());
             await _context.SaveChangesAsync(cancellationToken);
 
             return new UpdateReviewCommentResponseModel { Success = true, Message = "Comment saved." };

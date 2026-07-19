@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
@@ -41,7 +42,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 DoctorId = request.DoctorId,
                 AuthorName = null,
                 Rating = 5,
-                Comment = request.Comment.Trim(),
+                Comment = TextSanitizer.StripInvalidSurrogates(request.Comment.Trim()),
                 HelpfulCount = 0,
                 IsHidden = false,
                 IsHospitalResponse = true,
