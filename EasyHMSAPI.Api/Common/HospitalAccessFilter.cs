@@ -81,9 +81,19 @@ namespace EasyHMSAPI.Api.Common
                 _cache.Set(subKey, subStatus, CacheTtl);
             }
 
-            if (subStatus.Equals("Expired", StringComparison.OrdinalIgnoreCase) ||
+            // Read-only once expired/blocked/rejected, not a full lockout: GET (and HEAD) requests
+            // — viewing the appointment board, patient records, billing history, etc. — pass through
+            // regardless of subscription status. Only requests that mutate something (POST/PUT/PATCH/
+            // DELETE) get stopped here; the frontend mirrors this by disabling write actions while
+            // leaving navigation/viewing enabled (see MainLayout.tsx / AppointmentDashboard.tsx).
+            var isWriteRequest = !HttpMethods.IsGet(context.HttpContext.Request.Method)
+                && !HttpMethods.IsHead(context.HttpContext.Request.Method)
+                && !HttpMethods.IsOptions(context.HttpContext.Request.Method);
+
+            if (isWriteRequest && (
+                subStatus.Equals("Expired", StringComparison.OrdinalIgnoreCase) ||
                 subStatus.Equals("Blocked", StringComparison.OrdinalIgnoreCase) ||
-                subStatus.Equals("Rejected", StringComparison.OrdinalIgnoreCase))
+                subStatus.Equals("Rejected", StringComparison.OrdinalIgnoreCase)))
             {
                 // Check if user is Admin or AdminDoctor
                 var roles = await _db.UserRoles
