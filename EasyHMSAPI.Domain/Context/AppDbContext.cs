@@ -223,7 +223,13 @@ namespace EasyHMSAPI.Domain.Context
             modelBuilder.Entity<Specialization>().ToTable("Specializations");
 
             modelBuilder.Entity<MedicalQualificationType>().ToTable("MedicalQualificationTypes");
-            modelBuilder.Entity<MedicalSpeciality>().ToTable("MedicalSpecialities");
+            modelBuilder.Entity<MedicalSpeciality>(entity =>
+            {
+                entity.ToTable("MedicalSpecialities");
+                entity.HasOne(m => m.QualificationType)
+                      .WithMany(q => q.Specialities)
+                      .HasForeignKey(m => m.QualificationTypeCode);
+            });
             modelBuilder.Entity<MedicalSpecialityFeeder>(entity =>
             {
                 entity.ToTable("MedicalSpecialityFeeders");
