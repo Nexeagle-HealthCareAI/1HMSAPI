@@ -9,6 +9,7 @@ using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using System.Text.Json;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
@@ -19,13 +20,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         private readonly ISmsService _smsService;
         private readonly IWhatsAppMessagingService _whatsAppMessagingService;
         private readonly IMediator _mediator;
+        private readonly IMemoryCache _cache;
 
-        public RegisterAppointmentHandler(AppDbContext context, ISmsService smsService, IWhatsAppMessagingService whatsAppMessagingService, IMediator mediator)
+        public RegisterAppointmentHandler(AppDbContext context, ISmsService smsService, IWhatsAppMessagingService whatsAppMessagingService, IMediator mediator, IMemoryCache cache)
         {
             _context = context;
             _smsService = smsService;
             _whatsAppMessagingService = whatsAppMessagingService;
             _mediator = mediator;
+            _cache = cache;
         }
 
         public async Task<RegisterAppointmentResponseModel> Handle(RegisterAppointmentRequestModel request, CancellationToken cancellationToken)
@@ -84,6 +87,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 // Save appointment first to ensure ApptId exists in DB
                 await _context.SaveChangesAsync(cancellationToken);
+
+                // DoctorBookedSlotsHandler now caches its result for a short TTL (see
+                // PublicDirectoryCacheKeys) — a staff booking/reschedule must not sit behind that
+                // cache until it naturally expires, or the NEXT staff member checking this
+                // doctor+date would see a slot as open that was just taken.
+                _cache.Remove(PublicDirectoryCacheKeys.BookedSlots(appointment.HospitalId, appointment.DoctorId, appointment.ApptDate));
 
                 // Auto OPD billing: when the visit is chargeable (New / Old-Fee) and the billing
                 // policy's OPD consult trigger is AUTO, create the encounter + consult charge and a

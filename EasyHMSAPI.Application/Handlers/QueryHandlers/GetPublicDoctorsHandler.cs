@@ -1,10 +1,12 @@
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using System.Text.Json;
 
@@ -26,19 +28,40 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
     {
         private const string OpdConsultFeeType = "OPD_CONSULT";
 
+        private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(60);
+
         private readonly AppDbContext _context;
         private readonly IBlobStorageService _blobService;
+        private readonly IMemoryCache _cache;
         private readonly string _containerName;
 
-        public GetPublicDoctorsHandler(AppDbContext context, IBlobStorageService blobService, IConfiguration configuration)
+        public GetPublicDoctorsHandler(AppDbContext context, IBlobStorageService blobService, IMemoryCache cache, IConfiguration configuration)
         {
             _context = context;
             _blobService = blobService;
+            _cache = cache;
             _containerName = configuration["BlobStorage:ProfilePhotosContainer"] ?? string.Empty;
         }
 
         public async Task<GetPublicDoctorsResponseModel> Handle(GetPublicDoctorsRequestModel request, CancellationToken cancellationToken)
         {
+            // Whole-platform listing, identical for every caller (no per-request variation) — one
+            // 60s-old copy of the directory is a perfectly acceptable trade against hitting SQL
+            // Server on every single browse/search interaction from every concurrent visitor.
+            // Presigned photo URLs are valid for 24h (Storage:S3:UrlExpiryHours), so a 60s-stale
+            // cache entry never serves an expired one.
+            var cacheKey = PublicDirectoryCacheKeys.PublicDoctorsList();
+            if (_cache.TryGetValue(cacheKey, out GetPublicDoctorsResponseModel? cached) && cached != null)
+            {
+                return cached;
+            }
+
+            // Every query in this handler is read-only — this is the platform-wide doctor
+            // directory, hit repeatedly by many concurrent browsing users. Disabling change
+            // tracking for the whole request skips the identity-map/snapshot bookkeeping EF Core
+            // otherwise does for every row, which is pure waste on data that's never saved back.
+            _context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
+
             var publicHospitalIds = await _context.Hospitals
                 .Where(h => h.IsPubliclyListed && h.IsActive)
                 .Select(h => h.HospitalID)
@@ -69,16 +92,20 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
             var rows = await (
                 from d in _context.Doctors
-                where candidateDoctorIds.Contains(d.DoctorID) && d.IsPubliclyListed
+                where candidateDoctorIds.Contains(d.DoctorID) && d.IsPubliclyListed && !d.IsDelistedByAdmin
                 join u in _context.Users on d.UserID equals u.UserID
                 where u.UserStatusId != (int)UserStatusEnum.Revoked
-                select new { d.DoctorID, d.UserID, d.PrimaryDepartmentID, d.Qualification, d.ExperienceYears, d.Bio, d.LanguagesJson }
+                select new
+                {
+                    d.DoctorID, d.UserID, d.PrimaryDepartmentID, d.PrimaryMedicalSpecialityId, d.Qualification, d.ExperienceYears, d.Bio, d.LanguagesJson,
+                    d.IsFeatured, d.DiscountPercent, d.DiscountStartAt, d.DiscountEndAt
+                }
             ).ToListAsync(cancellationToken);
 
             var hospitalIdsUsed = rows.Select(r => doctorHospital[r.DoctorID]).Distinct().ToList();
             var hospitalById = await _context.Hospitals
                 .Where(h => hospitalIdsUsed.Contains(h.HospitalID))
-                .Select(h => new { h.HospitalID, h.Name, h.City, h.State, h.Latitude, h.Longitude })
+                .Select(h => new { h.HospitalID, h.Name, h.Location, h.City, h.State, h.Pincode, h.Latitude, h.Longitude })
                 .ToDictionaryAsync(h => h.HospitalID, cancellationToken);
 
             var userIds = rows.Select(r => r.UserID).Distinct().ToList();
@@ -95,6 +122,12 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             var deptNameById = await _context.Departments
                 .Where(dept => deptIds.Contains(dept.DepartmentID))
                 .ToDictionaryAsync(dept => dept.DepartmentID, dept => dept.Name, cancellationToken);
+
+            var specialityIds = rows.Where(r => r.PrimaryMedicalSpecialityId.HasValue).Select(r => r.PrimaryMedicalSpecialityId!.Value).Distinct().ToList();
+            var specialityById = await _context.MedicalSpecialities
+                .Where(s => specialityIds.Contains(s.SpecialityId))
+                .Select(s => new { s.SpecialityId, s.PatientFacingName, s.PatientFacingCategory })
+                .ToDictionaryAsync(s => s.SpecialityId, cancellationToken);
 
             // One batched aggregate query for the whole platform-wide listing rather than a
             // per-doctor round trip.
@@ -120,6 +153,27 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 rows.Select(r => _blobService.GetUrlAsync(r.UserID, _containerName, cancellationToken))
             );
 
+            // Was one query PER doctor in the loop below — at platform-wide scale that's one extra
+            // DB round trip per doctor on every listing load. Batched into a single query + grouped
+            // dictionary, same pattern as reviewAggregates/feeLookup above.
+            var specializationRows = await _context.DoctorSpecializations
+                .Where(ds => candidateDoctorIds.Contains(ds.DoctorID) && ds.Specialization != null && ds.Specialization.IsActive)
+                .Select(ds => new { ds.DoctorID, Name = ds.Specialization.Name })
+                .ToListAsync(cancellationToken);
+            var specializationsByDoctor = specializationRows
+                .GroupBy(s => s.DoctorID)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Select(s => s.Name)
+                        .Where(name => !string.IsNullOrWhiteSpace(name) &&
+                                       name.Trim().Length > 2 &&
+                                       name.All(c => char.IsLetter(c) || char.IsWhiteSpace(c)))
+                        .Select(name => name.Trim())
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                        .ToList());
+
+            var nowUtc = DateTime.UtcNow;
             var doctors = new List<PublicDoctorInfo>();
             for (var i = 0; i < rows.Count; i++)
             {
@@ -127,17 +181,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 var hospitalId = doctorHospital[r.DoctorID];
                 hospitalById.TryGetValue(hospitalId, out var hospital);
                 reviewAggregates.TryGetValue(r.DoctorID, out var reviewAgg);
-                var specializations = _context.DoctorSpecializations
-                    .Where(ds => ds.DoctorID == r.DoctorID && ds.Specialization != null && ds.Specialization.IsActive)
-                    .Select(ds => ds.Specialization.Name)
-                    .AsEnumerable()
-                    .Where(name => !string.IsNullOrWhiteSpace(name) &&
-                                   name.Trim().Length > 2 &&
-                                   name.All(c => char.IsLetter(c) || char.IsWhiteSpace(c)))
-                    .Select(name => name.Trim())
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
-                    .ToList();
+                specialityById.TryGetValue(r.PrimaryMedicalSpecialityId ?? Guid.Empty, out var speciality);
+                var specializations = specializationsByDoctor.TryGetValue(r.DoctorID, out var specs) ? specs : new List<string>();
+                var fee = feeLookup.TryGetValue((r.DoctorID, hospitalId), out var feeAmount) ? feeAmount : (decimal?)null;
+                var discountActive = DoctorMarketingHelpers.IsDiscountActive(r.DiscountPercent, r.DiscountStartAt, r.DiscountEndAt, nowUtc);
 
                 doctors.Add(new PublicDoctorInfo
                 {
@@ -148,23 +195,40 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     ExperienceYears = r.ExperienceYears,
                     Bio = r.Bio,
                     DepartmentName = r.PrimaryDepartmentID.HasValue && deptNameById.TryGetValue(r.PrimaryDepartmentID.Value, out var dn) ? dn : null,
+                    PrimaryMedicalSpecialityPatientFacingName = speciality?.PatientFacingName,
+                    PrimaryMedicalSpecialityCategory = speciality?.PatientFacingCategory,
                     Specializations = specializations,
                     Languages = string.IsNullOrWhiteSpace(r.LanguagesJson)
                         ? new List<string>()
                         : (JsonSerializer.Deserialize<List<string>>(r.LanguagesJson) ?? new List<string>()),
                     HospitalId = hospitalId,
                     HospitalName = hospital?.Name,
+                    Address = hospital?.Location,
                     City = hospital?.City,
                     State = hospital?.State,
+                    Pincode = hospital?.Pincode,
                     Latitude = hospital?.Latitude,
                     Longitude = hospital?.Longitude,
                     Rating = reviewAgg != null ? Math.Round(reviewAgg.Average, 1) : (double?)null,
                     ReviewCount = reviewAgg?.Count ?? 0,
-                    Fee = feeLookup.TryGetValue((r.DoctorID, hospitalId), out var fee) ? fee : (decimal?)null,
+                    Fee = fee,
+                    DiscountPercent = discountActive ? r.DiscountPercent : null,
+                    DiscountedFee = discountActive && fee.HasValue
+                        ? fee.Value - DoctorMarketingHelpers.ComputeDiscountAmount(fee.Value, r.DiscountPercent!.Value)
+                        : null,
+                    IsFeatured = r.IsFeatured,
                 });
             }
 
-            return new GetPublicDoctorsResponseModel { Success = true, Doctors = doctors.OrderBy(d => d.FullName).ToList() };
+            // Featured doctors first, alphabetical within each group — matches the sort NexEagle's
+            // own DoctorDirectory.tsx already applies client-side for its "promoted" doctors.
+            var response = new GetPublicDoctorsResponseModel
+            {
+                Success = true,
+                Doctors = doctors.OrderByDescending(d => d.IsFeatured).ThenBy(d => d.FullName).ToList()
+            };
+            _cache.Set(cacheKey, response, CacheTtl);
+            return response;
         }
     }
 }

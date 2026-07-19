@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -44,6 +45,14 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     CreatedAt = r.CreatedAt,
                 })
                 .ToListAsync(cancellationToken);
+
+            // See GetPublicDoctorReviewsHandler — a lone UTF-16 surrogate stored in an older row
+            // throws on JSON serialization otherwise.
+            foreach (var r in reviews)
+            {
+                r.AuthorName = TextSanitizer.StripInvalidSurrogates(r.AuthorName);
+                r.Comment = TextSanitizer.StripInvalidSurrogates(r.Comment);
+            }
 
             var visible = reviews.Where(r => !r.IsHidden && !r.IsHospitalResponse).ToList();
 

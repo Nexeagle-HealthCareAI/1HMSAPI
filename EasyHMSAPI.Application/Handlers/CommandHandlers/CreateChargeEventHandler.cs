@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
@@ -158,6 +159,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                         if (fee.HasValue && fee.Value > 0)
                         {
+                            // CMS-controlled marketing discount, applied here so it's baked into the
+                            // real posted charge, not just a display-time adjustment — the billing
+                            // ledger must show the actual amount owed, matching the discounted price
+                            // shown on Doctor Dekho/at pre-appointment confirm (see DoctorMarketingHelpers).
+                            var discountFields = await _context.Doctors
+                                .Where(d => d.DoctorID == lastAppointment.DoctorId)
+                                .Select(d => new { d.DiscountPercent, d.DiscountStartAt, d.DiscountEndAt })
+                                .FirstOrDefaultAsync(cancellationToken);
+                            var discountAmount = discountFields != null
+                                && DoctorMarketingHelpers.IsDiscountActive(discountFields.DiscountPercent, discountFields.DiscountStartAt, discountFields.DiscountEndAt, DateTime.UtcNow)
+                                ? DoctorMarketingHelpers.ComputeDiscountAmount(fee.Value, discountFields.DiscountPercent!.Value)
+                                : 0m;
+
                             var at = DateTime.UtcNow;
                             var chargeEvent = new BillingChargeEvent
                             {
@@ -170,8 +184,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 DisplayName = $"Consultation — {doctorName ?? "Doctor"}",
                                 Qty = 1,
                                 UnitPrice = fee.Value,
-                                DiscountAmount = 0,
-                                NetAmount = fee.Value,
+                                DiscountAmount = discountAmount,
+                                NetAmount = fee.Value - discountAmount,
                                 IsTaxInclusive = false,
                                 IsInterState = false,
                                 StatusCode = BillingConstants.ChargeEventStatus.Posted,

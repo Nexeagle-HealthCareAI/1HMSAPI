@@ -26,6 +26,9 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? MedicalCouncil { get; set; }
         public string? Department { get; set; }
         public List<string>? Specializations { get; set; }
+        // Optional link into the NMC qualification-ladder catalog (dbo.MedicalSpecialities) —
+        // additive, sits alongside Qualification/Department/Specializations above.
+        public Guid? PrimaryMedicalSpecialityId { get; set; }
         public decimal? ConsultFee { get; set; }   // optional OPD consultation fee
 
         [JsonIgnore]

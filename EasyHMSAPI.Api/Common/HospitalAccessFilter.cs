@@ -76,13 +76,24 @@ namespace EasyHMSAPI.Api.Common
                 var sub = await _db.HospitalSubscriptions
                     .AsNoTracking()
                     .FirstOrDefaultAsync(s => s.HospitalId == hospitalId.Value);
-                
-                subStatus = sub?.Status ?? "Trial"; // Default if missing
+
+                subStatus = sub?.GetEffectiveStatus(DateTime.UtcNow) ?? "Trial"; // Default if missing
                 _cache.Set(subKey, subStatus, CacheTtl);
             }
 
-            if (subStatus.Equals("Expired", StringComparison.OrdinalIgnoreCase) || 
-                subStatus.Equals("Blocked", StringComparison.OrdinalIgnoreCase))
+            // Read-only once expired/blocked/rejected, not a full lockout: GET (and HEAD) requests
+            // — viewing the appointment board, patient records, billing history, etc. — pass through
+            // regardless of subscription status. Only requests that mutate something (POST/PUT/PATCH/
+            // DELETE) get stopped here; the frontend mirrors this by disabling write actions while
+            // leaving navigation/viewing enabled (see MainLayout.tsx / AppointmentDashboard.tsx).
+            var isWriteRequest = !HttpMethods.IsGet(context.HttpContext.Request.Method)
+                && !HttpMethods.IsHead(context.HttpContext.Request.Method)
+                && !HttpMethods.IsOptions(context.HttpContext.Request.Method);
+
+            if (isWriteRequest && (
+                subStatus.Equals("Expired", StringComparison.OrdinalIgnoreCase) ||
+                subStatus.Equals("Blocked", StringComparison.OrdinalIgnoreCase) ||
+                subStatus.Equals("Rejected", StringComparison.OrdinalIgnoreCase)))
             {
                 // Check if user is Admin or AdminDoctor
                 var roles = await _db.UserRoles
@@ -93,12 +104,15 @@ namespace EasyHMSAPI.Api.Common
                     .ToListAsync();
 
                 bool isAdmin = roles.Contains("Admin") || roles.Contains("AdminDoctor");
+                var isRejected = subStatus.Equals("Rejected", StringComparison.OrdinalIgnoreCase);
 
                 if (isAdmin)
                 {
-                    context.Result = new ObjectResult(new { 
-                        message = "Your hospital subscription has expired. Please renew to continue.",
-                        subscriptionExpired = true 
+                    context.Result = new ObjectResult(new {
+                        message = isRejected
+                            ? "Your last payment submission was rejected. Please review the reason and resubmit."
+                            : "Your hospital subscription has expired. Please renew to continue.",
+                        subscriptionExpired = true
                     })
                     {
                         StatusCode = StatusCodes.Status402PaymentRequired,
@@ -106,7 +120,10 @@ namespace EasyHMSAPI.Api.Common
                 }
                 else
                 {
-                    context.Result = new ObjectResult(new { message = "Hospital subscription is inactive. Please contact your administrator." })
+                    context.Result = new ObjectResult(new {
+                        message = "Hospital subscription is inactive. Please contact your administrator.",
+                        subscriptionExpired = true
+                    })
                     {
                         StatusCode = StatusCodes.Status403Forbidden,
                     };

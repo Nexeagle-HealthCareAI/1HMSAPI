@@ -10,6 +10,7 @@ using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using EasyHMSAPI.UnitTests.TestUtils;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Moq;
 using NUnit.Framework;
 
@@ -29,7 +30,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         {
             _context = InMemoryDbContextFactory.CreateContext();
             _whatsAppServiceMock = new Mock<IWhatsAppMessagingService>();
-            _handler = new ConfirmPreAppointmentHandler(_context, _whatsAppServiceMock.Object);
+            _handler = new ConfirmPreAppointmentHandler(_context, _whatsAppServiceMock.Object, new MemoryCache(new MemoryCacheOptions()));
 
             _hospitalId = Guid.NewGuid();
             var user = TestDataFactory.SeedUser(_context);

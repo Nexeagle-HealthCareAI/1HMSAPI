@@ -8,6 +8,7 @@ using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using EasyHMSAPI.UnitTests.TestUtils;
+using Microsoft.Extensions.Caching.Memory;
 using NUnit.Framework;
 
 namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
@@ -22,7 +23,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         public void SetUp()
         {
             _context = InMemoryDbContextFactory.CreateContext();
-            _handler = new DoctorBookedSlotsHandler(_context);
+            _handler = new DoctorBookedSlotsHandler(_context, new MemoryCache(new MemoryCacheOptions()));
         }
 
         [TearDown]

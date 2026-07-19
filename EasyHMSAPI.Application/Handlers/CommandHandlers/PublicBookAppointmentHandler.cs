@@ -7,6 +7,7 @@ using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
@@ -27,12 +28,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         private readonly AppDbContext _context;
         private readonly ISmsService _smsService;
         private readonly IWhatsAppMessagingService _whatsAppMessagingService;
+        private readonly IMemoryCache _cache;
 
-        public PublicBookAppointmentHandler(AppDbContext context, ISmsService smsService, IWhatsAppMessagingService whatsAppMessagingService)
+        public PublicBookAppointmentHandler(AppDbContext context, ISmsService smsService, IWhatsAppMessagingService whatsAppMessagingService, IMemoryCache cache)
         {
             _context = context;
             _smsService = smsService;
             _whatsAppMessagingService = whatsAppMessagingService;
+            _cache = cache;
         }
 
         public async Task<PublicBookAppointmentResponseModel> Handle(PublicBookAppointmentRequestModel request, CancellationToken cancellationToken)
@@ -88,6 +91,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
             _context.Appointments.Add(appointment);
             await _context.SaveChangesAsync(cancellationToken);
+
+            // The new PRE_APPOINTMENT row occupies its preferred time in DoctorBookedSlotsHandler's
+            // query (it isn't Cancelled, so nothing there excludes pre-appointments) — without this,
+            // a cached "booked slots" entry could keep showing that time as open for up to its TTL.
+            _cache.Remove(PublicDirectoryCacheKeys.BookedSlots(hospitalId, request.DoctorId, appointment.ApptDate));
 
             var isReminderSent = false;
             if (!string.IsNullOrWhiteSpace(patient.Mobile))

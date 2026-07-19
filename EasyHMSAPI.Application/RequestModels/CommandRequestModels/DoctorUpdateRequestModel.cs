@@ -17,6 +17,9 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? PrimaryDepartment { get; set; }
         public string? Department { get; set; }
         public List<string>? Specializations { get; set; }
+        // Optional link into the NMC qualification-ladder catalog (dbo.MedicalSpecialities) —
+        // additive, sits alongside Qualification/Department/Specializations above.
+        public Guid? PrimaryMedicalSpecialityId { get; set; }
         public List<string>? Languages { get; set; }
         public string? PublicContactEmail { get; set; }
         public string? PublicContactPhone { get; set; }

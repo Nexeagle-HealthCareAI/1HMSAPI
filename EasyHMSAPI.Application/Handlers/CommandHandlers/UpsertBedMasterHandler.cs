@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Domain.Context;
@@ -10,10 +11,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     public class UpsertBedMasterHandler : IRequestHandler<UpsertBedMasterRequestModel, UpsertBedMasterResponseModel>
     {
         private readonly AppDbContext _context;
+        private readonly ISubscriptionLimitHelper _subscriptionLimitHelper;
 
-        public UpsertBedMasterHandler(AppDbContext context)
+        public UpsertBedMasterHandler(AppDbContext context, ISubscriptionLimitHelper subscriptionLimitHelper)
         {
             _context = context;
+            _subscriptionLimitHelper = subscriptionLimitHelper;
         }
 
         public async Task<UpsertBedMasterResponseModel> Handle(UpsertBedMasterRequestModel request, CancellationToken cancellationToken)
@@ -28,6 +31,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 if (!request.IsActive && existingBed.StatusCode == "OCCUPIED")
                     throw new InvalidOperationException($"Bed {existingBed.BedCode} is currently occupied and cannot be deactivated.");
+
+                // Reactivating a previously-deactivated bed puts it back into the active count —
+                // re-check the limit the same way a brand-new bed would be, so a hospital that's
+                // already at/over its plan's bed limit (e.g. after a downgrade) can't sidestep it
+                // by flipping an old bed back on instead of creating a new one.
+                if (request.IsActive && !existingBed.IsActive)
+                {
+                    var reactivateCheck = await _subscriptionLimitHelper.CanAddBedsAsync(request.HospitalId, 1, cancellationToken);
+                    if (!reactivateCheck.Allowed)
+                        throw new InvalidOperationException(reactivateCheck.Reason);
+                }
 
                 if (!string.IsNullOrEmpty(request.WardCode)) existingBed.WardCode = request.WardCode;
                 if (!string.IsNullOrEmpty(request.WardName)) existingBed.WardName = request.WardName;
@@ -59,6 +73,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     UpdatedBy = existingBed.UpdatedBy
                 };
             }
+
+            var limitCheck = await _subscriptionLimitHelper.CanAddBedsAsync(request.HospitalId, 1, cancellationToken);
+            if (!limitCheck.Allowed)
+                throw new InvalidOperationException(limitCheck.Reason);
 
             var wardCode = request.WardCode;
             var wardName = request.WardName;

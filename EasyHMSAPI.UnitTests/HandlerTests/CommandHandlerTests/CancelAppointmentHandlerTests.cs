@@ -11,6 +11,7 @@ using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using EasyHMSAPI.UnitTests.TestUtils;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using NUnit.Framework;
@@ -29,7 +30,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         {
             _context = InMemoryDbContextFactory.CreateContext();
             _mockSmsService = new Mock<ISmsService>();
-            _handler = new CancelAppointmentHandler(_context, _mockSmsService.Object, NullLogger<CancelAppointmentHandler>.Instance);
+            _handler = new CancelAppointmentHandler(_context, _mockSmsService.Object, NullLogger<CancelAppointmentHandler>.Instance, new MemoryCache(new MemoryCacheOptions()));
         }
 
         [TearDown]

@@ -8,6 +8,7 @@ using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using EasyHMSAPI.UnitTests.TestUtils;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Moq;
 using NUnit.Framework;
@@ -32,7 +33,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             _configurationMock = new Mock<IConfiguration>();
             _configurationMock.Setup(c => c["BlobStorage:ProfilePhotosContainer"]).Returns("photos");
 
-            _handler = new GetPublicDoctorsHandler(_context, _blobServiceMock.Object, _configurationMock.Object);
+            _handler = new GetPublicDoctorsHandler(_context, _blobServiceMock.Object, new MemoryCache(new MemoryCacheOptions()), _configurationMock.Object);
         }
 
         [TearDown]
@@ -73,8 +74,10 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             Assert.That(d.Bio, Is.EqualTo("Cardiologist with 10 years experience"));
             Assert.That(d.HospitalId, Is.EqualTo(hospital.HospitalID));
             Assert.That(d.HospitalName, Is.EqualTo(hospital.Name));
+            Assert.That(d.Address, Is.EqualTo(hospital.Location));
             Assert.That(d.City, Is.EqualTo(hospital.City));
             Assert.That(d.State, Is.EqualTo(hospital.State));
+            Assert.That(d.Pincode, Is.EqualTo(hospital.Pincode));
         }
 
         [Test]

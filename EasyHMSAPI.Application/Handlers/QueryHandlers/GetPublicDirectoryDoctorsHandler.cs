@@ -60,6 +60,11 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     d.PublicContactEmail,
                     d.PublicContactPhone,
                     d.IsPubliclyListed,
+                    d.IsFeatured,
+                    d.IsDelistedByAdmin,
+                    d.DiscountPercent,
+                    d.DiscountStartAt,
+                    d.DiscountEndAt,
                 }
             ).ToListAsync(cancellationToken);
 
@@ -132,6 +137,11 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     PublicContactEmail = r.PublicContactEmail,
                     PublicContactPhone = r.PublicContactPhone,
                     IsPubliclyListed = r.IsPubliclyListed,
+                    IsFeatured = r.IsFeatured,
+                    IsDelistedByAdmin = r.IsDelistedByAdmin,
+                    DiscountPercent = r.DiscountPercent,
+                    DiscountStartAt = r.DiscountStartAt,
+                    DiscountEndAt = r.DiscountEndAt,
                     Rating = reviewAgg != null ? Math.Round(reviewAgg.Average, 1) : (double?)null,
                     ReviewCount = reviewAgg?.Count ?? 0,
                 });

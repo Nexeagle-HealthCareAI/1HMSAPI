@@ -126,7 +126,12 @@ builder.Services
             ValidIssuer = jwtIssuer,
             ValidAudience = jwtAudience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
-            ClockSkew = TimeSpan.Zero
+            // Zero tolerance here means any clock drift between the process that issued a token
+            // and the process validating it (e.g. a container clock a few seconds off host time)
+            // rejects an otherwise-valid, non-expired token outright. A small buffer is the
+            // standard mitigation — tokens still expire on schedule (see JwtAuthService, 1 hour),
+            // this only forgives a few seconds/minutes of clock disagreement at the edges.
+            ClockSkew = TimeSpan.FromMinutes(2)
         };
     });
 
@@ -161,17 +166,27 @@ builder.Services.AddScoped<IBlobStorageService, S3StorageService>();
 builder.Services.AddScoped<ISmsService, SmsService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IWhatsAppMessagingService, WhatsAppMessagingService>();
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IPatientTokenValidator, EasyHMSAPI.Application.Services.Implementations.PatientTokenValidator>();
 builder.Services.AddScoped<IVoiceRxService, VoiceRxService>();
 builder.Services.AddScoped<IDoctorValidationHelper, DoctorValidationHelper>();
+builder.Services.AddScoped<ISubscriptionLimitHelper, SubscriptionLimitHelper>();
 
 // ------------------------------------------------------------
 // Rate Limiting
 // ------------------------------------------------------------
+// NexEagleWebsite proxies every public/patient-auth call server-to-server (see easyhmsFetch) —
+// both apps run in separate Docker containers on the same VM, so RemoteIpAddress alone sees the
+// Docker bridge address for ALL of that traffic, not the actual visitor's IP. TrustedProxyIpResolver
+// recovers the real IP from a header, but only trusts it when a shared secret also matches —
+// unset by default (see appsettings.json), in which case every policy below behaves exactly as
+// before (falls back to RemoteIpAddress).
+var proxyForwardingSecret = builder.Configuration["Internal:ProxyForwardingSecret"];
+
 builder.Services.AddRateLimiter(options =>
 {
      options.AddPolicy("PerIpPolicy", context =>
          RateLimitPartition.GetFixedWindowLimiter(
-         partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+         partitionKey: EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(context, proxyForwardingSecret),
          factory: key => new FixedWindowRateLimiterOptions
          {
              PermitLimit = 100,
@@ -185,10 +200,26 @@ builder.Services.AddRateLimiter(options =>
      // the general per-IP policy above since a leaked/scraped API key is a higher abuse risk.
      options.AddPolicy("PublicBookingPolicy", context =>
          RateLimitPartition.GetFixedWindowLimiter(
-         partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+         partitionKey: EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(context, proxyForwardingSecret),
          factory: key => new FixedWindowRateLimiterOptions
          {
              PermitLimit = 20,
+             Window = TimeSpan.FromMinutes(1),
+             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+             QueueLimit = 0
+         })
+     );
+
+     // Patient WhatsApp-OTP login (Doctor Dekho) — tighter per-IP ceiling than PublicBookingPolicy.
+     // This is on top of, not instead of, the per-mobile-number cooldown/daily-cap enforced inside
+     // PatientOtpSendHandler itself: this policy stops one IP from hammering many different numbers,
+     // the handler-level check stops any single number from being spammed regardless of IP rotation.
+     options.AddPolicy("PatientAuthPolicy", context =>
+         RateLimitPartition.GetFixedWindowLimiter(
+         partitionKey: EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(context, proxyForwardingSecret),
+         factory: key => new FixedWindowRateLimiterOptions
+         {
+             PermitLimit = 8,
              Window = TimeSpan.FromMinutes(1),
              QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
              QueueLimit = 0

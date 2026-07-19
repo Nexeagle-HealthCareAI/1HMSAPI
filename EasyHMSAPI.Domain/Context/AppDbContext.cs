@@ -65,6 +65,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<MedicineMaster> MedicineMaster { get; set; }
         public DbSet<User> Users { get; set; }
         public DbSet<UserAuth> UserAuths { get; set; }
+        public DbSet<PublicPatientAuth> PublicPatientAuths { get; set; }
         public DbSet<UserProfile> UserProfiles { get; set; }
         public DbSet<Role> Roles { get; set; }
         public DbSet<RolePermission> RolePermissions { get; set; }
@@ -77,6 +78,9 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<Department> Departments { get; set; }
         public DbSet<HospitalDepartmentMapping> HospitalDepartmentMappings { get; set; }
         public DbSet<Specialization> Specializations { get; set; }
+        public DbSet<MedicalQualificationType> MedicalQualificationTypes { get; set; }
+        public DbSet<MedicalSpeciality> MedicalSpecialities { get; set; }
+        public DbSet<MedicalSpecialityFeeder> MedicalSpecialityFeeders { get; set; }
         public DbSet<Doctor> Doctors { get; set; }
         public DbSet<DoctorDepartment> DoctorDepartments { get; set; }
         public DbSet<DoctorSpecialization> DoctorSpecializations { get; set; }
@@ -154,6 +158,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<NursingCarePlanItem> NursingCarePlanItem { get; set; }
         public DbSet<RestraintOrder> RestraintOrder { get; set; }
         public DbSet<HospitalSubscription> HospitalSubscriptions { get; set; }
+        public DbSet<HospitalSubscriptionPayment> HospitalSubscriptionPayments { get; set; }
         public DbSet<Store> Store { get; set; }
         public DbSet<Batch> Batch { get; set; }
         public DbSet<StockLevel> StockLevel { get; set; }
@@ -216,6 +221,28 @@ namespace EasyHMSAPI.Domain.Context
             modelBuilder.Entity<Department>().ToTable("Departments");
             modelBuilder.Entity<HospitalDepartmentMapping>().ToTable("HospitalDepartmentMappings");
             modelBuilder.Entity<Specialization>().ToTable("Specializations");
+
+            modelBuilder.Entity<MedicalQualificationType>().ToTable("MedicalQualificationTypes");
+            modelBuilder.Entity<MedicalSpeciality>(entity =>
+            {
+                entity.ToTable("MedicalSpecialities");
+                entity.HasOne(m => m.QualificationType)
+                      .WithMany(q => q.Specialities)
+                      .HasForeignKey(m => m.QualificationTypeCode);
+            });
+            modelBuilder.Entity<MedicalSpecialityFeeder>(entity =>
+            {
+                entity.ToTable("MedicalSpecialityFeeders");
+                entity.HasKey(f => new { f.SpecialityId, f.FeederSpecialityId });
+                entity.HasOne(f => f.Speciality)
+                    .WithMany(s => s.Feeders)
+                    .HasForeignKey(f => f.SpecialityId)
+                    .OnDelete(DeleteBehavior.NoAction);
+                entity.HasOne(f => f.FeederSpeciality)
+                    .WithMany(s => s.FeedsInto)
+                    .HasForeignKey(f => f.FeederSpecialityId)
+                    .OnDelete(DeleteBehavior.NoAction);
+            });
 
             // Lookup entities
             modelBuilder.Entity<LookupType>().ToTable("LookupTypes");
@@ -1111,6 +1138,33 @@ namespace EasyHMSAPI.Domain.Context
                 entity.HasOne(e => e.Hospital)
                       .WithMany()
                       .HasForeignKey(e => e.HospitalId);
+            });
+
+            modelBuilder.Entity<HospitalSubscriptionPayment>(entity =>
+            {
+                entity.ToTable("HospitalSubscriptionPayments");
+                entity.HasKey(e => e.PaymentId);
+                entity.Property(e => e.PaymentId).HasDefaultValueSql("newid()");
+                entity.Property(e => e.Amount).HasPrecision(18, 2);
+                entity.Property(e => e.Reference).HasMaxLength(100).IsRequired();
+                entity.Property(e => e.Status).HasMaxLength(50).IsRequired();
+                entity.Property(e => e.SubmittedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+                entity.Property(e => e.ReviewedAt).HasColumnType("datetime2(3)").IsRequired(false);
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+                entity.Property(e => e.ProratedCreditAmount).HasPrecision(18, 2);
+                entity.Property(e => e.IsProratedSwitch).HasDefaultValue(false);
+            });
+
+            modelBuilder.Entity<PublicPatientAuth>(entity =>
+            {
+                entity.ToTable("PublicPatientAuth");
+                entity.HasKey(e => e.Mobile);
+                entity.Property(e => e.Mobile).HasMaxLength(20);
+                entity.Property(e => e.OtpSentAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.OtpExpireAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.OtpWindowStartAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+                entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
             });
 
             modelBuilder.Entity<Store>(entity =>

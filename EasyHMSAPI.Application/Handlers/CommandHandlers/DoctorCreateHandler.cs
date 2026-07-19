@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Data.Enums;
@@ -12,10 +13,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     public class DoctorCreateHandler : IRequestHandler<DoctorCreateRequestModel, DoctorCreateResponseModel>
     {
         private readonly AppDbContext _context;
+        private readonly ISubscriptionLimitHelper _subscriptionLimitHelper;
 
-        public DoctorCreateHandler(AppDbContext context)
+        public DoctorCreateHandler(AppDbContext context, ISubscriptionLimitHelper subscriptionLimitHelper)
         {
             _context = context;
+            _subscriptionLimitHelper = subscriptionLimitHelper;
         }
 
         public async Task<DoctorCreateResponseModel> Handle(DoctorCreateRequestModel request, CancellationToken cancellationToken)
@@ -57,6 +60,22 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     };
                 }
 
+                var targetHospitalId = request.HospitalId ?? userWithHospital.HospitalId;
+                if (targetHospitalId.HasValue)
+                {
+                    var limitCheck = await _subscriptionLimitHelper.CanAddDoctorAsync(targetHospitalId.Value, cancellationToken);
+                    if (!limitCheck.Allowed)
+                    {
+                        return new DoctorCreateResponseModel
+                        {
+                            Success = false,
+                            Message = limitCheck.Reason,
+                            Errors = new List<string> { limitCheck.Reason! },
+                            UserId = request.UserId
+                        };
+                    }
+                }
+
                 Guid? primaryDepartmentId = null;
                 if (!string.IsNullOrWhiteSpace(request.PrimaryDepartment))
                 {
@@ -71,6 +90,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         errors.Add($"Primary department '{primaryDeptName}' not found.");
                         primaryDepartmentId = null;
                     }
+                }
+
+                Guid? primaryMedicalSpecialityId = null;
+                if (request.PrimaryMedicalSpecialityId.HasValue)
+                {
+                    var exists = await _context.MedicalSpecialities
+                        .AnyAsync(s => s.SpecialityId == request.PrimaryMedicalSpecialityId.Value && s.IsActive, cancellationToken);
+                    if (exists)
+                        primaryMedicalSpecialityId = request.PrimaryMedicalSpecialityId.Value;
+                    else
+                        errors.Add("Selected primary speciality was not found.");
                 }
 
                 var doctorId = Guid.NewGuid();
@@ -88,6 +118,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     PublicContactEmail = string.IsNullOrWhiteSpace(request.PublicContactEmail) ? null : request.PublicContactEmail.Trim(),
                     PublicContactPhone = string.IsNullOrWhiteSpace(request.PublicContactPhone) ? null : request.PublicContactPhone.Trim(),
                     PrimaryDepartmentID = primaryDepartmentId,
+                    PrimaryMedicalSpecialityId = primaryMedicalSpecialityId,
                     CreatedAt = createdAt,
                     HospitalId = request.HospitalId ?? userWithHospital.HospitalId
                 };

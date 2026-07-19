@@ -12,10 +12,18 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? PatientId { get; set; }
         public Guid EncounterId { get; set; }
         public PaymentDetail? Payment { get; set; }
+        public List<ExtraChargeDetail>? ExtraCharges { get; set; }
         [JsonIgnore]
         public string? LoggedInUserName { get; set; }
         [JsonIgnore]
         public Guid? LoggedInUserId { get; set; }
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class ExtraChargeDetail
+    {
+        public string? Reason { get; set; }
+        public decimal Amount { get; set; }
     }
 
     [ExcludeFromCodeCoverage]

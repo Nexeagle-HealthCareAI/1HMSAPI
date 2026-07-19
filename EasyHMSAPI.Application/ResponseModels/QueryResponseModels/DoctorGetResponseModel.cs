@@ -20,6 +20,9 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public bool IsPubliclyListed { get; set; }
         public Guid? PrimaryDepartmentID { get; set; }
         public string? PrimaryDepartmentName { get; set; }
+        public Guid? PrimaryMedicalSpecialityId { get; set; }
+        public string? PrimaryMedicalSpecialityName { get; set; }
+        public string? PrimaryMedicalSpecialityPatientFacingName { get; set; }
         public int ProfileCompletionPercentage { get; set; }
         public DateTime CreatedAt { get; set; }
         public List<DoctorDepartmentInfo> DoctorDepartments { get; set; } = new List<DoctorDepartmentInfo>();

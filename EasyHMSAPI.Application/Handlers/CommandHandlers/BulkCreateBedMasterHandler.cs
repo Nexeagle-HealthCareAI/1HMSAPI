@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Domain.Context;
@@ -12,10 +13,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     {
         private const int MaxBulk = 200;
         private readonly AppDbContext _context;
+        private readonly ISubscriptionLimitHelper _subscriptionLimitHelper;
 
-        public BulkCreateBedMasterHandler(AppDbContext context)
+        public BulkCreateBedMasterHandler(AppDbContext context, ISubscriptionLimitHelper subscriptionLimitHelper)
         {
             _context = context;
+            _subscriptionLimitHelper = subscriptionLimitHelper;
         }
 
         public async Task<BulkCreateBedMasterResponseModel> Handle(BulkCreateBedMasterRequestModel request, CancellationToken cancellationToken)
@@ -24,6 +27,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 return new BulkCreateBedMasterResponseModel { Success = false, Message = "Number of beds must be greater than 0." };
             if (request.Count > MaxBulk)
                 return new BulkCreateBedMasterResponseModel { Success = false, Message = $"Cannot create more than {MaxBulk} beds at once." };
+
+            var limitCheck = await _subscriptionLimitHelper.CanAddBedsAsync(request.HospitalId, request.Count, cancellationToken);
+            if (!limitCheck.Allowed)
+                return new BulkCreateBedMasterResponseModel { Success = false, Message = limitCheck.Reason };
 
             var wardCode = request.WardCode;
             var wardName = request.WardName;
