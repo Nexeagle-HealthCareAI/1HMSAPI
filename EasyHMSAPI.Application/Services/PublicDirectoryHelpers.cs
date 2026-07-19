@@ -36,17 +36,20 @@ namespace EasyHMSAPI.Application.Services
                 .Where(dd => dd.DoctorID == doctorId && dd.HospitalId.HasValue)
                 .Select(dd => dd.HospitalId!.Value)
                 .Distinct()
-                .OrderBy(id => id)
                 .ToListAsync(cancellationToken);
 
-            foreach (var hospitalId in hospitalIds)
-            {
-                var isPublic = await context.Hospitals
-                    .AnyAsync(h => h.HospitalID == hospitalId && h.IsPubliclyListed && h.IsActive, cancellationToken);
-                if (isPublic) return hospitalId;
-            }
+            if (hospitalIds.Count == 0) return null;
 
-            return null;
+            // This runs on every single availability check and every public booking — was one
+            // query PER candidate hospital (rare in practice, but still a per-call round-trip
+            // multiplier at volume). Batched into one query; .Min() picks the same "lowest
+            // HospitalId among the publicly-listed ones" the old ordered-loop did.
+            var publiclyListedIds = await context.Hospitals
+                .Where(h => hospitalIds.Contains(h.HospitalID) && h.IsPubliclyListed && h.IsActive)
+                .Select(h => h.HospitalID)
+                .ToListAsync(cancellationToken);
+
+            return publiclyListedIds.Count > 0 ? publiclyListedIds.Min() : (Guid?)null;
         }
     }
 }

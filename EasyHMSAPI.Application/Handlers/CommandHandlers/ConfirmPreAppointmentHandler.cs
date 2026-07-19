@@ -7,6 +7,7 @@ using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using System.Text.Json;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
@@ -24,11 +25,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     {
         private readonly AppDbContext _context;
         private readonly IWhatsAppMessagingService _whatsAppMessagingService;
+        private readonly IMemoryCache _cache;
 
-        public ConfirmPreAppointmentHandler(AppDbContext context, IWhatsAppMessagingService whatsAppMessagingService)
+        public ConfirmPreAppointmentHandler(AppDbContext context, IWhatsAppMessagingService whatsAppMessagingService, IMemoryCache cache)
         {
             _context = context;
             _whatsAppMessagingService = whatsAppMessagingService;
+            _cache = cache;
         }
 
         public async Task<ConfirmPreAppointmentResponseModel> Handle(ConfirmPreAppointmentRequestModel request, CancellationToken cancellationToken)
@@ -58,6 +61,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 return new ConfirmPreAppointmentResponseModel { Success = false, Message = "The selected time slot is already booked." };
 
             var explicitDuration = request.SlotTimeInMinutes.HasValue && request.SlotTimeInMinutes.Value > 0 ? request.SlotTimeInMinutes.Value : 15;
+            var previousApptDate = appointment.ApptDate;
 
             appointment.ApptDate = request.StartAt.Date;
             appointment.StartAt = request.StartAt;
@@ -74,6 +78,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             appointment.StatusHistoryJson = JsonSerializer.Serialize(history);
 
             await _context.SaveChangesAsync(cancellationToken);
+
+            // Invalidate both the slot it moved OUT of and the one it moved INTO — the receptionist
+            // may have picked a different date than the patient's original preference (that's the
+            // whole point of the auto-search), so a stale cache could otherwise keep showing the
+            // now-vacated original time as booked, or the newly-claimed time as open.
+            _cache.Remove(PublicDirectoryCacheKeys.BookedSlots(request.HospitalId, appointment.DoctorId, previousApptDate));
+            _cache.Remove(PublicDirectoryCacheKeys.BookedSlots(request.HospitalId, appointment.DoctorId, appointment.ApptDate));
 
             var tokenNumber = await AppointmentBookingHelpers.AllocateTokenWithLockingAsync(
                 _context, request.HospitalId, appointment.DoctorId, appointment.ApptDate, appointment.ApptId, cancellationToken);

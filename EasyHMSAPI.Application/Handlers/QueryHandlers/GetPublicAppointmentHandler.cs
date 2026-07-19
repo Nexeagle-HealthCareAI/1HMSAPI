@@ -22,6 +22,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
         public async Task<GetPublicAppointmentResponseModel> Handle(GetPublicAppointmentRequestModel request, CancellationToken cancellationToken)
         {
+            _context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
+
             var appt = await _context.Appointments
                 .Where(a => a.ApptId == request.AppointmentId)
                 .Select(a => new { a.ApptId, a.HospitalId, a.DoctorId, a.ApptDate, a.StartAt, a.CurrentStatusCode })

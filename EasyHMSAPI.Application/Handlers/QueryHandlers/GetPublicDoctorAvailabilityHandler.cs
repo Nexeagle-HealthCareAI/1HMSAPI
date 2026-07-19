@@ -4,6 +4,7 @@ using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 {
@@ -19,15 +20,33 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
     /// </summary>
     public class GetPublicDoctorAvailabilityHandler : IRequestHandler<GetPublicDoctorAvailabilityRequestModel, GetPublicDoctorAvailabilityResponseModel>
     {
-        private readonly AppDbContext _context;
+        private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(30);
 
-        public GetPublicDoctorAvailabilityHandler(AppDbContext context)
+        private readonly AppDbContext _context;
+        private readonly IMemoryCache _cache;
+
+        public GetPublicDoctorAvailabilityHandler(AppDbContext context, IMemoryCache cache)
         {
             _context = context;
+            _cache = cache;
         }
 
         public async Task<GetPublicDoctorAvailabilityResponseModel> Handle(GetPublicDoctorAvailabilityRequestModel request, CancellationToken cancellationToken)
         {
+            // Shift schedules and time-off change rarely compared to how often many concurrent
+            // visitors check the same popular doctor+date — a doctor's resolved hospital doesn't
+            // change within a 30s window either, so keying purely on (doctorId, date) lets a cache
+            // hit skip the hospital-resolution lookup too, not just the shift/time-off queries.
+            var cacheKey = PublicDirectoryCacheKeys.DoctorAvailability(request.DoctorId, request.Date.Date);
+            if (_cache.TryGetValue(cacheKey, out GetPublicDoctorAvailabilityResponseModel? cached) && cached != null)
+            {
+                return cached;
+            }
+
+            // Fully read-only, hit on every doctor+date the public site checks — skip EF Core's
+            // change-tracking bookkeeping for the whole request (see GetPublicDoctorsHandler).
+            _context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
+
             var doctorHospitalId = await PublicDirectoryHelpers.ResolvePubliclyListedHospitalIdAsync(_context, request.DoctorId, cancellationToken);
 
             if (doctorHospitalId == null)
@@ -46,12 +65,14 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
             if (timeOff != null)
             {
-                return new GetPublicDoctorAvailabilityResponseModel
+                var timeOffResponse = new GetPublicDoctorAvailabilityResponseModel
                 {
                     Success = true,
                     IsAvailable = false,
                     Reason = timeOff.Reason,
                 };
+                _cache.Set(cacheKey, timeOffResponse, CacheTtl);
+                return timeOffResponse;
             }
 
             var overrideShifts = await _context.DoctorShiftOverrides
@@ -78,13 +99,15 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     .ToListAsync(cancellationToken);
             }
 
-            return new GetPublicDoctorAvailabilityResponseModel
+            var response = new GetPublicDoctorAvailabilityResponseModel
             {
                 Success = true,
                 IsAvailable = shifts.Count > 0,
                 Reason = shifts.Count > 0 ? null : "Doctor is not scheduled on this day.",
                 Shifts = shifts,
             };
+            _cache.Set(cacheKey, response, CacheTtl);
+            return response;
         }
     }
 }

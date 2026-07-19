@@ -10,6 +10,7 @@ using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using EasyHMSAPI.UnitTests.TestUtils;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Moq;
 using NUnit.Framework;
 
@@ -35,7 +36,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                 .Setup(w => w.SendAppointmentConfirmationAsync(
                     It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
                 .ReturnsAsync(true);
-            _handler = new PublicBookAppointmentHandler(_context, _smsServiceMock.Object, _whatsAppMessagingServiceMock.Object);
+            _handler = new PublicBookAppointmentHandler(_context, _smsServiceMock.Object, _whatsAppMessagingServiceMock.Object, new MemoryCache(new MemoryCacheOptions()));
 
             var user = TestDataFactory.SeedUser(_context);
             var hospital = TestDataFactory.SeedHospital(_context, user.UserID, isPubliclyListed: true);

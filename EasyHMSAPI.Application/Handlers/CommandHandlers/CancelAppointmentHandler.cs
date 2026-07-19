@@ -8,6 +8,7 @@ using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
@@ -18,12 +19,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         private readonly AppDbContext _context;
         private readonly ISmsService _smsService;
         private readonly ILogger<CancelAppointmentHandler> _logger;
+        private readonly IMemoryCache _cache;
 
-        public CancelAppointmentHandler(AppDbContext context, ISmsService smsService, ILogger<CancelAppointmentHandler> logger)
+        public CancelAppointmentHandler(AppDbContext context, ISmsService smsService, ILogger<CancelAppointmentHandler> logger, IMemoryCache cache)
         {
             _context = context;
             _smsService = smsService;
             _logger = logger;
+            _cache = cache;
         }
 
         public async Task<CancelAppointmentResponseModel> Handle(CancelAppointmentRequestModel request, CancellationToken cancellationToken)
@@ -200,6 +203,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
 
                 await _context.SaveChangesAsync(cancellationToken);
+
+                // Cancelling frees this slot back up — DoctorBookedSlotsHandler's cache would
+                // otherwise keep showing it as taken until its TTL expires.
+                _cache.Remove(PublicDirectoryCacheKeys.BookedSlots(appt.HospitalId, appt.DoctorId, appt.ApptDate));
 
                 // Send SMS to patient
                 var patient = await _context.PatientRegistrations.FirstOrDefaultAsync(p => p.PatientId == appt.PatientId, cancellationToken);

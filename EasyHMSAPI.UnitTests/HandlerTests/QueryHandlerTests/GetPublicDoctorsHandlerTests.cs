@@ -8,6 +8,7 @@ using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using EasyHMSAPI.UnitTests.TestUtils;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Moq;
 using NUnit.Framework;
@@ -32,7 +33,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             _configurationMock = new Mock<IConfiguration>();
             _configurationMock.Setup(c => c["BlobStorage:ProfilePhotosContainer"]).Returns("photos");
 
-            _handler = new GetPublicDoctorsHandler(_context, _blobServiceMock.Object, _configurationMock.Object);
+            _handler = new GetPublicDoctorsHandler(_context, _blobServiceMock.Object, new MemoryCache(new MemoryCacheOptions()), _configurationMock.Object);
         }
 
         [TearDown]

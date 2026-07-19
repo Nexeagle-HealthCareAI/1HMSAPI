@@ -135,6 +135,29 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Read-only "Personal Information" for the Doctor Dekho profile page — same manual-JWT
+        // validation as GetMyAppointments, never [Authorize].
+        [HttpGet("patients/me")]
+        public async Task<ActionResult<GetPublicPatientProfileResponseModel>> GetMyPatientProfile(CancellationToken cancellationToken)
+        {
+            var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
+            if (!auth.IsValid || auth.Mobile == null)
+            {
+                return Unauthorized(new { Message = auth.Reason ?? "Please log in again." });
+            }
+
+            try
+            {
+                var response = await _mediator.Send(new GetPublicPatientProfileRequestModel { Mobile = auth.Mobile });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetMyPatientProfile");
+                return StatusCode(500, new { Message = "An error occurred while fetching your details." });
+            }
+        }
+
         [HttpGet("doctors/{doctorId:guid}/reviews")]
         public async Task<ActionResult<GetPublicDoctorReviewsResponseModel>> GetDoctorReviews(Guid doctorId)
         {

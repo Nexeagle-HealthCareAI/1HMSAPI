@@ -1,10 +1,12 @@
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using System.Text.Json;
 
@@ -26,19 +28,40 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
     {
         private const string OpdConsultFeeType = "OPD_CONSULT";
 
+        private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(60);
+
         private readonly AppDbContext _context;
         private readonly IBlobStorageService _blobService;
+        private readonly IMemoryCache _cache;
         private readonly string _containerName;
 
-        public GetPublicDoctorsHandler(AppDbContext context, IBlobStorageService blobService, IConfiguration configuration)
+        public GetPublicDoctorsHandler(AppDbContext context, IBlobStorageService blobService, IMemoryCache cache, IConfiguration configuration)
         {
             _context = context;
             _blobService = blobService;
+            _cache = cache;
             _containerName = configuration["BlobStorage:ProfilePhotosContainer"] ?? string.Empty;
         }
 
         public async Task<GetPublicDoctorsResponseModel> Handle(GetPublicDoctorsRequestModel request, CancellationToken cancellationToken)
         {
+            // Whole-platform listing, identical for every caller (no per-request variation) — one
+            // 60s-old copy of the directory is a perfectly acceptable trade against hitting SQL
+            // Server on every single browse/search interaction from every concurrent visitor.
+            // Presigned photo URLs are valid for 24h (Storage:S3:UrlExpiryHours), so a 60s-stale
+            // cache entry never serves an expired one.
+            var cacheKey = PublicDirectoryCacheKeys.PublicDoctorsList();
+            if (_cache.TryGetValue(cacheKey, out GetPublicDoctorsResponseModel? cached) && cached != null)
+            {
+                return cached;
+            }
+
+            // Every query in this handler is read-only — this is the platform-wide doctor
+            // directory, hit repeatedly by many concurrent browsing users. Disabling change
+            // tracking for the whole request skips the identity-map/snapshot bookkeeping EF Core
+            // otherwise does for every row, which is pure waste on data that's never saved back.
+            _context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
+
             var publicHospitalIds = await _context.Hospitals
                 .Where(h => h.IsPubliclyListed && h.IsActive)
                 .Select(h => h.HospitalID)
@@ -126,6 +149,26 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 rows.Select(r => _blobService.GetUrlAsync(r.UserID, _containerName, cancellationToken))
             );
 
+            // Was one query PER doctor in the loop below — at platform-wide scale that's one extra
+            // DB round trip per doctor on every listing load. Batched into a single query + grouped
+            // dictionary, same pattern as reviewAggregates/feeLookup above.
+            var specializationRows = await _context.DoctorSpecializations
+                .Where(ds => candidateDoctorIds.Contains(ds.DoctorID) && ds.Specialization != null && ds.Specialization.IsActive)
+                .Select(ds => new { ds.DoctorID, Name = ds.Specialization.Name })
+                .ToListAsync(cancellationToken);
+            var specializationsByDoctor = specializationRows
+                .GroupBy(s => s.DoctorID)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Select(s => s.Name)
+                        .Where(name => !string.IsNullOrWhiteSpace(name) &&
+                                       name.Trim().Length > 2 &&
+                                       name.All(c => char.IsLetter(c) || char.IsWhiteSpace(c)))
+                        .Select(name => name.Trim())
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                        .ToList());
+
             var doctors = new List<PublicDoctorInfo>();
             for (var i = 0; i < rows.Count; i++)
             {
@@ -134,17 +177,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 hospitalById.TryGetValue(hospitalId, out var hospital);
                 reviewAggregates.TryGetValue(r.DoctorID, out var reviewAgg);
                 specialityById.TryGetValue(r.PrimaryMedicalSpecialityId ?? Guid.Empty, out var speciality);
-                var specializations = _context.DoctorSpecializations
-                    .Where(ds => ds.DoctorID == r.DoctorID && ds.Specialization != null && ds.Specialization.IsActive)
-                    .Select(ds => ds.Specialization.Name)
-                    .AsEnumerable()
-                    .Where(name => !string.IsNullOrWhiteSpace(name) &&
-                                   name.Trim().Length > 2 &&
-                                   name.All(c => char.IsLetter(c) || char.IsWhiteSpace(c)))
-                    .Select(name => name.Trim())
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
-                    .ToList();
+                var specializations = specializationsByDoctor.TryGetValue(r.DoctorID, out var specs) ? specs : new List<string>();
 
                 doctors.Add(new PublicDoctorInfo
                 {
@@ -175,7 +208,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 });
             }
 
-            return new GetPublicDoctorsResponseModel { Success = true, Doctors = doctors.OrderBy(d => d.FullName).ToList() };
+            var response = new GetPublicDoctorsResponseModel { Success = true, Doctors = doctors.OrderBy(d => d.FullName).ToList() };
+            _cache.Set(cacheKey, response, CacheTtl);
+            return response;
         }
     }
 }

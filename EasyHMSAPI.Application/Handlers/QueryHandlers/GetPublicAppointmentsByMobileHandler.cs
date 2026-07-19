@@ -24,6 +24,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
         public async Task<GetPublicAppointmentsByMobileResponseModel> Handle(GetPublicAppointmentsByMobileRequestModel request, CancellationToken cancellationToken)
         {
+            // Fully read-only, and doubles as the "am I logged in" check on effectively every page
+            // load of the patient portal. See GetPublicDoctorsHandler for why this matters at volume.
+            _context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
+
             var patientIds = await _context.PatientRegistrations
                 .Where(p => p.Mobile == request.Mobile && p.PatientId != null)
                 .Select(p => p.PatientId!)
