@@ -66,6 +66,8 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<User> Users { get; set; }
         public DbSet<UserAuth> UserAuths { get; set; }
         public DbSet<PublicPatientAuth> PublicPatientAuths { get; set; }
+        public DbSet<WebsiteVisit> WebsiteVisits { get; set; }
+        public DbSet<AnalyticsEvent> AnalyticsEvents { get; set; }
         public DbSet<UserProfile> UserProfiles { get; set; }
         public DbSet<Role> Roles { get; set; }
         public DbSet<RolePermission> RolePermissions { get; set; }
@@ -1163,8 +1165,25 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(e => e.OtpSentAt).HasColumnType("datetime2(3)");
                 entity.Property(e => e.OtpExpireAt).HasColumnType("datetime2(3)");
                 entity.Property(e => e.OtpWindowStartAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.LastLoginAt).HasColumnType("datetime2(3)");
                 entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
                 entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+            });
+
+            modelBuilder.Entity<WebsiteVisit>(entity =>
+            {
+                entity.ToTable("WebsiteVisits");
+                entity.HasKey(e => e.VisitId);
+                entity.Property(e => e.VisitId).HasDefaultValueSql("newsequentialid()");
+                entity.Property(e => e.VisitedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+            });
+
+            modelBuilder.Entity<AnalyticsEvent>(entity =>
+            {
+                entity.ToTable("AnalyticsEvents");
+                entity.HasKey(e => e.EventId);
+                entity.Property(e => e.EventId).HasDefaultValueSql("newsequentialid()");
+                entity.Property(e => e.OccurredAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
             });
 
             modelBuilder.Entity<Store>(entity =>

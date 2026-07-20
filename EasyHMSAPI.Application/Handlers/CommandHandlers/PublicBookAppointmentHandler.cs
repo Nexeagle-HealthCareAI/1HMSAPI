@@ -82,6 +82,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 BookingIpAddress = request.IpAddress,
                 BookingReferrerUrl = request.ReferrerUrl,
                 BookingUtmCampaign = request.UtmCampaign,
+                BookedByMobile = request.VerifiedMobile,
                 Reason = request.Reason ?? string.Empty,
                 StatusHistoryJson = $"[{{\"status\":\"{AppConstants.AppointmentStatus_PreAppointment}\",\"timestamp\":\"{DateTime.UtcNow:o}\"}}]",
                 LastStatusCodeAt = DateTime.UtcNow,

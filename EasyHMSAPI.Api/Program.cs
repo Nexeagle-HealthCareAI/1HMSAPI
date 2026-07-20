@@ -167,6 +167,7 @@ builder.Services.AddScoped<ISmsService, SmsService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IWhatsAppMessagingService, WhatsAppMessagingService>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IPatientTokenValidator, EasyHMSAPI.Application.Services.Implementations.PatientTokenValidator>();
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IGeoIpLookupService, EasyHMSAPI.Application.Services.Implementations.IpApiGeoLookupService>();
 builder.Services.AddScoped<IVoiceRxService, VoiceRxService>();
 builder.Services.AddScoped<IDoctorValidationHelper, DoctorValidationHelper>();
 builder.Services.AddScoped<ISubscriptionLimitHelper, SubscriptionLimitHelper>();
@@ -220,6 +221,20 @@ builder.Services.AddRateLimiter(options =>
          factory: key => new FixedWindowRateLimiterOptions
          {
              PermitLimit = 8,
+             Window = TimeSpan.FromMinutes(1),
+             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+             QueueLimit = 0
+         })
+     );
+
+     // Page-view beacons — fires on every page load, so this needs a much more generous ceiling
+     // than the booking/auth policies above (a visitor browsing normally shouldn't get throttled).
+     options.AddPolicy("TrackVisitPolicy", context =>
+         RateLimitPartition.GetFixedWindowLimiter(
+         partitionKey: EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(context, proxyForwardingSecret),
+         factory: key => new FixedWindowRateLimiterOptions
+         {
+             PermitLimit = 60,
              Window = TimeSpan.FromMinutes(1),
              QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
              QueueLimit = 0

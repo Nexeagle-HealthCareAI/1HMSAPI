@@ -40,6 +40,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             var isDoctorRole = request.Roles.Any(r => DoctorRoles.Contains(r.Trim().ToLowerInvariant()));
             if (isDoctorRole && string.IsNullOrWhiteSpace(request.LicenseNumber))
                 return Fail("License number is required for a doctor.");
+            if (isDoctorRole && string.IsNullOrWhiteSpace(request.MedicalCouncil))
+                return Fail("State medical council is required for a doctor.");
+            if (isDoctorRole && (!request.RegistrationYear.HasValue || request.RegistrationYear < 1950 || request.RegistrationYear > DateTime.UtcNow.Year))
+                return Fail("A valid registration year is required for a doctor.");
 
             // The admin must belong to the hospital they're adding the user to.
             var callerIsMember = await _context.HospitalUsers
@@ -157,6 +161,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             Qualification = request.Qualification,
                             ExperienceYears = request.ExperienceYears,
                             MedicalCouncil = request.MedicalCouncil,
+                            RegistrationYear = request.RegistrationYear,
                             PrimaryDepartment = request.Department,   // mark the chosen department as primary too
                             Department = request.Department,
                             Specializations = request.Specializations,

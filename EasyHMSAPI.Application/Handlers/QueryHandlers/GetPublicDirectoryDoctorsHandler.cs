@@ -53,6 +53,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     d.UserID,
                     d.PrimaryDepartmentID,
                     d.LicenseNumber,
+                    d.MedicalCouncil,
+                    d.RegistrationYear,
                     d.Qualification,
                     d.ExperienceYears,
                     d.Bio,
@@ -102,11 +104,23 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .Select(g => new { DoctorId = g.Key, Average = g.Average(r => r.Rating), Count = g.Count() })
                 .ToDictionaryAsync(g => g.DoctorId, cancellationToken);
 
+            // Same dbo.DoctorFees rows Configuration > Doctor Fees edits — grouped per doctor so the
+            // tile editor can show/edit OPD fee and round-trip IPD/Emergency unchanged on save.
+            var feesByDoctor = await _context.DoctorFees
+                .Where(f => f.HospitalId == request.HospitalId && doctorIdsForReviews.Contains(f.DoctorId) && f.IsActive
+                    && (f.FeeType == "OPD_CONSULT" || f.FeeType == "IPD_VISIT" || f.FeeType == "EMERGENCY"))
+                .ToListAsync(cancellationToken);
+            var feesByDoctorLookup = feesByDoctor.GroupBy(f => f.DoctorId).ToDictionary(g => g.Key, g => g.ToList());
+
             var doctors = new List<PublicDirectoryDoctorItem>();
             for (var i = 0; i < rows.Count; i++)
             {
                 var r = rows[i];
                 reviewAggregates.TryGetValue(r.DoctorID, out var reviewAgg);
+                feesByDoctorLookup.TryGetValue(r.DoctorID, out var doctorFees);
+                var opdFee = doctorFees?.FirstOrDefault(f => f.FeeType == "OPD_CONSULT")?.Amount;
+                var ipdFee = doctorFees?.FirstOrDefault(f => f.FeeType == "IPD_VISIT")?.Amount;
+                var emergencyFee = doctorFees?.FirstOrDefault(f => f.FeeType == "EMERGENCY")?.Amount;
                 var specializations = await _context.DoctorSpecializations
                     .Where(ds => ds.DoctorID == r.DoctorID && ds.Specialization != null && ds.Specialization.IsActive)
                     .Select(ds => ds.Specialization.Name)
@@ -122,9 +136,14 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     DepartmentName = r.PrimaryDepartmentID.HasValue && deptNameById.TryGetValue(r.PrimaryDepartmentID.Value, out var dn) ? dn : null,
                     HospitalDepartmentMappingId = r.PrimaryDepartmentID.HasValue && mappingByDept.TryGetValue(r.PrimaryDepartmentID.Value, out var mid) ? mid : (Guid?)null,
                     LicenseNumber = r.LicenseNumber,
+                    MedicalCouncil = r.MedicalCouncil,
+                    RegistrationYear = r.RegistrationYear,
                     Qualification = r.Qualification,
                     ExperienceYears = r.ExperienceYears,
                     Bio = r.Bio,
+                    OpdConsultFee = opdFee,
+                    IpdVisitFee = ipdFee,
+                    EmergencyFee = emergencyFee,
                     Specializations = specializations
                         .Where(s => !string.IsNullOrWhiteSpace(s))
                         .Select(s => s.Trim())

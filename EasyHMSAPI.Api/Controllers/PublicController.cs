@@ -33,12 +33,58 @@ namespace EasyHMSAPI.Api.Controllers
         private readonly IMediator _mediator;
         private readonly ILogger<PublicController> _logger;
         private readonly IPatientTokenValidator _patientTokenValidator;
+        private readonly string? _proxyForwardingSecret;
 
-        public PublicController(IMediator mediator, ILogger<PublicController> logger, IPatientTokenValidator patientTokenValidator)
+        public PublicController(IMediator mediator, ILogger<PublicController> logger, IPatientTokenValidator patientTokenValidator, IConfiguration configuration)
         {
             _mediator = mediator;
             _logger = logger;
             _patientTokenValidator = patientTokenValidator;
+            _proxyForwardingSecret = configuration["Internal:ProxyForwardingSecret"];
+        }
+
+        // Page-view beacon for the CMS "Site Visits" report — fired on every NexEagleWebsite page
+        // load. Deliberately its own (much more generous) rate-limit policy, overriding the
+        // controller-level PublicBookingPolicy: a visitor browsing several pages would otherwise
+        // exhaust that 20/min booking-abuse ceiling just from page navigation.
+        [HttpPost("track-visit")]
+        [EnableRateLimiting("TrackVisitPolicy")]
+        public async Task<ActionResult<TrackVisitResponseModel>> TrackVisit([FromBody] TrackVisitRequestModel request)
+        {
+            try
+            {
+                request.IpAddress = EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(HttpContext, _proxyForwardingSecret);
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.TrackVisit");
+                // Never let visit tracking surface as a visible error to a site visitor.
+                return Ok(new TrackVisitResponseModel { Success = false });
+            }
+        }
+
+        // Generic funnel/behavior event beacon for the CMS Insights tab (Auth Funnel / Booking
+        // Funnel / All Searches) — see AppConstants.AnalyticsEventType_* for valid EventType
+        // values. Same generous rate-limit tier as TrackVisit: search/step events can fire several
+        // times per page, well above the booking-abuse-oriented PublicBookingPolicy ceiling.
+        [HttpPost("track-event")]
+        [EnableRateLimiting("TrackVisitPolicy")]
+        public async Task<ActionResult<TrackEventResponseModel>> TrackEvent([FromBody] TrackEventRequestModel request)
+        {
+            try
+            {
+                request.IpAddress = EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(HttpContext, _proxyForwardingSecret);
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.TrackEvent");
+                // Never let event tracking surface as a visible error to a site visitor.
+                return Ok(new TrackEventResponseModel { Success = false });
+            }
         }
 
         [HttpGet("doctors")]
@@ -76,11 +122,18 @@ namespace EasyHMSAPI.Api.Controllers
         }
 
         [HttpPost("appointments")]
-        public async Task<ActionResult<PublicBookAppointmentResponseModel>> BookAppointment([FromBody] PublicBookAppointmentRequestModel request)
+        public async Task<ActionResult<PublicBookAppointmentResponseModel>> BookAppointment([FromBody] PublicBookAppointmentRequestModel request, CancellationToken cancellationToken)
         {
             try
             {
                 request.IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
+
+                // Optional — a guest with no Authorization header (or an invalid/expired one) still
+                // books fine, same as before. Only a genuinely valid patient session sets this,
+                // which is what tells the CMS "Appointments" report guest vs. logged-in bookings apart.
+                var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
+                if (auth.IsValid) request.VerifiedMobile = auth.Mobile;
+
                 var response = await _mediator.Send(request);
                 if (!response.Success) return BadRequest(response);
                 return Ok(response);

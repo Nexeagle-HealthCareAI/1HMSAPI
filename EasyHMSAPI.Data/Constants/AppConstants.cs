@@ -24,6 +24,16 @@ namespace EasyHMSAPI.Data.Constants
         public static readonly string BookingSource_Internal = "INTERNAL";
         public static readonly string BookingSource_NexeaglePublic = "NEXEAGLE_PUBLIC";
 
+        // AnalyticsEvent.EventType values — the CMS Insights tab's Auth Funnel / Booking Funnel /
+        // All Searches reports group by these exact strings.
+        public static readonly string AnalyticsEventType_LoginInitiated = "login_initiated";
+        public static readonly string AnalyticsEventType_OtpSent = "otp_sent";
+        public static readonly string AnalyticsEventType_OtpVerified = "otp_verified";
+        public static readonly string AnalyticsEventType_OtpVerifyFailed = "otp_verify_failed";
+        public static readonly string AnalyticsEventType_SearchPerformed = "search_performed";
+        public static readonly string AnalyticsEventType_DoctorProfileViewed = "doctor_profile_viewed";
+        public static readonly string AnalyticsEventType_BookingStepReached = "booking_step_reached";
+
         public static readonly string TokenStrategy_Sequential = "SEQUENTIAL";
         
         public static readonly string Prescription_ActionType_Submit = "submit";

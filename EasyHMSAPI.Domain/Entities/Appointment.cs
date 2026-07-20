@@ -38,5 +38,11 @@ namespace EasyHMSAPI.Domain.Entities
         public string? BookingIpAddress { get; set; }
         public string? BookingReferrerUrl { get; set; }
         public string? BookingUtmCampaign { get; set; }
+
+        // The OTP-verified patient-session mobile active at the moment this booking was made (via
+        // PublicController.BookAppointment), NULL when the visitor was a guest. Distinct from this
+        // appointment's own contact mobile (PatientRegistration.Mobile) — a logged-in visitor can
+        // book for a dependent whose mobile differs from their own verified session.
+        public string? BookedByMobile { get; set; }
     }
 }
