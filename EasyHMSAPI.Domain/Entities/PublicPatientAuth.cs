@@ -29,6 +29,11 @@ namespace EasyHMSAPI.Domain.Entities
 
         public int SessionEpoch { get; set; }
 
+        // Set only in PatientOtpVerifyHandler's success branch — UpdatedAt above is touched on both
+        // success and failure, so it can't answer "when did this number last actually log in".
+        public DateTime? LastLoginAt { get; set; }
+        public int LoginCount { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }

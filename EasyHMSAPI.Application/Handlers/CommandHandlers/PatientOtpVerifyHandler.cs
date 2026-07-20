@@ -70,6 +70,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 auth.IsOtpUsed = true;
                 auth.IsLocked = false;
                 auth.FailedAttempts = 0;
+                auth.LastLoginAt = now;
+                auth.LoginCount += 1;
                 auth.UpdatedAt = now;
                 await _context.SaveChangesAsync(cancellationToken);
 

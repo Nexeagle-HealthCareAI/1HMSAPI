@@ -27,5 +27,11 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? UtmCampaign { get; set; }
         [JsonIgnore]
         public string? IpAddress { get; set; }
+
+        // The OTP-verified patient-session mobile, resolved server-side (PublicController) from the
+        // Authorization header via IPatientTokenValidator — never trusted from the client body. NULL
+        // when there's no valid session, meaning this is a guest booking.
+        [JsonIgnore]
+        public string? VerifiedMobile { get; set; }
     }
 }
