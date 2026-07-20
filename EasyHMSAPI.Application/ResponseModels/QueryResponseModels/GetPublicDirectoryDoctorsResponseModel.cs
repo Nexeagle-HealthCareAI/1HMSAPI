@@ -51,6 +51,10 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         // WHY a doctor they've enabled still isn't appearing publicly, rather than a silent gap.
         public bool IsFeatured { get; set; }
         public bool IsDelistedByAdmin { get; set; }
+        // Unlike IsFeatured/IsDelistedByAdmin above, the discount IS hospital-editable from this
+        // tile editor (PUT doctors/profile with UpdateDiscount=true) — it's a per-hospital
+        // marketing decision, not platform moderation. Doctor Dekho/online-booking-only; has no
+        // effect on easyHMSWeb's own in-hospital appointment or billing flows.
         public decimal? DiscountPercent { get; set; }
         public DateTime? DiscountStartAt { get; set; }
         public DateTime? DiscountEndAt { get; set; }
