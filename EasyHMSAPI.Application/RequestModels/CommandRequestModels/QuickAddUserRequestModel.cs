@@ -26,6 +26,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public List<string>? Qualification { get; set; }
         public int? ExperienceYears { get; set; }
         public string? MedicalCouncil { get; set; }
+        public int? RegistrationYear { get; set; }
         public string? Department { get; set; }
         public List<string>? Specializations { get; set; }
         // Optional link into the NMC qualification-ladder catalog (dbo.MedicalSpecialities) —

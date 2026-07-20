@@ -23,9 +23,18 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         // editor's "Save" round-trips this back unchanged when it isn't editing department.
         public Guid? HospitalDepartmentMappingId { get; set; }
         public string? LicenseNumber { get; set; }
+        public string? MedicalCouncil { get; set; }
+        public int? RegistrationYear { get; set; }
         public string? Qualification { get; set; }
         public int? ExperienceYears { get; set; }
         public string? Bio { get; set; }
+        // OPD/IPD/emergency fees — same dbo.DoctorFees rows Configuration > Doctor Fees edits
+        // (FeeType OPD_CONSULT/IPD_VISIT/EMERGENCY). IPD/Emergency are surfaced read-only here
+        // purely so the tile editor's OPD-only save can round-trip them unchanged instead of
+        // zeroing them out (UpsertDoctorFeeRequestModel takes all three, non-nullable).
+        public decimal? OpdConsultFee { get; set; }
+        public decimal? IpdVisitFee { get; set; }
+        public decimal? EmergencyFee { get; set; }
         public List<string> Specializations { get; set; } = new();
         public List<string> Languages { get; set; } = new();
         public string? PublicContactEmail { get; set; }
