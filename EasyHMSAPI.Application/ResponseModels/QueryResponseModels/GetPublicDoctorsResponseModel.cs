@@ -43,6 +43,9 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public decimal? DiscountPercent { get; set; }
         public decimal? DiscountedFee { get; set; }
         public bool IsFeatured { get; set; }
+        // Drives the public "Verified profile" badge — set by a CMS admin only after manually
+        // confirming this doctor's registration against the NMC's Indian Medical Register.
+        public bool IsRegistrationVerified { get; set; }
 
         // Which (publicly-listed) hospital this doctor belongs to — needed now that the
         // directory spans every opted-in hospital, not just one scoped by an API key.

@@ -98,7 +98,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 select new
                 {
                     d.DoctorID, d.UserID, d.PrimaryDepartmentID, d.PrimaryMedicalSpecialityId, d.Qualification, d.ExperienceYears, d.Bio, d.LanguagesJson,
-                    d.IsFeatured, d.DiscountPercent, d.DiscountStartAt, d.DiscountEndAt
+                    d.IsFeatured, d.DiscountPercent, d.DiscountStartAt, d.DiscountEndAt, d.IsRegistrationVerified
                 }
             ).ToListAsync(cancellationToken);
 
@@ -217,6 +217,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         ? fee.Value - DoctorMarketingHelpers.ComputeDiscountAmount(fee.Value, r.DiscountPercent!.Value)
                         : null,
                     IsFeatured = r.IsFeatured,
+                    IsRegistrationVerified = r.IsRegistrationVerified,
                 });
             }
 
