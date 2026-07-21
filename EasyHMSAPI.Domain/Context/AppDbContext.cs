@@ -68,6 +68,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<PublicPatientAuth> PublicPatientAuths { get; set; }
         public DbSet<WebsiteVisit> WebsiteVisits { get; set; }
         public DbSet<AnalyticsEvent> AnalyticsEvents { get; set; }
+        public DbSet<PatientHealthLockerDocument> PatientHealthLockerDocuments { get; set; }
         public DbSet<UserProfile> UserProfiles { get; set; }
         public DbSet<Role> Roles { get; set; }
         public DbSet<RolePermission> RolePermissions { get; set; }
@@ -1176,6 +1177,14 @@ namespace EasyHMSAPI.Domain.Context
                 entity.HasKey(e => e.VisitId);
                 entity.Property(e => e.VisitId).HasDefaultValueSql("newsequentialid()");
                 entity.Property(e => e.VisitedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+            });
+
+            modelBuilder.Entity<PatientHealthLockerDocument>(entity =>
+            {
+                entity.ToTable("PatientHealthLockerDocuments");
+                entity.HasKey(e => e.DocumentId);
+                entity.Property(e => e.DocumentId).HasDefaultValueSql("newsequentialid()");
+                entity.Property(e => e.UploadedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
             });
 
             modelBuilder.Entity<AnalyticsEvent>(entity =>
