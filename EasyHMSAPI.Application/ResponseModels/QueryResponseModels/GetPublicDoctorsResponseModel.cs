@@ -8,6 +8,11 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public bool Success { get; set; }
         public string? Message { get; set; }
         public List<PublicDoctorInfo> Doctors { get; set; } = new();
+        // Flat Page/PageSize/TotalCount convention — matches GetChargeMastersResponseModel,
+        // BedMasterResponseModels, etc. (this API's own established pagination shape).
+        public int Page { get; set; }
+        public int PageSize { get; set; }
+        public int TotalCount { get; set; }
     }
 
     // Public-safe field set only — no LicenseNumber, MedicalCouncil, RegistrationYear, UserId,

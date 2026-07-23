@@ -88,11 +88,23 @@ namespace EasyHMSAPI.Api.Controllers
         }
 
         [HttpGet("doctors")]
-        public async Task<ActionResult<GetPublicDoctorsResponseModel>> GetDoctors()
+        public async Task<ActionResult<GetPublicDoctorsResponseModel>> GetDoctors(
+            [FromQuery] int page = 1, [FromQuery] int pageSize = 24,
+            [FromQuery] string? city = null, [FromQuery] string? state = null,
+            [FromQuery] string? specialtyCategory = null, [FromQuery] string? search = null)
         {
             try
             {
-                var response = await _mediator.Send(new GetPublicDoctorsRequestModel());
+                var request = new GetPublicDoctorsRequestModel
+                {
+                    Page = page < 1 ? 1 : page,
+                    PageSize = pageSize < 1 ? 24 : pageSize,
+                    City = city,
+                    State = state,
+                    SpecialtyCategory = specialtyCategory,
+                    Search = search,
+                };
+                var response = await _mediator.Send(request);
                 return Ok(response);
             }
             catch (Exception ex)
