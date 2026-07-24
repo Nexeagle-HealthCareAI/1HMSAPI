@@ -50,6 +50,14 @@ namespace EasyHMSAPI.Domain.Entities
         // undo a CMS delisting, and vice versa — final visibility is
         // Hospital.IsPubliclyListed && Doctor.IsPubliclyListed && !Doctor.IsDelistedByAdmin.
         public bool IsDelistedByAdmin { get; set; } = false;
+        // Set by a CMS admin only after manually confirming this doctor's LicenseNumber/
+        // MedicalCouncil/RegistrationYear against the NMC's Indian Medical Register (no automated
+        // verification API exists in India). Drives the public "Verified profile" badge on
+        // Doctor Dekho. Verified*At/ByUserId are set only on the false->true transition and
+        // cleared when unmarked — see CMSAPI's DoctorRepository.UpdateDoctorMarketingAsync.
+        public bool IsRegistrationVerified { get; set; } = false;
+        public DateTime? RegistrationVerifiedAt { get; set; }
+        public Guid? RegistrationVerifiedByUserId { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public User User { get; set; } = null!;

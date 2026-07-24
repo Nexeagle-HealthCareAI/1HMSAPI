@@ -45,12 +45,20 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
         public async Task<GetPublicDoctorsResponseModel> Handle(GetPublicDoctorsRequestModel request, CancellationToken cancellationToken)
         {
-            // Whole-platform listing, identical for every caller (no per-request variation) — one
-            // 60s-old copy of the directory is a perfectly acceptable trade against hitting SQL
-            // Server on every single browse/search interaction from every concurrent visitor.
-            // Presigned photo URLs are valid for 24h (Storage:S3:UrlExpiryHours), so a 60s-stale
-            // cache entry never serves an expired one.
-            var cacheKey = PublicDirectoryCacheKeys.PublicDoctorsList();
+            var page = request.Page < 1 ? 1 : request.Page;
+            // Default (24) serves the paginated patient-facing browse UI. The cap (2000) is much
+            // higher than that on purpose: NexEagleWebsite's server.ts also calls this same
+            // endpoint for SSR page generation and single-doctor lookup (getAllDoctors/
+            // getDoctorById — no dedicated GET /public/doctors/{id} endpoint exists yet), and both
+            // explicitly request a large PageSize to fetch the whole directory in one call, exactly
+            // matching their pre-pagination behavior. 2000 comfortably covers today's ~1,080
+            // doctors with room to grow; revisit if the platform gets meaningfully bigger than that.
+            var pageSize = request.PageSize < 1 ? 24 : Math.Min(request.PageSize, 2000);
+
+            // One cache entry per filter combo now (not one whole-platform entry) — see
+            // PublicDirectoryCacheKeys.PublicDoctorsList. Presigned photo URLs are valid for 24h
+            // (Storage:S3:UrlExpiryHours), so a 60s-stale cache entry never serves an expired one.
+            var cacheKey = PublicDirectoryCacheKeys.PublicDoctorsList(page, pageSize, request.City, request.State, request.SpecialtyCategory, request.Search);
             if (_cache.TryGetValue(cacheKey, out GetPublicDoctorsResponseModel? cached) && cached != null)
             {
                 return cached;
@@ -62,19 +70,23 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             // otherwise does for every row, which is pure waste on data that's never saved back.
             _context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
 
-            var publicHospitalIds = await _context.Hospitals
-                .Where(h => h.IsPubliclyListed && h.IsActive)
-                .Select(h => h.HospitalID)
-                .ToListAsync(cancellationToken);
+            var hospitalQuery = _context.Hospitals.Where(h => h.IsPubliclyListed && h.IsActive);
+            if (!string.IsNullOrWhiteSpace(request.City))
+                hospitalQuery = hospitalQuery.Where(h => h.City == request.City);
+            if (!string.IsNullOrWhiteSpace(request.State))
+                hospitalQuery = hospitalQuery.Where(h => h.State == request.State);
+
+            var publicHospitalIds = await hospitalQuery.Select(h => h.HospitalID).ToListAsync(cancellationToken);
 
             if (publicHospitalIds.Count == 0)
-                return new GetPublicDoctorsResponseModel { Success = true, Doctors = new() };
+                return EmptyResult(page, pageSize);
 
-            // Doctor -> hospital affiliations restricted to publicly-listed hospitals. Doctor.HospitalId
-            // is a single retrofitted field, not the source of truth (see GetDoctorFeesHandler) — a
-            // doctor is a global identity that can have DoctorDepartments rows at more than one
-            // hospital. True multi-hospital doctor practice isn't a live product scenario yet, so pick
-            // one hospital deterministically per doctor rather than fanning out to multiple rows.
+            // Doctor -> hospital affiliations restricted to publicly-listed hospitals (now also
+            // narrowed by City/State above). Doctor.HospitalId is a single retrofitted field, not
+            // the source of truth (see GetDoctorFeesHandler) — a doctor is a global identity that
+            // can have DoctorDepartments rows at more than one hospital. True multi-hospital doctor
+            // practice isn't a live product scenario yet, so pick one hospital deterministically
+            // per doctor rather than fanning out to multiple rows.
             var doctorHospitalPairs = await _context.DoctorDepartments
                 .Where(dd => dd.HospitalId.HasValue && publicHospitalIds.Contains(dd.HospitalId!.Value))
                 .Select(dd => new { dd.DoctorID, HospitalId = dd.HospitalId!.Value })
@@ -86,53 +98,81 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .ToDictionary(g => g.Key, g => g.OrderBy(p => p.HospitalId).First().HospitalId);
 
             if (doctorHospital.Count == 0)
-                return new GetPublicDoctorsResponseModel { Success = true, Doctors = new() };
+                return EmptyResult(page, pageSize);
 
             var candidateDoctorIds = doctorHospital.Keys.ToList();
 
-            var rows = await (
+            // City/State/Specialty/Search/sort all happen in SQL, and Skip/Take runs BEFORE any of
+            // the expensive per-doctor enrichment below (hospital/department/speciality lookups,
+            // review aggregates, fee lookups, and — the important one at scale — presigned photo
+            // URL resolution, which is a real S3 network call per doctor). Joining UserProfiles here
+            // (rather than in a separate batch-by-id lookup, like the old code did) is what lets
+            // Search match on name and lets FullName drive the ORDER BY before paging.
+            var filteredQuery =
                 from d in _context.Doctors
                 where candidateDoctorIds.Contains(d.DoctorID) && d.IsPubliclyListed && !d.IsDelistedByAdmin
                 join u in _context.Users on d.UserID equals u.UserID
                 where u.UserStatusId != (int)UserStatusEnum.Revoked
-                select new
-                {
-                    d.DoctorID, d.UserID, d.PrimaryDepartmentID, d.PrimaryMedicalSpecialityId, d.Qualification, d.ExperienceYears, d.Bio, d.LanguagesJson,
-                    d.IsFeatured, d.DiscountPercent, d.DiscountStartAt, d.DiscountEndAt
-                }
-            ).ToListAsync(cancellationToken);
+                join up in _context.UserProfiles on u.UserID equals up.UserID
+                select new { d, up.FullName };
 
-            var hospitalIdsUsed = rows.Select(r => doctorHospital[r.DoctorID]).Distinct().ToList();
+            if (!string.IsNullOrWhiteSpace(request.SpecialtyCategory))
+            {
+                filteredQuery =
+                    from x in filteredQuery
+                    join ms in _context.MedicalSpecialities on x.d.PrimaryMedicalSpecialityId equals ms.SpecialityId
+                    where ms.PatientFacingCategory == request.SpecialtyCategory
+                    select x;
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.Search))
+            {
+                var term = request.Search.Trim();
+                filteredQuery = filteredQuery.Where(x => x.FullName.Contains(term) || (x.d.Qualification != null && x.d.Qualification.Contains(term)));
+            }
+
+            var totalCount = await filteredQuery.CountAsync(cancellationToken);
+
+            // Featured doctors first, alphabetical within each group — matches the sort NexEagle's
+            // own DoctorDirectory.tsx used to apply client-side; now done in SQL, before paging.
+            var pageRows = await filteredQuery
+                .OrderByDescending(x => x.d.IsFeatured)
+                .ThenBy(x => x.FullName)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => new
+                {
+                    x.d.DoctorID, x.d.UserID, x.d.PrimaryDepartmentID, x.d.PrimaryMedicalSpecialityId, x.d.Qualification, x.d.ExperienceYears, x.d.Bio, x.d.LanguagesJson,
+                    x.d.IsFeatured, x.d.DiscountPercent, x.d.DiscountStartAt, x.d.DiscountEndAt, x.d.IsRegistrationVerified,
+                    x.FullName
+                })
+                .ToListAsync(cancellationToken);
+
+            if (pageRows.Count == 0)
+                return EmptyResult(page, pageSize, totalCount);
+
+            var pageDoctorIds = pageRows.Select(r => r.DoctorID).ToList();
+
+            var hospitalIdsUsed = pageRows.Select(r => doctorHospital[r.DoctorID]).Distinct().ToList();
             var hospitalById = await _context.Hospitals
                 .Where(h => hospitalIdsUsed.Contains(h.HospitalID))
                 .Select(h => new { h.HospitalID, h.Name, h.Location, h.City, h.State, h.Pincode, h.Latitude, h.Longitude })
                 .ToDictionaryAsync(h => h.HospitalID, cancellationToken);
 
-            var userIds = rows.Select(r => r.UserID).Distinct().ToList();
-            var nameByUser = await _context.UserProfiles
-                .Where(up => userIds.Contains(up.UserID))
-                .OrderByDescending(up => up.UpdatedAt)
-                .Select(up => new { up.UserID, up.FullName })
-                .ToListAsync(cancellationToken);
-            var nameLookup = nameByUser
-                .GroupBy(n => n.UserID)
-                .ToDictionary(g => g.Key, g => g.First().FullName);
-
-            var deptIds = rows.Where(r => r.PrimaryDepartmentID.HasValue).Select(r => r.PrimaryDepartmentID!.Value).Distinct().ToList();
+            var deptIds = pageRows.Where(r => r.PrimaryDepartmentID.HasValue).Select(r => r.PrimaryDepartmentID!.Value).Distinct().ToList();
             var deptNameById = await _context.Departments
                 .Where(dept => deptIds.Contains(dept.DepartmentID))
                 .ToDictionaryAsync(dept => dept.DepartmentID, dept => dept.Name, cancellationToken);
 
-            var specialityIds = rows.Where(r => r.PrimaryMedicalSpecialityId.HasValue).Select(r => r.PrimaryMedicalSpecialityId!.Value).Distinct().ToList();
+            var specialityIds = pageRows.Where(r => r.PrimaryMedicalSpecialityId.HasValue).Select(r => r.PrimaryMedicalSpecialityId!.Value).Distinct().ToList();
             var specialityById = await _context.MedicalSpecialities
                 .Where(s => specialityIds.Contains(s.SpecialityId))
                 .Select(s => new { s.SpecialityId, s.PatientFacingName, s.PatientFacingCategory })
                 .ToDictionaryAsync(s => s.SpecialityId, cancellationToken);
 
-            // One batched aggregate query for the whole platform-wide listing rather than a
-            // per-doctor round trip.
+            // Scoped to this page's doctors only now, not the whole candidate set.
             var reviewAggregates = await _context.DoctorReviews
-                .Where(r => candidateDoctorIds.Contains(r.DoctorId) && !r.IsHidden && !r.IsHospitalResponse)
+                .Where(r => pageDoctorIds.Contains(r.DoctorId) && !r.IsHidden && !r.IsHospitalResponse)
                 .GroupBy(r => r.DoctorId)
                 .Select(g => new { DoctorId = g.Key, Average = g.Average(r => r.Rating), Count = g.Count() })
                 .ToDictionaryAsync(g => g.DoctorId, cancellationToken);
@@ -142,22 +182,21 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             // doctorHospital picked for this listing, not just any fee row for the doctor.
             var feeLookup = (await _context.DoctorFees
                 .Where(f => f.FeeType == OpdConsultFeeType && f.IsActive
-                         && candidateDoctorIds.Contains(f.DoctorId) && hospitalIdsUsed.Contains(f.HospitalId))
+                         && pageDoctorIds.Contains(f.DoctorId) && hospitalIdsUsed.Contains(f.HospitalId))
                 .Select(f => new { f.DoctorId, f.HospitalId, f.Amount })
                 .ToListAsync(cancellationToken))
                 .ToDictionary(f => (f.DoctorId, f.HospitalId), f => f.Amount);
 
-            // Photo-URL resolution now scales with platform-wide doctor count rather than one
-            // hospital's — fetch presigned URLs concurrently instead of one await per doctor.
+            // Photo-URL resolution now fans out to just this page's doctors (~PageSize) instead of
+            // every publicly-listed doctor platform-wide — each call is a real S3 ListObjectsV2
+            // round trip (S3StorageService.GetUrlAsync), so this is the change that actually caps
+            // the concurrent-S3-call spike pagination was introduced to fix.
             var photoUrls = await Task.WhenAll(
-                rows.Select(r => _blobService.GetUrlAsync(r.UserID, _containerName, cancellationToken))
+                pageRows.Select(r => _blobService.GetUrlAsync(r.UserID, _containerName, cancellationToken))
             );
 
-            // Was one query PER doctor in the loop below — at platform-wide scale that's one extra
-            // DB round trip per doctor on every listing load. Batched into a single query + grouped
-            // dictionary, same pattern as reviewAggregates/feeLookup above.
             var specializationRows = await _context.DoctorSpecializations
-                .Where(ds => candidateDoctorIds.Contains(ds.DoctorID) && ds.Specialization != null && ds.Specialization.IsActive)
+                .Where(ds => pageDoctorIds.Contains(ds.DoctorID) && ds.Specialization != null && ds.Specialization.IsActive)
                 .Select(ds => new { ds.DoctorID, Name = ds.Specialization.Name })
                 .ToListAsync(cancellationToken);
             var specializationsByDoctor = specializationRows
@@ -175,9 +214,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
             var nowUtc = DateTime.UtcNow;
             var doctors = new List<PublicDoctorInfo>();
-            for (var i = 0; i < rows.Count; i++)
+            for (var i = 0; i < pageRows.Count; i++)
             {
-                var r = rows[i];
+                var r = pageRows[i];
                 var hospitalId = doctorHospital[r.DoctorID];
                 hospitalById.TryGetValue(hospitalId, out var hospital);
                 reviewAggregates.TryGetValue(r.DoctorID, out var reviewAgg);
@@ -189,7 +228,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 doctors.Add(new PublicDoctorInfo
                 {
                     DoctorId = r.DoctorID,
-                    FullName = nameLookup.TryGetValue(r.UserID, out var n) ? n : null,
+                    FullName = r.FullName,
                     PhotoUrl = photoUrls[i] as string,
                     Qualification = r.Qualification,
                     ExperienceYears = r.ExperienceYears,
@@ -217,18 +256,23 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         ? fee.Value - DoctorMarketingHelpers.ComputeDiscountAmount(fee.Value, r.DiscountPercent!.Value)
                         : null,
                     IsFeatured = r.IsFeatured,
+                    IsRegistrationVerified = r.IsRegistrationVerified,
                 });
             }
 
-            // Featured doctors first, alphabetical within each group — matches the sort NexEagle's
-            // own DoctorDirectory.tsx already applies client-side for its "promoted" doctors.
             var response = new GetPublicDoctorsResponseModel
             {
                 Success = true,
-                Doctors = doctors.OrderByDescending(d => d.IsFeatured).ThenBy(d => d.FullName).ToList()
+                Doctors = doctors, // already ordered by the SQL query above (Featured desc, FullName asc)
+                Page = page,
+                PageSize = pageSize,
+                TotalCount = totalCount,
             };
             _cache.Set(cacheKey, response, CacheTtl);
             return response;
         }
+
+        private static GetPublicDoctorsResponseModel EmptyResult(int page, int pageSize, int totalCount = 0) =>
+            new() { Success = true, Doctors = new(), Page = page, PageSize = pageSize, TotalCount = totalCount };
     }
 }

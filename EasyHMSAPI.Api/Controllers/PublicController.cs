@@ -88,11 +88,23 @@ namespace EasyHMSAPI.Api.Controllers
         }
 
         [HttpGet("doctors")]
-        public async Task<ActionResult<GetPublicDoctorsResponseModel>> GetDoctors()
+        public async Task<ActionResult<GetPublicDoctorsResponseModel>> GetDoctors(
+            [FromQuery] int page = 1, [FromQuery] int pageSize = 24,
+            [FromQuery] string? city = null, [FromQuery] string? state = null,
+            [FromQuery] string? specialtyCategory = null, [FromQuery] string? search = null)
         {
             try
             {
-                var response = await _mediator.Send(new GetPublicDoctorsRequestModel());
+                var request = new GetPublicDoctorsRequestModel
+                {
+                    Page = page < 1 ? 1 : page,
+                    PageSize = pageSize < 1 ? 24 : pageSize,
+                    City = city,
+                    State = state,
+                    SpecialtyCategory = specialtyCategory,
+                    Search = search,
+                };
+                var response = await _mediator.Send(request);
                 return Ok(response);
             }
             catch (Exception ex)
@@ -188,6 +200,32 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Documents (prescriptions/lab reports) attached to one of the caller's own appointments —
+        // same manual-JWT validation as GetMyAppointments; the handler re-checks ownership via
+        // PatientRegistration.Mobile so a guessed/adjacent AppointmentId can't leak someone else's
+        // documents even with a valid patient session.
+        [HttpGet("appointments/{appointmentId:guid}/documents")]
+        public async Task<ActionResult<GetPublicAppointmentDocumentsResponseModel>> GetAppointmentDocuments(Guid appointmentId, CancellationToken cancellationToken)
+        {
+            var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
+            if (!auth.IsValid || auth.Mobile == null)
+            {
+                return Unauthorized(new { Message = auth.Reason ?? "Please log in again." });
+            }
+
+            try
+            {
+                var response = await _mediator.Send(new GetPublicAppointmentDocumentsRequestModel { Mobile = auth.Mobile, AppointmentId = appointmentId });
+                if (!response.Success && response.Message == "Appointment not found.") return NotFound(response);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetAppointmentDocuments for appointmentId: {AppointmentId}", appointmentId);
+                return StatusCode(500, new { Message = "An error occurred while fetching documents." });
+            }
+        }
+
         // Read-only "Personal Information" for the Doctor Dekho profile page — same manual-JWT
         // validation as GetMyAppointments, never [Authorize].
         [HttpGet("patients/me")]
@@ -211,6 +249,75 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Health Locker — patient-initiated uploads independent of any appointment, keyed purely
+        // by the OTP-verified Mobile (see PatientHealthLockerDocument). Same manual-JWT validation
+        // as GetMyAppointments/GetMyPatientProfile.
+        [HttpPost("patients/me/documents")]
+        public async Task<ActionResult<UploadHealthLockerDocumentResponseModel>> UploadHealthLockerDocument(UploadHealthLockerDocumentRequestModel request, CancellationToken cancellationToken)
+        {
+            var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
+            if (!auth.IsValid || auth.Mobile == null)
+            {
+                return Unauthorized(new { Message = auth.Reason ?? "Please log in again." });
+            }
+
+            try
+            {
+                request.Mobile = auth.Mobile;
+                var response = await _mediator.Send(request);
+                if (!response.Success) return BadRequest(response);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.UploadHealthLockerDocument");
+                return StatusCode(500, new { Message = "An error occurred while uploading the document." });
+            }
+        }
+
+        [HttpGet("patients/me/documents")]
+        public async Task<ActionResult<GetHealthLockerDocumentsResponseModel>> GetHealthLockerDocuments(CancellationToken cancellationToken)
+        {
+            var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
+            if (!auth.IsValid || auth.Mobile == null)
+            {
+                return Unauthorized(new { Message = auth.Reason ?? "Please log in again." });
+            }
+
+            try
+            {
+                var response = await _mediator.Send(new GetHealthLockerDocumentsRequestModel { Mobile = auth.Mobile });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetHealthLockerDocuments");
+                return StatusCode(500, new { Message = "An error occurred while fetching your documents." });
+            }
+        }
+
+        [HttpDelete("patients/me/documents/{documentId:guid}")]
+        public async Task<ActionResult<DeleteHealthLockerDocumentResponseModel>> DeleteHealthLockerDocument(Guid documentId, CancellationToken cancellationToken)
+        {
+            var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
+            if (!auth.IsValid || auth.Mobile == null)
+            {
+                return Unauthorized(new { Message = auth.Reason ?? "Please log in again." });
+            }
+
+            try
+            {
+                var response = await _mediator.Send(new DeleteHealthLockerDocumentRequestModel { Mobile = auth.Mobile, DocumentId = documentId });
+                if (!response.Success) return BadRequest(response);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.DeleteHealthLockerDocument for documentId: {DocumentId}", documentId);
+                return StatusCode(500, new { Message = "An error occurred while deleting the document." });
+            }
+        }
+
         [HttpGet("doctors/{doctorId:guid}/reviews")]
         public async Task<ActionResult<GetPublicDoctorReviewsResponseModel>> GetDoctorReviews(Guid doctorId)
         {
@@ -222,7 +329,9 @@ namespace EasyHMSAPI.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in PublicController.GetDoctorReviews for doctorId: {DoctorId}", doctorId);
-                return StatusCode(500, new { Message = "An error occurred while fetching reviews." });
+                // TEMPORARY diagnostic — surfacing ex.ToString() to track down a 500 that only
+                // reproduces on dev with real review-row data present. Revert before merging.
+                return StatusCode(500, new { Message = "An error occurred while fetching reviews.", Debug = ex.ToString() });
             }
         }
 

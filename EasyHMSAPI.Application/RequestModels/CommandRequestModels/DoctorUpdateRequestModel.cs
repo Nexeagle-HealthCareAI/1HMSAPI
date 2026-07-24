@@ -30,5 +30,17 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         // UpdateDoctorPublicListingHandler already uses. Left null, self-service edits behave
         // exactly as before.
         public Guid? HospitalId { get; set; }
+        // Only the Public Directory tile editor manages the OPD discount — the doctor's own
+        // self-service profile form (same endpoint, HospitalId omitted) never renders this
+        // section. When false, the three fields below are ignored entirely so that save path can
+        // never silently wipe a discount it doesn't show. When true, applied as a full replace
+        // (DiscountPercent = null clears it) — mirrors CMSAPI's
+        // BulkUpdateDoctorMarketingRequest.UpdateDiscount flag. This discount is Doctor
+        // Dekho/online-booking-only: it has no effect on easyHMSWeb's own in-hospital appointment
+        // or billing flows.
+        public bool UpdateDiscount { get; set; } = false;
+        public decimal? DiscountPercent { get; set; }
+        public DateTime? DiscountStartAt { get; set; }
+        public DateTime? DiscountEndAt { get; set; }
     }
 }

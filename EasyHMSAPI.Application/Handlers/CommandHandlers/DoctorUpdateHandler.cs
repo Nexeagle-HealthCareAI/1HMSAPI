@@ -56,6 +56,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         d.PublicContactPhone,
                         d.PrimaryDepartmentID,
                         d.PrimaryMedicalSpecialityId,
+                        d.DiscountPercent,
+                        d.DiscountStartAt,
+                        d.DiscountEndAt,
                         HospitalId = userWithHospital
                     })
                     .FirstOrDefaultAsync(cancellationToken);
@@ -165,6 +168,30 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     doctor.PublicContactPhone = string.IsNullOrWhiteSpace(request.PublicContactPhone) ? null : request.PublicContactPhone.Trim();
                     updatedFields.Add("PublicContactPhone");
                     _context.Entry(doctor).Property(d => d.PublicContactPhone).IsModified = true;
+                }
+
+                if (request.UpdateDiscount)
+                {
+                    if (request.DiscountPercent.HasValue && (request.DiscountPercent.Value < 0 || request.DiscountPercent.Value > 100))
+                    {
+                        errors.Add("Discount percent must be between 0 and 100.");
+                    }
+                    else if (request.DiscountStartAt.HasValue && request.DiscountEndAt.HasValue && request.DiscountEndAt.Value < request.DiscountStartAt.Value)
+                    {
+                        errors.Add("Discount end date cannot be before the start date.");
+                    }
+                    else if (request.DiscountPercent != current.DiscountPercent
+                        || request.DiscountStartAt != current.DiscountStartAt
+                        || request.DiscountEndAt != current.DiscountEndAt)
+                    {
+                        doctor.DiscountPercent = request.DiscountPercent;
+                        doctor.DiscountStartAt = request.DiscountStartAt;
+                        doctor.DiscountEndAt = request.DiscountEndAt;
+                        updatedFields.Add("Discount");
+                        _context.Entry(doctor).Property(d => d.DiscountPercent).IsModified = true;
+                        _context.Entry(doctor).Property(d => d.DiscountStartAt).IsModified = true;
+                        _context.Entry(doctor).Property(d => d.DiscountEndAt).IsModified = true;
+                    }
                 }
 
                 if (!string.IsNullOrEmpty(request.PrimaryDepartment))

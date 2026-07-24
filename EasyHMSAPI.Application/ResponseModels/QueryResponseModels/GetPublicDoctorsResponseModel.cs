@@ -8,6 +8,11 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public bool Success { get; set; }
         public string? Message { get; set; }
         public List<PublicDoctorInfo> Doctors { get; set; } = new();
+        // Flat Page/PageSize/TotalCount convention — matches GetChargeMastersResponseModel,
+        // BedMasterResponseModels, etc. (this API's own established pagination shape).
+        public int Page { get; set; }
+        public int PageSize { get; set; }
+        public int TotalCount { get; set; }
     }
 
     // Public-safe field set only — no LicenseNumber, MedicalCouncil, RegistrationYear, UserId,
@@ -43,6 +48,9 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public decimal? DiscountPercent { get; set; }
         public decimal? DiscountedFee { get; set; }
         public bool IsFeatured { get; set; }
+        // Drives the public "Verified profile" badge — set by a CMS admin only after manually
+        // confirming this doctor's registration against the NMC's Indian Medical Register.
+        public bool IsRegistrationVerified { get; set; }
 
         // Which (publicly-listed) hospital this doctor belongs to — needed now that the
         // directory spans every opted-in hospital, not just one scoped by an API key.
