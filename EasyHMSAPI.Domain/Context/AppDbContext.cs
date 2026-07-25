@@ -346,6 +346,13 @@ namespace EasyHMSAPI.Domain.Context
                  .WithMany(s => s.DoctorSpecializations)
                  .HasForeignKey(ds => ds.SpecializationID);
             modelBuilder.Entity<DoctorSpecialization>().Property(ds => ds.HospitalId).IsRequired(false);
+            // dbo.DoctorReviews.Rating is TINYINT (create_doctor_review_table.sql) but the CLR
+            // property is `int`, and with no explicit column-type mapping EF's default convention
+            // assumes the column is INT — fine for aggregates (SQL Server's AVG/whatever already
+            // promotes TINYINT to int on the wire), but a plain SELECT of the raw column throws
+            // "Unable to cast object of type 'System.Byte' to type 'System.Int32'" the moment a row
+            // actually exists to read, since SqlDataReader is strictly typed per the real wire type.
+            modelBuilder.Entity<DoctorReview>().Property(r => r.Rating).HasColumnType("tinyint");
             modelBuilder.Entity<PrescriptionHeaderFooter>().ToTable("PrescriptionHeaderFooter");
             modelBuilder.Entity<UserInvitation>().ToTable("UserInvitations");
             modelBuilder.Entity<DoctorShiftTemplate>().ToTable("DoctorShiftTemplates");
