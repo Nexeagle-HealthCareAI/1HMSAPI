@@ -329,9 +329,7 @@ namespace EasyHMSAPI.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in PublicController.GetDoctorReviews for doctorId: {DoctorId}", doctorId);
-                // TEMPORARY diagnostic — surfacing ex.ToString() to track down a 500 that only
-                // reproduces on dev with real review-row data present. Revert before merging.
-                return StatusCode(500, new { Message = "An error occurred while fetching reviews.", Debug = ex.ToString() });
+                return StatusCode(500, new { Message = "An error occurred while fetching reviews." });
             }
         }
 
