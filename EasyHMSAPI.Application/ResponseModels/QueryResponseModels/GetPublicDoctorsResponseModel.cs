@@ -51,6 +51,10 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         // Drives the public "Verified profile" badge — set by a CMS admin only after manually
         // confirming this doctor's registration against the NMC's Indian Medical Register.
         public bool IsRegistrationVerified { get; set; }
+        // Same TimeOff > Override > Template precedence as the single-doctor
+        // GetPublicDoctorAvailabilityHandler (see DoctorAvailabilityResolver), resolved for
+        // today's date and batched per page so the directory grid never needs a per-card call.
+        public bool IsAvailableToday { get; set; }
 
         // Which (publicly-listed) hospital this doctor belongs to — needed now that the
         // directory spans every opted-in hospital, not just one scoped by an API key.

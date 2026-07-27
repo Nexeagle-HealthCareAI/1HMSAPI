@@ -5,7 +5,32 @@
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(npx tsc *)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(curl -s -o /dev/null -w 'github: %{http_code}\\\\n' --max-time 10 https://api.github.com)",
+      "Bash(git push *)",
+      "Bash(curl -s --max-time 15 \"http://151.185.45.77:5001/api/public/doctors\")",
+      "Bash(curl -s --max-time 15 \"https://1hms-api.nexeagle.com/api/public/doctors\")",
+      "Bash(curl -s --max-time 15 \"http://151.185.45.77:5001/public/doctors\")",
+      "Bash(curl -s --max-time 15 \"https://1hms-api.nexeagle.com/public/doctors\")",
+      "Bash(curl -s \"http://151.185.45.77:82/api/search/parse\" -X POST -H \"Content-Type: application/json\" -d '{\"query\":\"pet mein dard hai\"}' --max-time 15)",
+      "Bash(curl -s \"http://151.185.45.77:5001/public/doctors\" --max-time 15)",
+      "Bash(curl -s \"http://151.185.45.77:82/\" --max-time 15)",
+      "Bash(\"/c/Program Files/Python312/python.exe\" generate_symptom_training_seed.py \"c:\\\\Users\\\\mtnoo\\\\OneDrive\\\\Desktop\\\\EasyHMS\\\\NLP Model\\\\Hinglish_Symptoms_Reference_v2.csv\")",
+      "Bash(\"/c/Program Files/Python312/python.exe\" build_validation_set.py)",
+      "Bash(\"/c/Program Files/Python312/python.exe\" generate_symptom_training_seed.py \"c:\\\\Users\\\\mtnoo\\\\OneDrive\\\\Desktop\\\\EasyHMS\\\\NLP Model\\\\data_pipeline\\\\trainable_pool.csv\")",
+      "Bash('/c/Program Files/Python312/python.exe' -c ' *)",
+      "Bash(\"/c/Program Files/Python312/python.exe\" Model_1_Doctor_Dekho.py --query \"pet mein dard hai\")",
+      "Bash(curl -s http://127.0.0.1:5004/health --max-time 10)",
+      "Bash(curl -s http://127.0.0.1:5004/model-info --max-time 10)",
+      "Bash(curl -s -X POST http://127.0.0.1:5004/route-symptom -H \"Content-Type: application/json\" -d '{\"query\":\"pet mein dard hai\"}' --max-time 10)",
+      "Bash(kill 29672)",
+      "Bash(rm -rf __pycache__ data_pipeline/__pycache__)",
+      "Bash(echo \"exit code: $?\")",
+      "Bash(rm -rf __pycache__)",
+      "Bash(\"/c/Program Files/Python312/python.exe\" -m uvicorn app:app --host 127.0.0.1 --port 5005)",
+      "Bash(echo \"started pid $!\")",
+      "Bash(cat /tmp/uvicorn_route_test.log 2>&1)",
+      "Bash(curl -s -X POST http://127.0.0.1:5005/route-symptom -H \"Content-Type: application/json\" -d '{\"query\":\"pet mein dard hai\"}' --max-time 15)"
     ]
   }
 }

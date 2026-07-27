@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm -rf __pycache__)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(gh run *)",
+      "Bash(curl -s -o /dev/null -w 'google: %{http_code}\\\\n' --max-time 8 https://www.google.com)",
+      "Bash(curl -s -o /dev/null -w 'raw ip test: %{http_code}\\\\n' --max-time 8 http://151.185.45.77:5001/health)",
+      "Bash(git commit *)",
+      "Bash(\"/c/Program Files/Python312/python.exe\" -c \"from sklearn.model_selection import cross_val_score; import inspect; print\\(inspect.signature\\(cross_val_score\\)\\)\")",
+      "Bash(\"/c/Program Files/Python312/python.exe\" Model_1_Doctor_Dekho.py --query \"pet mein dard hai\")",
+      "Bash('/c/Program Files/Python312/python.exe' -c ' *)",
+      "Bash(\"/c/Program Files/Python312/python.exe\" retrain_pipeline.py --training-fixture _test_training_fixture.json --feedback-fixture _test_feedback_fixture.json)",
+      "Bash(git restore *)",
+      "Bash(rm data_pipeline/_test_training_fixture.json data_pipeline/_test_feedback_fixture.json)",
+      "Bash(\"/c/Program Files/Python312/python.exe\" -m uvicorn app:app --host 127.0.0.1 --port 5004)",
+      "Bash(echo \"started pid $!\")",
+      "Bash(curl -s http://127.0.0.1:5004/health --max-time 10)",
+      "Bash(curl -s http://127.0.0.1:5004/model-info --max-time 10)",
+      "Bash(curl -s -X POST http://127.0.0.1:5004/route-symptom -H \"Content-Type: application/json\" -d '{\"query\":\"pet mein dard hai\"}' --max-time 10)",
+      "Bash(cat /tmp/uvicorn_final_test.log 2>&1)",
+      "Read(//tmp/**)"
+    ]
+  }
+}

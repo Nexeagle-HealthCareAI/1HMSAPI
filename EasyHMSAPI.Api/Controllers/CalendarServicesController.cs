@@ -154,5 +154,17 @@ namespace EasyHMSAPI.Api.Controllers
 
             return Ok(response);
         }
+
+        [HttpGet("roster")]
+        [Authorize]
+        public async Task<ActionResult<GetDoctorAvailabilityRosterResponseModel>> GetDoctorAvailabilityRoster([FromQuery] Guid hospitalId, [FromQuery] DateTime? date)
+        {
+            if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required" });
+
+            var request = new GetDoctorAvailabilityRosterRequestModel { HospitalId = hospitalId, Date = date };
+            var response = await _mediator.Send(request);
+
+            return Ok(response);
+        }
     }
 }

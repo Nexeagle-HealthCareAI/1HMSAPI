@@ -4,6 +4,7 @@ using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -187,6 +188,36 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .ToListAsync(cancellationToken))
                 .ToDictionary(f => (f.DoctorId, f.HospitalId), f => f.Amount);
 
+            // "Available today" — same TimeOff > Override > Template precedence as the single-doctor
+            // GetPublicDoctorAvailabilityHandler (DoctorAvailabilityResolver), batched for this
+            // page's doctors so the directory grid never needs a per-card call. TimeOffs/Overrides
+            // are only counted when their HospitalId matches the SAME canonical hospital picked for
+            // this doctor above — mirrors the (DoctorId, HospitalId) keying feeLookup uses.
+            // Storage convention is local/IST calendar dates (no explicit timezone), same as every
+            // other doctor-availability entry point in this codebase — so "today" is computed in
+            // IST here too, not UTC (IST = UTC+5:30).
+            var todayIst = DateTime.UtcNow.AddMinutes(330).Date;
+
+            var timeOffRows = await _context.DoctorTimeOffs
+                .Where(to => pageDoctorIds.Contains(to.DoctorID) && hospitalIdsUsed.Contains(to.HospitalId)
+                          && todayIst >= to.FromDate.Date && todayIst <= to.ToDate.Date)
+                .ToListAsync(cancellationToken);
+            var timeOffsByDoctor = timeOffRows
+                .Where(to => doctorHospital.TryGetValue(to.DoctorID, out var canonicalHospitalId) && canonicalHospitalId == to.HospitalId)
+                .GroupBy(to => to.DoctorID)
+                .ToDictionary(g => g.Key, g => (IReadOnlyCollection<DoctorTimeOff>)g.ToList());
+
+            var overrideRows = await _context.DoctorShiftOverrides
+                .Where(o => pageDoctorIds.Contains(o.DoctorID) && hospitalIdsUsed.Contains(o.HospitalId)
+                         && o.StartDate <= todayIst && (!o.EndDate.HasValue || o.EndDate >= todayIst))
+                .ToListAsync(cancellationToken);
+            var overridesByDoctor = overrideRows
+                .Where(o => doctorHospital.TryGetValue(o.DoctorID, out var canonicalHospitalId) && canonicalHospitalId == o.HospitalId)
+                .GroupBy(o => o.DoctorID)
+                .ToDictionary(g => g.Key, g => (IReadOnlyCollection<DoctorShiftOverride>)g.ToList());
+
+            var activeTemplates = await _context.DoctorShiftTemplates.Where(t => t.IsActive).ToListAsync(cancellationToken);
+
             // Photo-URL resolution now fans out to just this page's doctors (~PageSize) instead of
             // every publicly-listed doctor platform-wide — each call is a real S3 ListObjectsV2
             // round trip (S3StorageService.GetUrlAsync), so this is the change that actually caps
@@ -224,6 +255,11 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 var specializations = specializationsByDoctor.TryGetValue(r.DoctorID, out var specs) ? specs : new List<string>();
                 var fee = feeLookup.TryGetValue((r.DoctorID, hospitalId), out var feeAmount) ? feeAmount : (decimal?)null;
                 var discountActive = DoctorMarketingHelpers.IsDiscountActive(r.DiscountPercent, r.DiscountStartAt, r.DiscountEndAt, nowUtc);
+                var isAvailableToday = DoctorAvailabilityResolver.IsAvailable(
+                    todayIst,
+                    timeOffsByDoctor.TryGetValue(r.DoctorID, out var doctorTimeOffs) ? doctorTimeOffs : Array.Empty<DoctorTimeOff>(),
+                    overridesByDoctor.TryGetValue(r.DoctorID, out var doctorOverrides) ? doctorOverrides : Array.Empty<DoctorShiftOverride>(),
+                    activeTemplates);
 
                 doctors.Add(new PublicDoctorInfo
                 {
@@ -257,6 +293,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         : null,
                     IsFeatured = r.IsFeatured,
                     IsRegistrationVerified = r.IsRegistrationVerified,
+                    IsAvailableToday = isAvailableToday,
                 });
             }
 

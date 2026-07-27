@@ -2,6 +2,7 @@ using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -80,24 +81,15 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                           o.HospitalId == hospitalId &&
                           o.StartDate <= requestDate &&
                           (!o.EndDate.HasValue || o.EndDate >= requestDate))
-                .OrderBy(o => o.StartTime)
                 .ToListAsync(cancellationToken);
 
-            List<PublicShiftInfo> shifts;
-            if (overrideShifts.Count > 0)
-            {
-                shifts = overrideShifts
-                    .Select(s => new PublicShiftInfo { Name = s.ShiftName, StartTime = s.StartTime, EndTime = s.EndTime })
-                    .ToList();
-            }
-            else
-            {
-                shifts = await _context.DoctorShiftTemplates
-                    .Where(t => t.IsActive)
-                    .OrderBy(t => t.StartTime)
-                    .Select(t => new PublicShiftInfo { Name = t.ShiftName, StartTime = t.StartTime, EndTime = t.EndTime })
-                    .ToListAsync(cancellationToken);
-            }
+            // Templates are global (not per-doctor) — only worth fetching when there's no override,
+            // since an override for the date always wins.
+            var activeTemplates = overrideShifts.Count > 0
+                ? new List<DoctorShiftTemplate>()
+                : await _context.DoctorShiftTemplates.Where(t => t.IsActive).ToListAsync(cancellationToken);
+
+            var shifts = DoctorAvailabilityResolver.ResolveShifts(overrideShifts, activeTemplates);
 
             var response = new GetPublicDoctorAvailabilityResponseModel
             {
