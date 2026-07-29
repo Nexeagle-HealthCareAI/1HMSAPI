@@ -89,6 +89,7 @@ builder.Services.AddCors(options =>
                 "http://localhost:5173",
                 "https://1hms.nexeagle.com",
                 "http://1hms.nexeagle.com",
+                "https://1hms-dev.nexeagle.com",
                 "https://nexeagle.com",
                 "http://nexeagle.com",
                 "http://151.185.45.77:81",
