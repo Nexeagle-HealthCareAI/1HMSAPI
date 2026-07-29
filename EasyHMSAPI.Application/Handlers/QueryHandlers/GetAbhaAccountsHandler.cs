@@ -29,6 +29,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     Gender = a.Gender,
                     DateOfBirth = a.DateOfBirth,
                     Mobile = a.Mobile,
+                    Email = a.Email,
                     Source = a.Source,
                     LinkedPatientId = a.LinkedPatientId,
                     CreatedAt = a.CreatedAt,

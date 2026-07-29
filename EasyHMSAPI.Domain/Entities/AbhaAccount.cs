@@ -20,6 +20,7 @@ namespace EasyHMSAPI.Domain.Entities
         public string? Gender { get; set; }
         public string? DateOfBirth { get; set; }
         public string? Mobile { get; set; }
+        public string? Email { get; set; }
         public string Source { get; set; } = "AadhaarEnrol";
         public string? LinkedPatientId { get; set; }
         public DateTime CreatedAt { get; set; }

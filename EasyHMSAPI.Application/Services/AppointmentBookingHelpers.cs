@@ -73,6 +73,7 @@ namespace EasyHMSAPI.Application.Services
                 if (!string.IsNullOrEmpty(patientInfo.EmergencyContactPhone)) patient.EmergencyContactPhone = patientInfo.EmergencyContactPhone;
                 if (!string.IsNullOrEmpty(patientInfo.GuardianName)) patient.GuardianName = patientInfo.GuardianName;
                 if (!string.IsNullOrEmpty(patientInfo.GuardianRelation)) patient.GuardianRelation = patientInfo.GuardianRelation;
+                if (!string.IsNullOrEmpty(patientInfo.AbhaId)) patient.AbhaId = patientInfo.AbhaId;
                 if (patientInfo.MarketingConsent == true && !patient.MarketingConsent)
                 {
                     patient.MarketingConsent = true;
@@ -112,6 +113,7 @@ namespace EasyHMSAPI.Application.Services
                     EmergencyContactPhone = patientInfo.EmergencyContactPhone,
                     GuardianName = patientInfo.GuardianName,
                     GuardianRelation = patientInfo.GuardianRelation,
+                    AbhaId = patientInfo.AbhaId,
                     MarketingConsent = patientInfo.MarketingConsent == true,
                     MarketingConsentAt = patientInfo.MarketingConsent == true ? DateTime.UtcNow : null,
                 };

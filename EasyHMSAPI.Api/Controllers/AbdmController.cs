@@ -193,5 +193,55 @@ namespace EasyHMSAPI.Api.Controllers
                 return StatusCode(500, new { Message = "An error occurred while saving the ABHA account." });
             }
         }
+
+        // ---- Edit profile (re-verify via OTP first, then update mobile/email) ----
+
+        [HttpPost("profile/mobile/generate-otp")]
+        public async Task<ActionResult<AbdmOtpTxnResponseModel>> RequestUpdateMobileOtp([FromBody] RequestUpdateMobileOtpRequestModel request)
+        {
+            try
+            {
+                var response = await _mediator.Send(request);
+                if (!response.Success) return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error requesting ABHA mobile-update OTP.");
+                return StatusCode(500, new { Message = "An error occurred while requesting the OTP." });
+            }
+        }
+
+        [HttpPost("profile/mobile/verify-otp")]
+        public async Task<ActionResult<AbdmUpdateResponseModel>> VerifyUpdateMobileOtp([FromBody] VerifyUpdateMobileOtpRequestModel request)
+        {
+            try
+            {
+                var response = await _mediator.Send(request);
+                if (!response.Success) return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error verifying ABHA mobile-update OTP.");
+                return StatusCode(500, new { Message = "An error occurred while updating the mobile number." });
+            }
+        }
+
+        [HttpPost("profile/email")]
+        public async Task<ActionResult<AbdmUpdateResponseModel>> UpdateEmail([FromBody] UpdateAbhaEmailRequestModel request)
+        {
+            try
+            {
+                var response = await _mediator.Send(request);
+                if (!response.Success) return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating ABHA email.");
+                return StatusCode(500, new { Message = "An error occurred while updating the email." });
+            }
+        }
     }
 }

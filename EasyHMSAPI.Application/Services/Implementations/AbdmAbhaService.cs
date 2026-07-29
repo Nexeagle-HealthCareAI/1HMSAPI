@@ -164,6 +164,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
             return new AbdmProfileResult
             {
+                TxnId = txnId,
                 AbhaNumber = ReadString(account, "ABHANumber", "abhaNumber", "healthIdNumber") ?? string.Empty,
                 AbhaAddress = ReadString(account, "preferredAbhaAddress", "healthId", "abhaAddress"),
                 FullName = ReadString(account, "name", "fullName") ?? string.Empty,
@@ -171,6 +172,49 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 DateOfBirth = ReadString(account, "dob", "dateOfBirth"),
                 Mobile = ReadString(account, "mobile"),
                 Email = ReadString(account, "email")
+            };
+        }
+
+        // ---- Profile updates (require a live, freshly-verified session — see interface docs) ----
+
+        public async Task<AbdmOtpTxnResult> RequestUpdateMobileOtpAsync(string sessionTxnId, string newMobile, CancellationToken cancellationToken)
+        {
+            var encrypted = await _encryptionService.EncryptAsync(newMobile, cancellationToken);
+            var payload = new { loginId = encrypted };
+            var doc = await PostAuthenticatedAsync("/profile/account/mobile/request/otp", payload, sessionTxnId, cancellationToken);
+            return ReadOtpTxnResult(doc);
+        }
+
+        public async Task<AbdmUpdateResult> VerifyUpdateMobileOtpAsync(string sessionTxnId, string updateTxnId, string otp, CancellationToken cancellationToken)
+        {
+            var encryptedOtp = await _encryptionService.EncryptAsync(otp, cancellationToken);
+            var payload = new { txnId = updateTxnId, otpValue = encryptedOtp };
+            var doc = await PostAuthenticatedAsync("/profile/account/mobile/verify", payload, sessionTxnId, cancellationToken);
+            return new AbdmUpdateResult { Success = true, Message = ReadString(doc.RootElement, "message") ?? "Mobile number updated." };
+        }
+
+        public async Task<AbdmUpdateResult> UpdateEmailAsync(string sessionTxnId, string newEmail, CancellationToken cancellationToken)
+        {
+            var payload = new { email = newEmail };
+            var doc = await PostAuthenticatedAsync("/profile/account/email/update", payload, sessionTxnId, cancellationToken);
+            return new AbdmUpdateResult { Success = true, Message = ReadString(doc.RootElement, "message") ?? "Email updated." };
+        }
+
+        public async Task<AbdmProfileResult> GetProfileAsync(string sessionTxnId, CancellationToken cancellationToken)
+        {
+            using var request = await BuildRequestAsync(HttpMethod.Get, "/profile/account", null, cancellationToken, RequireXToken(sessionTxnId));
+            var doc = await SendAsync(request, cancellationToken);
+            var root = doc.RootElement;
+            return new AbdmProfileResult
+            {
+                TxnId = sessionTxnId,
+                AbhaNumber = ReadString(root, "ABHANumber", "abhaNumber", "healthIdNumber") ?? string.Empty,
+                AbhaAddress = ReadString(root, "preferredAbhaAddress", "healthId", "abhaAddress"),
+                FullName = ReadString(root, "name", "fullName") ?? string.Empty,
+                Gender = ReadString(root, "gender"),
+                DateOfBirth = ReadString(root, "dob", "dateOfBirth"),
+                Mobile = ReadString(root, "mobile"),
+                Email = ReadString(root, "email")
             };
         }
 
@@ -183,7 +227,26 @@ namespace EasyHMSAPI.Application.Services.Implementations
             return await SendAsync(request, cancellationToken);
         }
 
-        private async Task<HttpRequestMessage> BuildRequestAsync(HttpMethod method, string path, HttpContent? content, CancellationToken cancellationToken)
+        /// <summary>POSTs to a profile-scoped endpoint that requires the ABHA holder's own
+        /// (freshly OTP-verified) X-Token, not just the HIP gateway token.</summary>
+        private async Task<JsonDocument> PostAuthenticatedAsync(string path, object payload, string sessionTxnId, CancellationToken cancellationToken)
+        {
+            var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            using var request = await BuildRequestAsync(HttpMethod.Post, path, content, cancellationToken, RequireXToken(sessionTxnId));
+            return await SendAsync(request, cancellationToken);
+        }
+
+        /// <summary>Looks up the cached X-Token for a session TxnId, or throws a clear
+        /// "session expired" error the caller can surface as-is (the session/txn is only cached
+        /// ~20 minutes after the holder's OTP verification).</summary>
+        private string RequireXToken(string sessionTxnId)
+        {
+            if (_cache.TryGetValue(XTokenCachePrefix + sessionTxnId, out string? xToken) && !string.IsNullOrWhiteSpace(xToken))
+                return xToken;
+            throw new InvalidOperationException("This ABHA session has expired — please re-verify with an OTP before making changes.");
+        }
+
+        private async Task<HttpRequestMessage> BuildRequestAsync(HttpMethod method, string path, HttpContent? content, CancellationToken cancellationToken, string? xToken = null)
         {
             var accessToken = await _gatewayService.GetAccessTokenAsync(cancellationToken);
             var request = new HttpRequestMessage(method, $"{_abhaBaseUrl}{path}") { Content = content };
@@ -191,6 +254,8 @@ namespace EasyHMSAPI.Application.Services.Implementations
             request.Headers.Add("REQUEST-ID", Guid.NewGuid().ToString());
             request.Headers.Add("TIMESTAMP", DateTime.UtcNow.ToString("O"));
             request.Headers.Add("X-CM-ID", "sbx");
+            if (!string.IsNullOrWhiteSpace(xToken))
+                request.Headers.Add("X-Token", xToken);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             return request;
         }

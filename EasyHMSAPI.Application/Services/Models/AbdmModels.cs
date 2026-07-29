@@ -32,6 +32,11 @@ namespace EasyHMSAPI.Application.Services.Models
     /// Aadhaar OTP), or for a freshly created ABHA account.</summary>
     public class AbdmProfileResult
     {
+        // The authenticated session for this ABHA holder — pass back into
+        // RequestUpdateMobileOtpAsync/UpdateEmailAsync etc. to prove the holder just re-verified
+        // (ABDM requires a fresh OTP-backed session for any profile change, not just a stored ABHA
+        // number). Its X-Token is cached server-side, keyed by this TxnId — never sent to the client.
+        public string TxnId { get; set; } = string.Empty;
         public string AbhaNumber { get; set; } = string.Empty;
         public string? AbhaAddress { get; set; }
         public string FullName { get; set; } = string.Empty;
@@ -39,5 +44,12 @@ namespace EasyHMSAPI.Application.Services.Models
         public string? DateOfBirth { get; set; }
         public string? Mobile { get; set; }
         public string? Email { get; set; }
+    }
+
+    /// <summary>Result of a plain (non-OTP) profile field update, e.g. email.</summary>
+    public class AbdmUpdateResult
+    {
+        public bool Success { get; set; }
+        public string? Message { get; set; }
     }
 }

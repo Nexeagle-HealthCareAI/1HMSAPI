@@ -25,6 +25,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 return new AbdmProfileResponseModel
                 {
                     Success = true,
+                    TxnId = result.TxnId,
                     AbhaNumber = result.AbhaNumber,
                     AbhaAddress = result.AbhaAddress,
                     FullName = result.FullName,

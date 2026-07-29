@@ -7,6 +7,9 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
     {
         public bool Success { get; set; }
         public string? Message { get; set; }
+        // Authenticated session handle — pass to the profile-update endpoints while it's still
+        // live (~20 min). Not a secret itself; the real ABDM X-Token stays server-side.
+        public string? TxnId { get; set; }
         public string? AbhaNumber { get; set; }
         public string? AbhaAddress { get; set; }
         public string? FullName { get; set; }

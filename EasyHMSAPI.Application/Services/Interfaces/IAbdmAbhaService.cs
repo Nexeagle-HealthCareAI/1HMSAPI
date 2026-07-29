@@ -28,5 +28,17 @@ namespace EasyHMSAPI.Application.Services.Interfaces
         Task<AbdmOtpTxnResult> RequestLoginOtpAsync(string loginId, string loginHint, string otpSystem, CancellationToken cancellationToken);
 
         Task<AbdmProfileResult> VerifyLoginOtpAsync(string txnId, string otp, CancellationToken cancellationToken);
+
+        // ---- Profile updates — require a freshly-verified session (a TxnId from
+        // VerifyLoginOtpAsync/VerifyAadhaarOtpAsync/VerifyMobileOtpAsync whose cached X-Token is
+        // still valid, ~20 min) since ABDM requires live holder consent for any profile change. ----
+
+        Task<AbdmOtpTxnResult> RequestUpdateMobileOtpAsync(string sessionTxnId, string newMobile, CancellationToken cancellationToken);
+
+        Task<AbdmUpdateResult> VerifyUpdateMobileOtpAsync(string sessionTxnId, string updateTxnId, string otp, CancellationToken cancellationToken);
+
+        Task<AbdmUpdateResult> UpdateEmailAsync(string sessionTxnId, string newEmail, CancellationToken cancellationToken);
+
+        Task<AbdmProfileResult> GetProfileAsync(string sessionTxnId, CancellationToken cancellationToken);
     }
 }
