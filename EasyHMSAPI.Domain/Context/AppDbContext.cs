@@ -152,6 +152,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<AdmissionDayBillLine> AdmissionDayBillLine { get; set; }
         public DbSet<ConsentRecord> ConsentRecord { get; set; }
         public DbSet<ConsentTemplate> ConsentTemplate { get; set; }
+        public DbSet<AbhaAccount> AbhaAccount { get; set; }
         public DbSet<VitalReading> VitalReading { get; set; }
         public DbSet<FluidEntry> FluidEntry { get; set; }
         public DbSet<GlucoseReading> GlucoseReading { get; set; }
@@ -878,6 +879,13 @@ namespace EasyHMSAPI.Domain.Context
                 entity.HasKey(c => c.ConsentTemplateId);
                 entity.Property(c => c.CreatedAt).HasColumnType("datetime2(3)");
                 entity.Property(c => c.UpdatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<AbhaAccount>(entity =>
+            {
+                entity.ToTable("AbhaAccount");
+                entity.HasKey(a => a.AbhaAccountId);
+                entity.Property(a => a.CreatedAt).HasColumnType("datetime2(3)");
             });
 
             modelBuilder.Entity<VitalReading>(entity =>

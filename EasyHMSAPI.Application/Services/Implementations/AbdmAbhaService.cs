@@ -1,0 +1,277 @@
+using EasyHMSAPI.Application.Services.Interfaces;
+using EasyHMSAPI.Application.Services.Models;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
+using System.Diagnostics.CodeAnalysis;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
+
+namespace EasyHMSAPI.Application.Services.Implementations
+{
+    /// <summary>
+    /// Implements the ABHA V3 Aadhaar-OTP creation and Mobile/Aadhaar-OTP login flows against
+    /// ABDM's sandbox (see the "Abdm" appsettings section for base URLs). Field/endpoint names
+    /// follow the public ABDM V3 integrator guide as of this writing — if the hospital's copy of the
+    /// guide names a field differently, this is the one file to patch.
+    /// </summary>
+    [ExcludeFromCodeCoverage]
+    public class AbdmAbhaService : IAbdmAbhaService
+    {
+        private const string XTokenCachePrefix = "Abdm:XToken:";
+
+        private readonly HttpClient _httpClient;
+        private readonly IAbdmGatewayService _gatewayService;
+        private readonly IAbdmEncryptionService _encryptionService;
+        private readonly IMemoryCache _cache;
+        private readonly string _abhaBaseUrl;
+        private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
+
+        public AbdmAbhaService(
+            HttpClient httpClient,
+            IAbdmGatewayService gatewayService,
+            IAbdmEncryptionService encryptionService,
+            IMemoryCache cache,
+            IConfiguration configuration)
+        {
+            _httpClient = httpClient;
+            _gatewayService = gatewayService;
+            _encryptionService = encryptionService;
+            _cache = cache;
+            _abhaBaseUrl = (configuration["Abdm:AbhaBaseUrl"] ?? "https://abhasbx.abdm.gov.in/abha/api/v3").TrimEnd('/');
+        }
+
+        public async Task<AbdmOtpTxnResult> GenerateAadhaarOtpAsync(string aadhaarNumber, CancellationToken cancellationToken)
+        {
+            var encrypted = await _encryptionService.EncryptAsync(aadhaarNumber, cancellationToken);
+            var payload = new
+            {
+                txnId = "",
+                scope = new[] { "abha-enrol" },
+                loginHint = "aadhaar",
+                loginId = encrypted,
+                otpSystem = "aadhaar"
+            };
+            var doc = await PostAsync("/enrollment/request/otp", payload, cancellationToken);
+            return ReadOtpTxnResult(doc);
+        }
+
+        public async Task<AbdmEnrollResult> VerifyAadhaarOtpAsync(string txnId, string otp, CancellationToken cancellationToken)
+        {
+            var encryptedOtp = await _encryptionService.EncryptAsync(otp, cancellationToken);
+            var payload = new
+            {
+                authData = new
+                {
+                    authMethods = new[] { "otp" },
+                    otp = new { txnId, otpValue = encryptedOtp }
+                },
+                consent = new { code = "abha-enrollment", version = "1.4" }
+            };
+            var doc = await PostAsync("/enrollment/enrol/byAadhaar", payload, cancellationToken);
+            return ReadEnrollResult(doc, txnId);
+        }
+
+        public async Task<AbdmOtpTxnResult> GenerateMobileOtpAsync(string txnId, string mobile, CancellationToken cancellationToken)
+        {
+            var encrypted = await _encryptionService.EncryptAsync(mobile, cancellationToken);
+            var payload = new
+            {
+                txnId,
+                scope = new[] { "abha-enrol", "mobile-verify" },
+                loginHint = "mobile",
+                loginId = encrypted,
+                otpSystem = "abdm"
+            };
+            var doc = await PostAsync("/enrollment/request/otp", payload, cancellationToken);
+            return ReadOtpTxnResult(doc, fallbackTxnId: txnId);
+        }
+
+        public async Task<AbdmEnrollResult> VerifyMobileOtpAsync(string txnId, string otp, CancellationToken cancellationToken)
+        {
+            var encryptedOtp = await _encryptionService.EncryptAsync(otp, cancellationToken);
+            var payload = new
+            {
+                authData = new
+                {
+                    authMethods = new[] { "otp" },
+                    otp = new { txnId, otpValue = encryptedOtp }
+                }
+            };
+            var doc = await PostAsync("/enrollment/auth/byAbdm/verify", payload, cancellationToken);
+            return ReadEnrollResult(doc, txnId);
+        }
+
+        public async Task<AbdmAddressSuggestionsResult> GetAbhaAddressSuggestionsAsync(string txnId, CancellationToken cancellationToken)
+        {
+            using var request = await BuildRequestAsync(HttpMethod.Get, "/enrollment/enrol/suggestion", null, cancellationToken);
+            request.Headers.Add("Transaction_Id", txnId);
+            var doc = await SendAsync(request, cancellationToken);
+
+            var result = new AbdmAddressSuggestionsResult { TxnId = txnId };
+            if (doc.RootElement.TryGetProperty("abhaAddressList", out var list) && list.ValueKind == JsonValueKind.Array)
+                result.Suggestions = list.EnumerateArray().Select(e => e.GetString() ?? string.Empty).Where(s => s.Length > 0).ToList();
+            return result;
+        }
+
+        public async Task<AbdmEnrollResult> CreateAbhaAddressAsync(string txnId, string abhaAddress, CancellationToken cancellationToken)
+        {
+            var payload = new { txnId, abhaAddress, preferred = 1 };
+            var doc = await PostAsync("/enrollment/enrol/abha-address", payload, cancellationToken);
+            var result = ReadEnrollResult(doc, txnId);
+            if (string.IsNullOrWhiteSpace(result.AbhaAddress))
+                result.AbhaAddress = abhaAddress;
+            return result;
+        }
+
+        public async Task<AbdmOtpTxnResult> RequestLoginOtpAsync(string loginId, string loginHint, string otpSystem, CancellationToken cancellationToken)
+        {
+            var encrypted = await _encryptionService.EncryptAsync(loginId, cancellationToken);
+            var payload = new
+            {
+                scope = new[] { "abha-login", loginHint == "aadhaar" ? "aadhaar-verify" : "mobile-verify" },
+                loginHint,
+                loginId = encrypted,
+                otpSystem
+            };
+            var doc = await PostAsync("/profile/login/request/otp", payload, cancellationToken);
+            return ReadOtpTxnResult(doc);
+        }
+
+        public async Task<AbdmProfileResult> VerifyLoginOtpAsync(string txnId, string otp, CancellationToken cancellationToken)
+        {
+            var encryptedOtp = await _encryptionService.EncryptAsync(otp, cancellationToken);
+            var payload = new
+            {
+                scope = new[] { "abha-login" },
+                authData = new
+                {
+                    authMethods = new[] { "otp" },
+                    otp = new { txnId, otpValue = encryptedOtp }
+                }
+            };
+            var doc = await PostAsync("/profile/login/verify", payload, cancellationToken);
+
+            var root = doc.RootElement;
+            if (root.TryGetProperty("token", out var tokenEl) && tokenEl.ValueKind == JsonValueKind.String)
+                CacheXToken(txnId, tokenEl.GetString());
+
+            // Sandbox returns either a single account object or an "accounts" array (one loginId can
+            // map to multiple ABHA numbers) — prefer the first linked account either way.
+            JsonElement account = root;
+            if (root.TryGetProperty("accounts", out var accounts) && accounts.ValueKind == JsonValueKind.Array && accounts.GetArrayLength() > 0)
+                account = accounts[0];
+
+            return new AbdmProfileResult
+            {
+                AbhaNumber = ReadString(account, "ABHANumber", "abhaNumber", "healthIdNumber") ?? string.Empty,
+                AbhaAddress = ReadString(account, "preferredAbhaAddress", "healthId", "abhaAddress"),
+                FullName = ReadString(account, "name", "fullName") ?? string.Empty,
+                Gender = ReadString(account, "gender"),
+                DateOfBirth = ReadString(account, "dob", "dateOfBirth"),
+                Mobile = ReadString(account, "mobile"),
+                Email = ReadString(account, "email")
+            };
+        }
+
+        // ---- HTTP plumbing -------------------------------------------------------------------
+
+        private async Task<JsonDocument> PostAsync(string path, object payload, CancellationToken cancellationToken)
+        {
+            var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            using var request = await BuildRequestAsync(HttpMethod.Post, path, content, cancellationToken);
+            return await SendAsync(request, cancellationToken);
+        }
+
+        private async Task<HttpRequestMessage> BuildRequestAsync(HttpMethod method, string path, HttpContent? content, CancellationToken cancellationToken)
+        {
+            var accessToken = await _gatewayService.GetAccessTokenAsync(cancellationToken);
+            var request = new HttpRequestMessage(method, $"{_abhaBaseUrl}{path}") { Content = content };
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            request.Headers.Add("REQUEST-ID", Guid.NewGuid().ToString());
+            request.Headers.Add("TIMESTAMP", DateTime.UtcNow.ToString("O"));
+            request.Headers.Add("X-CM-ID", "sbx");
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            return request;
+        }
+
+        private async Task<JsonDocument> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var response = await _httpClient.SendAsync(request, cancellationToken);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
+                throw new InvalidOperationException($"ABDM request to {request.RequestUri} failed ({(int)response.StatusCode}): {body}");
+            return JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
+        }
+
+        // ---- Response parsing ------------------------------------------------------------------
+
+        private static AbdmOtpTxnResult ReadOtpTxnResult(JsonDocument doc, string? fallbackTxnId = null)
+        {
+            var root = doc.RootElement;
+            return new AbdmOtpTxnResult
+            {
+                TxnId = ReadString(root, "txnId") ?? fallbackTxnId ?? string.Empty,
+                Message = ReadString(root, "message")
+            };
+        }
+
+        private void ReadEnrollTokens(JsonElement root, string txnId)
+        {
+            if (root.TryGetProperty("tokens", out var tokens) && tokens.ValueKind == JsonValueKind.Object)
+            {
+                var xToken = ReadString(tokens, "token");
+                if (!string.IsNullOrWhiteSpace(xToken))
+                    CacheXToken(txnId, xToken);
+            }
+        }
+
+        private AbdmEnrollResult ReadEnrollResult(JsonDocument doc, string txnId)
+        {
+            var root = doc.RootElement;
+            ReadEnrollTokens(root, txnId);
+
+            var profile = root.TryGetProperty("ABHAProfile", out var p) && p.ValueKind == JsonValueKind.Object ? p : root;
+
+            var firstName = ReadString(profile, "firstName");
+            var middleName = ReadString(profile, "middleName");
+            var lastName = ReadString(profile, "lastName");
+            var fullName = ReadString(profile, "name")
+                ?? string.Join(' ', new[] { firstName, middleName, lastName }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+            return new AbdmEnrollResult
+            {
+                TxnId = ReadString(root, "txnId") ?? txnId,
+                AbhaNumber = ReadString(profile, "abhaNumber", "ABHANumber", "healthIdNumber") ?? string.Empty,
+                AbhaAddress = ReadString(profile, "healthId", "preferredAbhaAddress", "abhaAddress"),
+                FullName = fullName,
+                Gender = ReadString(profile, "gender"),
+                DateOfBirth = ReadString(profile, "dob", "dateOfBirth"),
+                Mobile = ReadString(profile, "mobile"),
+                MobileVerified = profile.TryGetProperty("mobileVerified", out var mv) && mv.ValueKind == JsonValueKind.True,
+                IsNew = root.TryGetProperty("isNew", out var isNew) && isNew.ValueKind == JsonValueKind.True
+            };
+        }
+
+        private static string? ReadString(JsonElement element, params string[] propertyNames)
+        {
+            foreach (var name in propertyNames)
+            {
+                if (element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String)
+                {
+                    var s = value.GetString();
+                    if (!string.IsNullOrWhiteSpace(s))
+                        return s;
+                }
+            }
+            return null;
+        }
+
+        private void CacheXToken(string txnId, string? xToken)
+        {
+            if (string.IsNullOrWhiteSpace(txnId) || string.IsNullOrWhiteSpace(xToken))
+                return;
+            _cache.Set(XTokenCachePrefix + txnId, xToken, TimeSpan.FromMinutes(20));
+        }
+    }
+}
