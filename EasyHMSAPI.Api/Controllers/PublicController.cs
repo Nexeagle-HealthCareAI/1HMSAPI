@@ -114,6 +114,21 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        [HttpGet("specialties")]
+        public async Task<ActionResult<GetPublicSpecialtiesResponseModel>> GetSpecialties()
+        {
+            try
+            {
+                var response = await _mediator.Send(new GetPublicSpecialtiesRequestModel());
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetSpecialties");
+                return StatusCode(500, new { Message = "An error occurred while fetching specialties." });
+            }
+        }
+
         [HttpGet("doctors/{doctorId:guid}/availability")]
         public async Task<ActionResult<GetPublicDoctorAvailabilityResponseModel>> GetDoctorAvailability(Guid doctorId, [FromQuery] DateTime date)
         {

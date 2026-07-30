@@ -26,5 +26,9 @@ namespace EasyHMSAPI.Application.Services
 
         public static string BookedSlots(Guid hospitalId, Guid doctorId, DateTime date) =>
             $"public:booked-slots:{hospitalId}:{doctorId}:{date:yyyyMMdd}";
+
+        // Single whole-platform entry — unlike PublicDoctorsList there's no per-request filter
+        // combo to key on, this is just "all bookable categories right now".
+        public const string PublicSpecialtiesList = "public:specialties";
     }
 }
