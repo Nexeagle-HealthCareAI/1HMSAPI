@@ -1,6 +1,7 @@
 using EasyHMSAPI.Application.Services.Interfaces;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -28,11 +29,20 @@ namespace EasyHMSAPI.Application.Services.Implementations
         private readonly IMemoryCache _cache;
         private readonly string _certUrl;
 
-        public AbdmEncryptionService(HttpClient httpClient, IMemoryCache cache, IConfiguration configuration)
+        public AbdmEncryptionService(HttpClient httpClient, IMemoryCache cache, IConfiguration configuration, IHostEnvironment environment)
         {
             _httpClient = httpClient;
             _cache = cache;
-            _certUrl = configuration["Abdm:CertUrl"] ?? "https://healthidsbx.abdm.gov.in/api/v1/auth/cert";
+            var isProd = environment.IsProduction();
+            // "healthidsbx.abdm.gov.in/api/v1/auth/cert" was a stale pre-ABHA-rebrand (Health ID era)
+            // endpoint — it doesn't respond, so every encrypt call hung for the full 100s HttpClient
+            // timeout before failing. Confirmed sandbox replacement via NHA's own Postman collection.
+            var configuredUrl = configuration[isProd ? "Abdm:CertUrlProd" : "Abdm:CertUrl"];
+            _certUrl = !string.IsNullOrWhiteSpace(configuredUrl)
+                ? configuredUrl
+                : !isProd
+                    ? "https://abhasbx.abdm.gov.in/abha/api/v3/profile/public/certificate"
+                    : throw new InvalidOperationException("Abdm:CertUrlProd must be configured before ABDM can be used in Production.");
         }
 
         public async Task<string> EncryptAsync(string plainText, CancellationToken cancellationToken)

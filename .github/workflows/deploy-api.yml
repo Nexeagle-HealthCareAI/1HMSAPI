@@ -64,6 +64,8 @@
 #                                 setting; expected shape https://apis.abdm.gov.in/api/hiecm/gateway
 #     ABDM_ABHA_BASE_URL_PROD     Abdm:AbhaBaseUrlProd — confirm against NHA's own docs before
 #                                 setting (do not assume it mirrors the sandbox URL's path shape)
+#     ABDM_CERT_URL_PROD          Abdm:CertUrlProd — confirm against NHA's own docs before setting;
+#                                 sandbox is https://abhasbx.abdm.gov.in/abha/api/v3/profile/public/certificate
 #     INTERNAL_PROXY_SECRET Internal:ProxyForwardingSecret — lets the public-API rate limiters
 #                           (PerIpPolicy/PublicBookingPolicy/PatientAuthPolicy) see each real
 #                           visitor's IP instead of NexEagleWebsite's own container IP for every
@@ -319,6 +321,7 @@ jobs:
           ABDM_CLIENT_SECRET: ${{ secrets.ABDM_CLIENTSECRET_PROD }}
           ABDM_GATEWAY_URL:   ${{ vars.ABDM_GATEWAY_BASE_URL_PROD }}
           ABDM_ABHA_URL:      ${{ vars.ABDM_ABHA_BASE_URL_PROD }}
+          ABDM_CERT_URL:      ${{ vars.ABDM_CERT_URL_PROD }}
           INVITATION_URL:  ${{ vars.PROD_INVITATION_URL || 'http://151.185.45.67:81/user-onboarding?token=' }}
           STORAGE_PROVIDER: ${{ vars.STORAGE_PROVIDER || 'S3' }}
           S3_SERVICE_URL:  ${{ secrets.PROD_S3_SERVICE_URL }}
@@ -356,6 +359,7 @@ jobs:
           add 'Abdm__ABDM_ClientSecret_Prod'            "$ABDM_CLIENT_SECRET"
           add 'Abdm__GatewayBaseUrlProd'                "$ABDM_GATEWAY_URL"
           add 'Abdm__AbhaBaseUrlProd'                   "$ABDM_ABHA_URL"
+          add 'Abdm__CertUrlProd'                       "$ABDM_CERT_URL"
           add 'Invitation__RegistrationBaseUrl'       "$INVITATION_URL"
           add 'Storage__Provider'                     "$STORAGE_PROVIDER"
           add 'Storage__S3__ServiceUrl'               "$S3_SERVICE_URL"
