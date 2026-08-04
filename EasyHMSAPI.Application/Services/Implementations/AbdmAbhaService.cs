@@ -69,15 +69,21 @@ namespace EasyHMSAPI.Application.Services.Implementations
             return ReadOtpTxnResult(doc);
         }
 
-        public async Task<AbdmEnrollResult> VerifyAadhaarOtpAsync(string txnId, string otp, CancellationToken cancellationToken)
+        public async Task<AbdmEnrollResult> VerifyAadhaarOtpAsync(string txnId, string otp, string mobile, CancellationToken cancellationToken)
         {
             var encryptedOtp = await _encryptionService.EncryptAsync(otp, cancellationToken);
+            var encryptedMobile = await _encryptionService.EncryptAsync(mobile, cancellationToken);
             var payload = new
             {
                 authData = new
                 {
                     authMethods = new[] { "otp" },
-                    otp = new { txnId, otpValue = encryptedOtp }
+                    // "mobile" is mandatory here per the integrator guide even though it reads like an
+                    // optional override — omitting it entirely got a 400 "Invalid Mobile Number" from
+                    // ABDM. If it doesn't match the Aadhaar-linked mobile, the profile's mobile comes
+                    // back null and this same number needs separate OTP verification (see
+                    // GenerateMobileOtpAsync/VerifyMobileOtpAsync).
+                    otp = new { txnId, otpValue = encryptedOtp, mobile = encryptedMobile }
                 },
                 consent = new { code = "abha-enrollment", version = "1.4" }
             };
@@ -490,7 +496,12 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 Gender = ReadString(profile, "gender"),
                 DateOfBirth = ReadString(profile, "dob", "dateOfBirth"),
                 Mobile = ReadString(profile, "mobile"),
-                MobileVerified = profile.TryGetProperty("mobileVerified", out var mv) && mv.ValueKind == JsonValueKind.True,
+                // enrol/byAadhaar has no explicit "mobileVerified" field — per the integrator guide's
+                // note, a matched primary mobile is saved onto the profile and a non-matching one
+                // comes back null, so presence of "mobile" IS the verification signal for this call.
+                // Other flows (byDocument etc.) do return an explicit boolean — prefer that when present.
+                MobileVerified = profile.TryGetProperty("mobileVerified", out var mv) && mv.ValueKind == JsonValueKind.True
+                    || !string.IsNullOrWhiteSpace(ReadString(profile, "mobile")),
                 IsNew = root.TryGetProperty("isNew", out var isNew) && isNew.ValueKind == JsonValueKind.True
             };
         }

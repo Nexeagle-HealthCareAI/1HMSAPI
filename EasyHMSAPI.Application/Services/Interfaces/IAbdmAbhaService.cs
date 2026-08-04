@@ -13,7 +13,11 @@ namespace EasyHMSAPI.Application.Services.Interfaces
     {
         Task<AbdmOtpTxnResult> GenerateAadhaarOtpAsync(string aadhaarNumber, CancellationToken cancellationToken);
 
-        Task<AbdmEnrollResult> VerifyAadhaarOtpAsync(string txnId, string otp, CancellationToken cancellationToken);
+        /// <param name="mobile">Primary mobile number for the account — mandatory on this call per
+        /// the integrator guide, regardless of whether it matches the Aadhaar-linked mobile. If it
+        /// doesn't match, ABDM returns a null profile mobile and this same number still needs
+        /// separate OTP verification via GenerateMobileOtpAsync/VerifyMobileOtpAsync.</param>
+        Task<AbdmEnrollResult> VerifyAadhaarOtpAsync(string txnId, string otp, string mobile, CancellationToken cancellationToken);
 
         Task<AbdmOtpTxnResult> GenerateMobileOtpAsync(string txnId, string mobile, CancellationToken cancellationToken);
 
