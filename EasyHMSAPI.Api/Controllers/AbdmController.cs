@@ -48,6 +48,25 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Removes the local hospital record only — does not deactivate/delete the ABHA number
+        // itself on ABDM's side (see the Deactivate ABHA flow for that).
+        [HttpDelete("accounts/{abhaAccountId}")]
+        public async Task<ActionResult<RemoveAbhaAccountResponseModel>> RemoveAccount(Guid abhaAccountId, [FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
+            try
+            {
+                var response = await _mediator.Send(new RemoveAbhaAccountRequestModel { HospitalId = hospitalId, AbhaAccountId = abhaAccountId });
+                if (!response.Success) return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error removing ABHA account {AbhaAccountId}.", abhaAccountId);
+                return StatusCode(500, new { Message = "An error occurred while removing the ABHA account." });
+            }
+        }
+
         [HttpPost("aadhaar/generate-otp")]
         public async Task<ActionResult<AbdmOtpTxnResponseModel>> GenerateAadhaarOtp([FromBody] GenerateAadhaarOtpRequestModel request)
         {
