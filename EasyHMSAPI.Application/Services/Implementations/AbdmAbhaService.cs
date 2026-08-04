@@ -202,25 +202,54 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
         public async Task<AbdmOtpTxnResult> RequestUpdateMobileOtpAsync(string sessionTxnId, string newMobile, CancellationToken cancellationToken)
         {
+            // The prior "/profile/account/mobile/request/otp" path doesn't exist (404) — the real
+            // §8.1 endpoint is the same generic /profile/account/request/otp used by deactivate/
+            // reactivate, distinguished only by scope/loginHint, matching every other update flow.
             var encrypted = await _encryptionService.EncryptAsync(newMobile, cancellationToken);
-            var payload = new { loginId = encrypted };
-            var doc = await PostAuthenticatedAsync("/profile/account/mobile/request/otp", payload, sessionTxnId, cancellationToken);
+            var payload = new
+            {
+                scope = new[] { "abha-profile", "mobile-verify" },
+                loginHint = "mobile",
+                loginId = encrypted,
+                otpSystem = "abdm"
+            };
+            var doc = await PostAuthenticatedAsync("/profile/account/request/otp", payload, sessionTxnId, cancellationToken);
             return ReadOtpTxnResult(doc);
         }
 
         public async Task<AbdmUpdateResult> VerifyUpdateMobileOtpAsync(string sessionTxnId, string updateTxnId, string otp, CancellationToken cancellationToken)
         {
             var encryptedOtp = await _encryptionService.EncryptAsync(otp, cancellationToken);
-            var payload = new { txnId = updateTxnId, otpValue = encryptedOtp };
-            var doc = await PostAuthenticatedAsync("/profile/account/mobile/verify", payload, sessionTxnId, cancellationToken);
+            var payload = new
+            {
+                scope = new[] { "abha-profile", "mobile-verify" },
+                authData = new
+                {
+                    authMethods = new[] { "otp" },
+                    otp = new { txnId = updateTxnId, otpValue = encryptedOtp }
+                }
+            };
+            var doc = await PostAuthenticatedAsync("/profile/account/verify", payload, sessionTxnId, cancellationToken);
             return new AbdmUpdateResult { Success = true, Message = ReadString(doc.RootElement, "message") ?? "Mobile number updated." };
         }
 
         public async Task<AbdmUpdateResult> UpdateEmailAsync(string sessionTxnId, string newEmail, CancellationToken cancellationToken)
         {
-            var payload = new { email = newEmail };
-            var doc = await PostAuthenticatedAsync("/profile/account/email/update", payload, sessionTxnId, cancellationToken);
-            return new AbdmUpdateResult { Success = true, Message = ReadString(doc.RootElement, "message") ?? "Email updated." };
+            // Unlike mobile, ABDM has no synchronous "update email" call at all — the endpoint we
+            // were calling (/profile/account/email/update) doesn't exist (404). The real flow just
+            // sends a verification LINK to the new address; the email isn't actually changed until
+            // the holder clicks that link in their inbox, entirely outside this app's control.
+            var encryptedEmail = await _encryptionService.EncryptAsync(newEmail, cancellationToken);
+            var payload = new
+            {
+                scope = new[] { "abha-profile", "email-link-verify" },
+                loginHint = "email",
+                loginId = encryptedEmail,
+                otpSystem = "abdm"
+            };
+            // ABDM's response here is an empty 200 body — there's no per-request message to surface.
+            await PostAuthenticatedAsync("/profile/account/request/emailVerificationLink", payload, sessionTxnId, cancellationToken);
+            return new AbdmUpdateResult { Success = true, Message = "A verification link was sent to that email address. The change only takes effect once the patient clicks the link." };
         }
 
         public async Task<AbdmProfileResult> GetProfileAsync(string sessionTxnId, CancellationToken cancellationToken)
