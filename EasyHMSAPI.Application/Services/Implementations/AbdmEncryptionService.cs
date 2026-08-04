@@ -134,7 +134,10 @@ namespace EasyHMSAPI.Application.Services.Implementations
         }
 
         /// <summary>The cert endpoint returns either a raw PEM string body or a JSON object with a
-        /// "publicKey"/"certificate" field — handle both.</summary>
+        /// "publicKey"/"certificate" field — handle both. Sandbox's actual "publicKey" value is bare
+        /// base64 DER (SubjectPublicKeyInfo) with no "-----BEGIN"/"-----END" armor at all, despite
+        /// looking like a PEM body in the PDF's example — RSA.ImportFromPem rejects that outright, so
+        /// any bare-base64 result gets wrapped in PEM armor before being returned.</summary>
         private static string ExtractPem(string body)
         {
             var trimmed = body.Trim();
@@ -145,16 +148,24 @@ namespace EasyHMSAPI.Application.Services.Implementations
             {
                 using var doc = JsonDocument.Parse(trimmed);
                 if (doc.RootElement.TryGetProperty("publicKey", out var pk) && pk.ValueKind == JsonValueKind.String)
-                    return pk.GetString() ?? string.Empty;
+                    return WrapAsPemIfBare(pk.GetString() ?? string.Empty, "PUBLIC KEY");
                 if (doc.RootElement.TryGetProperty("certificate", out var cert) && cert.ValueKind == JsonValueKind.String)
-                    return cert.GetString() ?? string.Empty;
+                    return WrapAsPemIfBare(cert.GetString() ?? string.Empty, "CERTIFICATE");
             }
             catch (JsonException)
             {
                 // Not JSON — fall through and treat the whole trimmed body as the PEM.
             }
 
-            return trimmed;
+            return WrapAsPemIfBare(trimmed, "PUBLIC KEY");
+        }
+
+        private static string WrapAsPemIfBare(string value, string label)
+        {
+            if (string.IsNullOrWhiteSpace(value) || value.Contains("-----BEGIN", StringComparison.Ordinal))
+                return value;
+
+            return $"-----BEGIN {label}-----\n{value.Trim()}\n-----END {label}-----";
         }
     }
 }
