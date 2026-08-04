@@ -451,8 +451,12 @@ namespace EasyHMSAPI.Application.Services.Implementations
             request.Headers.Add("REQUEST-ID", Guid.NewGuid().ToString());
             request.Headers.Add("TIMESTAMP", DateTime.UtcNow.ToString("O"));
             request.Headers.Add("X-CM-ID", "sbx");
+            // Every X-token header table in the integrator guide shows the example value as
+            // "Bearer X-token" — i.e. the header itself needs a Bearer prefix, not just the raw
+            // token. Sending the bare token got "Invalid X-token" back on every X-token-gated call
+            // (QR code, ABHA card, ...) — this is the first time any of them were exercised for real.
             if (!string.IsNullOrWhiteSpace(xToken))
-                request.Headers.Add("X-Token", xToken);
+                request.Headers.Add("X-Token", xToken.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) ? xToken : $"Bearer {xToken}");
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(acceptHeader));
             return request;
         }
