@@ -3,6 +3,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 
@@ -11,8 +12,11 @@ namespace EasyHMSAPI.Application.Services.Implementations
     /// <summary>
     /// Fetches ABDM's RSA public certificate (PEM, from the "CertUrl" configured under "Abdm") and
     /// uses it to RSA-OAEP-SHA1-encrypt PII before it's sent to any ABHA V3 API, per the ABDM
-    /// integrator guide. The certificate is cached and only refetched on expiry or a decrypt-side
-    /// rejection (ABDM rotates it without notice).
+    /// integrator guide. Cached 6h; refetched early if the cached PEM fails to parse (unexpected
+    /// format / a transient bad response from CertUrl). Note that an actual certificate ROTATION
+    /// does NOT surface here — encrypting with a stale-but-syntactically-valid public key always
+    /// succeeds locally, the failure only shows up as an ABDM-side decrypt rejection (a non-2xx HTTP
+    /// response), which the 6h TTL bounds the blast radius of.
     /// </summary>
     [ExcludeFromCodeCoverage]
     public class AbdmEncryptionService : IAbdmEncryptionService
@@ -38,9 +42,10 @@ namespace EasyHMSAPI.Application.Services.Implementations
             {
                 return Encrypt(plainText, pem);
             }
-            catch (CryptographicException)
+            catch (Exception ex) when (ex is CryptographicException or ArgumentException or FormatException)
             {
-                // Certificate rotated without notice — refetch once and retry.
+                // The cached PEM failed to parse (unexpected format, or CertUrl briefly served a bad
+                // response) — refetch once and retry.
                 pem = await GetPublicCertPemAsync(forceRefresh: true, cancellationToken);
                 return Encrypt(plainText, pem);
             }
@@ -48,10 +53,32 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
         private static string Encrypt(string plainText, string pem)
         {
-            using var rsa = RSA.Create();
-            rsa.ImportFromPem(pem);
+            using var rsa = ImportRsaPublicKey(pem);
             var cipherBytes = rsa.Encrypt(Encoding.UTF8.GetBytes(plainText), RSAEncryptionPadding.OaepSHA1);
             return Convert.ToBase64String(cipherBytes);
+        }
+
+        /// <summary>ABDM's cert endpoint can return either a bare RSA public key PEM ("PUBLIC KEY" /
+        /// "RSA PUBLIC KEY", which RSA.ImportFromPem understands directly) or a full X.509
+        /// certificate PEM ("CERTIFICATE", which it does NOT — ImportFromPem throws for unsupported
+        /// labels). Route certificate PEMs through X509Certificate2 to pull out the usable RSA public
+        /// key first; export/re-import so the returned RSA instance's lifetime isn't tied to the
+        /// certificate's.</summary>
+        private static RSA ImportRsaPublicKey(string pem)
+        {
+            if (pem.Contains("BEGIN CERTIFICATE", StringComparison.Ordinal))
+            {
+                using var cert = X509Certificate2.CreateFromPem(pem);
+                using var certRsa = cert.GetRSAPublicKey()
+                    ?? throw new CryptographicException("ABDM certificate does not contain an RSA public key.");
+                var rsa = RSA.Create();
+                rsa.ImportParameters(certRsa.ExportParameters(false));
+                return rsa;
+            }
+
+            var bareRsa = RSA.Create();
+            bareRsa.ImportFromPem(pem);
+            return bareRsa;
         }
 
         private async Task<string> GetPublicCertPemAsync(bool forceRefresh, CancellationToken cancellationToken)

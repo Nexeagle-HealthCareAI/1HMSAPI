@@ -214,7 +214,152 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 Gender = ReadString(root, "gender"),
                 DateOfBirth = ReadString(root, "dob", "dateOfBirth"),
                 Mobile = ReadString(root, "mobile"),
-                Email = ReadString(root, "email")
+                Email = ReadString(root, "email"),
+                ProfilePhoto = ReadString(root, "profilePhoto")
+            };
+        }
+
+        public async Task<AbdmBinaryResult> GetQrCodeAsync(string sessionTxnId, CancellationToken cancellationToken)
+        {
+            using var request = await BuildRequestAsync(HttpMethod.Get, "/profile/account/qrCode", null, cancellationToken, RequireXToken(sessionTxnId), acceptHeader: "*/*");
+            return await SendBinaryAsync(request, cancellationToken);
+        }
+
+        public async Task<AbdmBinaryResult> GetAbhaCardAsync(string sessionTxnId, CancellationToken cancellationToken)
+        {
+            using var request = await BuildRequestAsync(HttpMethod.Get, "/profile/account/abha-card", null, cancellationToken, RequireXToken(sessionTxnId), acceptHeader: "*/*");
+            return await SendBinaryAsync(request, cancellationToken);
+        }
+
+        public async Task<AbdmFindAbhaSearchResult> FindAbhaSearchAsync(string value, string searchBy, CancellationToken cancellationToken)
+        {
+            var encrypted = await _encryptionService.EncryptAsync(value, cancellationToken);
+            object payload = searchBy == "aadhaar"
+                ? new { scope = new[] { "search-abha" }, aadhaar = encrypted }
+                : new { scope = new[] { "search-abha" }, mobile = encrypted };
+            var doc = await PostAsync("/profile/account/abha/search", payload, cancellationToken);
+
+            // Response is a top-level array: [{ txnId, ABHA: [{ index, ABHANumber, name, gender }] }].
+            var result = new AbdmFindAbhaSearchResult();
+            if (doc.RootElement.ValueKind != JsonValueKind.Array || doc.RootElement.GetArrayLength() == 0)
+                return result;
+
+            var entry = doc.RootElement[0];
+            result.TxnId = ReadString(entry, "txnId") ?? string.Empty;
+            if (entry.TryGetProperty("ABHA", out var abhaList) && abhaList.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var candidate in abhaList.EnumerateArray())
+                {
+                    result.Candidates.Add(new AbdmFindAbhaCandidate
+                    {
+                        Index = candidate.TryGetProperty("index", out var idx) && idx.TryGetInt32(out var i) ? i : 0,
+                        AbhaNumber = ReadString(candidate, "ABHANumber", "abhaNumber") ?? string.Empty,
+                        Name = ReadString(candidate, "name"),
+                        Gender = ReadString(candidate, "gender")
+                    });
+                }
+            }
+            return result;
+        }
+
+        public async Task<AbdmOtpTxnResult> FindAbhaGenerateOtpAsync(string txnId, int index, string searchBy, CancellationToken cancellationToken)
+        {
+            var encryptedIndex = await _encryptionService.EncryptAsync(index.ToString(), cancellationToken);
+            var verifyTag = searchBy == "aadhaar" ? "aadhaar-verify" : "mobile-verify";
+            var otpSystem = searchBy == "aadhaar" ? "aadhaar" : "abdm";
+            var payload = new
+            {
+                scope = new[] { "abha-login", "search-abha", verifyTag },
+                loginHint = "index",
+                loginId = encryptedIndex,
+                otpSystem,
+                txnId
+            };
+            var doc = await PostAsync("/profile/login/request/otp", payload, cancellationToken);
+            return ReadOtpTxnResult(doc, fallbackTxnId: txnId);
+        }
+
+        public async Task<AbdmOtpTxnResult> RequestDeactivateOtpAsync(string sessionTxnId, string abhaNumber, string otpSystem, CancellationToken cancellationToken)
+        {
+            var encrypted = await _encryptionService.EncryptAsync(abhaNumber, cancellationToken);
+            var payload = new
+            {
+                scope = new[] { "abha-profile", "de-activate" },
+                loginHint = "abha-number",
+                loginId = encrypted,
+                otpSystem
+            };
+            var doc = await PostAuthenticatedAsync("/profile/account/request/otp", payload, sessionTxnId, cancellationToken);
+            return ReadOtpTxnResult(doc);
+        }
+
+        public async Task<AbdmUpdateResult> VerifyDeactivateOtpAsync(string sessionTxnId, string deactivateTxnId, string otp, string reason, CancellationToken cancellationToken)
+        {
+            var encryptedOtp = await _encryptionService.EncryptAsync(otp, cancellationToken);
+            var payload = new
+            {
+                scope = new[] { "abha-profile", "de-activate" },
+                authData = new
+                {
+                    authMethods = new[] { "otp" },
+                    otp = new { txnId = deactivateTxnId, otpValue = encryptedOtp }
+                },
+                reasons = new[] { string.IsNullOrWhiteSpace(reason) ? "Requested by ABHA holder" : reason }
+            };
+            var doc = await PostAuthenticatedAsync("/profile/account/verify", payload, sessionTxnId, cancellationToken);
+            return new AbdmUpdateResult { Success = true, Message = ReadString(doc.RootElement, "message") ?? "ABHA number deactivated." };
+        }
+
+        public async Task<AbdmOtpTxnResult> RequestReactivateOtpAsync(string abhaNumber, CancellationToken cancellationToken)
+        {
+            var encrypted = await _encryptionService.EncryptAsync(abhaNumber, cancellationToken);
+            var payload = new
+            {
+                scope = new[] { "abha-login", "mobile-verify", "re-activate" },
+                loginHint = "abha-number",
+                loginId = encrypted,
+                otpSystem = "abdm"
+            };
+            // Unlike deactivate, a deactivated account has no live X-Token session to begin with —
+            // this is a cold-start call authenticated only by the HIP gateway token.
+            var doc = await PostAsync("/profile/account/request/otp", payload, cancellationToken);
+            return ReadOtpTxnResult(doc);
+        }
+
+        public async Task<AbdmProfileResult> VerifyReactivateOtpAsync(string txnId, string otp, CancellationToken cancellationToken)
+        {
+            var encryptedOtp = await _encryptionService.EncryptAsync(otp, cancellationToken);
+            var payload = new
+            {
+                scope = new[] { "abha-login", "mobile-verify", "re-activate" },
+                authData = new
+                {
+                    authMethods = new[] { "otp" },
+                    otp = new { txnId, otpValue = encryptedOtp }
+                }
+            };
+            // Reactivate's verify step returns the same shape as a normal login (fresh X-Token +
+            // linked accounts) since a successful reactivation also logs the holder in.
+            var doc = await PostAsync("/profile/login/verify", payload, cancellationToken);
+
+            var root = doc.RootElement;
+            if (root.TryGetProperty("token", out var tokenEl) && tokenEl.ValueKind == JsonValueKind.String)
+                CacheXToken(txnId, tokenEl.GetString());
+
+            JsonElement account = root;
+            if (root.TryGetProperty("accounts", out var accounts) && accounts.ValueKind == JsonValueKind.Array && accounts.GetArrayLength() > 0)
+                account = accounts[0];
+
+            return new AbdmProfileResult
+            {
+                TxnId = txnId,
+                AbhaNumber = ReadString(account, "ABHANumber", "abhaNumber", "healthIdNumber") ?? string.Empty,
+                AbhaAddress = ReadString(account, "preferredAbhaAddress", "healthId", "abhaAddress"),
+                FullName = ReadString(account, "name", "fullName") ?? string.Empty,
+                Gender = ReadString(account, "gender"),
+                DateOfBirth = ReadString(account, "dob", "dateOfBirth"),
+                Mobile = ReadString(account, "mobile"),
+                Email = ReadString(account, "email")
             };
         }
 
@@ -246,7 +391,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
             throw new InvalidOperationException("This ABHA session has expired — please re-verify with an OTP before making changes.");
         }
 
-        private async Task<HttpRequestMessage> BuildRequestAsync(HttpMethod method, string path, HttpContent? content, CancellationToken cancellationToken, string? xToken = null)
+        private async Task<HttpRequestMessage> BuildRequestAsync(HttpMethod method, string path, HttpContent? content, CancellationToken cancellationToken, string? xToken = null, string acceptHeader = "application/json")
         {
             var accessToken = await _gatewayService.GetAccessTokenAsync(cancellationToken);
             var request = new HttpRequestMessage(method, $"{_abhaBaseUrl}{path}") { Content = content };
@@ -256,7 +401,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
             request.Headers.Add("X-CM-ID", "sbx");
             if (!string.IsNullOrWhiteSpace(xToken))
                 request.Headers.Add("X-Token", xToken);
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(acceptHeader));
             return request;
         }
 
@@ -267,6 +412,25 @@ namespace EasyHMSAPI.Application.Services.Implementations
             if (!response.IsSuccessStatusCode)
                 throw new InvalidOperationException($"ABDM request to {request.RequestUri} failed ({(int)response.StatusCode}): {body}");
             return JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
+        }
+
+        /// <summary>Like <see cref="SendAsync"/> but for §10/§11's binary (image/PDF) responses —
+        /// reads raw bytes instead of parsing JSON, passing the response's own Content-Type through
+        /// unchanged so the caller doesn't have to guess between image/png and application/pdf.</summary>
+        private async Task<AbdmBinaryResult> SendBinaryAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var response = await _httpClient.SendAsync(request, cancellationToken);
+            var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = Encoding.UTF8.GetString(bytes);
+                throw new InvalidOperationException($"ABDM request to {request.RequestUri} failed ({(int)response.StatusCode}): {body}");
+            }
+            return new AbdmBinaryResult
+            {
+                Content = bytes,
+                ContentType = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream"
+            };
         }
 
         // ---- Response parsing ------------------------------------------------------------------

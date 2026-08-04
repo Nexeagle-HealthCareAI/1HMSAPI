@@ -243,5 +243,161 @@ namespace EasyHMSAPI.Api.Controllers
                 return StatusCode(500, new { Message = "An error occurred while updating the email." });
             }
         }
+
+        // ---- Read-only ABDM-side artifacts (§9/§10/§11) — all require the same live,
+        // freshly-OTP-verified sessionTxnId as the profile-update endpoints above. ----
+
+        [HttpGet("profile")]
+        public async Task<ActionResult<AbdmProfileResponseModel>> GetProfile([FromQuery] Guid hospitalId, [FromQuery] string sessionTxnId)
+        {
+            if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
+            try
+            {
+                var response = await _mediator.Send(new GetAbdmProfileRequestModel { HospitalId = hospitalId, SessionTxnId = sessionTxnId });
+                if (!response.Success) return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching live ABHA profile.");
+                return StatusCode(500, new { Message = "An error occurred while fetching the profile." });
+            }
+        }
+
+        [HttpGet("profile/qr-code")]
+        public async Task<IActionResult> GetQrCode([FromQuery] Guid hospitalId, [FromQuery] string sessionTxnId)
+        {
+            if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
+            try
+            {
+                var response = await _mediator.Send(new GetAbdmQrCodeRequestModel { HospitalId = hospitalId, SessionTxnId = sessionTxnId });
+                if (!response.Success || response.Content == null) return BadRequest(new { response.Message });
+                return File(response.Content, response.ContentType);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching ABHA QR code.");
+                return StatusCode(500, new { Message = "An error occurred while fetching the QR code." });
+            }
+        }
+
+        [HttpGet("profile/abha-card")]
+        public async Task<IActionResult> GetAbhaCard([FromQuery] Guid hospitalId, [FromQuery] string sessionTxnId)
+        {
+            if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
+            try
+            {
+                var response = await _mediator.Send(new GetAbdmAbhaCardRequestModel { HospitalId = hospitalId, SessionTxnId = sessionTxnId });
+                if (!response.Success || response.Content == null) return BadRequest(new { response.Message });
+                return File(response.Content, response.ContentType, "abha-card");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching ABHA card.");
+                return StatusCode(500, new { Message = "An error occurred while fetching the ABHA card." });
+            }
+        }
+
+        // ---- §7.6 Find ABHA — for a holder who has a mobile/Aadhaar but doesn't remember their
+        // exact ABHA number/address. ----
+
+        [HttpPost("find/search")]
+        public async Task<ActionResult<AbdmFindAbhaSearchResponseModel>> FindAbhaSearch([FromBody] FindAbhaSearchRequestModel request)
+        {
+            try
+            {
+                var response = await _mediator.Send(request);
+                if (!response.Success) return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error searching for ABHA.");
+                return StatusCode(500, new { Message = "An error occurred while searching for the ABHA number." });
+            }
+        }
+
+        [HttpPost("find/generate-otp")]
+        public async Task<ActionResult<AbdmOtpTxnResponseModel>> FindAbhaGenerateOtp([FromBody] FindAbhaGenerateOtpRequestModel request)
+        {
+            try
+            {
+                var response = await _mediator.Send(request);
+                if (!response.Success) return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generating Find-ABHA OTP.");
+                return StatusCode(500, new { Message = "An error occurred while requesting the OTP." });
+            }
+        }
+        // Verification reuses POST abdm/login/verify-otp — same endpoint/response shape as a normal login.
+
+        // ---- §8.4/§8.5 Deactivate / Re-activate ABHA ----
+
+        [HttpPost("profile/deactivate/generate-otp")]
+        public async Task<ActionResult<AbdmOtpTxnResponseModel>> RequestDeactivateOtp([FromBody] RequestDeactivateAbhaOtpRequestModel request)
+        {
+            try
+            {
+                var response = await _mediator.Send(request);
+                if (!response.Success) return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error requesting ABHA deactivation OTP.");
+                return StatusCode(500, new { Message = "An error occurred while requesting the OTP." });
+            }
+        }
+
+        [HttpPost("profile/deactivate/verify-otp")]
+        public async Task<ActionResult<AbdmUpdateResponseModel>> VerifyDeactivateOtp([FromBody] VerifyDeactivateAbhaOtpRequestModel request)
+        {
+            try
+            {
+                var response = await _mediator.Send(request);
+                if (!response.Success) return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deactivating ABHA.");
+                return StatusCode(500, new { Message = "An error occurred while deactivating the ABHA number." });
+            }
+        }
+
+        [HttpPost("profile/reactivate/generate-otp")]
+        public async Task<ActionResult<AbdmOtpTxnResponseModel>> RequestReactivateOtp([FromBody] RequestReactivateAbhaOtpRequestModel request)
+        {
+            try
+            {
+                var response = await _mediator.Send(request);
+                if (!response.Success) return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error requesting ABHA reactivation OTP.");
+                return StatusCode(500, new { Message = "An error occurred while requesting the OTP." });
+            }
+        }
+
+        [HttpPost("profile/reactivate/verify-otp")]
+        public async Task<ActionResult<AbdmProfileResponseModel>> VerifyReactivateOtp([FromBody] VerifyReactivateAbhaOtpRequestModel request)
+        {
+            try
+            {
+                var response = await _mediator.Send(request);
+                if (!response.Success) return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error reactivating ABHA.");
+                return StatusCode(500, new { Message = "An error occurred while reactivating the ABHA number." });
+            }
+        }
     }
 }

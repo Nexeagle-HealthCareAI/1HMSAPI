@@ -35,7 +35,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     await _context.SaveChangesAsync(cancellationToken);
                 }
 
-                return new AbdmUpdateResponseModel { Success = true, Message = "Email updated.", Email = request.NewEmail };
+                // ABDM's own record is updated regardless (that already happened above) — but if there's
+                // no local AbhaAccount row for this (HospitalId, AbhaNumber), say so explicitly instead
+                // of silently reporting a plain success that implies everything, including the local
+                // copy, is now in sync.
+                var message = account == null
+                    ? "Email updated on ABDM, but no local ABHA record was found to update at this hospital."
+                    : "Email updated.";
+                return new AbdmUpdateResponseModel { Success = true, Message = message, Email = request.NewEmail };
             }
             catch (InvalidOperationException ex)
             {

@@ -44,6 +44,8 @@ namespace EasyHMSAPI.Application.Services.Models
         public string? DateOfBirth { get; set; }
         public string? Mobile { get; set; }
         public string? Email { get; set; }
+        // Only populated by GetProfileAsync (§9 Get Profile) — base64 JPEG, as returned by ABDM.
+        public string? ProfilePhoto { get; set; }
     }
 
     /// <summary>Result of a plain (non-OTP) profile field update, e.g. email.</summary>
@@ -51,5 +53,30 @@ namespace EasyHMSAPI.Application.Services.Models
     {
         public bool Success { get; set; }
         public string? Message { get; set; }
+    }
+
+    /// <summary>Raw binary payload from a profile-scoped GET that returns an image/PDF rather than
+    /// JSON (§10 Generate QR Code, §11 Generate ABHA Card) — passed through as-is, content type and
+    /// all, rather than re-encoded.</summary>
+    public class AbdmBinaryResult
+    {
+        public byte[] Content { get; set; } = Array.Empty<byte>();
+        public string ContentType { get; set; } = "application/octet-stream";
+    }
+
+    /// <summary>One ABHA candidate returned by §7.6 Find ABHA's search step — a mobile/Aadhaar can be
+    /// linked to more than one ABHA number, so the holder picks one by Index before an OTP is sent.</summary>
+    public class AbdmFindAbhaCandidate
+    {
+        public int Index { get; set; }
+        public string AbhaNumber { get; set; } = string.Empty;
+        public string? Name { get; set; }
+        public string? Gender { get; set; }
+    }
+
+    public class AbdmFindAbhaSearchResult
+    {
+        public string TxnId { get; set; } = string.Empty;
+        public List<AbdmFindAbhaCandidate> Candidates { get; set; } = new();
     }
 }

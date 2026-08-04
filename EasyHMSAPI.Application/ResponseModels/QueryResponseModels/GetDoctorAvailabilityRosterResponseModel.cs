@@ -20,5 +20,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         // Only set when IsAvailable is false and the doctor has a TimeOff entry covering the
         // requested date (matches GetPublicDoctorAvailabilityResponseModel's Reason field).
         public string? Reason { get; set; }
+        // Manual "online now" toggle (Doctor.IsOnlineNow) — separate from IsAvailable, which is
+        // schedule-derived.
+        public bool IsOnlineNow { get; set; }
     }
 }

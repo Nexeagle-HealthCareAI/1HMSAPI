@@ -40,5 +40,34 @@ namespace EasyHMSAPI.Application.Services.Interfaces
         Task<AbdmUpdateResult> UpdateEmailAsync(string sessionTxnId, string newEmail, CancellationToken cancellationToken);
 
         Task<AbdmProfileResult> GetProfileAsync(string sessionTxnId, CancellationToken cancellationToken);
+
+        // ---- §10/§11: read-only, holder-facing artifacts, both gated by the same live session ----
+
+        Task<AbdmBinaryResult> GetQrCodeAsync(string sessionTxnId, CancellationToken cancellationToken);
+
+        Task<AbdmBinaryResult> GetAbhaCardAsync(string sessionTxnId, CancellationToken cancellationToken);
+
+        // ---- §7.6 Find ABHA — for a holder who doesn't remember their exact ABHA number/address but
+        // has the mobile or Aadhaar it's linked to. Search can surface more than one linked ABHA; the
+        // caller picks one by index, then completes the same OTP verify as a normal login
+        // (VerifyLoginOtpAsync) to actually authenticate as that account. ----
+
+        /// <param name="searchBy">"mobile" | "aadhaar".</param>
+        Task<AbdmFindAbhaSearchResult> FindAbhaSearchAsync(string value, string searchBy, CancellationToken cancellationToken);
+
+        Task<AbdmOtpTxnResult> FindAbhaGenerateOtpAsync(string txnId, int index, string searchBy, CancellationToken cancellationToken);
+
+        // ---- §8.4/§8.5: deactivate requires a live, freshly-verified session (same precondition as
+        // the profile updates above); reactivate is a cold-start flow since a deactivated account has
+        // no live session to begin with. ----
+
+        /// <param name="otpSystem">"aadhaar" (§8.4.1) | "abdm" (§8.4.2, OTP to the ABHA-linked mobile).</param>
+        Task<AbdmOtpTxnResult> RequestDeactivateOtpAsync(string sessionTxnId, string abhaNumber, string otpSystem, CancellationToken cancellationToken);
+
+        Task<AbdmUpdateResult> VerifyDeactivateOtpAsync(string sessionTxnId, string deactivateTxnId, string otp, string reason, CancellationToken cancellationToken);
+
+        Task<AbdmOtpTxnResult> RequestReactivateOtpAsync(string abhaNumber, CancellationToken cancellationToken);
+
+        Task<AbdmProfileResult> VerifyReactivateOtpAsync(string txnId, string otp, CancellationToken cancellationToken);
     }
 }

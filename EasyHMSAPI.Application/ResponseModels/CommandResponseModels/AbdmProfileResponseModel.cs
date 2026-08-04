@@ -17,5 +17,7 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public string? DateOfBirth { get; set; }
         public string? Mobile { get; set; }
         public string? Email { get; set; }
+        // Only populated when this came from GetAbdmProfileHandler (§9 Get Profile) — base64 JPEG.
+        public string? ProfilePhoto { get; set; }
     }
 }

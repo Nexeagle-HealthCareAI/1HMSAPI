@@ -46,7 +46,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             var rows = await (
                 from d in _context.Doctors
                 where doctorIds.Contains(d.DoctorID)
-                select new { d.DoctorID, d.UserID, d.PrimaryDepartmentID }
+                select new { d.DoctorID, d.UserID, d.PrimaryDepartmentID, d.IsOnlineNow }
             ).ToListAsync(cancellationToken);
 
             var userIds = rows.Select(r => r.UserID).Distinct().ToList();
@@ -100,6 +100,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     DepartmentName = r.PrimaryDepartmentID.HasValue && deptNameById.TryGetValue(r.PrimaryDepartmentID.Value, out var dn) ? dn : null,
                     IsAvailable = isAvailable,
                     Reason = reason,
+                    IsOnlineNow = r.IsOnlineNow,
                 };
             })
             .OrderBy(d => d.FullName)

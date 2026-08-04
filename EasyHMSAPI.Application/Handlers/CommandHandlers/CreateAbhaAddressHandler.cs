@@ -4,6 +4,7 @@ using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
@@ -29,21 +30,41 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             {
                 var result = await _abha.CreateAbhaAddressAsync(request.TxnId, request.AbhaAddress, cancellationToken);
 
-                var account = new AbhaAccount
+                // ABDM enrollment above has already succeeded by this point — an existing local row
+                // (retry/double-submit/re-registering the same person) must upsert rather than blindly
+                // insert, since (HospitalId, AbhaNumber) is unique. A blind insert here would throw an
+                // uncaught DbUpdateException on the duplicate and report a false failure to the caller
+                // even though ABDM enrollment succeeded (see SaveLinkedAbhaAccountHandler for the same
+                // upsert pattern on the login/link flow).
+                var account = await _context.AbhaAccount.FirstOrDefaultAsync(
+                    a => a.HospitalId == request.HospitalId && a.AbhaNumber == result.AbhaNumber, cancellationToken);
+
+                if (account != null)
                 {
-                    AbhaAccountId = Guid.NewGuid(),
-                    HospitalId = request.HospitalId,
-                    AbhaNumber = result.AbhaNumber,
-                    AbhaAddress = result.AbhaAddress,
-                    FullName = result.FullName,
-                    Gender = result.Gender,
-                    DateOfBirth = result.DateOfBirth,
-                    Mobile = result.Mobile,
-                    Source = "AadhaarEnrol",
-                    CreatedAt = DateTime.UtcNow,
-                    CreatedBy = request.LoggedInUserName
-                };
-                _context.AbhaAccount.Add(account);
+                    account.AbhaAddress = result.AbhaAddress ?? account.AbhaAddress;
+                    account.FullName = result.FullName ?? account.FullName;
+                    account.Gender = result.Gender ?? account.Gender;
+                    account.DateOfBirth = result.DateOfBirth ?? account.DateOfBirth;
+                    account.Mobile = result.Mobile ?? account.Mobile;
+                }
+                else
+                {
+                    account = new AbhaAccount
+                    {
+                        AbhaAccountId = Guid.NewGuid(),
+                        HospitalId = request.HospitalId,
+                        AbhaNumber = result.AbhaNumber,
+                        AbhaAddress = result.AbhaAddress,
+                        FullName = result.FullName,
+                        Gender = result.Gender,
+                        DateOfBirth = result.DateOfBirth,
+                        Mobile = result.Mobile,
+                        Source = "AadhaarEnrol",
+                        CreatedAt = DateTime.UtcNow,
+                        CreatedBy = request.LoggedInUserName
+                    };
+                    _context.AbhaAccount.Add(account);
+                }
                 await _context.SaveChangesAsync(cancellationToken);
 
                 return new AbdmEnrollResponseModel

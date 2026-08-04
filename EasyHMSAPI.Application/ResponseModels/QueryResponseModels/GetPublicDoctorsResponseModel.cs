@@ -55,6 +55,9 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         // GetPublicDoctorAvailabilityHandler (see DoctorAvailabilityResolver), resolved for
         // today's date and batched per page so the directory grid never needs a per-card call.
         public bool IsAvailableToday { get; set; }
+        // Manual "online now" toggle (Doctor.IsOnlineNow) — a doctor/staff-set signal, separate
+        // from IsAvailableToday's schedule-derived status. Drives a distinct "Online now" badge.
+        public bool IsOnlineNow { get; set; }
 
         // Which (publicly-listed) hospital this doctor belongs to — needed now that the
         // directory spans every opted-in hospital, not just one scoped by an API key.

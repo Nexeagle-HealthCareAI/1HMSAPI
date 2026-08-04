@@ -144,7 +144,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .Select(x => new
                 {
                     x.d.DoctorID, x.d.UserID, x.d.PrimaryDepartmentID, x.d.PrimaryMedicalSpecialityId, x.d.Qualification, x.d.ExperienceYears, x.d.Bio, x.d.LanguagesJson,
-                    x.d.IsFeatured, x.d.DiscountPercent, x.d.DiscountStartAt, x.d.DiscountEndAt, x.d.IsRegistrationVerified,
+                    x.d.IsFeatured, x.d.DiscountPercent, x.d.DiscountStartAt, x.d.DiscountEndAt, x.d.IsRegistrationVerified, x.d.IsOnlineNow,
                     x.FullName
                 })
                 .ToListAsync(cancellationToken);
@@ -294,6 +294,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     IsFeatured = r.IsFeatured,
                     IsRegistrationVerified = r.IsRegistrationVerified,
                     IsAvailableToday = isAvailableToday,
+                    IsOnlineNow = r.IsOnlineNow,
                 });
             }
 
