@@ -72,7 +72,6 @@ namespace EasyHMSAPI.Application.Services.Implementations
         public async Task<AbdmEnrollResult> VerifyAadhaarOtpAsync(string txnId, string otp, string mobile, CancellationToken cancellationToken)
         {
             var encryptedOtp = await _encryptionService.EncryptAsync(otp, cancellationToken);
-            var encryptedMobile = await _encryptionService.EncryptAsync(mobile, cancellationToken);
             var payload = new
             {
                 authData = new
@@ -80,10 +79,13 @@ namespace EasyHMSAPI.Application.Services.Implementations
                     authMethods = new[] { "otp" },
                     // "mobile" is mandatory here per the integrator guide even though it reads like an
                     // optional override — omitting it entirely got a 400 "Invalid Mobile Number" from
-                    // ABDM. If it doesn't match the Aadhaar-linked mobile, the profile's mobile comes
-                    // back null and this same number needs separate OTP verification (see
+                    // ABDM. Unlike otpValue, the guide's example shows "mobile": "{{mobile_number}}"
+                    // with no "_Encryption" suffix — sending it RSA-encrypted (like every other PII
+                    // field) also got "Invalid Mobile Number" back, so this one goes in plain. If it
+                    // doesn't match the Aadhaar-linked mobile, the profile's mobile comes back null and
+                    // this same number needs separate OTP verification (see
                     // GenerateMobileOtpAsync/VerifyMobileOtpAsync).
-                    otp = new { txnId, otpValue = encryptedOtp, mobile = encryptedMobile }
+                    otp = new { txnId, otpValue = encryptedOtp, mobile }
                 },
                 consent = new { code = "abha-enrollment", version = "1.4" }
             };
