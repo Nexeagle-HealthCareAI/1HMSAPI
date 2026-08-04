@@ -27,12 +27,15 @@ namespace EasyHMSAPI.Application.Services.Implementations
         private readonly string _clientId;
         private readonly string _clientSecret;
         private readonly string _gatewayBaseUrl;
+        private readonly string _cmId;
 
         public AbdmGatewayService(HttpClient httpClient, IMemoryCache cache, IConfiguration configuration, IHostEnvironment environment)
         {
             _httpClient = httpClient;
             _cache = cache;
             var isProd = environment.IsProduction();
+            // Per the integrator guide's session-token header table: "sbx" for Sandbox, "abdm" for Prod.
+            _cmId = isProd ? "abdm" : "sbx";
             _clientId = configuration[isProd ? "Abdm:ABDM_ClientId_Prod" : "Abdm:ABDM_ClientId_Dev"] ?? string.Empty;
             _clientSecret = configuration[isProd ? "Abdm:ABDM_ClientSecret_Prod" : "Abdm:ABDM_ClientSecret_Dev"] ?? string.Empty;
             // Confirmed against the official V3 integrator guide's session-token section — the prior
@@ -65,6 +68,12 @@ namespace EasyHMSAPI.Application.Services.Implementations
                     Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
                 };
                 request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                // REQUEST-ID/TIMESTAMP/X-CM-ID are all marked mandatory in the integrator guide's
+                // session-token header table — omitting them was causing ABDM to reject the request
+                // with a bare 401 rather than a descriptive validation error.
+                request.Headers.Add("REQUEST-ID", Guid.NewGuid().ToString());
+                request.Headers.Add("TIMESTAMP", DateTime.UtcNow.ToString("O"));
+                request.Headers.Add("X-CM-ID", _cmId);
 
                 var response = await _httpClient.SendAsync(request, cancellationToken);
                 var body = await response.Content.ReadAsStringAsync(cancellationToken);
