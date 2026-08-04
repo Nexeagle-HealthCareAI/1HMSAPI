@@ -39,8 +39,13 @@
 #                           var WHATSAPP_API_URL if the phone-number-id differs)
 #     OPENAI_API_KEY        OpenAI:ApiKey         (Voice Rx)
 #     DEEPGRAM_API_KEY      Deepgram:ApiKey       (diarized transcription)
-#     ABDM_CLIENTID_DEV     Abdm:ABDM_ClientId_Dev      (ABDM sandbox — Dev only, no Prod equivalent yet)
-#     ABDM_CLIENTSECRET_DEV Abdm:ABDM_ClientSecret_Dev
+#     ABDM_CLIENTID_DEV      Abdm:ABDM_ClientId_Dev      (ABDM sandbox — dev.abdm.gov.in)
+#     ABDM_CLIENTSECRET_DEV  Abdm:ABDM_ClientSecret_Dev
+#     ABDM_CLIENTID_PROD     Abdm:ABDM_ClientId_Prod     (ABDM production — add once NHA issues
+#     ABDM_CLIENTSECRET_PROD Abdm:ABDM_ClientSecret_Prod  production credentials; see also the
+#                           ABDM_GATEWAY_BASE_URL_PROD/ABDM_ABHA_BASE_URL_PROD vars below — ABDM
+#                           calls fail loud in Production until both the credentials and the base
+#                           URLs are set, rather than falling back to a guessed URL)
 #     S3 object storage (MinIO) — separate per environment:
 #       DEV_S3_SERVICE_URL  / DEV_S3_ACCESS_KEY  / DEV_S3_SECRET_KEY
 #       PROD_S3_SERVICE_URL / PROD_S3_ACCESS_KEY / PROD_S3_SECRET_KEY
@@ -55,6 +60,10 @@
 #                           EASYHMS_SERVICE_KEY in the CMSAPI repo's secrets.
 #     CMS_BASE_URL          Cms:BaseUrl — CMSAPI's base URL per environment (repo variable, e.g.
 #                           http://151.185.45.77:5002 for dev, http://151.185.45.67:5002 for prod)
+#     ABDM_GATEWAY_BASE_URL_PROD  Abdm:GatewayBaseUrlProd — confirm against NHA's own docs before
+#                                 setting; expected shape https://apis.abdm.gov.in/api/hiecm/gateway
+#     ABDM_ABHA_BASE_URL_PROD     Abdm:AbhaBaseUrlProd — confirm against NHA's own docs before
+#                                 setting (do not assume it mirrors the sandbox URL's path shape)
 #     INTERNAL_PROXY_SECRET Internal:ProxyForwardingSecret — lets the public-API rate limiters
 #                           (PerIpPolicy/PublicBookingPolicy/PatientAuthPolicy) see each real
 #                           visitor's IP instead of NexEagleWebsite's own container IP for every
@@ -306,6 +315,10 @@ jobs:
           WHATSAPP_API_URL: ${{ vars.WHATSAPP_API_URL || 'https://graph.facebook.com/v22.0/917702338094533/messages' }}
           OPENAI_KEY:      ${{ secrets.OPENAI_API_KEY }}
           DEEPGRAM_KEY:    ${{ secrets.DEEPGRAM_API_KEY }}
+          ABDM_CLIENT_ID:     ${{ secrets.ABDM_CLIENTID_PROD }}
+          ABDM_CLIENT_SECRET: ${{ secrets.ABDM_CLIENTSECRET_PROD }}
+          ABDM_GATEWAY_URL:   ${{ vars.ABDM_GATEWAY_BASE_URL_PROD }}
+          ABDM_ABHA_URL:      ${{ vars.ABDM_ABHA_BASE_URL_PROD }}
           INVITATION_URL:  ${{ vars.PROD_INVITATION_URL || 'http://151.185.45.67:81/user-onboarding?token=' }}
           STORAGE_PROVIDER: ${{ vars.STORAGE_PROVIDER || 'S3' }}
           S3_SERVICE_URL:  ${{ secrets.PROD_S3_SERVICE_URL }}
@@ -339,6 +352,10 @@ jobs:
           add 'WhatsApp__ApiUrl'                      "$WHATSAPP_API_URL"
           add 'OpenAI__ApiKey'                        "$OPENAI_KEY"
           add 'Deepgram__ApiKey'                      "$DEEPGRAM_KEY"
+          add 'Abdm__ABDM_ClientId_Prod'                "$ABDM_CLIENT_ID"
+          add 'Abdm__ABDM_ClientSecret_Prod'            "$ABDM_CLIENT_SECRET"
+          add 'Abdm__GatewayBaseUrlProd'                "$ABDM_GATEWAY_URL"
+          add 'Abdm__AbhaBaseUrlProd'                   "$ABDM_ABHA_URL"
           add 'Invitation__RegistrationBaseUrl'       "$INVITATION_URL"
           add 'Storage__Provider'                     "$STORAGE_PROVIDER"
           add 'Storage__S3__ServiceUrl'               "$S3_SERVICE_URL"

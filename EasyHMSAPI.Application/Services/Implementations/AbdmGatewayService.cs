@@ -1,6 +1,7 @@
 using EasyHMSAPI.Application.Services.Interfaces;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using System.Diagnostics.CodeAnalysis;
 using System.Net.Http.Headers;
 using System.Text;
@@ -10,7 +11,10 @@ namespace EasyHMSAPI.Application.Services.Implementations
 {
     /// <summary>
     /// Obtains and caches the ABDM gateway session access token (client_credentials grant) used to
-    /// authorize every call to the ABHA V3 APIs. Config comes from the "Abdm" appsettings section.
+    /// authorize every call to the ABHA V3 APIs. Config comes from the "Abdm" appsettings section —
+    /// Dev/sandbox keys and URLs have known-good defaults; Production has none, since NHA's
+    /// production ABHA base URL wasn't confirmed against the (occasionally OCR-garbled) integrator
+    /// PDF and must be set explicitly before Production can call ABDM at all.
     /// </summary>
     [ExcludeFromCodeCoverage]
     public class AbdmGatewayService : IAbdmGatewayService
@@ -24,13 +28,21 @@ namespace EasyHMSAPI.Application.Services.Implementations
         private readonly string _clientSecret;
         private readonly string _gatewayBaseUrl;
 
-        public AbdmGatewayService(HttpClient httpClient, IMemoryCache cache, IConfiguration configuration)
+        public AbdmGatewayService(HttpClient httpClient, IMemoryCache cache, IConfiguration configuration, IHostEnvironment environment)
         {
             _httpClient = httpClient;
             _cache = cache;
-            _clientId = configuration["Abdm:ABDM_ClientId_Dev"] ?? string.Empty;
-            _clientSecret = configuration["Abdm:ABDM_ClientSecret_Dev"] ?? string.Empty;
-            _gatewayBaseUrl = (configuration["Abdm:GatewayBaseUrl"] ?? "https://dev.abdm.gov.in/gateway").TrimEnd('/');
+            var isProd = environment.IsProduction();
+            _clientId = configuration[isProd ? "Abdm:ABDM_ClientId_Prod" : "Abdm:ABDM_ClientId_Dev"] ?? string.Empty;
+            _clientSecret = configuration[isProd ? "Abdm:ABDM_ClientSecret_Prod" : "Abdm:ABDM_ClientSecret_Dev"] ?? string.Empty;
+            // Confirmed against the official V3 integrator guide's session-token section — the prior
+            // "/gateway/v0.5/sessions" default was a stale pre-V3 path that could never have succeeded.
+            var configuredUrl = configuration[isProd ? "Abdm:GatewayBaseUrlProd" : "Abdm:GatewayBaseUrl"];
+            _gatewayBaseUrl = !string.IsNullOrWhiteSpace(configuredUrl)
+                ? configuredUrl.TrimEnd('/')
+                : !isProd
+                    ? "https://dev.abdm.gov.in/api/hiecm/gateway"
+                    : throw new InvalidOperationException("Abdm:GatewayBaseUrlProd must be configured before ABDM can be used in Production.");
         }
 
         public async Task<string> GetAccessTokenAsync(CancellationToken cancellationToken)
@@ -48,7 +60,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
                     throw new InvalidOperationException("ABDM is not configured (missing Client ID/Secret).");
 
                 var payload = new { clientId = _clientId, clientSecret = _clientSecret, grantType = "client_credentials" };
-                using var request = new HttpRequestMessage(HttpMethod.Post, $"{_gatewayBaseUrl}/v0.5/sessions")
+                using var request = new HttpRequestMessage(HttpMethod.Post, $"{_gatewayBaseUrl}/v3/sessions")
                 {
                     Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
                 };

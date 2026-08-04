@@ -2,6 +2,7 @@ using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Application.Services.Models;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using System.Diagnostics.CodeAnalysis;
 using System.Net.Http.Headers;
 using System.Text;
@@ -32,13 +33,25 @@ namespace EasyHMSAPI.Application.Services.Implementations
             IAbdmGatewayService gatewayService,
             IAbdmEncryptionService encryptionService,
             IMemoryCache cache,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IHostEnvironment environment)
         {
             _httpClient = httpClient;
             _gatewayService = gatewayService;
             _encryptionService = encryptionService;
             _cache = cache;
-            _abhaBaseUrl = (configuration["Abdm:AbhaBaseUrl"] ?? "https://abhasbx.abdm.gov.in/abha/api/v3").TrimEnd('/');
+            var isProd = environment.IsProduction();
+            // Sandbox default is confirmed against the V3 integrator guide's literal endpoint
+            // examples. Production has no default — the PDF's stated prod ABHA base URL
+            // ("https://abha.abdm.gov.in/api/abha") has a path shape inconsistent with the sandbox
+            // one and this document has had other OCR/typo issues, so it must be confirmed and set
+            // explicitly rather than guessed.
+            var configuredUrl = configuration[isProd ? "Abdm:AbhaBaseUrlProd" : "Abdm:AbhaBaseUrl"];
+            _abhaBaseUrl = !string.IsNullOrWhiteSpace(configuredUrl)
+                ? configuredUrl.TrimEnd('/')
+                : !isProd
+                    ? "https://abhasbx.abdm.gov.in/abha/api/v3"
+                    : throw new InvalidOperationException("Abdm:AbhaBaseUrlProd must be configured before ABDM can be used in Production.");
         }
 
         public async Task<AbdmOtpTxnResult> GenerateAadhaarOtpAsync(string aadhaarNumber, CancellationToken cancellationToken)
