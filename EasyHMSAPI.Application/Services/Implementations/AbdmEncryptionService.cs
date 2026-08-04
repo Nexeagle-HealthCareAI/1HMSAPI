@@ -3,6 +3,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using System.Diagnostics.CodeAnalysis;
+using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -26,12 +27,14 @@ namespace EasyHMSAPI.Application.Services.Implementations
         private static readonly SemaphoreSlim FetchLock = new(1, 1);
 
         private readonly HttpClient _httpClient;
+        private readonly IAbdmGatewayService _gatewayService;
         private readonly IMemoryCache _cache;
         private readonly string _certUrl;
 
-        public AbdmEncryptionService(HttpClient httpClient, IMemoryCache cache, IConfiguration configuration, IHostEnvironment environment)
+        public AbdmEncryptionService(HttpClient httpClient, IAbdmGatewayService gatewayService, IMemoryCache cache, IConfiguration configuration, IHostEnvironment environment)
         {
             _httpClient = httpClient;
+            _gatewayService = gatewayService;
             _cache = cache;
             var isProd = environment.IsProduction();
             // "healthidsbx.abdm.gov.in/api/v1/auth/cert" was a stale pre-ABHA-rebrand (Health ID era)
@@ -102,7 +105,17 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 if (!forceRefresh && _cache.TryGetValue(CacheKey, out string? pemAfterLock) && !string.IsNullOrWhiteSpace(pemAfterLock))
                     return pemAfterLock;
 
-                using var response = await _httpClient.GetAsync(_certUrl, cancellationToken);
+                // Despite the PDF documenting this as a plain unauthenticated GET, the sandbox
+                // rejects it with 401 without the same gateway Bearer token every other ABDM call
+                // carries — matching AbdmAbhaService.BuildRequestAsync's headers here too.
+                var accessToken = await _gatewayService.GetAccessTokenAsync(cancellationToken);
+                using var request = new HttpRequestMessage(HttpMethod.Get, _certUrl);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                request.Headers.Add("REQUEST-ID", Guid.NewGuid().ToString());
+                request.Headers.Add("TIMESTAMP", DateTime.UtcNow.ToString("O"));
+                request.Headers.Add("X-CM-ID", "sbx");
+
+                using var response = await _httpClient.SendAsync(request, cancellationToken);
                 var body = await response.Content.ReadAsStringAsync(cancellationToken);
                 if (!response.IsSuccessStatusCode)
                     throw new InvalidOperationException($"Failed to fetch ABDM public certificate ({(int)response.StatusCode}).");
