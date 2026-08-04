@@ -31,7 +31,10 @@ namespace EasyHMSAPI.Application.Services.Interfaces
         /// <param name="otpSystem">"abdm" (ABHA-linked mobile) | "aadhaar" (UIDAI Aadhaar OTP).</param>
         Task<AbdmOtpTxnResult> RequestLoginOtpAsync(string loginId, string loginHint, string otpSystem, CancellationToken cancellationToken);
 
-        Task<AbdmProfileResult> VerifyLoginOtpAsync(string txnId, string otp, CancellationToken cancellationToken);
+        /// <param name="loginHint">Must match the value passed to RequestLoginOtpAsync for this
+        /// txnId — determines the second scope element ("aadhaar-verify" vs "mobile-verify"), which
+        /// ABDM validates strictly (a mismatch is rejected as "Invalid Scope").</param>
+        Task<AbdmProfileResult> VerifyLoginOtpAsync(string txnId, string otp, string loginHint, CancellationToken cancellationToken);
 
         // ---- Profile updates — require a freshly-verified session (a TxnId from
         // VerifyLoginOtpAsync/VerifyAadhaarOtpAsync/VerifyMobileOtpAsync whose cached X-Token is

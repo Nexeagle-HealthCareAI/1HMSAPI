@@ -10,5 +10,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public Guid HospitalId { get; set; }
         public string TxnId { get; set; } = string.Empty;
         public string Otp { get; set; } = string.Empty;
+        /// <summary>Must match the loginHint used to request this OTP — "mobile" | "aadhaar" |
+        /// "abha-number". Determines ABDM's expected verify scope.</summary>
+        public string LoginHint { get; set; } = "mobile";
     }
 }

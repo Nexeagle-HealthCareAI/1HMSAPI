@@ -159,12 +159,14 @@ namespace EasyHMSAPI.Application.Services.Implementations
             return ReadOtpTxnResult(doc);
         }
 
-        public async Task<AbdmProfileResult> VerifyLoginOtpAsync(string txnId, string otp, CancellationToken cancellationToken)
+        public async Task<AbdmProfileResult> VerifyLoginOtpAsync(string txnId, string otp, string loginHint, CancellationToken cancellationToken)
         {
             var encryptedOtp = await _encryptionService.EncryptAsync(otp, cancellationToken);
             var payload = new
             {
-                scope = new[] { "abha-login" },
+                // Must match the scope used in RequestLoginOtpAsync for this txnId — sending just
+                // ["abha-login"] got "Invalid Scope" back from ABDM.
+                scope = new[] { "abha-login", loginHint == "aadhaar" ? "aadhaar-verify" : "mobile-verify" },
                 authData = new
                 {
                     authMethods = new[] { "otp" },

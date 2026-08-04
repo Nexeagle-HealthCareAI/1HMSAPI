@@ -21,7 +21,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
             try
             {
-                var result = await _abha.VerifyLoginOtpAsync(request.TxnId, request.Otp, cancellationToken);
+                var result = await _abha.VerifyLoginOtpAsync(request.TxnId, request.Otp, request.LoginHint, cancellationToken);
                 return new AbdmProfileResponseModel
                 {
                     Success = true,
