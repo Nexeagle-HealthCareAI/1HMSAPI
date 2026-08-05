@@ -18,5 +18,9 @@ namespace EasyHMSAPI.Domain.Entities
         public string? SideEffects { get; set; }
         public Decimal? PriceApprox { get; set; }
         public DateTime CreatedOn { get; set; }
+        public string? PackSize { get; set; }
+        public bool? RequiresPrescription { get; set; }
+        public string? PrescriptionFormat { get; set; }
+        public string? SourceKey { get; set; }
     }
 }

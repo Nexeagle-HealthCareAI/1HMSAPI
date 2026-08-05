@@ -102,7 +102,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         Strength = x.Strength,
                         UsageDescription = x.UsageDescription,
                         SideEffects = x.SideEffects,
-                        Price = x.PriceApprox
+                        Price = x.PriceApprox,
+                        PrescriptionFormat = x.PrescriptionFormat
                     })
                     .ToListAsync(cancellationToken);
 

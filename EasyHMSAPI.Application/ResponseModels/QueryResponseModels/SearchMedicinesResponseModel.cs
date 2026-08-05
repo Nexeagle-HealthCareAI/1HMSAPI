@@ -40,5 +40,6 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? UsageDescription { get; set; }
         public string? SideEffects { get; set; }
         public Decimal? Price { get; set; }
+        public string? PrescriptionFormat { get; set; }
     }
 }
