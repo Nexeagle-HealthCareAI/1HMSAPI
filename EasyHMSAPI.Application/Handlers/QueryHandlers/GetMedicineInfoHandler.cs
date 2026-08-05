@@ -17,11 +17,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
         private readonly AppDbContext _dbContext;
         private readonly IRxNormService _rxNormService;
+        private readonly IDrugLabelService _drugLabelService;
 
-        public GetMedicineInfoHandler(AppDbContext dbContext, IRxNormService rxNormService)
+        public GetMedicineInfoHandler(AppDbContext dbContext, IRxNormService rxNormService, IDrugLabelService drugLabelService)
         {
             _dbContext = dbContext;
             _rxNormService = rxNormService;
+            _drugLabelService = drugLabelService;
         }
 
         public async Task<GetMedicineInfoResponseModel> Handle(GetMedicineInfoRequestModel request, CancellationToken cancellationToken)
@@ -91,7 +93,23 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             {
                 // RxNorm being slow/unreachable shouldn't fail the whole request - just report
                 // this one ingredient as not found and let a later call retry (nothing is cached).
-                return new IngredientInfoDataModel { IngredientName = ingredientName, Found = false };
+                lookup = new RxNormLookupResult { Found = false };
+            }
+
+            // openFDA is US-label data - search under the RxNorm-resolved US name when we have
+            // one (more likely to hit), otherwise fall back to the raw ingredient name.
+            var labelSearchName = lookup.Found && !string.IsNullOrWhiteSpace(lookup.DisplayName)
+                ? lookup.DisplayName
+                : ingredientName;
+
+            DrugLabelLookupResult label;
+            try
+            {
+                label = await _drugLabelService.LookupLabelAsync(labelSearchName, cancellationToken);
+            }
+            catch (Exception)
+            {
+                label = new DrugLabelLookupResult { Found = false };
             }
 
             var entity = cached ?? new RxNormIngredientCache { IngredientName = cacheKey };
@@ -99,6 +117,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             entity.RxCui = lookup.RxCui;
             entity.DisplayName = lookup.DisplayName;
             entity.RelatedFormsJson = JsonSerializer.Serialize(lookup.AvailableForms);
+            entity.IndicationsText = label.IndicationsAndUsage;
+            entity.AdverseReactionsText = label.AdverseReactions;
             entity.FetchedAtUtc = DateTime.UtcNow;
 
             if (cached == null)
@@ -113,6 +133,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 RxCui = lookup.RxCui,
                 DisplayName = lookup.DisplayName,
                 AvailableForms = lookup.AvailableForms,
+                Usage = label.IndicationsAndUsage,
+                SideEffects = label.AdverseReactions,
             };
         }
 
@@ -127,6 +149,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 AvailableForms = string.IsNullOrWhiteSpace(cached.RelatedFormsJson)
                     ? new List<string>()
                     : JsonSerializer.Deserialize<List<string>>(cached.RelatedFormsJson) ?? new List<string>(),
+                Usage = cached.IndicationsText,
+                SideEffects = cached.AdverseReactionsText,
             };
         }
     }

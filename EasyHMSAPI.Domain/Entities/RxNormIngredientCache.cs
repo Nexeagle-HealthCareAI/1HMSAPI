@@ -13,5 +13,7 @@ namespace EasyHMSAPI.Domain.Entities
         public string? RelatedFormsJson { get; set; }
         public bool Found { get; set; }
         public DateTime FetchedAtUtc { get; set; }
+        public string? IndicationsText { get; set; }
+        public string? AdverseReactionsText { get; set; }
     }
 }

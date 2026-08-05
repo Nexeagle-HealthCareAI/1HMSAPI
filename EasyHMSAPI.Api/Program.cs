@@ -186,6 +186,14 @@ builder.Services.AddHttpClient<EasyHMSAPI.Application.Services.Interfaces.IRxNor
     client.Timeout = TimeSpan.FromSeconds(10);
 });
 
+// openFDA Drug Label API: free, unauthenticated FDA API used for usage/side-effect text that
+// neither the 1mg import nor RxNorm carries. Fixed public base URL, no per-environment config.
+builder.Services.AddHttpClient<EasyHMSAPI.Application.Services.Interfaces.IDrugLabelService, EasyHMSAPI.Application.Services.Implementations.OpenFdaLabelService>(client =>
+{
+    client.BaseAddress = new Uri("https://api.fda.gov/");
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
+
 // ------------------------------------------------------------
 // Rate Limiting
 // ------------------------------------------------------------

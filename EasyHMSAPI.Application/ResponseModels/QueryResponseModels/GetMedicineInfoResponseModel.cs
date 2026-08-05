@@ -19,5 +19,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? RxCui { get; set; }
         public string? DisplayName { get; set; }
         public List<string> AvailableForms { get; set; } = new();
+        public string? Usage { get; set; }
+        public string? SideEffects { get; set; }
     }
 }
