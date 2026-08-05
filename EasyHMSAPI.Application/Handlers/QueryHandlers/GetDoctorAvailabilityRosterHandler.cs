@@ -89,8 +89,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 var doctorTimeOffs = timeOffsByDoctor.TryGetValue(r.DoctorID, out var to) ? to : Array.Empty<DoctorTimeOff>();
                 var doctorOverrides = overridesByDoctor.TryGetValue(r.DoctorID, out var ov) ? ov : Array.Empty<DoctorShiftOverride>();
                 var isAvailable = DoctorAvailabilityResolver.IsAvailable(targetDate, doctorTimeOffs, doctorOverrides, activeTemplates);
-                var reason = !isAvailable
-                    ? doctorTimeOffs.OrderByDescending(to => to.CreatedAt).FirstOrDefault()?.Reason
+                var activeTimeOff = !isAvailable
+                    ? doctorTimeOffs.OrderByDescending(to => to.CreatedAt).FirstOrDefault()
                     : null;
 
                 return new DoctorAvailabilityRosterItem
@@ -99,7 +99,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     FullName = nameLookup.TryGetValue(r.UserID, out var n) ? n : null,
                     DepartmentName = r.PrimaryDepartmentID.HasValue && deptNameById.TryGetValue(r.PrimaryDepartmentID.Value, out var dn) ? dn : null,
                     IsAvailable = isAvailable,
-                    Reason = reason,
+                    Reason = activeTimeOff?.Reason,
+                    TimeOffId = activeTimeOff?.TimeOffID,
+                    TimeOffFromDate = activeTimeOff?.FromDate,
+                    TimeOffToDate = activeTimeOff?.ToDate,
                     IsOnlineNow = r.IsOnlineNow,
                 };
             })
