@@ -63,6 +63,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<LookupPersonal> LookupPersonals { get; set; }
         public DbSet<DoctorPreferredMedicine> DoctorPreferredMedicines { get; set; }
         public DbSet<MedicineMaster> MedicineMaster { get; set; }
+        public DbSet<RxNormIngredientCache> RxNormIngredientCache { get; set; }
         public DbSet<User> Users { get; set; }
         public DbSet<UserAuth> UserAuths { get; set; }
         public DbSet<PublicPatientAuth> PublicPatientAuths { get; set; }

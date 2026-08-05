@@ -9,6 +9,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 {
     public class SearchMedicinesHandler : IRequestHandler<SearchMedicinesRequestModel, SearchMedicinesResponseModel>
     {
+        private const int MaxPersonalResults = 15;
+        private const int MaxMasterResults = 25;
+
         private readonly AppDbContext _dbContext;
         private readonly IDoctorValidationHelper _doctorValidationHelper;
 
@@ -59,9 +62,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 var personalMedicines = await _dbContext.DoctorPreferredMedicines
                     .Where(x => x.HospitalId == request.HospitalId
                                 && x.DoctorId == request.DoctorId
-                                && ((x.MedicineName != null && x.MedicineName.Contains(searchTextLower)) 
+                                && ((x.MedicineName != null && x.MedicineName.Contains(searchTextLower))
                                 || (x.BrandName != null && x.BrandName.Contains(searchTextLower))
+                                || (x.GenericName != null && x.GenericName.Contains(searchTextLower))
                                 ))
+                    .OrderByDescending(x => x.MedicineName != null && x.MedicineName.StartsWith(searchTextLower))
+                    .ThenBy(x => x.MedicineName)
+                    .Take(MaxPersonalResults)
                     .Select(x => new PersonalMedicineDataModel
                     {
                         MedicineName = x.MedicineName,
@@ -77,11 +84,16 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     .ToListAsync(cancellationToken);
 
                 var masterMedicines = await _dbContext.MedicineMaster
-                    .Where(x => (x.MedicineName != null && x.MedicineName.Contains(searchTextLower)
-                                || x.BrandName != null && x.BrandName.Contains(searchTextLower)
-                                ))
+                    .Where(x => (x.MedicineName != null && x.MedicineName.Contains(searchTextLower))
+                                || (x.BrandName != null && x.BrandName.Contains(searchTextLower))
+                                || (x.GenericName != null && x.GenericName.Contains(searchTextLower))
+                                )
+                    .OrderByDescending(x => x.MedicineName != null && x.MedicineName.StartsWith(searchTextLower))
+                    .ThenBy(x => x.MedicineName)
+                    .Take(MaxMasterResults)
                     .Select(x => new MasterMedicineDataModel
                     {
+                        MedicineId = x.MedicineId,
                         MedicineName = x.MedicineName,
                         GenericName = x.GenericName,
                         BrandName = x.BrandName,
