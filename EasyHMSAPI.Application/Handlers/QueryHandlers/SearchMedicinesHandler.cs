@@ -87,8 +87,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     .Where(x => (x.MedicineName != null && x.MedicineName.Contains(searchTextLower))
                                 || (x.BrandName != null && x.BrandName.Contains(searchTextLower))
                                 || (x.GenericName != null && x.GenericName.Contains(searchTextLower))
+                                || (x.PrescriptionFormat != null && x.PrescriptionFormat.Contains(searchTextLower))
                                 )
-                    .OrderByDescending(x => x.MedicineName != null && x.MedicineName.StartsWith(searchTextLower))
+                    // PrescriptionFormat ("Tab Dintor 20mg") is what the dropdown actually shows, so a
+                    // doctor typing that shorthand (or just "Tab"/"Syp"/"Cap" first, matching habit) needs
+                    // to match/rank here too, not just against the raw catalog MedicineName.
+                    .OrderByDescending(x => (x.MedicineName != null && x.MedicineName.StartsWith(searchTextLower))
+                                          || (x.PrescriptionFormat != null && x.PrescriptionFormat.StartsWith(searchTextLower)))
                     .ThenBy(x => x.MedicineName)
                     .Take(MaxMasterResults)
                     .Select(x => new MasterMedicineDataModel
