@@ -118,6 +118,24 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        [HttpPut("details")]
+        public async Task<ActionResult<UpdateAdmissionReferralDetailsResponseModel>> UpdateAdmissionReferralDetails([FromBody] UpdateAdmissionReferralDetailsRequestModel request)
+        {
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in UpdateAdmissionReferralDetails for referralId: {ReferralId}", request.ReferralId);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
         [HttpPut("status")]
         public async Task<ActionResult<UpdateAdmissionReferralStatusResponseModel>> UpdateAdmissionReferralStatus([FromBody] UpdateAdmissionReferralStatusRequestModel request)
         {
