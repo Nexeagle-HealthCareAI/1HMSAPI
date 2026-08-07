@@ -48,6 +48,13 @@ namespace EasyHMSAPI.Data.Constants
             public const string Replaced = "REPLACED";
         }
 
+        /// <summary>NurseShiftAssignment.StatusCode — span-row roster entry lifecycle.</summary>
+        public static class NurseAssignmentStatus
+        {
+            public const string Active = "ACTIVE";
+            public const string Released = "RELEASED";
+        }
+
         /// <summary>Admission.ReferralSource — same soft-validated posture as ReferringFacilityType.
         /// HOSPITAL is intentionally excluded from AdmissionReferrerAssignment's audit trail (see that
         /// entity's doc comment) but stays a valid Admission.ReferralSource value.</summary>
