@@ -95,6 +95,37 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // "My patients": every active admission on a ward this nurse (or the one specified) is
+        // currently rostered to, with last vitals and MAR due/overdue folded in. nurseUserId
+        // defaults to the caller so the station works with zero query params for the common case.
+        [HttpGet("summary")]
+        public async Task<ActionResult<GetNursingStationSummaryResponseModel>> GetSummary(
+            [FromQuery] Guid hospitalId, [FromQuery] Guid? nurseUserId, [FromQuery] string? wardCode, [FromQuery] string? shiftCode)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var request = new GetNursingStationSummaryRequestModel
+                {
+                    HospitalId = hospitalId,
+                    NurseUserId = nurseUserId ?? UserContextHelper.GetUserId(HttpContext.User),
+                    WardCode = wardCode,
+                    ShiftCode = shiftCode,
+                };
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetSummary for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
         [HttpGet("nurses")]
         public async Task<ActionResult<GetHospitalNursesResponseModel>> GetNurses([FromQuery] Guid hospitalId)
         {
