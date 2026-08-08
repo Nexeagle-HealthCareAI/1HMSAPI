@@ -68,6 +68,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .Select(g => g.OrderByDescending(x => x.ScoredAt).First())
                 .ToDictionaryAsync(s => s.AdmissionId, cancellationToken);
 
+            // Latest ventilator settings -- a real record here wins over the SofaScore proxy below.
+            var latestVentilator = await _context.VentilatorSettings
+                .Where(v => admissionIds.Contains(v.AdmissionId))
+                .GroupBy(v => v.AdmissionId)
+                .Select(g => g.OrderByDescending(x => x.ScoredAt).First())
+                .ToDictionaryAsync(v => v.AdmissionId, cancellationToken);
+
             // Latest Early Warning Score
             var latestEws = await _context.EarlyWarningScore
                 .Where(s => admissionIds.Contains(s.AdmissionId))
@@ -176,7 +183,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     IcuLevel = levelOfCare?.Level,
                     ApacheScore = apache?.TotalScore,
                     SofaScore = sofa?.TotalScore,
-                    OnVentilator = sofa?.OnRespiratorySupport ?? false,
+                    // A real ventilator record wins; the SOFA checkbox is only a fallback proxy
+                    // for admissions that have never had a ventilator setting recorded.
+                    OnVentilator = latestVentilator.ContainsKey(a.AdmissionId) || (sofa?.OnRespiratorySupport ?? false),
                     PrimaryDiagnosis = a.Diagnosis,
                     EwsScore = ews?.TotalScore,
                     EwsRiskBand = ews?.RiskBand,

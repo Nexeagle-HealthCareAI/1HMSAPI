@@ -197,5 +197,83 @@ namespace EasyHMSAPI.Api.Controllers
                 return StatusCode(500, new { Message = "An error occurred while fetching SOFA score history." });
             }
         }
+
+        [HttpPost("ventilator")]
+        public async Task<ActionResult<RecordVentilatorSettingsResponseModel>> RecordVentilatorSettings([FromBody] RecordVentilatorSettingsRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and admissionId are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in RecordVentilatorSettings for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred while recording ventilator settings." });
+            }
+        }
+
+        [HttpGet("ventilator/history")]
+        public async Task<ActionResult<GetVentilatorSettingsHistoryResponseModel>> GetVentilatorHistory([FromQuery] Guid hospitalId, [FromQuery] Guid admissionId)
+        {
+            if (hospitalId == Guid.Empty || admissionId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and admissionId are required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetVentilatorSettingsHistoryRequestModel { HospitalId = hospitalId, AdmissionId = admissionId });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetVentilatorHistory for admissionId: {AdmissionId}", admissionId);
+                return StatusCode(500, new { Message = "An error occurred while fetching ventilator settings history." });
+            }
+        }
+
+        [HttpPost("weaning")]
+        public async Task<ActionResult<RecordWeaningAssessmentResponseModel>> RecordWeaningAssessment([FromBody] RecordWeaningAssessmentRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and admissionId are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in RecordWeaningAssessment for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred while recording the weaning assessment." });
+            }
+        }
+
+        [HttpGet("weaning/history")]
+        public async Task<ActionResult<GetWeaningAssessmentHistoryResponseModel>> GetWeaningHistory([FromQuery] Guid hospitalId, [FromQuery] Guid admissionId)
+        {
+            if (hospitalId == Guid.Empty || admissionId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and admissionId are required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetWeaningAssessmentHistoryRequestModel { HospitalId = hospitalId, AdmissionId = admissionId });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetWeaningHistory for admissionId: {AdmissionId}", admissionId);
+                return StatusCode(500, new { Message = "An error occurred while fetching weaning assessment history." });
+            }
+        }
     }
 }

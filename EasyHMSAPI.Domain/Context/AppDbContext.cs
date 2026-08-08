@@ -199,6 +199,8 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<IcuLevelOfCare> IcuLevelOfCare { get; set; }
         public DbSet<ApacheIIScore> ApacheIIScore { get; set; }
         public DbSet<SofaScore> SofaScore { get; set; }
+        public DbSet<VentilatorSettings> VentilatorSettings { get; set; }
+        public DbSet<WeaningAssessment> WeaningAssessment { get; set; }
         public DbSet<EarlyWarningScore> EarlyWarningScore { get; set; }
         public DbSet<RapidResponseActivation> RapidResponseActivation { get; set; }
         public DbSet<DeviceAssignment> DeviceAssignment { get; set; }
@@ -1580,6 +1582,29 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(s => s.ScoredAt).HasColumnType("datetime2(3)");
                 entity.Property(s => s.CreatedAt).HasColumnType("datetime2(3)");
                 entity.Property(s => s.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<VentilatorSettings>(entity =>
+            {
+                entity.ToTable("VentilatorSettings");
+                entity.HasKey(v => v.VentilatorSettingsId);
+                entity.Property(v => v.FiO2Percent).HasPrecision(5, 2);
+                entity.Property(v => v.PeepCmH2o).HasPrecision(5, 2);
+                entity.Property(v => v.TidalVolumeMl).HasPrecision(7, 2);
+                entity.Property(v => v.PeakInspiratoryPressure).HasPrecision(5, 2);
+                entity.Property(v => v.PlateauPressure).HasPrecision(5, 2);
+                entity.Property(v => v.ScoredAt).HasColumnType("datetime2(3)");
+                entity.Property(v => v.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(v => v.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<WeaningAssessment>(entity =>
+            {
+                entity.ToTable("WeaningAssessment");
+                entity.HasKey(w => w.WeaningAssessmentId);
+                entity.Property(w => w.AssessedAt).HasColumnType("datetime2(3)");
+                entity.Property(w => w.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(w => w.RowVersion).IsRowVersion();
             });
 
             modelBuilder.Entity<EarlyWarningScore>(entity =>
