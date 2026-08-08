@@ -9,6 +9,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 {
     public class GetIcuBoardHandler : IRequestHandler<GetIcuBoardRequestModel, GetIcuBoardResponseModel>
     {
+        private static readonly TimeSpan IstOffset = TimeSpan.FromHours(5.5);
+
         private readonly AppDbContext _context;
 
         public GetIcuBoardHandler(AppDbContext context)
@@ -73,6 +75,42 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .Select(g => g.OrderByDescending(x => x.ScoredAt).First())
                 .ToDictionaryAsync(s => s.AdmissionId, cancellationToken);
 
+            // Nurse roster per ward, ward-level grain (no per-bed assignment exists) -- same
+            // NurseShiftAssignment/UserProfiles two-step join GetNursingStationSummaryHandler uses.
+            var todayIst = (DateTime.UtcNow + IstOffset).Date;
+            var wardCodes = beds.Values.Where(b => b.WardCode != null).Select(b => b.WardCode!).Distinct().ToList();
+            var nurseNamesByWard = new Dictionary<string, List<string>>();
+            if (wardCodes.Count > 0)
+            {
+                var roster = await _context.NurseShiftAssignment
+                    .Where(n => n.HospitalId == request.HospitalId
+                        && wardCodes.Contains(n.WardCode)
+                        && n.StatusCode == IpdConstants.NurseAssignmentStatus.Active
+                        && (n.ShiftDate == null || n.ShiftDate == todayIst))
+                    .ToListAsync(cancellationToken);
+
+                var nurseUserIds = roster.Select(r => r.NurseUserId).Distinct().ToList();
+                var nurseProfiles = await _context.UserProfiles
+                    .Where(up => nurseUserIds.Contains(up.UserID))
+                    .OrderByDescending(up => up.UpdatedAt)
+                    .ToListAsync(cancellationToken);
+                var nameByUser = nurseProfiles.GroupBy(up => up.UserID).ToDictionary(g => g.Key, g => g.First().FullName);
+
+                nurseNamesByWard = roster
+                    .GroupBy(r => r.WardCode)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g.Select(r => nameByUser.TryGetValue(r.NurseUserId, out var n) ? n : null).Where(n => !string.IsNullOrWhiteSpace(n)).Select(n => n!).Distinct().ToList());
+            }
+
+            // Latest vitals within the last 4h -- anything older is already "stale" for ICU purposes.
+            var vitalsSince = DateTime.UtcNow.AddHours(-4);
+            var vitalRows = await _context.VitalReading
+                .Where(v => v.HospitalId == request.HospitalId && admissionIds.Contains(v.AdmissionId) && v.RecordedAt >= vitalsSince)
+                .OrderByDescending(v => v.RecordedAt)
+                .ToListAsync(cancellationToken);
+            var latestVitalByAdmission = vitalRows.GroupBy(v => v.AdmissionId).ToDictionary(g => g.Key, g => g.First());
+
             // Admissions with a currently-open Rapid Response activation
             var openRrtAdmissionIds = (await _context.RapidResponseActivation
                     .Where(r => admissionIds.Contains(r.AdmissionId) && r.ResolvedAt == null)
@@ -114,7 +152,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 if (activeBed != null) beds.TryGetValue(activeBed.BedId, out bed);
                 
                 // Determine if they are an ICU patient
-                var isIcuWard = bed != null && (bed.WardType?.Contains("ICU") == true || bed.WardType?.Contains("CCU") == true);
+                var isIcuWard = IpdConstants.WardType.IsIcuFamily(bed?.WardType);
                 var hasIcuLevel = levelOfCare != null;
                 
                 if (!isIcuWard && !hasIcuLevel) continue; // Skip non-ICU patients
@@ -125,6 +163,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 latestApache.TryGetValue(a.AdmissionId, out var apache);
                 latestSofa.TryGetValue(a.AdmissionId, out var sofa);
                 latestEws.TryGetValue(a.AdmissionId, out var ews);
+                latestVitalByAdmission.TryGetValue(a.AdmissionId, out var vital);
+                var nurseNames = bed?.WardCode != null && nurseNamesByWard.TryGetValue(bed.WardCode, out var names) ? names : new List<string>();
 
                 icuCases.Add(new IcuBoardCaseDataModel
                 {
@@ -137,12 +177,19 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     ApacheScore = apache?.TotalScore,
                     SofaScore = sofa?.TotalScore,
                     OnVentilator = sofa?.OnRespiratorySupport ?? false,
-                    PrimaryDiagnosis = null, // Admission doesn't have ProvisionalDiagnosis in EasyHMS
+                    PrimaryDiagnosis = a.Diagnosis,
                     EwsScore = ews?.TotalScore,
                     EwsRiskBand = ews?.RiskBand,
                     HasOpenRapidResponse = openRrtAdmissionIds.Contains(a.AdmissionId),
                     ActiveDeviceCount = activeDevices.Count(d => d.AdmissionId == a.AdmissionId),
                     HasOverdueBundleCheck = overdueAdmissionIds.Contains(a.AdmissionId),
+                    NurseNames = nurseNames,
+                    LastVitalAt = vital?.RecordedAt,
+                    LastPulse = vital?.Pulse,
+                    LastSystolicBP = vital?.SystolicBP,
+                    LastDiastolicBP = vital?.DiastolicBP,
+                    LastTemperature = vital?.Temperature,
+                    LastSpO2 = vital?.SpO2,
                 });
             }
             

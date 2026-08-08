@@ -26,5 +26,17 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public bool HasOpenRapidResponse { get; set; }
         public int ActiveDeviceCount { get; set; }
         public bool HasOverdueBundleCheck { get; set; }
+
+        // Every nurse currently rostered to this patient's ward (ward-level grain -- there is no
+        // per-bed nurse assignment in this system). Empty when nobody is rostered.
+        public List<string> NurseNames { get; set; } = new();
+
+        // Raw values, not pre-formatted -- the frontend already has its own age/staleness formatting.
+        public DateTime? LastVitalAt { get; set; }
+        public int? LastPulse { get; set; }
+        public int? LastSystolicBP { get; set; }
+        public int? LastDiastolicBP { get; set; }
+        public decimal? LastTemperature { get; set; }
+        public decimal? LastSpO2 { get; set; }
     }
 }
