@@ -23,6 +23,16 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
     }
 
     [ExcludeFromCodeCoverage]
+    public class QuickReceiveStockResponseModel
+    {
+        public bool Success { get; set; }
+        public string? Message { get; set; }
+        public Guid? BatchId { get; set; }
+        public Guid? InventoryMovementId { get; set; }
+        public decimal? NewCurrentStock { get; set; }
+    }
+
+    [ExcludeFromCodeCoverage]
     public class BulkCreateBatchResponseModel
     {
         public bool Success { get; set; }

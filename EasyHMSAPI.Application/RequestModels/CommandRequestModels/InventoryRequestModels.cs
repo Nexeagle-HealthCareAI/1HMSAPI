@@ -88,6 +88,29 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public bool IsNarcoticDispenseContext { get; set; }
     }
 
+    // Board-level "receive stock" quick action (OT/ICU boards) — composes CreateBatchRequestModel +
+    // RecordInventoryMovementRequestModel (MovementType=RECEIVE) inside one DB transaction so a
+    // clinical user never has to think about batches; BatchNumber is optional and auto-generated
+    // by the handler when omitted (ad-hoc stock rarely has a meaningful lot number to hand).
+    [ExcludeFromCodeCoverage]
+    public class QuickReceiveStockRequestModel : IRequest<QuickReceiveStockResponseModel>
+    {
+        public Guid HospitalId { get; set; }
+        [JsonIgnore]
+        public string? LoggedInUserName { get; set; }
+        [JsonIgnore]
+        public Guid? LoggedInUserId { get; set; }
+
+        public Guid StoreId { get; set; }
+        public Guid InventoryItemId { get; set; }
+        public decimal Qty { get; set; }
+        public string? BatchNumber { get; set; }
+        public DateTime? ManufactureDate { get; set; }
+        public DateTime? ExpiryDate { get; set; }
+        public decimal? UnitCost { get; set; }
+        public string? Notes { get; set; }
+    }
+
     [ExcludeFromCodeCoverage]
     public class BulkCreateBatchRequestModel : IRequest<BulkCreateBatchResponseModel>
     {

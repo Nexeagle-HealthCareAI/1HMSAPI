@@ -118,6 +118,31 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Board-level "receive stock" quick action (OT/ICU boards) — one call that creates a batch
+        // and records the inbound movement together, so clinical staff don't have to make two
+        // separate requests to safely stock a new consignment.
+        [HttpPost("receive")]
+        public async Task<ActionResult<QuickReceiveStockResponseModel>> QuickReceive([FromBody] QuickReceiveStockRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.StoreId == Guid.Empty || request.InventoryItemId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId, storeId, and inventoryItemId are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                request.LoggedInUserId = UserContextHelper.GetUserId(HttpContext.User);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in QuickReceive for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred while receiving stock." });
+            }
+        }
+
         [HttpGet("items/{inventoryItemId:guid}/batches")]
         public async Task<ActionResult<GetBatchesForItemResponseModel>> GetBatches(
             Guid inventoryItemId, [FromQuery] Guid hospitalId, [FromQuery] Guid? storeId, [FromQuery] bool activeOnly = true)
