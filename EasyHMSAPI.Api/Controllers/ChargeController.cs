@@ -212,8 +212,8 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
-        [HttpPatch("cancel-event")]
-        public async Task<ActionResult<CancelChargeEventResponseModel>> CancelChargeEvent([FromBody] CancelChargeEventRequestModel request)
+        [HttpPatch("cancel-encounter-charges")]
+        public async Task<ActionResult<CancelEncounterChargesResponseModel>> CancelEncounterCharges([FromBody] CancelEncounterChargesRequestModel request)
         {
             if (request.HospitalId == Guid.Empty || string.IsNullOrEmpty(request.PatientId))
                 return BadRequest(new { Message = "HospitalId and PatientId are required." });
@@ -226,7 +226,7 @@ namespace EasyHMSAPI.Api.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error in CancelChargeEvent for patientId: {PatientId}", request.PatientId);
+                _logger.LogError(ex, "Error in CancelEncounterCharges for patientId: {PatientId}", request.PatientId);
                 return StatusCode(500, new { Message = "An error occurred." });
             }
         }

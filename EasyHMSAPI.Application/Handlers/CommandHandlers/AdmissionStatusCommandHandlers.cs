@@ -89,6 +89,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 await SendDischargeNotificationAsync(admission, dischargedAt, cancellationToken);
 
+                // Informational only -- discharge always proceeds regardless. Mirrors the same
+                // "never block a clinical/legal action on billing state" posture already documented
+                // above for EXPIRED/LAMA/DAMA, just surfaced here instead of silently saying nothing.
+                var (hasOutstandingBalance, outstandingAmount, hasUnfinalizedInvoice) =
+                    await GetBillingWarningAsync(admission.HospitalId, admission.EncounterId, cancellationToken);
+
                 return new DischargeAdmissionResponseModel
                 {
                     Success = true,
@@ -96,6 +102,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     AdmissionId = admission.AdmissionId,
                     DischargedAt = dischargedAt,
                     BedReleased = bedReleased,
+                    HasOutstandingBalance = hasOutstandingBalance,
+                    OutstandingAmount = outstandingAmount,
+                    HasUnfinalizedInvoice = hasUnfinalizedInvoice,
                 };
             }
             catch (Exception)
@@ -367,6 +376,35 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             {
                 return new UpsertAdmissionCoverageResponseModel { Success = false, Message = "Error updating coverage details." };
             }
+        }
+
+        // Same due-amount formula GetHospitalBillingDashboardHandler uses: total non-void charges
+        // minus (payments+advances minus refunds), for the admission's encounter. Informational
+        // only -- callers must never use this to block discharge itself.
+        private async Task<(bool HasOutstandingBalance, decimal OutstandingAmount, bool HasUnfinalizedInvoice)> GetBillingWarningAsync(
+            Guid hospitalId, Guid? encounterId, CancellationToken cancellationToken)
+        {
+            if (!encounterId.HasValue)
+                return (false, 0m, false);
+
+            var billed = await _context.BillingChargeEvent
+                .Where(c => c.HospitalId == hospitalId && c.EncounterId == encounterId.Value && c.StatusCode != BillingConstants.ChargeEventStatus.Void)
+                .SumAsync(c => c.NetAmount, cancellationToken);
+
+            var payments = await _context.BillingPayment
+                .Where(p => p.HospitalId == hospitalId && p.EncounterId == encounterId.Value)
+                .GroupBy(p => p.PaymentType)
+                .Select(g => new { PaymentType = g.Key, Total = g.Sum(x => x.Amount) })
+                .ToListAsync(cancellationToken);
+
+            var collected = payments.Where(p => p.PaymentType == BillingConstants.PaymentType.Payment || p.PaymentType == BillingConstants.PaymentType.Advance).Sum(p => p.Total);
+            var refunded = payments.Where(p => p.PaymentType == BillingConstants.PaymentType.Refund).Sum(p => p.Total);
+            var outstanding = billed - (collected - refunded);
+
+            var hasUnfinalizedInvoice = await _context.BillingInvoice
+                .AnyAsync(i => i.HospitalId == hospitalId && i.EncounterId == encounterId.Value && i.StatusCode == BillingConstants.InvoiceStatus.Draft, cancellationToken);
+
+            return (outstanding > 0, outstanding, hasUnfinalizedInvoice);
         }
 
         // Fires a plain-text discharge notice on SMS + WhatsApp. Only DISCHARGED sends this — a

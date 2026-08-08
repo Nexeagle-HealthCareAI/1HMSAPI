@@ -13,6 +13,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
     {
         public Guid AdmissionId { get; set; }
         public Guid EncounterId { get; set; }
+        public string? PatientId { get; set; }
         public string? PatientName { get; set; }
         public string? BedCode { get; set; }
         public string? WardCode { get; set; }

@@ -51,10 +51,21 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 decimal runningTotal = 0;
                 if (admission.EncounterId.HasValue)
                 {
+                    // Exclude only charges definitively marked non-payable (ChargeMaster.IsIRDAIPayable
+                    // == false) -- matches GetDischargeTpaSplitHandler's real claim calculation, so this
+                    // in-stay alert doesn't fire on money that was never going to be claimed anyway.
+                    // Charges with no ChargeId link stay included (conservative: better to over-warn on
+                    // an unknown than under-warn), same "never silently bucket" philosophy as the split.
+                    var nonPayableChargeIds = await _context.ChargeMaster
+                        .Where(m => m.HospitalId == request.HospitalId && !m.IsIRDAIPayable)
+                        .Select(m => m.ChargeId)
+                        .ToListAsync(cancellationToken);
+
                     runningTotal = await _context.BillingChargeEvent
                         .Where(c => c.HospitalId == request.HospitalId
                                  && c.EncounterId == admission.EncounterId.Value
-                                 && c.StatusCode != BillingConstants.ChargeEventStatus.Void)
+                                 && c.StatusCode != BillingConstants.ChargeEventStatus.Void
+                                 && (!c.ChargeId.HasValue || !nonPayableChargeIds.Contains(c.ChargeId.Value)))
                         .SumAsync(c => c.NetAmount, cancellationToken);
                 }
 

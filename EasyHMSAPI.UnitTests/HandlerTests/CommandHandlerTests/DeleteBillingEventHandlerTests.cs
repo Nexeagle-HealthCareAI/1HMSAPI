@@ -89,6 +89,180 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task Handle_ChargeNeverLinkedToAnInvoice_DeletesDirectlyInsteadOfFailing()
+        {
+            // Posted but the auto-createDraftInvoice step never ran (e.g. BillingPage's best-effort
+            // call failed silently) -- no BillingInvoiceChargeEvent row exists for this charge.
+            var charge = new BillingChargeEvent
+            {
+                ChargeEventId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+                DisplayName = "Consult",
+                Qty = 1,
+                UnitPrice = 300,
+                GrossAmount = 300,
+                NetAmount = 300,
+                StatusCode = "POSTED",
+                ServiceDate = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            _context.BillingChargeEvent.Add(charge);
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new DeleteBillingEventRequestModel
+            {
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EventId = charge.ChargeEventId,
+                Type = "Charges",
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(_context.BillingChargeEvent.Any(c => c.ChargeEventId == charge.ChargeEventId), Is.False);
+        }
+
+        [Test]
+        public async Task Handle_DeletesLinkedCharge_CancelsAccruedIncentive()
+        {
+            var doctorId = Guid.NewGuid();
+            var charge = new BillingChargeEvent
+            {
+                ChargeEventId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+                DisplayName = "Consult",
+                Qty = 1,
+                UnitPrice = 300,
+                GrossAmount = 300,
+                NetAmount = 300,
+                StatusCode = "POSTED",
+                ServiceDate = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            _context.BillingChargeEvent.Add(charge);
+            var invoice = new BillingInvoice
+            {
+                InvoiceId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                EncounterId = _encounterId,
+                PatientId = "PT001",
+                InvoiceNo = "INV-1",
+                InvoiceDate = DateTime.UtcNow,
+                StatusCode = "DRAFT",
+                GrossAmount = 300,
+                NetAmount = 300,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            _context.BillingInvoice.Add(invoice);
+            _context.BillingInvoiceChargeEvent.Add(new BillingInvoiceChargeEvent { InvoiceId = invoice.InvoiceId, ChargeEventId = charge.ChargeEventId });
+            var ledgerEntry = new ConsultantIncentiveLedger
+            {
+                ConsultantIncentiveLedgerId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                DoctorId = doctorId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+                ChargeEventId = charge.ChargeEventId,
+                IncentiveAmount = 50,
+                StatusCode = "ACCRUED",
+                AccruedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            _context.ConsultantIncentiveLedger.Add(ledgerEntry);
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new DeleteBillingEventRequestModel
+            {
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EventId = charge.ChargeEventId,
+                Type = "Charges",
+                LoggedInUserName = "cashier1",
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            var reloaded = _context.ConsultantIncentiveLedger.First(l => l.ConsultantIncentiveLedgerId == ledgerEntry.ConsultantIncentiveLedgerId);
+            Assert.That(reloaded.StatusCode, Is.EqualTo("CANCELLED"));
+            Assert.That(reloaded.CancelledAt, Is.Not.Null);
+            Assert.That(reloaded.CancelledBy, Is.EqualTo("cashier1"));
+        }
+
+        [Test]
+        public async Task Handle_DeletesLinkedCharge_NeverTouchesAnAlreadyPaidIncentive()
+        {
+            var doctorId = Guid.NewGuid();
+            var charge = new BillingChargeEvent
+            {
+                ChargeEventId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+                DisplayName = "Consult",
+                Qty = 1,
+                UnitPrice = 300,
+                GrossAmount = 300,
+                NetAmount = 300,
+                StatusCode = "POSTED",
+                ServiceDate = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            _context.BillingChargeEvent.Add(charge);
+            var invoice = new BillingInvoice
+            {
+                InvoiceId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                EncounterId = _encounterId,
+                PatientId = "PT001",
+                InvoiceNo = "INV-1",
+                InvoiceDate = DateTime.UtcNow,
+                StatusCode = "DRAFT",
+                GrossAmount = 300,
+                NetAmount = 300,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            _context.BillingInvoice.Add(invoice);
+            _context.BillingInvoiceChargeEvent.Add(new BillingInvoiceChargeEvent { InvoiceId = invoice.InvoiceId, ChargeEventId = charge.ChargeEventId });
+            var ledgerEntry = new ConsultantIncentiveLedger
+            {
+                ConsultantIncentiveLedgerId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                DoctorId = doctorId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+                ChargeEventId = charge.ChargeEventId,
+                IncentiveAmount = 50,
+                StatusCode = "PAID",
+                AccruedAt = DateTime.UtcNow,
+                PaidAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            _context.ConsultantIncentiveLedger.Add(ledgerEntry);
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new DeleteBillingEventRequestModel
+            {
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EventId = charge.ChargeEventId,
+                Type = "Charges",
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            var reloaded = _context.ConsultantIncentiveLedger.First(l => l.ConsultantIncentiveLedgerId == ledgerEntry.ConsultantIncentiveLedgerId);
+            Assert.That(reloaded.StatusCode, Is.EqualTo("PAID"));
+        }
+
+        [Test]
         public async Task Handle_DeletesPayment_Immediately_NoApproval()
         {
             var payment = new BillingPayment

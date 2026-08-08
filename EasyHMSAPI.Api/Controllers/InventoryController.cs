@@ -118,6 +118,31 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Board-level "use stock, bill the patient" quick action (ICU board today) — one call that
+        // deducts stock and posts the matching charge event together.
+        [HttpPost("use-and-bill")]
+        public async Task<ActionResult<RecordAndBillStockUsageResponseModel>> UseAndBillStock([FromBody] RecordAndBillStockUsageRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.StoreId == Guid.Empty || request.InventoryItemId == Guid.Empty
+                || request.EncounterId == Guid.Empty || string.IsNullOrWhiteSpace(request.PatientId))
+                return BadRequest(new { Message = "hospitalId, storeId, inventoryItemId, encounterId, and patientId are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                request.LoggedInUserId = UserContextHelper.GetUserId(HttpContext.User);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in UseAndBillStock for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred while recording and billing stock usage." });
+            }
+        }
+
         // Board-level "receive stock" quick action (OT/ICU boards) — one call that creates a batch
         // and records the inbound movement together, so clinical staff don't have to make two
         // separate requests to safely stock a new consignment.

@@ -177,6 +177,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 {
                     AdmissionId = a.AdmissionId,
                     EncounterId = a.EncounterId ?? a.AdmissionId,
+                    PatientId = a.PatientId,
                     PatientName = patient?.FullName ?? "Unknown",
                     BedCode = bed?.BedCode,
                     WardCode = bed?.WardCode,

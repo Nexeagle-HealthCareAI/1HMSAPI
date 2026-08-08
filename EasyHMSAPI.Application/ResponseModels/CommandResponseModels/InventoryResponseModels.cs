@@ -23,6 +23,18 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
     }
 
     [ExcludeFromCodeCoverage]
+    public class RecordAndBillStockUsageResponseModel
+    {
+        public bool Success { get; set; }
+        public string? Message { get; set; }
+        public Guid? InventoryMovementId { get; set; }
+        public Guid? ChargeEventId { get; set; }
+        // True when the item had no ChargeMaster link configured -- the usage was still recorded,
+        // just nothing was billed. Not a failure; the caller should surface this distinctly.
+        public bool NoChargeConfigured { get; set; }
+    }
+
+    [ExcludeFromCodeCoverage]
     public class QuickReceiveStockResponseModel
     {
         public bool Success { get; set; }
