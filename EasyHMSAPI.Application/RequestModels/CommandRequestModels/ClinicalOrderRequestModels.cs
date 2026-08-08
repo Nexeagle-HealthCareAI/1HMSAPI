@@ -26,6 +26,12 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public Guid? OrderedByDoctorId { get; set; }
         public string? Notes { get; set; }
 
+        // Set only when this order is placed via the Surgery Case panel's post-op order-set flow
+        // -- left null for every normal, manual CPOE order (the vast majority of calls).
+        public Guid? SurgeryCaseId { get; set; }
+        public Guid? SourceOrderSetId { get; set; }
+        public string? SourceOrderSetNameSnapshot { get; set; }
+
         public List<ClinicalOrderLineInput> Lines { get; set; } = new();
     }
 

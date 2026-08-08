@@ -112,6 +112,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<OTPlan> OTPlans { get; set; }
         public DbSet<PackageType> PackageTypes { get; set; }
         public DbSet<OTPlanPackageType> OTPlanPackageTypes { get; set; }
+        public DbSet<OrderSet> OrderSets { get; set; }
         public DbSet<AdmissionReferral> AdmissionReferrals { get; set; }
         public DbSet<AdmissionReferralStatusHistory> AdmissionReferralStatusHistories { get; set; }
         public DbSet<AdmissionReferralComment> AdmissionReferralComment { get; set; }
@@ -436,6 +437,13 @@ namespace EasyHMSAPI.Domain.Context
             modelBuilder.Entity<PackageType>().Property(e => e.CreatedAt).HasColumnType("datetime2");
             modelBuilder.Entity<PackageType>().Property(e => e.UpdatedAt).HasColumnType("datetime2");
             modelBuilder.Entity<PackageType>().Property(e => e.RowVersion).IsRowVersion();
+
+            // Configure OrderSet
+            modelBuilder.Entity<OrderSet>().ToTable("OrderSet");
+            modelBuilder.Entity<OrderSet>().HasKey(e => e.OrderSetId);
+            modelBuilder.Entity<OrderSet>().Property(e => e.CreatedAt).HasColumnType("datetime2");
+            modelBuilder.Entity<OrderSet>().Property(e => e.UpdatedAt).HasColumnType("datetime2");
+            modelBuilder.Entity<OrderSet>().Property(e => e.RowVersion).IsRowVersion();
 
             // Configure OTPlanPackageType (many-to-many join: an OT Plan may offer several Package Types)
             modelBuilder.Entity<OTPlanPackageType>().ToTable("OTPlanPackageType");

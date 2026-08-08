@@ -29,6 +29,12 @@ namespace EasyHMSAPI.Domain.Entities
 
         public string? Notes { get; set; }
 
+        // Set only when this order was placed via the Surgery Case panel's post-op order-set
+        // flow -- null for every order placed the normal, manual CPOE way.
+        public Guid? SurgeryCaseId { get; set; }
+        public Guid? SourceOrderSetId { get; set; }
+        public string? SourceOrderSetNameSnapshot { get; set; }
+
         public DateTime CreatedAt { get; set; }
         public string? CreatedBy { get; set; }
         public DateTime UpdatedAt { get; set; }

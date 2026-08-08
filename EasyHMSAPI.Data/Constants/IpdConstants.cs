@@ -174,6 +174,13 @@ namespace EasyHMSAPI.Data.Constants
             public static readonly string[] All = { Medication, Lab, Radiology, Procedure, Diet, Nursing };
         }
 
+        /// <summary>OrderSet.Category — only POST_OP is ever written by the UI in v1; the field
+        /// exists so future set types (e.g. admission-wide protocols) don't need a schema change.</summary>
+        public static class OrderSetCategory
+        {
+            public const string PostOp = "POST_OP";
+        }
+
         public static class ClinicalOrderStatus
         {
             public const string Active = "ACTIVE";
