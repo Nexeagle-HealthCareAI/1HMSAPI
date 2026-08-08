@@ -76,6 +76,32 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Adds several expense lines (same category/date/vendor/payment-mode/status, each with its
+        // own amount + reason) in one call -- e.g. logging today's FOOD spend as separate lines.
+        [HttpPost("bulk")]
+        public async Task<ActionResult<BulkAddExpenseResponseModel>> BulkAddExpense([FromQuery] Guid hospitalId, [FromBody] BulkAddExpenseRequestModel request)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+            if (string.IsNullOrWhiteSpace(request.CategoryCode))
+                return BadRequest(new { Message = "Category is required." });
+
+            try
+            {
+                request.HospitalId = hospitalId;
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in BulkAddExpense for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
         [HttpDelete]
         public async Task<ActionResult<DeleteExpenseResponseModel>> DeleteExpense([FromQuery] Guid hospitalId, [FromQuery] Guid expenseId)
         {
