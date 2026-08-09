@@ -110,6 +110,29 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         g => g.Select(r => nameByUser.TryGetValue(r.NurseUserId, out var n) ? n : null).Where(n => !string.IsNullOrWhiteSpace(n)).Select(n => n!).Distinct().ToList());
             }
 
+            // Real per-patient assignment (PatientNurseAssignment), independent of the ward-level
+            // roster above -- same two-step bulk-fetch-then-dictionary idiom, just keyed by
+            // AdmissionId instead of WardCode.
+            var patientAssignments = await _context.PatientNurseAssignment
+                .Where(p => p.HospitalId == request.HospitalId
+                    && admissionIds.Contains(p.AdmissionId)
+                    && p.StatusCode == IpdConstants.NurseAssignmentStatus.Active
+                    && (p.ShiftDate == null || p.ShiftDate == todayIst))
+                .ToListAsync(cancellationToken);
+
+            var assignedNurseUserIds = patientAssignments.Select(p => p.NurseUserId).Distinct().ToList();
+            var assignedNurseProfiles = await _context.UserProfiles
+                .Where(up => assignedNurseUserIds.Contains(up.UserID))
+                .OrderByDescending(up => up.UpdatedAt)
+                .ToListAsync(cancellationToken);
+            var assignedNameByUser = assignedNurseProfiles.GroupBy(up => up.UserID).ToDictionary(g => g.Key, g => g.First().FullName);
+
+            var assignedNurseNamesByAdmission = patientAssignments
+                .GroupBy(p => p.AdmissionId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Select(p => assignedNameByUser.TryGetValue(p.NurseUserId, out var n) ? n : null).Where(n => !string.IsNullOrWhiteSpace(n)).Select(n => n!).Distinct().ToList());
+
             // Latest vitals within the last 4h -- anything older is already "stale" for ICU purposes.
             var vitalsSince = DateTime.UtcNow.AddHours(-4);
             var vitalRows = await _context.VitalReading
@@ -194,6 +217,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     ActiveDeviceCount = activeDevices.Count(d => d.AdmissionId == a.AdmissionId),
                     HasOverdueBundleCheck = overdueAdmissionIds.Contains(a.AdmissionId),
                     NurseNames = nurseNames,
+                    AssignedNurseNames = assignedNurseNamesByAdmission.TryGetValue(a.AdmissionId, out var assignedNames) ? assignedNames : new List<string>(),
                     LastVitalAt = vital?.RecordedAt,
                     LastPulse = vital?.Pulse,
                     LastSystolicBP = vital?.SystolicBP,

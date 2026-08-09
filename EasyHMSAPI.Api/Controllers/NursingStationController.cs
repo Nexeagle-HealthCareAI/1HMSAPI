@@ -126,6 +126,74 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Per-patient nurse assignment -- independent of the ward roster above (a nurse doesn't
+        // need to already be rostered to the ward to be assigned to a specific patient).
+        [HttpPost("patient-assignment")]
+        public async Task<ActionResult<AssignPatientNurseResponseModel>> AssignPatientNurse([FromBody] AssignPatientNurseRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.NurseUserId == Guid.Empty || request.AdmissionId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId, nurseUserId and admissionId are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in AssignPatientNurse for hospitalId: {HospitalId}, admissionId: {AdmissionId}", request.HospitalId, request.AdmissionId);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
+        [HttpPost("patient-assignment/release")]
+        public async Task<ActionResult<ReleasePatientNurseResponseModel>> ReleasePatientNurse([FromBody] ReleasePatientNurseRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.PatientNurseAssignmentId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and patientNurseAssignmentId are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in ReleasePatientNurse for assignmentId: {AssignmentId}", request.PatientNurseAssignmentId);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
+        [HttpGet("patient-assignments")]
+        public async Task<ActionResult<GetPatientNurseAssignmentsResponseModel>> GetPatientAssignments(
+            [FromQuery] Guid hospitalId, [FromQuery] Guid admissionId, [FromQuery] bool activeOnly = true)
+        {
+            if (hospitalId == Guid.Empty || admissionId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and admissionId are required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetPatientNurseAssignmentsRequestModel
+                {
+                    HospitalId = hospitalId,
+                    AdmissionId = admissionId,
+                    ActiveOnly = activeOnly,
+                });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetPatientAssignments for admissionId: {AdmissionId}", admissionId);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
         [HttpGet("nurses")]
         public async Task<ActionResult<GetHospitalNursesResponseModel>> GetNurses([FromQuery] Guid hospitalId)
         {

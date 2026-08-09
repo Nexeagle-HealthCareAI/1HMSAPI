@@ -103,6 +103,29 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
                 var admissionIds = admissions.Select(a => a.AdmissionId).ToList();
 
+                // Per-patient nurse assignment (PatientNurseAssignment), independent of the ward
+                // roster this board is otherwise driven by -- same two-step bulk-fetch-then-
+                // dictionary idiom as the ward roster's own nurse-name lookup.
+                var patientAssignments = await _context.PatientNurseAssignment.AsNoTracking()
+                    .Where(p => p.HospitalId == request.HospitalId
+                        && admissionIds.Contains(p.AdmissionId)
+                        && p.StatusCode == IpdConstants.NurseAssignmentStatus.Active
+                        && (p.ShiftDate == null || p.ShiftDate == todayIst))
+                    .ToListAsync(cancellationToken);
+
+                var assignedNurseUserIds = patientAssignments.Select(p => p.NurseUserId).Distinct().ToList();
+                var assignedNurseProfiles = await _context.UserProfiles.AsNoTracking()
+                    .Where(up => assignedNurseUserIds.Contains(up.UserID))
+                    .OrderByDescending(up => up.UpdatedAt)
+                    .ToListAsync(cancellationToken);
+                var assignedNameByUser = assignedNurseProfiles.GroupBy(up => up.UserID).ToDictionary(g => g.Key, g => g.First().FullName);
+
+                var assignedNurseNamesByAdmission = patientAssignments
+                    .GroupBy(p => p.AdmissionId)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g.Select(p => assignedNameByUser.TryGetValue(p.NurseUserId, out var n) ? n : null).Where(n => !string.IsNullOrWhiteSpace(n)).Select(n => n!).Distinct().ToList());
+
                 // Step 6: patient demographics.
                 var patientIds = admissions.Select(a => a.PatientId).Distinct().ToList();
                 var patientsById = await _context.PatientRegistrations.AsNoTracking()
@@ -228,6 +251,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         MedsDueCount = dueByAdmission.GetValueOrDefault(a.AdmissionId),
                         MedsOverdueCount = overdueByAdmission.GetValueOrDefault(a.AdmissionId),
                         NextDoseAtUtc = nextDoseByAdmission.TryGetValue(a.AdmissionId, out var next) ? next : null,
+                        AssignedNurseNames = assignedNurseNamesByAdmission.TryGetValue(a.AdmissionId, out var assignedNames) ? assignedNames : new List<string>(),
                     };
                 })
                 .OrderBy(i => i.WardName ?? i.WardCode)
