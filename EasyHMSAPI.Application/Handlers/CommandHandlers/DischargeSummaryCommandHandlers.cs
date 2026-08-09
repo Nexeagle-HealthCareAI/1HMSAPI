@@ -166,8 +166,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return new SignDischargeSummaryResponseModel { Success = false, Message = "Save the discharge summary before signing." };
                 if (summary.IsSigned)
                     return new SignDischargeSummaryResponseModel { Success = false, Message = "Discharge summary is already signed." };
-                if (string.IsNullOrWhiteSpace(summary.FinalDiagnosis) || string.IsNullOrWhiteSpace(summary.ConditionAtDischarge))
-                    return new SignDischargeSummaryResponseModel { Success = false, Message = "Final diagnosis and condition at discharge are required before signing." };
 
                 var now = DateTime.UtcNow;
                 summary.IsSigned = true;

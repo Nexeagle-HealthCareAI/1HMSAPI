@@ -96,57 +96,62 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
                 else if(!string.IsNullOrEmpty(request.Source))
                 {
-                    if(request?.Source.ToLower() == "prescription")
+                    // Any tagged source (e.g. the e-prescription pad's "Medicine", the discharge
+                    // medications editor's "discharge", or the settings panel's "prescription")
+                    // means "auto-record this medicine as used" -- find-by-name-and-increment, or
+                    // insert new. This used to be gated on an exact "prescription" string match,
+                    // which silently no-op'd for every other source (including the e-prescription
+                    // pad's own "Medicine" value) -- the outer non-empty check above is what
+                    // actually distinguishes this auto-record path from the explicit manual-add
+                    // path below (no Source at all), so no further gating is needed here.
+                    var existing = await _dbContext.DoctorPreferredMedicines
+                        .Where(x =>
+                            x.DoctorId == request.DoctorId &&
+                            x.HospitalId == request.HospitalId &&
+                            x.MedicineName != null &&
+                            request.Medicine.MedicineName != null &&
+                            x.MedicineName.ToLower() == request.Medicine.MedicineName.ToLower()
+                        )
+                        .FirstOrDefaultAsync(cancellationToken);
+                    if (existing is not null)
                     {
-                        var existing = await _dbContext.DoctorPreferredMedicines
-                            .Where(x =>
-                                x.DoctorId == request.DoctorId &&
-                                x.HospitalId == request.HospitalId &&
-                                x.MedicineName != null &&
-                                request.Medicine.MedicineName != null &&
-                                x.MedicineName.ToLower() == request.Medicine.MedicineName.ToLower()
-                            )
-                            .FirstOrDefaultAsync(cancellationToken);
-                        if (existing is not null)
+                        existing.UsageCount = (existing.UsageCount ?? 0) + 1;
+                        existing.UpdatedAt = DateTime.UtcNow;
+                        existing.UpdatedBy = request.LoggedInUserId.ToString();
+                        await _dbContext.SaveChangesAsync(cancellationToken);
+
+                        response.Success = true;
+                        response.Message = "Preferred medicine usage count updated";
+
+                    }
+                    else
+                    {
+                        var newMed = new DoctorPreferredMedicine
                         {
-                            existing.UsageCount = (existing.UsageCount ?? 0) + 1;
-                            existing.UpdatedAt = DateTime.UtcNow;
-                            existing.UpdatedBy = request.LoggedInUserId.ToString();
-                            await _dbContext.SaveChangesAsync(cancellationToken);
+                            DoctorId = request.DoctorId,
+                            HospitalId = request.HospitalId,
+                            MedicineName = request.Medicine?.MedicineName?.ToUpper(),
+                            BrandName = request?.Medicine?.BrandName,
+                            GenericName = request?.Medicine?.GenericName,
+                            Manufacturer = request?.Medicine?.Manufacturer,
+                            DosageForm = request?.Medicine?.DosageForm,
+                            Strength = request?.Medicine?.Strength,
+                            Price = request?.Medicine?.Price,
+                            Usage = request?.Medicine?.UsageDescription,
+                            SideEffects = request?.Medicine?.SideEffects,
+                            Notes = request?.Medicine?.Notes,
+                            UsageCount = 0,
+                            CreatedAt = DateTime.UtcNow,
+                            CreatedBy = request?.LoggedInUserId.ToString(),
+                            UpdatedAt = DateTime.UtcNow,
+                            UpdatedBy = request?.LoggedInUserId.ToString(),
+                        };
 
-                            response.Success = true;
-                            response.Message = "Preferred medicine usage count updated";
+                        _dbContext.DoctorPreferredMedicines.Add(newMed);
+                        await _dbContext.SaveChangesAsync(cancellationToken);
 
-                        }
-                        else
-                        {
-                            var newMed = new DoctorPreferredMedicine
-                            {
-                                DoctorId = request.DoctorId,
-                                HospitalId = request.HospitalId,
-                                MedicineName = request.Medicine?.MedicineName?.ToUpper(),
-                                BrandName = request?.Medicine?.BrandName,
-                                GenericName = request?.Medicine?.GenericName,
-                                Manufacturer = request?.Medicine?.Manufacturer,
-                                DosageForm = request?.Medicine?.DosageForm,
-                                Strength = request?.Medicine?.Strength,
-                                Price = request?.Medicine?.Price,
-                                Usage = request?.Medicine?.UsageDescription,
-                                SideEffects = request?.Medicine?.SideEffects,
-                                Notes = request?.Medicine?.Notes,
-                                UsageCount = 0,
-                                CreatedAt = DateTime.UtcNow,
-                                CreatedBy = request?.LoggedInUserId.ToString(),
-                                UpdatedAt = DateTime.UtcNow,
-                                UpdatedBy = request?.LoggedInUserId.ToString(),
-                            };
-
-                            _dbContext.DoctorPreferredMedicines.Add(newMed);
-                            await _dbContext.SaveChangesAsync(cancellationToken);
-
-                            response.Success = true;
-                            response.Message = "Preferred medicine added";
-                        }
+                        response.Success = true;
+                        response.Message = "Preferred medicine added";
                     }
                 }
                 else
