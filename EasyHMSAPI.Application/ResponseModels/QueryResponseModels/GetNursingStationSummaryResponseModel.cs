@@ -44,5 +44,9 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public int MedsDueCount { get; set; }
         public int MedsOverdueCount { get; set; }
         public DateTime? NextDoseAtUtc { get; set; }
+
+        // Per-patient assignment (PatientNurseAssignment), independent of the ward roster this
+        // board is otherwise driven by. Empty when nobody has been specifically assigned yet.
+        public List<string> AssignedNurseNames { get; set; } = new();
     }
 }

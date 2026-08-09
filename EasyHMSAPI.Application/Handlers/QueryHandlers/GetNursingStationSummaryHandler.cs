@@ -10,12 +10,15 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 {
     /// <summary>
     /// The Nursing Station's "my patients" list: every active admission in a bed on a ward this
-    /// nurse is currently rostered to, with last vitals and MAR due/overdue folded in. Bulk-fetch-
-    /// then-dictionary throughout (same house style as GetActiveAdmissionsHandler) so the round-trip
-    /// count stays flat regardless of how many patients are on the ward, instead of calling the
-    /// single-admission GetMarGridHandler in a per-patient loop. MAR due/overdue tallying reuses
-    /// MarSlotMatcher/MarScheduleCalculator so this never silently disagrees with the MAR grid
-    /// itself for the same patient.
+    /// nurse is currently rostered to, PLUS every active admission this nurse has been directly
+    /// assigned to via PatientNurseAssignment even without a ward roster row (otherwise a nurse who
+    /// has only ever been assigned to specific patients -- never rostered to a ward -- would see
+    /// "not rostered" and nothing else, which defeats the point of being able to assign her at
+    /// all). Bulk-fetch-then-dictionary throughout (same house style as GetActiveAdmissionsHandler)
+    /// so the round-trip count stays flat regardless of how many patients are on the ward, instead
+    /// of calling the single-admission GetMarGridHandler in a per-patient loop. MAR due/overdue
+    /// tallying reuses MarSlotMatcher/MarScheduleCalculator so this never silently disagrees with
+    /// the MAR grid itself for the same patient.
     /// </summary>
     public class GetNursingStationSummaryHandler : IRequestHandler<GetNursingStationSummaryRequestModel, GetNursingStationSummaryResponseModel>
     {
@@ -62,34 +65,61 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 }
 
                 var roster = await rosterQuery.ToListAsync(cancellationToken);
-                if (roster.Count == 0)
+                var wardCodes = roster.Select(r => r.WardCode).Distinct().ToList();
+
+                // Step 1b: admissions this nurse is directly assigned to (PatientNurseAssignment),
+                // independent of the ward roster above -- this is what lets a nurse who has never
+                // been rostered to any ward still see the specific patients she's been assigned to.
+                var directAssignmentQuery = _context.PatientNurseAssignment.AsNoTracking()
+                    .Where(p => p.HospitalId == request.HospitalId
+                        && p.NurseUserId == nurseUserId.Value
+                        && p.StatusCode == IpdConstants.NurseAssignmentStatus.Active
+                        && (p.ShiftDate == null || p.ShiftDate == todayIst));
+                if (!string.IsNullOrWhiteSpace(request.ShiftCode))
+                {
+                    var directShiftCode = request.ShiftCode.Trim().ToUpperInvariant();
+                    directAssignmentQuery = directAssignmentQuery.Where(p => p.ShiftCode == directShiftCode);
+                }
+                var directAdmissionIds = (await directAssignmentQuery.Select(p => p.AdmissionId).Distinct().ToListAsync(cancellationToken));
+
+                if (roster.Count == 0 && directAdmissionIds.Count == 0)
                 {
                     return new GetNursingStationSummaryResponseModel { Success = true, NurseName = nurseName, HasAssignments = false };
                 }
 
-                var wardCodes = roster.Select(r => r.WardCode).Distinct().ToList();
-
-                // Step 3: the beds that live on those wards.
-                var beds = await _context.BedMaster.AsNoTracking()
+                // Step 3: the beds that live on rostered wards.
+                var wardBeds = wardCodes.Count == 0 ? new List<BedMaster>() : await _context.BedMaster.AsNoTracking()
                     .Where(b => b.HospitalId == request.HospitalId && b.WardCode != null && wardCodes.Contains(b.WardCode!))
                     .ToListAsync(cancellationToken);
-                var bedsById = beds.ToDictionary(b => b.BedId);
-                var bedIds = beds.Select(b => b.BedId).ToList();
+                var wardBedIds = wardBeds.Select(b => b.BedId).ToList();
 
-                // Step 4: who currently occupies those beds.
+                // Step 4: who currently occupies those beds, OR any bed belonging to a directly-
+                // assigned admission (which may sit on a ward this nurse isn't rostered to at all).
                 var activeBedAssignments = await _context.BedAssignment.AsNoTracking()
-                    .Where(b => b.HospitalId == request.HospitalId && b.StatusCode == IpdConstants.BedAssignmentStatus.Active && bedIds.Contains(b.BedId))
+                    .Where(b => b.HospitalId == request.HospitalId && b.StatusCode == IpdConstants.BedAssignmentStatus.Active
+                        && (wardBedIds.Contains(b.BedId) || directAdmissionIds.Contains(b.AdmissionId)))
                     .ToListAsync(cancellationToken);
+
+                // Bed records for every bed actually referenced -- a directly-assigned admission's
+                // bed may not be one of wardBeds, so re-resolve from the full referenced set.
+                var referencedBedIds = activeBedAssignments.Select(b => b.BedId).Distinct().ToList();
+                var bedsById = referencedBedIds.Count == 0 ? new Dictionary<Guid, BedMaster>() : await _context.BedMaster.AsNoTracking()
+                    .Where(b => referencedBedIds.Contains(b.BedId))
+                    .ToDictionaryAsync(b => b.BedId, cancellationToken);
+
                 var bedByAdmission = activeBedAssignments.ToDictionary(b => b.AdmissionId, b => bedsById[b.BedId]);
 
-                if (bedByAdmission.Count == 0)
+                // Candidate admissions: ward-driven (has a bed on a rostered ward) UNION directly-
+                // assigned (even one with no active bed at all yet is still worth surfacing).
+                var candidateAdmissionIds = bedByAdmission.Keys.Union(directAdmissionIds).Distinct().ToList();
+
+                if (candidateAdmissionIds.Count == 0)
                 {
                     return new GetNursingStationSummaryResponseModel { Success = true, NurseName = nurseName, HasAssignments = true };
                 }
 
                 // Step 5: only admissions still genuinely active (a lagging bed release must not
                 // resurrect a discharged patient on the station).
-                var candidateAdmissionIds = bedByAdmission.Keys.ToList();
                 var admissions = await _context.Admission.AsNoTracking()
                     .Where(a => a.HospitalId == request.HospitalId
                         && candidateAdmissionIds.Contains(a.AdmissionId)
@@ -102,6 +132,29 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 }
 
                 var admissionIds = admissions.Select(a => a.AdmissionId).ToList();
+
+                // Per-patient nurse assignment (PatientNurseAssignment), independent of the ward
+                // roster this board is otherwise driven by -- same two-step bulk-fetch-then-
+                // dictionary idiom as the ward roster's own nurse-name lookup.
+                var patientAssignments = await _context.PatientNurseAssignment.AsNoTracking()
+                    .Where(p => p.HospitalId == request.HospitalId
+                        && admissionIds.Contains(p.AdmissionId)
+                        && p.StatusCode == IpdConstants.NurseAssignmentStatus.Active
+                        && (p.ShiftDate == null || p.ShiftDate == todayIst))
+                    .ToListAsync(cancellationToken);
+
+                var assignedNurseUserIds = patientAssignments.Select(p => p.NurseUserId).Distinct().ToList();
+                var assignedNurseProfiles = await _context.UserProfiles.AsNoTracking()
+                    .Where(up => assignedNurseUserIds.Contains(up.UserID))
+                    .OrderByDescending(up => up.UpdatedAt)
+                    .ToListAsync(cancellationToken);
+                var assignedNameByUser = assignedNurseProfiles.GroupBy(up => up.UserID).ToDictionary(g => g.Key, g => g.First().FullName);
+
+                var assignedNurseNamesByAdmission = patientAssignments
+                    .GroupBy(p => p.AdmissionId)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g.Select(p => assignedNameByUser.TryGetValue(p.NurseUserId, out var n) ? n : null).Where(n => !string.IsNullOrWhiteSpace(n)).Select(n => n!).Distinct().ToList());
 
                 // Step 6: patient demographics.
                 var patientIds = admissions.Select(a => a.PatientId).Distinct().ToList();
@@ -228,6 +281,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         MedsDueCount = dueByAdmission.GetValueOrDefault(a.AdmissionId),
                         MedsOverdueCount = overdueByAdmission.GetValueOrDefault(a.AdmissionId),
                         NextDoseAtUtc = nextDoseByAdmission.TryGetValue(a.AdmissionId, out var next) ? next : null,
+                        AssignedNurseNames = assignedNurseNamesByAdmission.TryGetValue(a.AdmissionId, out var assignedNames) ? assignedNames : new List<string>(),
                     };
                 })
                 .OrderBy(i => i.WardName ?? i.WardCode)

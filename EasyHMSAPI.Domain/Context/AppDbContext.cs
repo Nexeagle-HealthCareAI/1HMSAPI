@@ -146,6 +146,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<BedAssignment> BedAssignment { get; set; }
         public DbSet<AdmissionDoctorAssignment> AdmissionDoctorAssignment { get; set; }
         public DbSet<NurseShiftAssignment> NurseShiftAssignment { get; set; }
+        public DbSet<PatientNurseAssignment> PatientNurseAssignment { get; set; }
         public DbSet<AdmissionReferrerAssignment> AdmissionReferrerAssignment { get; set; }
         public DbSet<AdmissionDocument> AdmissionDocument { get; set; }
         public DbSet<ClinicalOrder> ClinicalOrder { get; set; }
@@ -843,6 +844,18 @@ namespace EasyHMSAPI.Domain.Context
             {
                 entity.ToTable("NurseShiftAssignment");
                 entity.HasKey(a => a.NurseShiftAssignmentId);
+                entity.Property(a => a.ShiftDate).HasColumnType("date");
+                entity.Property(a => a.AssignedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.UnassignedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<PatientNurseAssignment>(entity =>
+            {
+                entity.ToTable("PatientNurseAssignment");
+                entity.HasKey(a => a.PatientNurseAssignmentId);
                 entity.Property(a => a.ShiftDate).HasColumnType("date");
                 entity.Property(a => a.AssignedAt).HasColumnType("datetime2(3)");
                 entity.Property(a => a.UnassignedAt).HasColumnType("datetime2(3)");
