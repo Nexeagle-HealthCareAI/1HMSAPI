@@ -39,7 +39,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             _context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
 
             var publicHospitalIds = await _context.Hospitals
-                .Where(h => h.IsPubliclyListed && h.IsActive)
+                .Where(h => h.IsPubliclyListed && h.IsActive && !h.IsArchived)
                 .Select(h => h.HospitalID)
                 .ToListAsync(cancellationToken);
 

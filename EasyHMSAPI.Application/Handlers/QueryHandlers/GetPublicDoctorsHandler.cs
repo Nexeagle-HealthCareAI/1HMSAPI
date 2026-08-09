@@ -71,7 +71,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             // otherwise does for every row, which is pure waste on data that's never saved back.
             _context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
 
-            var hospitalQuery = _context.Hospitals.Where(h => h.IsPubliclyListed && h.IsActive);
+            var hospitalQuery = _context.Hospitals.Where(h => h.IsPubliclyListed && h.IsActive && !h.IsArchived);
             if (!string.IsNullOrWhiteSpace(request.City))
                 hospitalQuery = hospitalQuery.Where(h => h.City == request.City);
             if (!string.IsNullOrWhiteSpace(request.State))
