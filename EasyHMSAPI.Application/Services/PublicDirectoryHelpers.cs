@@ -45,7 +45,7 @@ namespace EasyHMSAPI.Application.Services
             // multiplier at volume). Batched into one query; .Min() picks the same "lowest
             // HospitalId among the publicly-listed ones" the old ordered-loop did.
             var publiclyListedIds = await context.Hospitals
-                .Where(h => hospitalIds.Contains(h.HospitalID) && h.IsPubliclyListed && h.IsActive)
+                .Where(h => hospitalIds.Contains(h.HospitalID) && h.IsPubliclyListed && h.IsActive && !h.IsArchived)
                 .Select(h => h.HospitalID)
                 .ToListAsync(cancellationToken);
 

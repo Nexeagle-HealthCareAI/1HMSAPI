@@ -3,9 +3,10 @@ using System.Diagnostics.CodeAnalysis;
 namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
 {
     [ExcludeFromCodeCoverage]
-    public class CancelChargeEventResponseModel
+    public class SaveAbhaAccountResponseModel
     {
-        public bool? Success { get; set; }
+        public bool Success { get; set; }
         public string? Message { get; set; }
+        public Guid? AbhaAccountId { get; set; }
     }
 }

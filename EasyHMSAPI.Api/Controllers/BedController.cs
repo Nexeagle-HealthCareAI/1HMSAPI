@@ -258,6 +258,26 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Distinct wards for the hospital, derived from BedMaster -- there is no separate Ward
+        // table. Used by the Nursing Station roster ward-picker and its ward chips.
+        [HttpGet("wards")]
+        public async Task<ActionResult<GetWardListResponseModel>> GetWards([FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetWardListRequestModel { HospitalId = hospitalId });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetWards for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
         // Assign a bed to an admission that doesn't currently have one.
         [HttpPost("assign")]
         public async Task<ActionResult<AssignBedResponseModel>> AssignBed([FromBody] AssignBedRequestModel request)

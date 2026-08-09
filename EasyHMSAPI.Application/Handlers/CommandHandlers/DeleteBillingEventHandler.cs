@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
@@ -73,10 +74,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
             if (invoiceChargeEvents.Count == 0)
             {
+                // Posted but never linked to a draft invoice (e.g. BillingPage's best-effort
+                // auto-createDraftInvoice call failed silently) -- there's no invoice to unwind,
+                // so just remove the charge directly instead of refusing to delete it forever.
+                await ConsultantIncentiveHelper.CancelForChargeAsync(_context, chargeEvent.ChargeEventId, request.LoggedInUserName, "Charge event deleted", cancellationToken);
+                _context.BillingChargeEvent.Remove(chargeEvent);
+                await _context.SaveChangesAsync(cancellationToken);
+
                 return new DeleteBillingEventResponseModel
                 {
-                    Success = false,
-                    Message = "No invoice mapping found for this charge event."
+                    Success = true,
+                    Message = "Charge event deleted successfully."
                 };
             }
 
@@ -133,6 +141,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     _context.BillingPaymentAllocation.Remove(allocation);
             }
 
+            await ConsultantIncentiveHelper.CancelForChargeAsync(_context, chargeEvent.ChargeEventId, request.LoggedInUserName, "Charge event deleted", cancellationToken);
             _context.BillingChargeEvent.Remove(chargeEvent);
 
             foreach (var mapping in invoiceChargeEvents)

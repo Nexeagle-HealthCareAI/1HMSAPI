@@ -18,6 +18,9 @@ namespace EasyHMSAPI.Api.Common
     public class HospitalAccessFilter : IAsyncActionFilter
     {
         private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(60);
+        // Shorter than CacheTtl: archiving is a deliberate, singular admin action (unlike a
+        // subscription merely lapsing), so a prompt cutoff matters more than staleness tolerance.
+        private static readonly TimeSpan ArchiveCacheTtl = TimeSpan.FromSeconds(15);
         private readonly AppDbContext _db;
         private readonly IMemoryCache _cache;
 
@@ -58,6 +61,38 @@ namespace EasyHMSAPI.Api.Common
             if (!isMember)
             {
                 context.Result = new ObjectResult(new { message = "You don't have access to this hospital." })
+                {
+                    StatusCode = StatusCodes.Status403Forbidden,
+                };
+                return;
+            }
+
+            // --- Archived Check --- (blocks BOTH reads and writes — the goal is hiding
+            // everything about this hospital, not just stopping new writes, unlike the
+            // subscription check below which deliberately still allows reads through)
+            var archKey = $"arch:{hospitalId}";
+            bool isArchived;
+            if (_cache.TryGetValue(archKey, out bool cachedArchived))
+            {
+                isArchived = cachedArchived;
+            }
+            else
+            {
+                isArchived = await _db.Hospitals
+                    .AsNoTracking()
+                    .Where(h => h.HospitalID == hospitalId.Value)
+                    .Select(h => h.IsArchived)
+                    .FirstOrDefaultAsync();
+                _cache.Set(archKey, isArchived, ArchiveCacheTtl);
+            }
+
+            if (isArchived)
+            {
+                context.Result = new ObjectResult(new
+                {
+                    message = "This hospital has been archived and is no longer accessible.",
+                    hospitalArchived = true
+                })
                 {
                     StatusCode = StatusCodes.Status403Forbidden,
                 };

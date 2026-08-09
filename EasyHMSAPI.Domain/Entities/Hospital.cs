@@ -22,6 +22,13 @@ namespace EasyHMSAPI.Domain.Entities
         public string Pincode { get; set; } = null!;
         public string? TimeZone { get; set; }
         public bool IsActive { get; set; } = true;
+        // Soft-delete: distinct from IsActive (which CMS's admin hospital list already uses to
+        // mean "still pending onboarding"). An archived hospital is hidden from every surface —
+        // staff access, public directory, nightly batch jobs — enforced via HospitalAccessFilter
+        // plus explicit checks in the handful of places that bypass it. Set from CMS web only.
+        public bool IsArchived { get; set; } = false;
+        public DateTime? ArchivedAt { get; set; }
+        public Guid? ArchivedByUserId { get; set; }
         // Opt-in: hospital only appears in the platform-wide public doctor directory
         // (Nexeagle's "find a doctor" page) once this is explicitly turned on.
         public bool IsPubliclyListed { get; set; } = false;

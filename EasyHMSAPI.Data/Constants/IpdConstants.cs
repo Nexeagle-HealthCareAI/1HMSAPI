@@ -48,6 +48,13 @@ namespace EasyHMSAPI.Data.Constants
             public const string Replaced = "REPLACED";
         }
 
+        /// <summary>NurseShiftAssignment.StatusCode — span-row roster entry lifecycle.</summary>
+        public static class NurseAssignmentStatus
+        {
+            public const string Active = "ACTIVE";
+            public const string Released = "RELEASED";
+        }
+
         /// <summary>Admission.ReferralSource — same soft-validated posture as ReferringFacilityType.
         /// HOSPITAL is intentionally excluded from AdmissionReferrerAssignment's audit trail (see that
         /// entity's doc comment) but stays a valid Admission.ReferralSource value.</summary>
@@ -165,6 +172,13 @@ namespace EasyHMSAPI.Data.Constants
             public const string Nursing = "NURSING";
 
             public static readonly string[] All = { Medication, Lab, Radiology, Procedure, Diet, Nursing };
+        }
+
+        /// <summary>OrderSet.Category — only POST_OP is ever written by the UI in v1; the field
+        /// exists so future set types (e.g. admission-wide protocols) don't need a schema change.</summary>
+        public static class OrderSetCategory
+        {
+            public const string PostOp = "POST_OP";
         }
 
         public static class ClinicalOrderStatus

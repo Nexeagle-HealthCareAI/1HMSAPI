@@ -59,6 +59,9 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? GuardianName { get; set; }
         public string? GuardianRelation { get; set; }
 
+        // ABHA number, linked/created via the ABDM module at booking time (optional).
+        public string? AbhaId { get; set; }
+
         // Opt-in for future SMS/email/marketing communication (e.g. a checkbox on the public
         // Nexeagle booking form). Null/false is simply "not asked this time" — never downgrades
         // an existing true consent; see AppointmentBookingHelpers.FindOrCreatePatientAsync.

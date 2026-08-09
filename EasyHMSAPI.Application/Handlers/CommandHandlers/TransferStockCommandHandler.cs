@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -8,11 +9,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     public class TransferStockCommandHandler : IRequestHandler<TransferStockRequestModel, TransferStockResponseModel>
     {
         private readonly IMediator _mediator;
+        private readonly AppDbContext _context;
         private readonly ILogger<TransferStockCommandHandler> _logger;
 
-        public TransferStockCommandHandler(IMediator mediator, ILogger<TransferStockCommandHandler> logger)
+        public TransferStockCommandHandler(IMediator mediator, AppDbContext context, ILogger<TransferStockCommandHandler> logger)
         {
             _mediator = mediator;
+            _context = context;
             _logger = logger;
         }
 
@@ -34,6 +37,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 return new TransferStockResponseModel { Success = false, Message = "Transfer quantity must be greater than zero." };
             }
 
+            using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
             try
             {
                 // Step 1: ISSUE from source store
@@ -53,10 +57,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 if (!issueResponse.Success)
                 {
+                    await transaction.RollbackAsync(cancellationToken);
                     return new TransferStockResponseModel { Success = false, Message = $"Failed to issue from source store: {issueResponse.Message}" };
                 }
 
-                // Step 2: RECEIVE to destination store
+                // Step 2: RECEIVE to destination store — shares the same scoped AppDbContext as
+                // step 1 (nested _mediator.Send resolves handlers from the same DI scope), so both
+                // SaveChangesAsync calls enlist in the transaction opened above.
                 var receiveResponse = await _mediator.Send(new RecordInventoryMovementRequestModel
                 {
                     HospitalId = request.HospitalId,
@@ -73,19 +80,16 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 if (!receiveResponse.Success)
                 {
-                    // This is a partial failure state! Ideally this should be wrapped in a distributed transaction 
-                    // or a single EF Core transaction if they shared a context, but RecordMovement saves its own context.
-                    // For now, this is a known edge case that requires manual adjustment if it occurs.
-                    _logger.LogCritical("Transfer partial failure: Issued {Qty} of Item {Item} from {FromStore} but failed to receive in {ToStore}. Reason: {Msg}",
-                        request.Qty, request.InventoryItemId, request.FromStoreId, request.ToStoreId, receiveResponse.Message);
-                        
-                    return new TransferStockResponseModel { Success = false, Message = $"Failed to receive in destination store. Source stock was deducted. Contact admin." };
+                    await transaction.RollbackAsync(cancellationToken);
+                    return new TransferStockResponseModel { Success = false, Message = $"Failed to receive in destination store: {receiveResponse.Message}. Transfer was rolled back." };
                 }
 
+                await transaction.CommitAsync(cancellationToken);
                 return new TransferStockResponseModel { Success = true, Message = "Stock transferred successfully." };
             }
             catch (Exception ex)
             {
+                await transaction.RollbackAsync(cancellationToken);
                 _logger.LogError(ex, "Error executing transfer.");
                 return new TransferStockResponseModel { Success = false, Message = "An error occurred during the transfer." };
             }

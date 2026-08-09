@@ -43,6 +43,20 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             _context.Dispose();
         }
 
+        // GetPublicDoctorsHandler inner-joins UserProfiles -- TestDataFactory.SeedUser doesn't
+        // create one, so any test expecting a non-empty result must add it explicitly.
+        private void SeedProfile(User user, string fullName = "Dr. Test")
+        {
+            _context.UserProfiles.Add(new UserProfile
+            {
+                UserProfileID = Guid.NewGuid(),
+                UserID = user.UserID,
+                UserStatusId = user.UserStatusId,
+                FullName = fullName,
+                UpdatedAt = DateTime.UtcNow,
+            });
+        }
+
         [Test]
         public async Task Handle_ReturnsPublicSafeFields_WithPhotoUrl_NoLicenseOrInternalFields()
         {
@@ -90,6 +104,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             var doctor = TestDataFactory.SeedDoctor(_context, user, isPubliclyListed: true);
             TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, hospital.HospitalID);
             doctor.LanguagesJson = "[\"English\",\"Hindi\"]";
+            SeedProfile(user);
             await _context.SaveChangesAsync();
 
             var response = await _handler.Handle(new GetPublicDoctorsRequestModel(), CancellationToken.None);
@@ -111,6 +126,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             _context.DoctorReviews.Add(new DoctorReview { ReviewId = Guid.NewGuid(), HospitalId = hospital.HospitalID, DoctorId = doctor.DoctorID, Rating = 4, Comment = "x", CreatedAt = DateTime.UtcNow });
             _context.DoctorReviews.Add(new DoctorReview { ReviewId = Guid.NewGuid(), HospitalId = hospital.HospitalID, DoctorId = doctor.DoctorID, Rating = 2, Comment = "x", CreatedAt = DateTime.UtcNow });
             _context.DoctorReviews.Add(new DoctorReview { ReviewId = Guid.NewGuid(), HospitalId = hospital.HospitalID, DoctorId = doctor.DoctorID, Rating = 1, Comment = "x", IsHidden = true, CreatedAt = DateTime.UtcNow });
+            SeedProfile(user);
             await _context.SaveChangesAsync();
 
             var response = await _handler.Handle(new GetPublicDoctorsRequestModel(), CancellationToken.None);
@@ -130,6 +146,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             _context.DoctorFees.Add(new DoctorFee { DoctorFeeId = Guid.NewGuid(), HospitalId = hospital.HospitalID, DoctorId = doctor.DoctorID, FeeType = "OPD_CONSULT", Amount = 500m, IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
             // A different fee type must not be picked up as the consultation fee.
             _context.DoctorFees.Add(new DoctorFee { DoctorFeeId = Guid.NewGuid(), HospitalId = hospital.HospitalID, DoctorId = doctor.DoctorID, FeeType = "IPD_VISIT", Amount = 1200m, IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+            SeedProfile(user);
             await _context.SaveChangesAsync();
 
             var response = await _handler.Handle(new GetPublicDoctorsRequestModel(), CancellationToken.None);
@@ -145,6 +162,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             var doctor = TestDataFactory.SeedDoctor(_context, user, isPubliclyListed: true);
             TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, hospital.HospitalID);
             _context.DoctorFees.Add(new DoctorFee { DoctorFeeId = Guid.NewGuid(), HospitalId = hospital.HospitalID, DoctorId = doctor.DoctorID, FeeType = "OPD_CONSULT", Amount = 500m, IsActive = false, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow });
+            SeedProfile(user);
             await _context.SaveChangesAsync();
 
             var response = await _handler.Handle(new GetPublicDoctorsRequestModel(), CancellationToken.None);
@@ -161,6 +179,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, hospital.HospitalID);
             _context.DoctorReviews.Add(new DoctorReview { ReviewId = Guid.NewGuid(), HospitalId = hospital.HospitalID, DoctorId = doctor.DoctorID, Rating = 4, Comment = "x", CreatedAt = DateTime.UtcNow });
             _context.DoctorReviews.Add(new DoctorReview { ReviewId = Guid.NewGuid(), HospitalId = hospital.HospitalID, DoctorId = doctor.DoctorID, Rating = 1, Comment = "Thanks for the feedback.", IsHospitalResponse = true, CreatedAt = DateTime.UtcNow });
+            SeedProfile(user);
             await _context.SaveChangesAsync();
 
             var response = await _handler.Handle(new GetPublicDoctorsRequestModel(), CancellationToken.None);
@@ -183,6 +202,8 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             var doctor2 = TestDataFactory.SeedDoctor(_context, user2, isPubliclyListed: true);
             TestDataFactory.SeedDoctorDepartment(_context, doctor2.DoctorID, unlistedHospital.HospitalID);
 
+            SeedProfile(user1, "Dr. One");
+            SeedProfile(user2, "Dr. Two");
             await _context.SaveChangesAsync();
 
             var response = await _handler.Handle(new GetPublicDoctorsRequestModel(), CancellationToken.None);
@@ -203,6 +224,8 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             var unlistedDoctor = TestDataFactory.SeedDoctor(_context, user2, isPubliclyListed: false);
             TestDataFactory.SeedDoctorDepartment(_context, unlistedDoctor.DoctorID, hospital.HospitalID);
 
+            SeedProfile(user1, "Dr. Listed");
+            SeedProfile(user2, "Dr. Unlisted");
             await _context.SaveChangesAsync();
 
             var response = await _handler.Handle(new GetPublicDoctorsRequestModel(), CancellationToken.None);
@@ -224,6 +247,8 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             var doctor2 = TestDataFactory.SeedDoctor(_context, user2, isPubliclyListed: true);
             TestDataFactory.SeedDoctorDepartment(_context, doctor2.DoctorID, hospital2.HospitalID);
 
+            SeedProfile(user1, "Dr. Kolkata");
+            SeedProfile(user2, "Dr. Mumbai");
             await _context.SaveChangesAsync();
 
             var response = await _handler.Handle(new GetPublicDoctorsRequestModel(), CancellationToken.None);

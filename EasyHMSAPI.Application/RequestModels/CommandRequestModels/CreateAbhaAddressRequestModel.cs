@@ -6,11 +6,11 @@ using System.Text.Json.Serialization;
 namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
 {
     [ExcludeFromCodeCoverage]
-    public class CancelChargeEventRequestModel : IRequest<CancelChargeEventResponseModel>
+    public class CreateAbhaAddressRequestModel : IRequest<AbdmEnrollResponseModel>
     {
         public Guid HospitalId { get; set; }
-        public string? PatientId { get; set; }
-        public string? CancelReason { get; set; }
+        public string TxnId { get; set; } = string.Empty;
+        public string AbhaAddress { get; set; } = string.Empty;
         [JsonIgnore]
         public string? LoggedInUserName { get; set; }
     }

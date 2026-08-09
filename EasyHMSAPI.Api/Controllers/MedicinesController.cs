@@ -166,5 +166,35 @@ namespace EasyHMSAPI.Api.Controllers
 
             return Ok(response);
         }
+
+        [HttpGet("{medicineId}/info")]
+        [Authorize]
+        public async Task<ActionResult<GetMedicineInfoResponseModel>> GetMedicineInfo(int medicineId)
+        {
+            _logger.LogInformation("GetMedicineInfo started at {Time} for medicineId: {MedicineId}", DateTime.UtcNow, medicineId);
+            GetMedicineInfoResponseModel response = new();
+            try
+            {
+                if (medicineId <= 0)
+                {
+                    response.Success = false;
+                    response.Message = "Invalid medicineId.";
+                }
+                else
+                {
+                    GetMedicineInfoRequestModel request = new() { MedicineId = medicineId };
+                    response = await _mediator.Send(request);
+                    _logger.LogInformation("GetMedicineInfo ended for medicineId: {MedicineId}", medicineId);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetMedicineInfo for medicineId: {MedicineId}" + ex.Message + ex.InnerException + ex.StackTrace, medicineId);
+                response.Success = false;
+                response.Message = "An error occurred while processing the request." + ex.Message + ex.InnerException + ex.StackTrace;
+            }
+
+            return Ok(response);
+        }
     }
 }

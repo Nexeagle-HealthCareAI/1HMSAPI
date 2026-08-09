@@ -30,6 +30,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
     [ExcludeFromCodeCoverage]
     public class MasterMedicineDataModel
     {
+        public int MedicineId { get; set; }
         public string? MedicineName { get; set; }
         public string? GenericName { get; set; }
         public string? BrandName { get; set; }
@@ -39,5 +40,6 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? UsageDescription { get; set; }
         public string? SideEffects { get; set; }
         public Decimal? Price { get; set; }
+        public string? PrescriptionFormat { get; set; }
     }
 }

@@ -1,3 +1,4 @@
+using EasyHMSAPI.Api.Common;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
@@ -287,6 +288,54 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 _logger.LogError(ex, "Error in UpdateDoctorPublicListing for hospitalId: {HospitalId}", hospitalId);
                 return StatusCode(500, new { Message = "An error occurred while updating the doctor's public-listing preference." });
+            }
+        }
+
+        // Toggles a doctor's manual "online now" flag on behalf of hospital staff. hospitalId as a
+        // query param (not the body) so the global HospitalAccessFilter gates this to callers who
+        // are members of that hospital — same pattern as UpdateDoctorPublicListing.
+        [HttpPatch("online-status")]
+        [Authorize]
+        public async Task<ActionResult<UpdateDoctorOnlineStatusResponseModel>> UpdateDoctorOnlineStatus([FromQuery] Guid hospitalId, [FromBody] UpdateDoctorOnlineStatusRequestModel request)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+            if (request.DoctorId == Guid.Empty)
+                return BadRequest(new { Message = "doctorId is required." });
+
+            try
+            {
+                request.HospitalId = hospitalId;
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in UpdateDoctorOnlineStatus for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while updating the doctor's online status." });
+            }
+        }
+
+        // Doctor self-service "online now" toggle — no hospitalId param, identity is resolved
+        // strictly from the caller's own JWT (see UpdateOwnOnlineStatusRequestModel).
+        [HttpPatch("online-status/self")]
+        [Authorize]
+        public async Task<ActionResult<UpdateDoctorOnlineStatusResponseModel>> UpdateOwnOnlineStatus([FromBody] UpdateOwnOnlineStatusRequestModel request)
+        {
+            var userId = UserContextHelper.GetUserId(HttpContext.User);
+            if (userId == null)
+                return Unauthorized(new { Message = "Could not resolve the signed-in user." });
+
+            try
+            {
+                request.CallerUserId = userId.Value;
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in UpdateOwnOnlineStatus for userId: {UserId}", userId);
+                return StatusCode(500, new { Message = "An error occurred while updating your online status." });
             }
         }
     }

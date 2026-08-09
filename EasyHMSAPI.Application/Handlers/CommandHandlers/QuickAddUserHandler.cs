@@ -51,6 +51,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             if (!callerIsMember)
                 return Fail("You don't have access to this hospital.");
 
+            // This controller is [SkipHospitalAccessCheck]-exempt, so HospitalAccessFilter's
+            // archived check never runs for this action — enforce it here directly.
+            var isArchived = await _context.Hospitals
+                .Where(h => h.HospitalID == request.HospitalId)
+                .Select(h => h.IsArchived)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (isArchived)
+                return Fail("This hospital has been archived and can no longer be modified.");
+
             // Adding team members is an administrator action.
             if (!await Common.CallerGuards.IsAdminAsync(_context, request.CallerUserId, cancellationToken))
                 return Fail("Only an administrator can add team members.");

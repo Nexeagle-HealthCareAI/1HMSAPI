@@ -7,16 +7,18 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
-    public class CancelChargeEventHandler : IRequestHandler<CancelChargeEventRequestModel, CancelChargeEventResponseModel>
+    // Renamed from CancelChargeEventHandler -- despite that old name, this has always cancelled
+    // the patient's entire latest encounter and voided every charge on it, not one charge.
+    public class CancelEncounterChargesHandler : IRequestHandler<CancelEncounterChargesRequestModel, CancelEncounterChargesResponseModel>
     {
         private readonly AppDbContext _context;
 
-        public CancelChargeEventHandler(AppDbContext context)
+        public CancelEncounterChargesHandler(AppDbContext context)
         {
             _context = context;
         }
 
-        public async Task<CancelChargeEventResponseModel> Handle(CancelChargeEventRequestModel request, CancellationToken cancellationToken)
+        public async Task<CancelEncounterChargesResponseModel> Handle(CancelEncounterChargesRequestModel request, CancellationToken cancellationToken)
         {
             try
             {
@@ -27,7 +29,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     .FirstOrDefaultAsync(cancellationToken);
 
                 if (encounter == null)
-                    return new CancelChargeEventResponseModel { Success = false, Message = $"No encounter found for patient {request.PatientId}." };
+                    return new CancelEncounterChargesResponseModel { Success = false, Message = $"No encounter found for patient {request.PatientId}." };
 
                 encounter.StatusCode = BillingConstants.EncounterStatus.Cancelled;
                 encounter.UpdatedAt = DateTime.UtcNow;
@@ -50,11 +52,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 await _context.SaveChangesAsync(cancellationToken);
 
-                return new CancelChargeEventResponseModel { Success = true, Message = "Encounter cancelled successfully." };
+                return new CancelEncounterChargesResponseModel { Success = true, Message = "Encounter cancelled successfully." };
             }
             catch (Exception)
             {
-                return new CancelChargeEventResponseModel { Success = false, Message = "Error cancelling encounter." };
+                return new CancelEncounterChargesResponseModel { Success = false, Message = "Error cancelling encounter." };
             }
         }
     }

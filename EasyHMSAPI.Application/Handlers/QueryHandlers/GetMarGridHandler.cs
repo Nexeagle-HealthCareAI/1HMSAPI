@@ -79,24 +79,22 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
                     var computedSlots = MarScheduleCalculator.ComputeSlots(line.Frequency, order.OrderedAt, line.DurationDays, dayStart, dayEnd.AddTicks(-1));
                     var candidateAdmins = adminsByLine.TryGetValue(line.OrderLineId, out var a) ? a : new List<MedicationAdministration>();
-                    var claimed = new HashSet<Guid>();
+                    var candidateById = candidateAdmins.ToDictionary(m => m.MedicationAdministrationId);
+
+                    var slotMatches = MarSlotMatcher.Match(
+                        computedSlots,
+                        candidateAdmins.Select(m => new MarSlotMatcher.Candidate(m.MedicationAdministrationId, m.ScheduledFor, m.ActedAt)));
+                    var claimed = MarSlotMatcher.GetClaimedIds(slotMatches);
 
                     var slotItems = new List<MarSlotItem>();
-                    foreach (var slot in computedSlots)
+                    foreach (var slotMatch in slotMatches)
                     {
-                        var match = candidateAdmins
-                            .Where(m => !claimed.Contains(m.MedicationAdministrationId)
-                                && Math.Abs((m.ScheduledFor - slot).TotalMinutes) <= MarScheduleCalculator.MatchTolerance.TotalMinutes)
-                            .OrderBy(m => Math.Abs((m.ScheduledFor - slot).TotalMinutes))
-                            .ThenByDescending(m => m.ActedAt)
-                            .FirstOrDefault();
-
-                        if (match != null)
+                        if (slotMatch.MatchedId.HasValue)
                         {
-                            claimed.Add(match.MedicationAdministrationId);
+                            var match = candidateById[slotMatch.MatchedId.Value];
                             slotItems.Add(new MarSlotItem
                             {
-                                ScheduledForUtc = slot,
+                                ScheduledForUtc = slotMatch.ScheduledForUtc,
                                 Status = match.ActionStatus,
                                 MedicationAdministrationId = match.MedicationAdministrationId,
                                 ActedAt = match.ActedAt,
@@ -114,8 +112,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         {
                             slotItems.Add(new MarSlotItem
                             {
-                                ScheduledForUtc = slot,
-                                Status = MarScheduleCalculator.DeriveSlotStatus(slot, now),
+                                ScheduledForUtc = slotMatch.ScheduledForUtc,
+                                Status = MarScheduleCalculator.DeriveSlotStatus(slotMatch.ScheduledForUtc, now),
                                 WitnessRequired = line.IsHighAlert,
                             });
                         }

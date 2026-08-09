@@ -35,6 +35,10 @@ namespace EasyHMSAPI.Domain.Entities
         // Opt-in: doctor only appears in the platform-wide public directory when BOTH
         // their hospital (Hospital.IsPubliclyListed) AND this flag are true.
         public bool IsPubliclyListed { get; set; } = false;
+        // Manual "online now" presence toggle — flipped by the doctor or staff on their behalf.
+        // Not derived from DoctorAvailabilityResolver/schedule data (see IsAvailableToday); a
+        // simple, self-reported signal, same shape as IsPubliclyListed.
+        public bool IsOnlineNow { get; set; } = false;
 
         // ── CMS-controlled Doctor Dekho marketing/moderation fields ──────────────────
         // Scheduled consultation-fee discount. "Active" is never stored as its own bool —

@@ -63,6 +63,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<LookupPersonal> LookupPersonals { get; set; }
         public DbSet<DoctorPreferredMedicine> DoctorPreferredMedicines { get; set; }
         public DbSet<MedicineMaster> MedicineMaster { get; set; }
+        public DbSet<RxNormIngredientCache> RxNormIngredientCache { get; set; }
         public DbSet<User> Users { get; set; }
         public DbSet<UserAuth> UserAuths { get; set; }
         public DbSet<PublicPatientAuth> PublicPatientAuths { get; set; }
@@ -111,6 +112,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<OTPlan> OTPlans { get; set; }
         public DbSet<PackageType> PackageTypes { get; set; }
         public DbSet<OTPlanPackageType> OTPlanPackageTypes { get; set; }
+        public DbSet<OrderSet> OrderSets { get; set; }
         public DbSet<AdmissionReferral> AdmissionReferrals { get; set; }
         public DbSet<AdmissionReferralStatusHistory> AdmissionReferralStatusHistories { get; set; }
         public DbSet<AdmissionReferralComment> AdmissionReferralComment { get; set; }
@@ -143,6 +145,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<DischargeMedication> DischargeMedication { get; set; }
         public DbSet<BedAssignment> BedAssignment { get; set; }
         public DbSet<AdmissionDoctorAssignment> AdmissionDoctorAssignment { get; set; }
+        public DbSet<NurseShiftAssignment> NurseShiftAssignment { get; set; }
         public DbSet<AdmissionReferrerAssignment> AdmissionReferrerAssignment { get; set; }
         public DbSet<AdmissionDocument> AdmissionDocument { get; set; }
         public DbSet<ClinicalOrder> ClinicalOrder { get; set; }
@@ -152,6 +155,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<AdmissionDayBillLine> AdmissionDayBillLine { get; set; }
         public DbSet<ConsentRecord> ConsentRecord { get; set; }
         public DbSet<ConsentTemplate> ConsentTemplate { get; set; }
+        public DbSet<AbhaAccount> AbhaAccount { get; set; }
         public DbSet<VitalReading> VitalReading { get; set; }
         public DbSet<FluidEntry> FluidEntry { get; set; }
         public DbSet<GlucoseReading> GlucoseReading { get; set; }
@@ -195,6 +199,8 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<IcuLevelOfCare> IcuLevelOfCare { get; set; }
         public DbSet<ApacheIIScore> ApacheIIScore { get; set; }
         public DbSet<SofaScore> SofaScore { get; set; }
+        public DbSet<VentilatorSettings> VentilatorSettings { get; set; }
+        public DbSet<WeaningAssessment> WeaningAssessment { get; set; }
         public DbSet<EarlyWarningScore> EarlyWarningScore { get; set; }
         public DbSet<RapidResponseActivation> RapidResponseActivation { get; set; }
         public DbSet<DeviceAssignment> DeviceAssignment { get; set; }
@@ -433,6 +439,13 @@ namespace EasyHMSAPI.Domain.Context
             modelBuilder.Entity<PackageType>().Property(e => e.CreatedAt).HasColumnType("datetime2");
             modelBuilder.Entity<PackageType>().Property(e => e.UpdatedAt).HasColumnType("datetime2");
             modelBuilder.Entity<PackageType>().Property(e => e.RowVersion).IsRowVersion();
+
+            // Configure OrderSet
+            modelBuilder.Entity<OrderSet>().ToTable("OrderSet");
+            modelBuilder.Entity<OrderSet>().HasKey(e => e.OrderSetId);
+            modelBuilder.Entity<OrderSet>().Property(e => e.CreatedAt).HasColumnType("datetime2");
+            modelBuilder.Entity<OrderSet>().Property(e => e.UpdatedAt).HasColumnType("datetime2");
+            modelBuilder.Entity<OrderSet>().Property(e => e.RowVersion).IsRowVersion();
 
             // Configure OTPlanPackageType (many-to-many join: an OT Plan may offer several Package Types)
             modelBuilder.Entity<OTPlanPackageType>().ToTable("OTPlanPackageType");
@@ -826,6 +839,18 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(a => a.RowVersion).IsRowVersion();
             });
 
+            modelBuilder.Entity<NurseShiftAssignment>(entity =>
+            {
+                entity.ToTable("NurseShiftAssignment");
+                entity.HasKey(a => a.NurseShiftAssignmentId);
+                entity.Property(a => a.ShiftDate).HasColumnType("date");
+                entity.Property(a => a.AssignedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.UnassignedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.RowVersion).IsRowVersion();
+            });
+
             modelBuilder.Entity<AdmissionDocument>(entity =>
             {
                 entity.ToTable("AdmissionDocument");
@@ -878,6 +903,13 @@ namespace EasyHMSAPI.Domain.Context
                 entity.HasKey(c => c.ConsentTemplateId);
                 entity.Property(c => c.CreatedAt).HasColumnType("datetime2(3)");
                 entity.Property(c => c.UpdatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<AbhaAccount>(entity =>
+            {
+                entity.ToTable("AbhaAccount");
+                entity.HasKey(a => a.AbhaAccountId);
+                entity.Property(a => a.CreatedAt).HasColumnType("datetime2(3)");
             });
 
             modelBuilder.Entity<VitalReading>(entity =>
@@ -1550,6 +1582,29 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(s => s.ScoredAt).HasColumnType("datetime2(3)");
                 entity.Property(s => s.CreatedAt).HasColumnType("datetime2(3)");
                 entity.Property(s => s.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<VentilatorSettings>(entity =>
+            {
+                entity.ToTable("VentilatorSettings");
+                entity.HasKey(v => v.VentilatorSettingsId);
+                entity.Property(v => v.FiO2Percent).HasPrecision(5, 2);
+                entity.Property(v => v.PeepCmH2o).HasPrecision(5, 2);
+                entity.Property(v => v.TidalVolumeMl).HasPrecision(7, 2);
+                entity.Property(v => v.PeakInspiratoryPressure).HasPrecision(5, 2);
+                entity.Property(v => v.PlateauPressure).HasPrecision(5, 2);
+                entity.Property(v => v.ScoredAt).HasColumnType("datetime2(3)");
+                entity.Property(v => v.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(v => v.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<WeaningAssessment>(entity =>
+            {
+                entity.ToTable("WeaningAssessment");
+                entity.HasKey(w => w.WeaningAssessmentId);
+                entity.Property(w => w.AssessedAt).HasColumnType("datetime2(3)");
+                entity.Property(w => w.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(w => w.RowVersion).IsRowVersion();
             });
 
             modelBuilder.Entity<EarlyWarningScore>(entity =>

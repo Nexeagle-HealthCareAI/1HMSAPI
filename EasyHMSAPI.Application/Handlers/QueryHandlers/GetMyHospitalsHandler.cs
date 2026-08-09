@@ -27,6 +27,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     from hu in _context.HospitalUsers
                     where hu.UserID == request.UserId
                     join h in _context.Hospitals on hu.HospitalID equals h.HospitalID
+                    where !h.IsArchived
                     join c in _context.HospitalChains on h.ChainId equals c.ChainId into chains
                     from c in chains.DefaultIfEmpty()
                     orderby hu.IsPrimary descending, h.Name

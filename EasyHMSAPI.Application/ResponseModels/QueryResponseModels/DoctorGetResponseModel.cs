@@ -18,6 +18,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? PublicContactPhone { get; set; }
         public string? PhotoUrl { get; set; }
         public bool IsPubliclyListed { get; set; }
+        public bool IsOnlineNow { get; set; }
         public Guid? PrimaryDepartmentID { get; set; }
         public string? PrimaryDepartmentName { get; set; }
         public Guid? PrimaryMedicalSpecialityId { get; set; }

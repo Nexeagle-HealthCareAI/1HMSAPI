@@ -89,6 +89,7 @@ builder.Services.AddCors(options =>
                 "http://localhost:5173",
                 "https://1hms.nexeagle.com",
                 "http://1hms.nexeagle.com",
+                "https://1hms-dev.nexeagle.com",
                 "https://nexeagle.com",
                 "http://nexeagle.com",
                 "http://151.185.45.77:81",
@@ -171,6 +172,27 @@ builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IGeoIpLook
 builder.Services.AddScoped<IVoiceRxService, VoiceRxService>();
 builder.Services.AddScoped<IDoctorValidationHelper, DoctorValidationHelper>();
 builder.Services.AddScoped<ISubscriptionLimitHelper, SubscriptionLimitHelper>();
+// ABDM M1: ABHA creation (Aadhaar-OTP) + existing-ABHA login (Mobile/Aadhaar-OTP).
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmEncryptionService, EasyHMSAPI.Application.Services.Implementations.AbdmEncryptionService>();
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmGatewayService, EasyHMSAPI.Application.Services.Implementations.AbdmGatewayService>();
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmAbhaService, EasyHMSAPI.Application.Services.Implementations.AbdmAbhaService>();
+
+// RxNorm (RxNav): free, unauthenticated NLM API used to enrich a medicine's generic/salt
+// ingredients (available strengths, US-naming cross-reference). Fixed public base URL, no
+// per-environment config needed.
+builder.Services.AddHttpClient<EasyHMSAPI.Application.Services.Interfaces.IRxNormService, EasyHMSAPI.Application.Services.Implementations.RxNormService>(client =>
+{
+    client.BaseAddress = new Uri("https://rxnav.nlm.nih.gov/REST/");
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
+
+// openFDA Drug Label API: free, unauthenticated FDA API used for usage/side-effect text that
+// neither the 1mg import nor RxNorm carries. Fixed public base URL, no per-environment config.
+builder.Services.AddHttpClient<EasyHMSAPI.Application.Services.Interfaces.IDrugLabelService, EasyHMSAPI.Application.Services.Implementations.OpenFdaLabelService>(client =>
+{
+    client.BaseAddress = new Uri("https://api.fda.gov/");
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
 
 // ------------------------------------------------------------
 // Rate Limiting

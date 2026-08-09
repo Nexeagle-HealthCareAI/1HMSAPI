@@ -88,6 +88,53 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public bool IsNarcoticDispenseContext { get; set; }
     }
 
+    // Board-level "use stock, bill the patient" quick action (ICU board today; OT board's patient
+    // list lives in a sibling component with a different shape and isn't wired up yet). Composes
+    // RecordInventoryMovementRequestModel + AddChargeEventRequestModel inside one DB transaction —
+    // same nested-send-under-one-transaction shape as TransferStockCommandHandler and
+    // QuickReceiveStockCommandHandler. ChargeId is resolved from the InventoryItem's own catalog
+    // link (InventoryItem.ChargeId), never supplied by the caller.
+    [ExcludeFromCodeCoverage]
+    public class RecordAndBillStockUsageRequestModel : IRequest<RecordAndBillStockUsageResponseModel>
+    {
+        public Guid HospitalId { get; set; }
+        [JsonIgnore]
+        public string? LoggedInUserName { get; set; }
+        [JsonIgnore]
+        public Guid? LoggedInUserId { get; set; }
+
+        public Guid StoreId { get; set; }
+        public Guid InventoryItemId { get; set; }
+        public decimal Qty { get; set; }
+        public Guid EncounterId { get; set; }
+        public string PatientId { get; set; } = null!;
+        public Guid? AttributedDoctorId { get; set; }
+        public string? Notes { get; set; }
+    }
+
+    // Board-level "receive stock" quick action (OT/ICU boards) — composes CreateBatchRequestModel +
+    // RecordInventoryMovementRequestModel (MovementType=RECEIVE) inside one DB transaction so a
+    // clinical user never has to think about batches; BatchNumber is optional and auto-generated
+    // by the handler when omitted (ad-hoc stock rarely has a meaningful lot number to hand).
+    [ExcludeFromCodeCoverage]
+    public class QuickReceiveStockRequestModel : IRequest<QuickReceiveStockResponseModel>
+    {
+        public Guid HospitalId { get; set; }
+        [JsonIgnore]
+        public string? LoggedInUserName { get; set; }
+        [JsonIgnore]
+        public Guid? LoggedInUserId { get; set; }
+
+        public Guid StoreId { get; set; }
+        public Guid InventoryItemId { get; set; }
+        public decimal Qty { get; set; }
+        public string? BatchNumber { get; set; }
+        public DateTime? ManufactureDate { get; set; }
+        public DateTime? ExpiryDate { get; set; }
+        public decimal? UnitCost { get; set; }
+        public string? Notes { get; set; }
+    }
+
     [ExcludeFromCodeCoverage]
     public class BulkCreateBatchRequestModel : IRequest<BulkCreateBatchResponseModel>
     {

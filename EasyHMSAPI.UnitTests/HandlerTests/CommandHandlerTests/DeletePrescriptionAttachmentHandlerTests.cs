@@ -108,7 +108,10 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             _context.PrescriptionAttachments.Add(TestEntityFactory.CreatePrescriptionAttachment(attachmentId, appointmentId, doctorId, hospitalId, patientId));
             await _context.SaveChangesAsync();
 
-            _mockBlobStorageService.Setup(x => x.DeleteAsync(attachmentId.ToString(), "test-container", It.IsAny<CancellationToken>()))
+            // TestEntityFactory.CreatePrescriptionAttachment sets ReportType = "Lab Report", which
+            // the handler routes to the "labreports" container (not the configured default
+            // container) -- mock the container the handler will actually call.
+            _mockBlobStorageService.Setup(x => x.DeleteAsync(attachmentId.ToString(), "labreports", It.IsAny<CancellationToken>()))
                 .ReturnsAsync(true);
 
             var request = new DeletePrescriptionAttachmentRequestModel
