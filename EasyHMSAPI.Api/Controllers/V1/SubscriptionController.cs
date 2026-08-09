@@ -122,7 +122,11 @@ namespace EasyHMSAPI.Api.Controllers.V1
                 sub.PaymentMode,
                 sub.PaymentDate,
                 sub.RejectionReason,
-                sub.RejectedAt
+                sub.RejectedAt,
+                sub.ReferralCode,
+                sub.ReferralCodeRewardKind,
+                sub.ReferralCodeRewardValue,
+                sub.ReferralCodeRedeemedAt
             });
         }
 

@@ -5,15 +5,74 @@ using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using System.Net.Http.Headers;
+using System.Text.Json;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
     public class HospitalRegisterHandler : IRequestHandler<HospitalRegisterRequestModel, HospitalRegisterResponseModel>
     {
         private readonly AppDbContext _context;
-        public HospitalRegisterHandler(AppDbContext context)
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IConfiguration _configuration;
+        private readonly ILogger<HospitalRegisterHandler> _logger;
+
+        public HospitalRegisterHandler(AppDbContext context, IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<HospitalRegisterHandler> logger)
         {
             _context = context;
+            _httpClientFactory = httpClientFactory;
+            _configuration = configuration;
+            _logger = logger;
+        }
+
+        private class ValidateReferralCodeResponse
+        {
+            public bool Valid { get; set; }
+            public string? Message { get; set; }
+            public string? RewardKind { get; set; }
+            public decimal? RewardValue { get; set; }
+            public string? ReferralCodeTypeName { get; set; }
+        }
+
+        // Server-to-server call to CMSAPI's referral code catalog, same X-Service-Key convention
+        // SubscriptionController.GetPlans already uses. Never throws -- an invalid code, or CMS
+        // being unreachable, must never block hospital registration; the caller just gets back a
+        // "not applied" result with an explanatory message.
+        private async Task<ValidateReferralCodeResponse> ValidateReferralCodeAsync(string referralCode, CancellationToken cancellationToken)
+        {
+            var baseUrl = _configuration["Cms:BaseUrl"];
+            var serviceKey = _configuration["Cms:ServiceApiKey"];
+            if (string.IsNullOrEmpty(baseUrl) || string.IsNullOrEmpty(serviceKey))
+            {
+                _logger.LogError("Cms:BaseUrl or Cms:ServiceApiKey is not configured; cannot validate referral code.");
+                return new ValidateReferralCodeResponse { Valid = false, Message = "Referral codes are not available right now." };
+            }
+
+            try
+            {
+                var client = _httpClientFactory.CreateClient();
+                var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl.TrimEnd('/')}/api/v1/ReferralCodes/service/validate?code={Uri.EscapeDataString(referralCode)}");
+                request.Headers.Add("X-Service-Key", serviceKey);
+                request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+                var response = await client.SendAsync(request, cancellationToken);
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("Referral code validation request failed with {StatusCode}.", response.StatusCode);
+                    return new ValidateReferralCodeResponse { Valid = false, Message = "Referral code could not be verified." };
+                }
+
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                var result = JsonSerializer.Deserialize<ValidateReferralCodeResponse>(body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                return result ?? new ValidateReferralCodeResponse { Valid = false, Message = "Referral code could not be verified." };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error validating referral code with CMS.");
+                return new ValidateReferralCodeResponse { Valid = false, Message = "Referral code could not be verified." };
+            }
         }
 
         public async Task<HospitalRegisterResponseModel> Handle(HospitalRegisterRequestModel request, CancellationToken cancellationToken)
@@ -155,6 +214,26 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
+
+                // --- Optional referral code ---
+                bool referralCodeApplied = false;
+                string? referralCodeMessage = null;
+                if (!string.IsNullOrWhiteSpace(request.ReferralCode))
+                {
+                    var validation = await ValidateReferralCodeAsync(request.ReferralCode.Trim(), cancellationToken);
+                    if (validation.Valid)
+                    {
+                        trialSub.ReferralCode = request.ReferralCode.Trim().ToUpperInvariant();
+                        trialSub.ReferralCodeRewardKind = validation.RewardKind;
+                        trialSub.ReferralCodeRewardValue = validation.RewardValue;
+                        referralCodeApplied = true;
+                        referralCodeMessage = $"Referral code applied: {validation.ReferralCodeTypeName}.";
+                    }
+                    else
+                    {
+                        referralCodeMessage = validation.Message ?? "Referral code not recognized.";
+                    }
+                }
                 _context.HospitalSubscriptions.Add(trialSub);
 
                 // --- Automatically Setup Doctor profile and Default Department if AdminDoctor/Doctor ---
@@ -226,7 +305,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     Success = true,
                     Message = "Hospital registered successfully.",
                     HospitalId = hospitalId,
-                    HospitalUserId = hospitalUser.HospitalUserID
+                    HospitalUserId = hospitalUser.HospitalUserID,
+                    ReferralCodeApplied = referralCodeApplied,
+                    ReferralCodeMessage = referralCodeMessage
                 };
             }
         }
