@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
@@ -76,7 +77,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 // Posted but never linked to a draft invoice (e.g. BillingPage's best-effort
                 // auto-createDraftInvoice call failed silently) -- there's no invoice to unwind,
                 // so just remove the charge directly instead of refusing to delete it forever.
-                await ReverseConsultantIncentiveAsync(chargeEvent.ChargeEventId, request, cancellationToken);
+                await ConsultantIncentiveHelper.CancelForChargeAsync(_context, chargeEvent.ChargeEventId, request.LoggedInUserName, "Charge event deleted", cancellationToken);
                 _context.BillingChargeEvent.Remove(chargeEvent);
                 await _context.SaveChangesAsync(cancellationToken);
 
@@ -140,7 +141,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     _context.BillingPaymentAllocation.Remove(allocation);
             }
 
-            await ReverseConsultantIncentiveAsync(chargeEvent.ChargeEventId, request, cancellationToken);
+            await ConsultantIncentiveHelper.CancelForChargeAsync(_context, chargeEvent.ChargeEventId, request.LoggedInUserName, "Charge event deleted", cancellationToken);
             _context.BillingChargeEvent.Remove(chargeEvent);
 
             foreach (var mapping in invoiceChargeEvents)
@@ -201,27 +202,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 Success = true,
                 Message = "Charge event deleted successfully."
             };
-        }
-
-        // Soft-cancel rather than delete -- preserves the audit trail, matches this codebase's
-        // established revoke-never-hard-delete convention. Never touches a row already PAID
-        // (settled) -- clawing back a paid-out incentive is a separate reconciliation concern.
-        private async Task ReverseConsultantIncentiveAsync(Guid chargeEventId, DeleteBillingEventRequestModel request, CancellationToken cancellationToken)
-        {
-            var ledgerEntry = await _context.ConsultantIncentiveLedger
-                .Where(l => l.ChargeEventId == chargeEventId && l.StatusCode == "ACCRUED")
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (ledgerEntry == null)
-                return;
-
-            var now = DateTime.UtcNow;
-            ledgerEntry.StatusCode = "CANCELLED";
-            ledgerEntry.CancelledAt = now;
-            ledgerEntry.CancelledBy = request.LoggedInUserName;
-            ledgerEntry.CancelReason = "Charge event deleted";
-            ledgerEntry.UpdatedAt = now;
-            ledgerEntry.UpdatedBy = request.LoggedInUserName;
         }
 
         private async Task<DeleteBillingEventResponseModel> DeletePaymentEvent(DeleteBillingEventRequestModel request, CancellationToken cancellationToken)

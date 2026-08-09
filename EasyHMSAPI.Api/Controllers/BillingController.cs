@@ -186,6 +186,28 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Manually deletes (soft-cancels) an invoice regardless of status -- draft or finalized.
+        [HttpPost("delete-invoice")]
+        public async Task<ActionResult<DeleteInvoiceResponseModel>> DeleteInvoice([FromBody] DeleteInvoiceRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.EncounterId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and encounterId are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in DeleteInvoice for encounterId: {EncounterId}", request.EncounterId);
+                return StatusCode(500, new { Message = "An error occurred while deleting the invoice." });
+            }
+        }
+
         [HttpGet("print")]
         public async Task<ActionResult<PrintBillingResponseModel>> PrintBilling(
             [FromQuery] string? patientId,
