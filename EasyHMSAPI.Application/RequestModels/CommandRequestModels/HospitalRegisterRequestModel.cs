@@ -26,6 +26,10 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModel
         public string? NabhNabl { get; set; }
         // When set, onboard this hospital into an existing chain (caller must be the chain owner).
         public Guid? ChainId { get; set; }
+        // Optional referral code entered at registration. Validated against CMSAPI's referral code
+        // catalog; an invalid/expired/already-used code never blocks registration -- see
+        // HospitalRegisterResponseModel.ReferralCodeApplied for the soft feedback shown to the user.
+        public string? ReferralCode { get; set; }
         [JsonIgnore]
         public string? LoggedInUserName { get; set; }
     }
