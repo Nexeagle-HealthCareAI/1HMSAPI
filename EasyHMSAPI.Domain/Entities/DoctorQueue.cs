@@ -18,6 +18,10 @@ namespace EasyHMSAPI.Domain.Entities
         [Required, StringLength(20)]
         public string TokenStrategy { get; set; } = string.Empty;
 
+        // Authoritative "who's up now" pointer for the OPD queue feature, set by
+        // queue/{doctorId}/call and queue/{doctorId}/skip. Null = nobody called yet today.
+        public int? CurrentServingTokenNo { get; set; }
+
         // Concurrency token — two simultaneous bookings for the same doctor's first-available slot
         // both reading the same NextTokenNo and racing to increment it (a silent lost update, no
         // exception) was the root cause of duplicate/skipped token numbers. EF Core checks this on

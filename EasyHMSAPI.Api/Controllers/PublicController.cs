@@ -87,11 +87,31 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Resolves a scanned OPD QR code to a hospital -- the bot gateway's GET /c/{hospital_code}
+        // calls this to know which hospital's context to load. No auth beyond the controller's
+        // optional X-Api-Key, same as every other endpoint here.
+        [HttpGet("hospitals/by-code/{hospitalCode}")]
+        public async Task<ActionResult<GetHospitalByCodeResponseModel>> GetHospitalByCode(string hospitalCode)
+        {
+            try
+            {
+                var response = await _mediator.Send(new GetHospitalByCodeRequestModel { HospitalCode = hospitalCode });
+                if (!response.Success) return NotFound(response);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetHospitalByCode for hospitalCode: {HospitalCode}", hospitalCode);
+                return StatusCode(500, new { Message = "An error occurred while resolving the hospital code." });
+            }
+        }
+
         [HttpGet("doctors")]
         public async Task<ActionResult<GetPublicDoctorsResponseModel>> GetDoctors(
             [FromQuery] int page = 1, [FromQuery] int pageSize = 24,
             [FromQuery] string? city = null, [FromQuery] string? state = null,
-            [FromQuery] string? specialtyCategory = null, [FromQuery] string? search = null)
+            [FromQuery] string? specialtyCategory = null, [FromQuery] string? search = null,
+            [FromQuery] Guid? hospitalId = null)
         {
             try
             {
@@ -103,6 +123,7 @@ namespace EasyHMSAPI.Api.Controllers
                     State = state,
                     SpecialtyCategory = specialtyCategory,
                     Search = search,
+                    HospitalId = hospitalId,
                 };
                 var response = await _mediator.Send(request);
                 return Ok(response);
@@ -169,6 +190,44 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 _logger.LogError(ex, "Error in PublicController.BookAppointment");
                 return StatusCode(500, new { Message = "An error occurred while booking the appointment." });
+            }
+        }
+
+        // OPD QR check-in: converts a booked appointment into a queue token after a geofence check.
+        // See IssueQueueTokenHandler for the idempotency/geofence details.
+        [HttpPost("tokens")]
+        public async Task<ActionResult<IssueQueueTokenResponseModel>> IssueQueueToken([FromBody] IssueQueueTokenRequestModel request, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var response = await _mediator.Send(request, cancellationToken);
+                if (!response.Success) return BadRequest(response);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.IssueQueueToken for appointmentId: {AppointmentId}", request.AppointmentId);
+                return StatusCode(500, new { Message = "An error occurred while checking in." });
+            }
+        }
+
+        // On-demand queue status snapshot -- deliberately a plain JSON GET, not SSE (no such
+        // infrastructure exists in this codebase, and the bot's own POST /events/token-called
+        // already handles real-time push delivery; this just serves a one-shot read for the bot's
+        // "type STATUS" handler to call).
+        [HttpGet("tokens/{appointmentId:guid}")]
+        public async Task<ActionResult<GetQueueTokenStatusResponseModel>> GetQueueTokenStatus(Guid appointmentId, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var response = await _mediator.Send(new GetQueueTokenStatusRequestModel { AppointmentId = appointmentId }, cancellationToken);
+                if (!response.Success) return NotFound(response);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetQueueTokenStatus for appointmentId: {AppointmentId}", appointmentId);
+                return StatusCode(500, new { Message = "An error occurred while fetching queue status." });
             }
         }
 

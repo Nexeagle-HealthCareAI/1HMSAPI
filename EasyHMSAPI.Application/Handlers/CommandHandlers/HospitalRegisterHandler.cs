@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModel;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
@@ -126,6 +127,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     PAN = request.PanNumber ?? string.Empty,
                     NABH_NABL = request.NabhNabl ?? string.Empty
                 };
+                hospital.HospitalCode = await HospitalCodeHelper.GenerateUniqueCodeAsync(_context, cancellationToken);
                 _context.Hospitals.Add(hospital);
 
                 var employeeId = await _context.UserProfiles

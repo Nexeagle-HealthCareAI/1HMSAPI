@@ -117,6 +117,44 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         }
 
         [Test]
+        public async Task Handle_HospitalIdFilter_BypassesIsPubliclyListed_ButStillRequiresActive()
+        {
+            var user = TestDataFactory.SeedUser(_context);
+            var notPubliclyListedHospital = TestDataFactory.SeedHospital(_context, user.UserID, isPubliclyListed: false);
+            var doctor = TestDataFactory.SeedDoctor(_context, user, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, notPubliclyListedHospital.HospitalID);
+            SeedProfile(user);
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetPublicDoctorsRequestModel { HospitalId = notPubliclyListedHospital.HospitalID }, CancellationToken.None);
+
+            Assert.That(response.Doctors, Has.Count.EqualTo(1));
+            Assert.That(response.Doctors[0].HospitalId, Is.EqualTo(notPubliclyListedHospital.HospitalID));
+        }
+
+        [Test]
+        public async Task Handle_HospitalIdFilter_ExcludesDoctorsAtOtherHospitals()
+        {
+            var user1 = TestDataFactory.SeedUser(_context, email: "one@example.com", phone: "1111111111");
+            var hospital1 = TestDataFactory.SeedHospital(_context, user1.UserID);
+            var doctor1 = TestDataFactory.SeedDoctor(_context, user1, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor1.DoctorID, hospital1.HospitalID);
+            SeedProfile(user1, "Dr. One");
+
+            var user2 = TestDataFactory.SeedUser(_context, email: "two@example.com", phone: "2222222222");
+            var hospital2 = TestDataFactory.SeedHospital(_context, user2.UserID);
+            var doctor2 = TestDataFactory.SeedDoctor(_context, user2, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor2.DoctorID, hospital2.HospitalID);
+            SeedProfile(user2, "Dr. Two");
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetPublicDoctorsRequestModel { HospitalId = hospital1.HospitalID }, CancellationToken.None);
+
+            Assert.That(response.Doctors, Has.Count.EqualTo(1));
+            Assert.That(response.Doctors[0].DoctorId, Is.EqualTo(doctor1.DoctorID));
+        }
+
+        [Test]
         public async Task Handle_ReturnsRatingAggregate_FromNonHiddenReviewsOnly()
         {
             var user = TestDataFactory.SeedUser(_context);

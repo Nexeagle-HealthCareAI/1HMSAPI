@@ -35,6 +35,31 @@ namespace EasyHMSAPI.Data.Constants
         public static readonly string AnalyticsEventType_BookingStepReached = "booking_step_reached";
 
         public static readonly string TokenStrategy_Sequential = "SEQUENTIAL";
+
+        // OPD queue check-in (QR flow) -- AppointmentToken.Status values.
+        public static readonly string QueueTokenStatus_Waiting = "WAITING";
+        public static readonly string QueueTokenStatus_Called = "CALLED";
+        public static readonly string QueueTokenStatus_Done = "DONE";
+        public static readonly string QueueTokenStatus_NoShow = "NOSHOW";
+
+        public static readonly string QueueArrivalMethod_Geofence = "Geofence";
+        public static readonly string QueueArrivalMethod_StaffOverride = "StaffOverride";
+
+        // How close (in meters) a patient's reported GPS position must be to Hospital.Latitude/
+        // Longitude for POST public/tokens to accept a self-check-in without staff involvement.
+        public const double GeofenceRadiusMeters = 200;
+
+        // A skip is capped at this many times per token before it requires manual reception
+        // handling (see QueueController.Skip) -- the spec doesn't define what happens past the
+        // cap, so this is a hard stop rather than a guessed auto-action.
+        public const int QueueMaxSkipsPerToken = 2;
+
+        // How many positions later a skipped patient's QueueSequence moves.
+        public const int QueueSkipRequeueOffset = 3;
+
+        // Rough per-patient consult duration used to estimate a queued patient's wait time —
+        // documented as an estimate, not a promise.
+        public const int QueueAverageConsultMinutes = 10;
         
         public static readonly string Prescription_ActionType_Submit = "submit";
         public static readonly string Prescription_ActionType_Draft = "draft";

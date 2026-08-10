@@ -223,6 +223,7 @@ namespace EasyHMSAPI.Domain.Context
             modelBuilder.Entity<UserRole>().ToTable("UserRoles");
 
             modelBuilder.Entity<Hospital>().ToTable("Hospitals");
+            modelBuilder.Entity<Hospital>().HasIndex(h => h.HospitalCode).IsUnique().HasFilter("[HospitalCode] IS NOT NULL");
             modelBuilder.Entity<HospitalChain>().ToTable("HospitalChains");
             modelBuilder.Entity<HospitalUser>().ToTable("HospitalUsers");
             modelBuilder.Entity<HospitalProfileStatus>().ToTable("HospitalProfileStatus");

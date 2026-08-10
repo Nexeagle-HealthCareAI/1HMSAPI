@@ -36,6 +36,10 @@ namespace EasyHMSAPI.Domain.Entities
         // doctor publicly listed at this hospital, since a doctor doesn't have their own address.
         public decimal? Latitude { get; set; }
         public decimal? Longitude { get; set; }
+        // Short, unique, QR-friendly slug resolved by GET public/hospitals/by-code/{hospitalCode} --
+        // distinct from HospitalID (a GUID, never printed on physical signage). Null until assigned.
+        [MaxLength(12)]
+        public string? HospitalCode { get; set; }
         public Guid CreatedByUserID { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime LastUpdatedAt { get; set; } = DateTime.UtcNow;

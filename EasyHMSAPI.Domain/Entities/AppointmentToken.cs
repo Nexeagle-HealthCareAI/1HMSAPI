@@ -24,5 +24,23 @@ namespace EasyHMSAPI.Domain.Entities
         public bool IsManual { get; set; }
         [Required]
         public DateTime CreatedAt { get; set; }
+
+        // OPD queue state (added for the QR check-in feature) -- see AppConstants.QueueTokenStatus_*
+        // for the valid Status values.
+        [Required, StringLength(20)]
+        public string Status { get; set; } = "WAITING";
+        [Required]
+        public int SkipCount { get; set; }
+        // Live ordering key, defaults to TokenNo at issuance; a skip re-numbers this (not TokenNo
+        // itself, which stays the patient's permanent, display-facing token number).
+        public int? QueueSequence { get; set; }
+        public DateTime? ArrivedAt { get; set; }
+        [StringLength(20)]
+        public string? ArrivalMethod { get; set; } // 'Geofence' | 'StaffOverride'
+        [Column(TypeName = "decimal(9,6)")]
+        public decimal? ArrivalLatitude { get; set; }
+        [Column(TypeName = "decimal(9,6)")]
+        public decimal? ArrivalLongitude { get; set; }
+        public DateTime? CalledAt { get; set; }
     }
 }
