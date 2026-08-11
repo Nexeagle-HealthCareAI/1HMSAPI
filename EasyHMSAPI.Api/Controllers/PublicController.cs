@@ -150,6 +150,69 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Single-doctor lookup -- previously there was no dedicated endpoint for this (see the
+        // note in NexEagleWebsite's server.ts getDoctorById); used directly by the WhatsApp
+        // bot's deterministic DRBOOK <doctorId> trigger (GET /doc/{doctorId} in webhook.py) to
+        // resolve exactly one doctor, no name-matching involved.
+        [HttpGet("doctors/{doctorId:guid}")]
+        public async Task<ActionResult<GetPublicDoctorByIdResponseModel>> GetDoctorById(Guid doctorId)
+        {
+            try
+            {
+                var response = await _mediator.Send(new GetPublicDoctorsRequestModel { DoctorId = doctorId, Page = 1, PageSize = 1 });
+                var doctor = response.Doctors.FirstOrDefault();
+                if (doctor == null)
+                    return NotFound(new { Message = "Doctor not found." });
+                return Ok(new GetPublicDoctorByIdResponseModel { Success = true, Doctor = doctor });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetDoctorById for doctorId: {DoctorId}", doctorId);
+                return StatusCode(500, new { Message = "An error occurred while fetching the doctor." });
+            }
+        }
+
+        // Doctor's own WhatsApp-booking QR (NexEagle logo centered) -- rendered on their Doctor
+        // Dekho profile page. Scanning it lands the patient straight into a booking flow for
+        // THIS exact doctor (skips specialty/name search entirely) -- see the bot's DRBOOK
+        // trigger in conversation.py.
+        [HttpGet("doctors/{doctorId:guid}/qr-code")]
+        public async Task<IActionResult> GetDoctorQrCode(Guid doctorId)
+        {
+            try
+            {
+                var response = await _mediator.Send(new GetPublicDoctorQrCodeRequestModel { DoctorId = doctorId });
+                if (!response.Success || response.Content == null)
+                    return NotFound(new { response.Message });
+                return File(response.Content, response.ContentType);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetDoctorQrCode for doctorId: {DoctorId}", doctorId);
+                return StatusCode(500, new { Message = "An error occurred while generating the QR code." });
+            }
+        }
+
+        // Generic "chat with us on WhatsApp" QR (NexEagle logo centered) -- e.g. the Doctor
+        // Dekho homepage's WhatsApp CTA. Content never varies per call; callers are expected to
+        // cache the response rather than re-fetch on every page view.
+        [HttpGet("whatsapp-qr-code")]
+        public async Task<IActionResult> GetWhatsAppEntryQrCode()
+        {
+            try
+            {
+                var response = await _mediator.Send(new GetWhatsAppEntryQrCodeRequestModel());
+                if (!response.Success || response.Content == null)
+                    return NotFound(new { response.Message });
+                return File(response.Content, response.ContentType);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetWhatsAppEntryQrCode");
+                return StatusCode(500, new { Message = "An error occurred while generating the QR code." });
+            }
+        }
+
         [HttpGet("doctors/{doctorId:guid}/availability")]
         public async Task<ActionResult<GetPublicDoctorAvailabilityResponseModel>> GetDoctorAvailability(Guid doctorId, [FromQuery] DateTime date)
         {

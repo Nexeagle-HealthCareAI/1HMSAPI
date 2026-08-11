@@ -321,5 +321,42 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
 
             Assert.That(response.Doctors, Is.Empty);
         }
+
+        [Test]
+        public async Task Handle_DoctorIdFilter_ReturnsOnlyThatDoctor()
+        {
+            var user1 = TestDataFactory.SeedUser(_context, email: "g@example.com", phone: "8888888888");
+            var hospital1 = TestDataFactory.SeedHospital(_context, user1.UserID);
+            var doctor1 = TestDataFactory.SeedDoctor(_context, user1, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor1.DoctorID, hospital1.HospitalID);
+            SeedProfile(user1, "Dr. Target");
+
+            var user2 = TestDataFactory.SeedUser(_context, email: "h@example.com", phone: "9999999999");
+            var hospital2 = TestDataFactory.SeedHospital(_context, user2.UserID);
+            var doctor2 = TestDataFactory.SeedDoctor(_context, user2, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor2.DoctorID, hospital2.HospitalID);
+            SeedProfile(user2, "Dr. Other");
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetPublicDoctorsRequestModel { DoctorId = doctor1.DoctorID }, CancellationToken.None);
+
+            Assert.That(response.Doctors, Has.Count.EqualTo(1));
+            Assert.That(response.Doctors[0].DoctorId, Is.EqualTo(doctor1.DoctorID));
+        }
+
+        [Test]
+        public async Task Handle_DoctorIdFilter_StillRequiresPubliclyListed()
+        {
+            var user = TestDataFactory.SeedUser(_context);
+            var hospital = TestDataFactory.SeedHospital(_context, user.UserID, isPubliclyListed: true);
+            var doctor = TestDataFactory.SeedDoctor(_context, user, isPubliclyListed: false);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, hospital.HospitalID);
+            SeedProfile(user);
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetPublicDoctorsRequestModel { DoctorId = doctor.DoctorID }, CancellationToken.None);
+
+            Assert.That(response.Doctors, Is.Empty);
+        }
     }
 }
