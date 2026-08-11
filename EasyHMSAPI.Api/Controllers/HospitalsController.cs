@@ -120,6 +120,28 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Ready-to-print PNG (NexEagle logo centered) encoding this hospital's check-in URL --
+        // requires a HospitalCode to already exist (see GenerateHospitalCode above).
+        [HttpGet("{hospitalId}/qr-code")]
+        [Authorize]
+        public async Task<IActionResult> GetHospitalQrCode(Guid hospitalId)
+        {
+            try
+            {
+                if (hospitalId == Guid.Empty)
+                    return BadRequest(new { Message = "Hospital ID is required and cannot be empty." });
+
+                var response = await _mediator.Send(new GetHospitalQrCodeRequestModel { HospitalId = hospitalId });
+                if (!response.Success || response.Content == null) return BadRequest(new { response.Message });
+                return File(response.Content, response.ContentType);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetHospitalQrCode for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while generating the QR code." });
+            }
+        }
+
         [HttpGet("{hospitalId}")]
         [Authorize]
         public async Task<ActionResult<GetHospitalDetailsResponseModel>> GetHospitalById(Guid hospitalId)
