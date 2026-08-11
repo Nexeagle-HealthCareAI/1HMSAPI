@@ -17,13 +17,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         private readonly AppDbContext _context;
         private readonly IDoctorValidationHelper _doctorValidationHelper;
         private readonly IBlobStorageService _blobStorageService;
+        private readonly IWhatsAppMessagingService _whatsAppMessagingService;
         private readonly string _containerName;
 
-        public UploadPrescriptionAttachmentsHandler(AppDbContext context, IDoctorValidationHelper doctorValidationHelper, IBlobStorageService blobStorageService, IConfiguration configuration)
+        public UploadPrescriptionAttachmentsHandler(AppDbContext context, IDoctorValidationHelper doctorValidationHelper, IBlobStorageService blobStorageService, IWhatsAppMessagingService whatsAppMessagingService, IConfiguration configuration)
         {
             _context = context;
             _doctorValidationHelper = doctorValidationHelper;
             _blobStorageService = blobStorageService;
+            _whatsAppMessagingService = whatsAppMessagingService;
             _containerName = configuration["BlobStorage:PrescriptionAttachmentsContainer"] ?? string.Empty;
         }
         public async Task<UploadPrescriptionAttachmentsResponseModel> Handle(UploadPrescriptionAttachmentsRequestModel request, CancellationToken cancellationToken)
@@ -78,7 +80,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             ? "labreports"
                             : _containerName;
 
-                        var newAttachmentId = Guid.NewGuid();
+                        var newAttachmentId = request.AttachmentId ?? Guid.NewGuid();
                         var uploadResult = await _blobStorageService.UploadAsync(newAttachmentId.ToString(), request.File, targetContainer, cancellationToken);
 
                         if (!string.IsNullOrEmpty(uploadResult))
@@ -120,6 +122,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             response.Message = "Attachment successfully uploaded";
                             response.AttachmentId = newAttachmentId;
                             response.FileUrl = fileUrl;
+
+                            // Best-effort: a patient with a WhatsApp-reachable number gets this
+                            // automatically, whether the upload came from InkRx's auto-save or a
+                            // manual portal upload -- both land here, it's the same handler. Never
+                            // lets a WhatsApp failure affect the upload's own success response.
+                            if (string.Equals(request.ReportType, "Prescription", StringComparison.OrdinalIgnoreCase))
+                            {
+                                await TrySendPrescriptionWhatsAppAsync(
+                                    request.PatientId!, request.HospitalId, existingHospital.Name, existingDoctor.DoctorID,
+                                    fileUrl, !string.IsNullOrEmpty(blobName) ? blobName : (request.FileName ?? "Prescription.pdf"), cancellationToken);
+                            }
                         }
                     }
                     else
@@ -139,6 +152,38 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
 
             return response;
+        }
+
+        // Best-effort push -- swallows every failure. A patient not having a WhatsApp-reachable
+        // number on file, WhatsApp being disabled, or the Meta template not being approved yet
+        // are all expected, non-error outcomes here, not something the upload caller needs to
+        // know about.
+        private async Task TrySendPrescriptionWhatsAppAsync(
+            string patientId, Guid hospitalId, string hospitalName, Guid doctorId,
+            string documentLink, string fileName, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var mobile = await _context.PatientRegistrations
+                    .Where(p => p.PatientId == patientId && p.HospitalId == hospitalId)
+                    .Select(p => p.Mobile)
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (string.IsNullOrWhiteSpace(mobile))
+                    return;
+
+                var doctor = await _context.Doctors
+                    .Where(d => d.DoctorID == doctorId)
+                    .Include(d => d.User)
+                    .ThenInclude(u => u.UserProfiles)
+                    .FirstOrDefaultAsync(cancellationToken);
+                var doctorName = doctor?.User?.UserProfiles?.FirstOrDefault()?.FullName ?? "Doctor";
+
+                await _whatsAppMessagingService.SendPrescriptionAsync(mobile, documentLink, fileName, hospitalName, doctorName);
+            }
+            catch (Exception)
+            {
+                // Swallowed deliberately -- see method summary.
+            }
         }
     }
 }

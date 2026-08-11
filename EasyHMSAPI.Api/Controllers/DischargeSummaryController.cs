@@ -44,6 +44,28 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Ready-to-print PNG (NexEagle logo centered) encoding this discharge summary's
+        // WhatsApp-delivery link -- scanning it lands the patient in WhatsApp, where the bot
+        // sends the actual PDF back. Mints AccessToken on first call if not already set.
+        [HttpGet("qr-code")]
+        public async Task<IActionResult> GetQrCode([FromQuery] Guid hospitalId, [FromQuery] Guid admissionId)
+        {
+            if (hospitalId == Guid.Empty || admissionId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and admissionId are required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetDischargeSummaryQrCodeRequestModel { HospitalId = hospitalId, AdmissionId = admissionId });
+                if (!response.Success || response.Content == null) return BadRequest(new { response.Message });
+                return File(response.Content, response.ContentType);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetQrCode for admissionId: {AdmissionId}", admissionId);
+                return StatusCode(500, new { Message = "An error occurred while generating the QR code." });
+            }
+        }
+
         [HttpPut]
         public async Task<ActionResult<SaveDischargeSummaryResponseModel>> Save([FromBody] SaveDischargeSummaryRequestModel request)
         {
