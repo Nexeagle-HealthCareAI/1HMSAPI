@@ -34,6 +34,15 @@ namespace EasyHMSAPI.Data.Constants
         public static readonly string AnalyticsEventType_DoctorProfileViewed = "doctor_profile_viewed";
         public static readonly string AnalyticsEventType_BookingStepReached = "booking_step_reached";
 
+        // HospitalLead.Source / HospitalLead.LeadType values -- the Lead Generation page's own
+        // vocabulary, deliberately separate from AnalyticsEventType_* above (see HospitalLead.cs).
+        public static readonly string LeadSource_DoctorDekho = "DoctorDekho";
+        public static readonly string LeadSource_WhatsApp = "WhatsApp";
+        public static readonly string LeadType_DoctorNameSearch = "DoctorNameSearch";
+        public static readonly string LeadType_HospitalNameSearch = "HospitalNameSearch";
+        public static readonly string LeadType_DoctorProfileView = "DoctorProfileView";
+        public static readonly string LeadType_HospitalPageView = "HospitalPageView";
+
         public static readonly string TokenStrategy_Sequential = "SEQUENTIAL";
 
         // OPD queue check-in (QR flow) -- AppointmentToken.Status values.

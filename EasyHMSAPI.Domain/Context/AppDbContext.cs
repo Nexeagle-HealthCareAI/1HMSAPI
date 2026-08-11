@@ -69,6 +69,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<PublicPatientAuth> PublicPatientAuths { get; set; }
         public DbSet<WebsiteVisit> WebsiteVisits { get; set; }
         public DbSet<AnalyticsEvent> AnalyticsEvents { get; set; }
+        public DbSet<HospitalLead> HospitalLeads { get; set; }
         public DbSet<PatientHealthLockerDocument> PatientHealthLockerDocuments { get; set; }
         public DbSet<UserProfile> UserProfiles { get; set; }
         public DbSet<Role> Roles { get; set; }
@@ -211,9 +212,73 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<RoomClassRateMultiplier> RoomClassRateMultiplier { get; set; }
         public DbSet<ConsultantIncentiveLedger> ConsultantIncentiveLedger { get; set; }
         public DbSet<PublicApiClient> PublicApiClient { get; set; }
+        
+        // Pathology Module
+        public DbSet<LabConfiguration> LabConfiguration { get; set; }
+        public DbSet<PathologyTestMaster> PathologyTestMaster { get; set; }
+        public DbSet<PathologyReportTemplate> PathologyReportTemplate { get; set; }
+        public DbSet<PathologyOrder> PathologyOrder { get; set; }
+        public DbSet<PathologyOrderLine> PathologyOrderLine { get; set; }
+        public DbSet<PathologyReport> PathologyReport { get; set; }
+        public DbSet<PathologyResult> PathologyResult { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {   
+            // Pathology Configs
+            modelBuilder.Entity<LabConfiguration>(entity =>
+            {
+                entity.ToTable("LabConfiguration");
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2");
+                entity.Property(e => e.UpdatedAt).HasColumnType("datetime2");
+                entity.Property(e => e.RowVersion).IsRowVersion();
+            });
+            modelBuilder.Entity<PathologyTestMaster>(entity =>
+            {
+                entity.ToTable("PathologyTestMaster");
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2");
+                entity.Property(e => e.UpdatedAt).HasColumnType("datetime2");
+                entity.Property(e => e.RowVersion).IsRowVersion();
+            });
+            modelBuilder.Entity<PathologyReportTemplate>(entity =>
+            {
+                entity.ToTable("PathologyReportTemplate");
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2");
+                entity.Property(e => e.UpdatedAt).HasColumnType("datetime2");
+                entity.Property(e => e.RowVersion).IsRowVersion();
+            });
+            modelBuilder.Entity<PathologyOrder>(entity =>
+            {
+                entity.ToTable("PathologyOrder");
+                entity.Property(e => e.OrderDate).HasColumnType("datetime2");
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2");
+                entity.Property(e => e.UpdatedAt).HasColumnType("datetime2");
+                entity.Property(e => e.RowVersion).IsRowVersion();
+            });
+            modelBuilder.Entity<PathologyOrderLine>(entity =>
+            {
+                entity.ToTable("PathologyOrderLine");
+                entity.Property(e => e.SampleCollectedAt).HasColumnType("datetime2");
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2");
+                entity.Property(e => e.UpdatedAt).HasColumnType("datetime2");
+                entity.Property(e => e.RowVersion).IsRowVersion();
+            });
+            modelBuilder.Entity<PathologyReport>(entity =>
+            {
+                entity.ToTable("PathologyReport");
+                entity.Property(e => e.GeneratedAt).HasColumnType("datetime2");
+                entity.Property(e => e.ApprovedAt).HasColumnType("datetime2");
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2");
+                entity.Property(e => e.UpdatedAt).HasColumnType("datetime2");
+                entity.Property(e => e.RowVersion).IsRowVersion();
+            });
+            modelBuilder.Entity<PathologyResult>(entity =>
+            {
+                entity.ToTable("PathologyResult");
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2");
+                entity.Property(e => e.UpdatedAt).HasColumnType("datetime2");
+                entity.Property(e => e.RowVersion).IsRowVersion();
+            });
+
             modelBuilder.Entity<User>().ToTable("Users");
             modelBuilder.Entity<UserAuth>().ToTable("UserAuth");
             modelBuilder.Entity<UserProfile>().ToTable("UserProfiles");

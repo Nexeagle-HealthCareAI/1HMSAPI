@@ -87,6 +87,28 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Records one hospital-scoped marketing lead for the Lead Generation page -- see
+        // AppConstants.LeadSource_*/LeadType_* for valid values. Called by both NexEagleWebsite
+        // (doctor profile/hospital page views, name searches) and the WhatsApp bot (name
+        // searches, resolved server-side via hms_client.record_lead). Same generous rate-limit
+        // tier and error-swallowing posture as TrackEvent.
+        [HttpPost("leads")]
+        [EnableRateLimiting("TrackVisitPolicy")]
+        public async Task<ActionResult<RecordLeadResponseModel>> RecordLead([FromBody] RecordLeadRequestModel request)
+        {
+            try
+            {
+                request.IpAddress = EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(HttpContext, _proxyForwardingSecret);
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.RecordLead");
+                return Ok(new RecordLeadResponseModel { Success = false });
+            }
+        }
+
         // Resolves a scanned OPD QR code to a hospital -- the bot gateway's GET /c/{hospital_code}
         // calls this to know which hospital's context to load. No auth beyond the controller's
         // optional X-Api-Key, same as every other endpoint here.
@@ -103,6 +125,25 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 _logger.LogError(ex, "Error in PublicController.GetHospitalByCode for hospitalCode: {HospitalCode}", hospitalCode);
                 return StatusCode(500, new { Message = "An error occurred while resolving the hospital code." });
+            }
+        }
+
+        // Platform-wide, publicly-listed hospitals -- e.g. the WhatsApp bot's new hospital-name
+        // matching (resolver.match_hospital_by_query via hms_client.list_hospitals), which had
+        // no bulk-listing endpoint to fuzzy-match against before this (only the exact single-code
+        // lookup above).
+        [HttpGet("hospitals")]
+        public async Task<ActionResult<GetPublicHospitalsResponseModel>> GetHospitals()
+        {
+            try
+            {
+                var response = await _mediator.Send(new GetPublicHospitalsRequestModel());
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetHospitals");
+                return StatusCode(500, new { Message = "An error occurred while fetching hospitals." });
             }
         }
 
