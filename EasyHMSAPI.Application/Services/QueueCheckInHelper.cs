@@ -12,6 +12,33 @@ namespace EasyHMSAPI.Application.Services
     // appointment that already has a token just returns the existing one, never double-allocates.
     public static class QueueCheckInHelper
     {
+        // Shared by CheckInAsync (below, appointment-first) and ResolveCheckInHandler
+        // (hospital-first, before it ever touches PatientRegistrations) -- extracted so a mobile
+        // lookup can be geofence-gated up front rather than duplicating this check.
+        public static async Task<(bool Ok, string? ErrorMessage)> CheckGeofenceAsync(
+            AppDbContext context,
+            Guid hospitalId,
+            decimal? patientLatitude,
+            decimal? patientLongitude,
+            CancellationToken cancellationToken)
+        {
+            var hospital = await context.Hospitals.FirstOrDefaultAsync(h => h.HospitalID == hospitalId, cancellationToken);
+            if (hospital == null)
+                return (false, "Hospital not found.");
+
+            if (!hospital.Latitude.HasValue || !hospital.Longitude.HasValue)
+                return (false, "This hospital hasn't set up location-based check-in yet. Please check in at reception.");
+
+            if (!patientLatitude.HasValue || !patientLongitude.HasValue)
+                return (false, "Location is required to check in.");
+
+            var distanceMeters = GeofenceHelper.DistanceMeters(patientLatitude.Value, patientLongitude.Value, hospital.Latitude.Value, hospital.Longitude.Value);
+            if (distanceMeters > AppConstants.GeofenceRadiusMeters)
+                return (false, "You don't appear to be at the hospital yet. Please check in at reception if this seems wrong.");
+
+            return (true, null);
+        }
+
         public static async Task<IssueQueueTokenResponseModel> CheckInAsync(
             AppDbContext context,
             Guid appointmentId,
@@ -34,19 +61,9 @@ namespace EasyHMSAPI.Application.Services
 
             if (requireGeofence)
             {
-                var hospital = await context.Hospitals.FirstOrDefaultAsync(h => h.HospitalID == appointment.HospitalId, cancellationToken);
-                if (hospital == null)
-                    return new IssueQueueTokenResponseModel { Success = false, Message = "Hospital not found." };
-
-                if (!hospital.Latitude.HasValue || !hospital.Longitude.HasValue)
-                    return new IssueQueueTokenResponseModel { Success = false, Message = "This hospital hasn't set up location-based check-in yet. Please check in at reception." };
-
-                if (!patientLatitude.HasValue || !patientLongitude.HasValue)
-                    return new IssueQueueTokenResponseModel { Success = false, Message = "Location is required to check in." };
-
-                var distanceMeters = GeofenceHelper.DistanceMeters(patientLatitude.Value, patientLongitude.Value, hospital.Latitude.Value, hospital.Longitude.Value);
-                if (distanceMeters > AppConstants.GeofenceRadiusMeters)
-                    return new IssueQueueTokenResponseModel { Success = false, Message = "You don't appear to be at the hospital yet. Please check in at reception if this seems wrong." };
+                var (ok, errorMessage) = await CheckGeofenceAsync(context, appointment.HospitalId, patientLatitude, patientLongitude, cancellationToken);
+                if (!ok)
+                    return new IssueQueueTokenResponseModel { Success = false, Message = errorMessage };
             }
 
             var tokenNo = await AppointmentBookingHelpers.AllocateTokenWithLockingAsync(

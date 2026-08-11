@@ -231,6 +231,26 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Walk-in OPD QR check-in: resolves "my appointment today at this hospital" from just a
+        // phone number, for patients whose appointment wasn't booked through this bot (so the
+        // bot doesn't already know an AppointmentId). See ResolveCheckInHandler for why this is
+        // safe to expose anonymously (geofence-gated before any mobile lookup).
+        [HttpPost("checkin/resolve")]
+        public async Task<ActionResult<ResolveCheckInResponseModel>> ResolveCheckIn([FromBody] ResolveCheckInRequestModel request, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var response = await _mediator.Send(request, cancellationToken);
+                if (!response.Success) return BadRequest(response);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.ResolveCheckIn for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred while checking in." });
+            }
+        }
+
         // Guest "my booking" lookup — gated purely by knowing the AppointmentId (unguessable GUID),
         // no login required. See GetPublicAppointmentHandler for why the response stays minimal.
         [HttpGet("appointments/{appointmentId:guid}")]
