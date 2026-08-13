@@ -43,6 +43,12 @@ namespace EasyHMSAPI.Data.Constants
         public static readonly string LeadType_DoctorProfileView = "DoctorProfileView";
         public static readonly string LeadType_HospitalPageView = "HospitalPageView";
 
+        // The "scan a QR, land in a live 1HMS demo" marketing funnel (info@nexeagle.com on
+        // NexEagle General Clinic) — a different kind of lead from the Doctor Dekho ones above,
+        // reusing the same HospitalLeads table/pipeline rather than a new one.
+        public static readonly string LeadSource_1HMSDemo = "1HMSDemo";
+        public static readonly string LeadType_DemoLogin = "DemoLogin";
+
         public static readonly string TokenStrategy_Sequential = "SEQUENTIAL";
 
         // OPD queue check-in (QR flow) -- AppointmentToken.Status values.

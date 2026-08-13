@@ -19,6 +19,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         {
             AppConstants.LeadSource_DoctorDekho,
             AppConstants.LeadSource_WhatsApp,
+            AppConstants.LeadSource_1HMSDemo,
         };
 
         private static readonly HashSet<string> ValidLeadTypes = new()
@@ -27,6 +28,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             AppConstants.LeadType_HospitalNameSearch,
             AppConstants.LeadType_DoctorProfileView,
             AppConstants.LeadType_HospitalPageView,
+            AppConstants.LeadType_DemoLogin,
         };
 
         private readonly AppDbContext _context;

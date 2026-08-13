@@ -99,6 +99,25 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task Handle_DemoLoginLead_PersistsWithPatientNameAndMobile()
+        {
+            var hospitalId = Guid.NewGuid();
+            var request = ValidRequest(hospitalId);
+            request.Source = "1HMSDemo";
+            request.LeadType = "DemoLogin";
+            request.PatientName = "Dr. Test Doctor";
+            request.Mobile = "919876543210";
+
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            var lead = _context.HospitalLeads.First();
+            Assert.That(lead.Source, Is.EqualTo("1HMSDemo"));
+            Assert.That(lead.LeadType, Is.EqualTo("DemoLogin"));
+            Assert.That(lead.PatientName, Is.EqualTo("Dr. Test Doctor"));
+        }
+
+        [Test]
         public async Task Handle_WhatsAppLead_NoIpAddress_SkipsGeoLookup()
         {
             var request = ValidRequest();
