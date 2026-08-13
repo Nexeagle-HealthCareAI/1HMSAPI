@@ -297,6 +297,48 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Anonymous cancel — the ONLY gate is knowing the AppointmentId (unguessable GUID), same
+        // trust model as GetAppointment below, plus a Mobile cross-check in the handler. Built
+        // for the WhatsApp bot (which only ever knows AppointmentId + the visitor's own phone
+        // number, never a PatientId/HospitalId or a staff session) — see
+        // PublicCancelAppointmentHandler for why this can't reuse the staff-JWT cancel endpoint.
+        [HttpPatch("appointments/{appointmentId:guid}/cancel")]
+        public async Task<ActionResult<PublicCancelAppointmentResponseModel>> CancelAppointment(
+            Guid appointmentId, [FromBody] PublicCancelAppointmentRequestModel request, CancellationToken cancellationToken)
+        {
+            try
+            {
+                request.AppointmentId = appointmentId;
+                var response = await _mediator.Send(request, cancellationToken);
+                if (!response.Success) return BadRequest(response);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.CancelAppointment for appointmentId: {AppointmentId}", appointmentId);
+                return StatusCode(500, new { Message = "An error occurred while cancelling the appointment." });
+            }
+        }
+
+        // Anonymous reschedule — same AppointmentId + Mobile gate as CancelAppointment above.
+        [HttpPatch("appointments/{appointmentId:guid}/reschedule")]
+        public async Task<ActionResult<PublicRescheduleAppointmentResponseModel>> RescheduleAppointment(
+            Guid appointmentId, [FromBody] PublicRescheduleAppointmentRequestModel request, CancellationToken cancellationToken)
+        {
+            try
+            {
+                request.AppointmentId = appointmentId;
+                var response = await _mediator.Send(request, cancellationToken);
+                if (!response.Success) return BadRequest(response);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.RescheduleAppointment for appointmentId: {AppointmentId}", appointmentId);
+                return StatusCode(500, new { Message = "An error occurred while rescheduling the appointment." });
+            }
+        }
+
         // OPD QR check-in: converts a booked appointment into a queue token after a geofence check.
         // See IssueQueueTokenHandler for the idempotency/geofence details.
         [HttpPost("tokens")]
