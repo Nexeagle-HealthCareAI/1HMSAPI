@@ -76,6 +76,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         Success = true,
                         Message = "Usage recorded. This item has no charge configured, so nothing was billed.",
                         InventoryMovementId = movementResponse.InventoryMovementId,
+                        InventoryMovementIds = movementResponse.InventoryMovementIds,
                         NoChargeConfigured = true,
                     };
                 }
@@ -114,6 +115,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     Success = true,
                     Message = "Usage recorded and billed.",
                     InventoryMovementId = movementResponse.InventoryMovementId,
+                    InventoryMovementIds = movementResponse.InventoryMovementIds,
                     ChargeEventId = chargeResponse.Data.ChargeEvents[0].ChargeEventId,
                 };
             }

@@ -48,6 +48,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     RoleName = string.Join(",", userRolesList.Select(ur => ur.Role.RoleName)),
                     Description = string.Join(" | ", userRolesList.Select(ur => ur.Role.Description)),
                     PermissionKeys = userRolesList.SelectMany(ur => ur.Role.RolePermissions)
+                        .Where(rp => rp.IsAllowed)
                         .Select(rp => rp.PermissionKey)
                         .Distinct()
                         .ToList(),

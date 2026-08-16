@@ -147,20 +147,21 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (request.Qty <= 0)
                     return new RecordInventoryMovementResponseModel { Success = false, Message = "Qty must be greater than zero." };
 
+                await _context.Database.ExecuteSqlRawAsync(
+                    "SELECT 1 FROM InventoryItem WITH (UPDLOCK) WHERE InventoryItemId = {0} AND HospitalId = {1}", 
+                    request.InventoryItemId, request.HospitalId);
+
                 var item = await _context.InventoryItem
                     .FirstOrDefaultAsync(i => i.InventoryItemId == request.InventoryItemId && i.HospitalId == request.HospitalId, cancellationToken);
                 if (item == null)
                     return new RecordInventoryMovementResponseModel { Success = false, Message = "Inventory item not found." };
 
                 var isInbound = IpdConstants.InventoryMovementType.Inbound.Contains(movementType);
-                var delta = isInbound ? request.Qty : -request.Qty;
+                var totalDelta = isInbound ? request.Qty : -request.Qty;
 
-                if (item.CurrentStock + delta < 0)
+                if (item.CurrentStock + totalDelta < 0)
                     return new RecordInventoryMovementResponseModel { Success = false, Message = $"Insufficient stock — only {item.CurrentStock} {item.Unit} available." };
 
-                // India regulatory compliance (INV-8) — schedule-class gating on dispensing. Legacy
-                // callers (OT/CSSD) issue CONSUMABLE/SURGICAL/IMPLANT items that never carry a
-                // ScheduleClass, so this is a no-op for them; it only bites real drug dispensing.
                 if (!isInbound && !string.IsNullOrWhiteSpace(item.ScheduleClass))
                 {
                     if (item.ScheduleClass == IpdConstants.DrugScheduleClass.Narcotic && !request.IsNarcoticDispenseContext)
@@ -171,144 +172,204 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         return new RecordInventoryMovementResponseModel { Success = false, Message = "A witness is required to dispense a narcotic." };
                 }
 
-                // Batch/store-aware path (INV-2) — resolve which batch (if any) this movement posts
-                // against, entirely optional so legacy callers (no BatchId/StoreId) behave exactly as
-                // before.
-                Batch? batch = null;
+                var allocations = new List<BatchAllocation>();
+                var today = DateTime.UtcNow.Date;
+
                 if (request.BatchId.HasValue && request.BatchId != Guid.Empty)
                 {
-                    batch = await _context.Batch.FirstOrDefaultAsync(
+                    var singleBatch = await _context.Batch.FirstOrDefaultAsync(
                         b => b.BatchId == request.BatchId && b.HospitalId == request.HospitalId && b.InventoryItemId == item.InventoryItemId, cancellationToken);
-                    if (batch == null)
+                    
+                    if (singleBatch == null)
                         return new RecordInventoryMovementResponseModel { Success = false, Message = "Batch not found." };
-                    if (!isInbound && batch.RemainingQty + delta < 0)
-                        return new RecordInventoryMovementResponseModel { Success = false, Message = $"Insufficient stock in batch {batch.BatchNumber} — only {batch.RemainingQty} {item.Unit} remaining." };
+
+                    await _context.Database.ExecuteSqlRawAsync(
+                        "SELECT 1 FROM Batch WITH (UPDLOCK) WHERE BatchId = {0}", singleBatch.BatchId);
+
+                    if (!isInbound && (singleBatch.Status != "ACTIVE" || (singleBatch.ExpiryDate.HasValue && singleBatch.ExpiryDate.Value.Date < today)))
+                        return new RecordInventoryMovementResponseModel { Success = false, Message = $"Cannot dispense from batch {singleBatch.BatchNumber} — it is expired or no longer active." };
+
+                    if (isInbound && request.StoreId.HasValue && request.StoreId.Value != Guid.Empty && singleBatch.StoreId != request.StoreId.Value)
+                    {
+                        var destBatch = await _context.Batch.FirstOrDefaultAsync(
+                            b => b.StoreId == request.StoreId.Value && b.HospitalId == request.HospitalId 
+                            && b.InventoryItemId == item.InventoryItemId && b.BatchNumber == singleBatch.BatchNumber, cancellationToken);
+                        
+                        if (destBatch != null)
+                        {
+                            await _context.Database.ExecuteSqlRawAsync(
+                                "SELECT 1 FROM Batch WITH (UPDLOCK) WHERE BatchId = {0}", destBatch.BatchId);
+                            singleBatch = destBatch;
+                        }
+                        else
+                        {
+                            destBatch = new Batch
+                            {
+                                BatchId = Guid.NewGuid(),
+                                HospitalId = singleBatch.HospitalId,
+                                InventoryItemId = singleBatch.InventoryItemId,
+                                StoreId = request.StoreId.Value,
+                                BatchNumber = singleBatch.BatchNumber,
+                                ManufactureDate = singleBatch.ManufactureDate,
+                                ExpiryDate = singleBatch.ExpiryDate,
+                                UnitCost = singleBatch.UnitCost,
+                                ReceivedQty = 0,
+                                RemainingQty = 0,
+                                VendorId = singleBatch.VendorId,
+                                GrnLineId = singleBatch.GrnLineId,
+                                Status = "ACTIVE",
+                                CreatedAt = DateTime.UtcNow,
+                                CreatedBy = request.LoggedInUserName,
+                                UpdatedAt = DateTime.UtcNow,
+                                UpdatedBy = request.LoggedInUserName,
+                            };
+                            _context.Batch.Add(destBatch);
+                            singleBatch = destBatch;
+                        }
+                    }
+
+                    if (!isInbound && singleBatch.RemainingQty + totalDelta < 0)
+                        return new RecordInventoryMovementResponseModel { Success = false, Message = $"Insufficient stock in batch {singleBatch.BatchNumber} — only {singleBatch.RemainingQty} {item.Unit} remaining." };
+
+                    allocations.Add(new BatchAllocation { Batch = singleBatch, AllocatedQty = request.Qty });
                 }
                 else if (!isInbound && request.StoreId.HasValue && request.StoreId != Guid.Empty)
                 {
-                    batch = await FefoBatchAllocationService.AllocateAsync(_context, request.HospitalId, item.InventoryItemId, request.StoreId.Value, request.Qty, cancellationToken);
-                    if (batch == null)
+                    allocations = await FefoBatchAllocationService.AllocateAsync(_context, request.HospitalId, item.InventoryItemId, request.StoreId.Value, request.Qty, cancellationToken);
+                    if (allocations == null || allocations.Count == 0)
                         return new RecordInventoryMovementResponseModel { Success = false, Message = "No active batch has enough remaining stock in that store to cover this quantity." };
+
+                    foreach (var alloc in allocations)
+                    {
+                        await _context.Database.ExecuteSqlRawAsync(
+                            "SELECT 1 FROM Batch WITH (UPDLOCK) WHERE BatchId = {0}", alloc.Batch.BatchId);
+                    }
                 }
-
-                // Expired/inactive batch hard-block on dispensing — no override path. FEFO already
-                // filters these out at selection time; this catches an explicitly-supplied BatchId.
-                if (!isInbound && batch != null)
+                else
                 {
-                    var today = DateTime.UtcNow.Date;
-                    if (batch.Status != "ACTIVE" || (batch.ExpiryDate.HasValue && batch.ExpiryDate.Value.Date < today))
-                        return new RecordInventoryMovementResponseModel { Success = false, Message = $"Cannot dispense from batch {batch.BatchNumber} — it is expired or no longer active." };
-                }
-
-                var storeId = batch?.StoreId ?? request.StoreId;
-
-                StockLevel? stockLevel = null;
-                if (storeId.HasValue && storeId != Guid.Empty)
-                {
-                    stockLevel = await _context.StockLevel.FirstOrDefaultAsync(
-                        sl => sl.InventoryItemId == item.InventoryItemId && sl.StoreId == storeId, cancellationToken);
-                    var currentQty = stockLevel?.QtyOnHand ?? 0;
-                    if (currentQty + delta < 0)
-                        return new RecordInventoryMovementResponseModel { Success = false, Message = "Insufficient stock at that store." };
+                    allocations.Add(new BatchAllocation { Batch = null!, AllocatedQty = request.Qty });
                 }
 
                 var now = DateTime.UtcNow;
-                var movement = new InventoryMovement
-                {
-                    InventoryMovementId = Guid.NewGuid(),
-                    HospitalId = request.HospitalId,
-                    InventoryItemId = item.InventoryItemId,
-                    MovementType = movementType,
-                    Qty = request.Qty,
-                    UnitCost = request.UnitCost,
-                    BatchNumber = batch?.BatchNumber ?? (string.IsNullOrWhiteSpace(request.BatchNumber) ? null : request.BatchNumber.Trim()),
-                    ExpiryDate = batch?.ExpiryDate ?? request.ExpiryDate,
-                    BatchId = batch?.BatchId,
-                    FromStoreId = !isInbound ? storeId : null,
-                    ToStoreId = isInbound ? storeId : null,
-                    EncounterId = request.EncounterId,
-                    PatientId = request.PatientId,
-                    ChargeEventId = request.ChargeEventId,
-                    SourceModule = string.IsNullOrWhiteSpace(request.SourceModule) ? null : request.SourceModule.Trim(),
-                    SourceRefId = string.IsNullOrWhiteSpace(request.SourceRefId) ? null : request.SourceRefId.Trim(),
-                    Reason = string.IsNullOrWhiteSpace(request.Reason) ? null : request.Reason.Trim(),
-                    Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
-                    MovedAt = now,
-                    MovedBy = request.LoggedInUserName,
-                    MovedByUserId = request.LoggedInUserId,
-                    CreatedAt = now,
-                };
-                _context.InventoryMovement.Add(movement);
+                var movementIds = new List<Guid>();
+                var batchIds = new List<Guid>();
 
-                item.CurrentStock += delta;
-                item.UpdatedAt = now;
-                item.UpdatedBy = request.LoggedInUserName;
-
-                if (batch != null)
+                foreach (var alloc in allocations)
                 {
-                    batch.RemainingQty += delta;
-                    batch.UpdatedAt = now;
-                    batch.UpdatedBy = request.LoggedInUserName;
-                    if (batch.RemainingQty == 0 && batch.Status == "ACTIVE")
-                        batch.Status = "EXHAUSTED";
-                }
+                    var batch = alloc.Batch;
+                    var allocQty = alloc.AllocatedQty;
+                    var allocDelta = isInbound ? allocQty : -allocQty;
+                    var storeId = batch?.StoreId ?? request.StoreId;
 
-                if (storeId.HasValue && storeId != Guid.Empty)
-                {
-                    if (stockLevel == null)
+                    StockLevel? stockLevel = null;
+                    if (storeId.HasValue && storeId != Guid.Empty)
                     {
-                        stockLevel = new StockLevel
-                        {
-                            StockLevelId = Guid.NewGuid(),
-                            HospitalId = request.HospitalId,
-                            InventoryItemId = item.InventoryItemId,
-                            StoreId = storeId.Value,
-                            QtyOnHand = 0,
-                            UpdatedAt = now,
-                        };
-                        _context.StockLevel.Add(stockLevel);
-                    }
-                    stockLevel.QtyOnHand += delta;
-                    stockLevel.UpdatedAt = now;
-                }
+                        await _context.Database.ExecuteSqlRawAsync(
+                            "SELECT 1 FROM StockLevel WITH (UPDLOCK) WHERE InventoryItemId = {0} AND StoreId = {1}", item.InventoryItemId, storeId.Value);
 
-                // NDPS narcotics register (INV-8) — every movement of a NARCOTIC-scheduled item that
-                // resolved to a real batch is logged here, both directions. Witness is only enforced
-                // above for dispensing (OUT); a receipt (IN, e.g. via GRN) logs with the receiving
-                // user standing in as witness since a second-signer flow isn't wired for receiving yet.
-                if (item.ScheduleClass == IpdConstants.DrugScheduleClass.Narcotic && batch != null && storeId.HasValue)
-                {
-                    var formType = !string.IsNullOrWhiteSpace(request.PatientId)
-                        ? IpdConstants.NarcoticFormType.Form3E
-                        : IpdConstants.NarcoticFormType.Form3D;
-                    if (formType == IpdConstants.NarcoticFormType.Form3D)
-                    {
-                        var storeType = await _context.Store.Where(s => s.StoreId == storeId).Select(s => s.StoreType).FirstOrDefaultAsync(cancellationToken);
-                        if (storeType == IpdConstants.StoreType.Main || storeType == IpdConstants.StoreType.Narcotic)
-                            formType = IpdConstants.NarcoticFormType.Form3H;
+                        stockLevel = await _context.StockLevel.FirstOrDefaultAsync(
+                            sl => sl.InventoryItemId == item.InventoryItemId && sl.StoreId == storeId, cancellationToken);
+                        
+                        var currentQty = stockLevel?.QtyOnHand ?? 0;
+                        if (currentQty + allocDelta < 0)
+                            return new RecordInventoryMovementResponseModel { Success = false, Message = "Insufficient stock at that store." };
                     }
 
-                    _context.NarcoticRegisterEntry.Add(new NarcoticRegisterEntry
+                    var movement = new InventoryMovement
                     {
-                        RegisterEntryId = Guid.NewGuid(),
+                        InventoryMovementId = Guid.NewGuid(),
                         HospitalId = request.HospitalId,
                         InventoryItemId = item.InventoryItemId,
-                        BatchId = batch.BatchId,
-                        StoreId = storeId.Value,
-                        FormType = formType,
-                        Direction = isInbound ? IpdConstants.NarcoticDirection.In : IpdConstants.NarcoticDirection.Out,
-                        Qty = request.Qty,
-                        BalanceAfter = batch.RemainingQty,
-                        PatientId = request.PatientId,
+                        MovementType = movementType,
+                        Qty = allocQty,
+                        UnitCost = request.UnitCost ?? batch?.UnitCost,
+                        BatchNumber = batch?.BatchNumber ?? (string.IsNullOrWhiteSpace(request.BatchNumber) ? null : request.BatchNumber.Trim()),
+                        ExpiryDate = batch?.ExpiryDate ?? request.ExpiryDate,
+                        BatchId = batch?.BatchId,
+                        FromStoreId = !isInbound ? storeId : null,
+                        ToStoreId = isInbound ? storeId : null,
                         EncounterId = request.EncounterId,
-                        PrescriberRef = request.PrescriberRef,
-                        IssuedBy = request.LoggedInUserName,
-                        IssuedByUserId = request.LoggedInUserId,
-                        WitnessBy = string.IsNullOrWhiteSpace(request.WitnessBy) ? (request.LoggedInUserName ?? "Unknown") : request.WitnessBy,
-                        WitnessByUserId = request.WitnessByUserId,
-                        RecordedAt = now,
-                    });
+                        PatientId = request.PatientId,
+                        ChargeEventId = request.ChargeEventId,
+                        SourceModule = string.IsNullOrWhiteSpace(request.SourceModule) ? null : request.SourceModule.Trim(),
+                        SourceRefId = string.IsNullOrWhiteSpace(request.SourceRefId) ? null : request.SourceRefId.Trim(),
+                        Reason = string.IsNullOrWhiteSpace(request.Reason) ? null : request.Reason.Trim(),
+                        Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
+                        MovedAt = now,
+                        MovedBy = request.LoggedInUserName,
+                        MovedByUserId = request.LoggedInUserId,
+                        CreatedAt = now,
+                    };
+                    _context.InventoryMovement.Add(movement);
+                    movementIds.Add(movement.InventoryMovementId);
+                    
+                    if (batch != null) 
+                    {
+                        batchIds.Add(batch.BatchId);
+                        batch.RemainingQty += allocDelta;
+                        batch.UpdatedAt = now;
+                        batch.UpdatedBy = request.LoggedInUserName;
+                        if (batch.RemainingQty == 0 && batch.Status == "ACTIVE")
+                            batch.Status = "EXHAUSTED";
+                    }
+
+                    if (storeId.HasValue && storeId != Guid.Empty)
+                    {
+                        if (stockLevel == null)
+                        {
+                            stockLevel = new StockLevel
+                            {
+                                StockLevelId = Guid.NewGuid(),
+                                HospitalId = request.HospitalId,
+                                InventoryItemId = item.InventoryItemId,
+                                StoreId = storeId.Value,
+                                QtyOnHand = 0,
+                                UpdatedAt = now,
+                            };
+                            _context.StockLevel.Add(stockLevel);
+                        }
+                        stockLevel.QtyOnHand += allocDelta;
+                        stockLevel.UpdatedAt = now;
+                    }
+
+                    if (item.ScheduleClass == IpdConstants.DrugScheduleClass.Narcotic && batch != null && storeId.HasValue)
+                    {
+                        var formType = !string.IsNullOrWhiteSpace(request.PatientId)
+                            ? IpdConstants.NarcoticFormType.Form3E
+                            : IpdConstants.NarcoticFormType.Form3D;
+                        if (formType == IpdConstants.NarcoticFormType.Form3D)
+                        {
+                            var storeType = await _context.Store.Where(s => s.StoreId == storeId).Select(s => s.StoreType).FirstOrDefaultAsync(cancellationToken);
+                            if (storeType == IpdConstants.StoreType.Main || storeType == IpdConstants.StoreType.Narcotic)
+                                formType = IpdConstants.NarcoticFormType.Form3H;
+                        }
+
+                        _context.NarcoticRegisterEntry.Add(new NarcoticRegisterEntry
+                        {
+                            RegisterEntryId = Guid.NewGuid(),
+                            HospitalId = request.HospitalId,
+                            InventoryItemId = item.InventoryItemId,
+                            BatchId = batch.BatchId,
+                            StoreId = storeId.Value,
+                            FormType = formType,
+                            Direction = isInbound ? IpdConstants.NarcoticDirection.In : IpdConstants.NarcoticDirection.Out,
+                            Qty = allocQty,
+                            BalanceAfter = batch.RemainingQty,
+                            PatientId = request.PatientId,
+                            EncounterId = request.EncounterId,
+                            PrescriberRef = request.PrescriberRef,
+                            IssuedBy = request.LoggedInUserName,
+                            IssuedByUserId = request.LoggedInUserId,
+                            WitnessBy = string.IsNullOrWhiteSpace(request.WitnessBy) ? (request.LoggedInUserName ?? "Unknown") : request.WitnessBy,
+                            WitnessByUserId = request.WitnessByUserId,
+                            RecordedAt = now,
+                        });
+                    }
                 }
+
+                item.CurrentStock += totalDelta;
+                item.UpdatedAt = now;
+                item.UpdatedBy = request.LoggedInUserName;
 
                 await _context.SaveChangesAsync(cancellationToken);
 
@@ -316,14 +377,16 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 {
                     Success = true,
                     Message = "Movement recorded.",
-                    InventoryMovementId = movement.InventoryMovementId,
+                    InventoryMovementId = movementIds.FirstOrDefault(),
+                    InventoryMovementIds = movementIds,
                     NewCurrentStock = item.CurrentStock,
-                    BatchId = batch?.BatchId,
+                    BatchId = batchIds.FirstOrDefault(),
+                    BatchIds = batchIds
                 };
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                return new RecordInventoryMovementResponseModel { Success = false, Message = "Error recording inventory movement." };
+                return new RecordInventoryMovementResponseModel { Success = false, Message = $"Error recording inventory movement: {ex.Message}" };
             }
         }
     }

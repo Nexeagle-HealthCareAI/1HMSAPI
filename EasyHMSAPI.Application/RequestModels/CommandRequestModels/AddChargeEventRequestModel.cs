@@ -38,6 +38,9 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public decimal Rate { get; set; }
         public decimal DiscountPercent { get; set; }
         public string? CategoryCode { get; set; }
+        
+        public string? SourceModule { get; set; }
+        public string? SourceRefId { get; set; }
 
         // GST overrides — when supplied they override the ChargeMaster snapshot.
         public string? HsnSacCode { get; set; }

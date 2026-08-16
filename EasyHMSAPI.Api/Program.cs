@@ -39,11 +39,15 @@ builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 // Multi-tenant guard: blocks a signed-in user from acting on a hospital they don't belong to.
 builder.Services.AddScoped<EasyHMSAPI.Api.Common.HospitalAccessFilter>();
+// Board-level guard: blocks a signed-in user from an action carrying [RequiresPermission(...)]
+// unless their role(s) grant one of the listed PermissionKeys. Fails open when unannotated.
+builder.Services.AddScoped<EasyHMSAPI.Api.Common.PermissionAuthorizationFilter>();
 // Public (Nexeagle) API-key gate — applied per-controller via [ServiceFilter], not globally.
 builder.Services.AddScoped<EasyHMSAPI.Api.Common.PublicApiKeyFilter>();
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<EasyHMSAPI.Api.Common.HospitalAccessFilter>();
+    options.Filters.Add<EasyHMSAPI.Api.Common.PermissionAuthorizationFilter>();
 });
 
 // ------------------------------------------------------------

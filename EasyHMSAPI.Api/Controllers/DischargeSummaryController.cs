@@ -15,6 +15,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("discharge-summary")]
     [Authorize]
+    [RequiresPermission("ipd")]
     public class DischargeSummaryController : ControllerBase
     {
         private readonly IMediator _mediator;

@@ -12,6 +12,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("payment")]
     [Authorize]
+    [RequiresPermission("billing")]
     public class PaymentController : ControllerBase
     {
         private readonly IMediator _mediator;

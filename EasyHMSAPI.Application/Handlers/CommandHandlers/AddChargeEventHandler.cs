@@ -164,9 +164,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                     var isPharmacyItem = string.Equals(master?.AppliesTo, "PHARMACY", StringComparison.OrdinalIgnoreCase)
                         || string.Equals(charge.CategoryCode, "PHARMACY", StringComparison.OrdinalIgnoreCase);
-                    var effectiveSourceModule = isPharmacyItem
+                    var effectiveSourceModule = charge.SourceModule ?? (isPharmacyItem
                         ? (isIpdEncounter ? BillingConstants.SourceModule.PharmacyIpd : BillingConstants.SourceModule.PharmacyCounter)
-                        : sourceModule;
+                        : sourceModule);
 
                     // Resolves ICU/room-threshold/pharmacy exemptions on top of the item's own
                     // configured GST treatment — see GstResolver's remarks for full rule precedence.
@@ -191,6 +191,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         EncounterId = request.EncounterId,
                         ChargeId = charge.ChargeId,
                         SourceModule = effectiveSourceModule,
+                        SourceRefId = charge.SourceRefId,
                         CategoryCode = charge.CategoryCode,
                         DisplayName = charge.DisplayName,
                         Qty = charge.Qty,

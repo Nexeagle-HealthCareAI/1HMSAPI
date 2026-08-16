@@ -60,6 +60,29 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             Assert.That(response.PermissionKeys, Does.Contain("Access"));
         }
 
+        [Test]
+        public async Task Handle_ExcludesPermissionsWhereIsAllowedIsFalse()
+        {
+            // Arrange
+            var user = TestDataFactory.SeedUser(_context, role: "Admin");
+            user.UserStatusId = (int)UserStatusEnum.Active;
+
+            var role = _context.Roles.First(r => r.RoleName == "Admin");
+            _context.RolePermissions.Add(new RolePermission { RoleID = role.RoleID, PermissionKey = "granted", IsAllowed = true });
+            _context.RolePermissions.Add(new RolePermission { RoleID = role.RoleID, PermissionKey = "revoked", IsAllowed = false });
+            await _context.SaveChangesAsync();
+
+            var request = new UserPermissionsRequestModel { UserId = user.UserID };
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response, Is.Not.Null);
+            Assert.That(response!.PermissionKeys, Does.Contain("granted"));
+            Assert.That(response.PermissionKeys, Does.Not.Contain("revoked"));
+        }
+
          [Test]
         public async Task Handle_EmptyUserId_ReturnsAllRoles()
         {

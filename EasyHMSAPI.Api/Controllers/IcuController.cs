@@ -16,6 +16,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("icu")]
     [Authorize]
+    [RequiresPermission("icu_board")]
     public class IcuController : ControllerBase
     {
         private readonly IMediator _mediator;

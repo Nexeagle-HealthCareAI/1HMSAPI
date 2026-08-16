@@ -13,6 +13,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ExcludeFromCodeCoverage]
     [Route("calendar")]
     [ApiController]
+    [EasyHMSAPI.Api.Common.RequiresPermission("doctor_calendar")]
     public class CalendarServicesController : ControllerBase
     {
         private readonly IMediator _mediator;

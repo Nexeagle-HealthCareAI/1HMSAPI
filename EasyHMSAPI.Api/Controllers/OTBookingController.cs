@@ -16,6 +16,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("ot-booking")]
     [Authorize]
+    [RequiresPermission("ot_board")]
     public class OTBookingController : ControllerBase
     {
         private readonly IMediator _mediator;

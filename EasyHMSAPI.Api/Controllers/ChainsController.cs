@@ -20,6 +20,7 @@ namespace EasyHMSAPI.Api.Controllers
     [Route("chains")]
     [Authorize]
     [EasyHMSAPI.Api.Common.SkipHospitalAccessCheck]
+    [RequiresPermission("admin_panel")]
     public class ChainsController : ControllerBase
     {
         private readonly IMediator _mediator;

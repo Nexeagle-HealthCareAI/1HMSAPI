@@ -10,6 +10,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ExcludeFromCodeCoverage]
     [Route("doctor-dashboard")]
     [ApiController]
+    [EasyHMSAPI.Api.Common.RequiresPermission("doc_board")]
     public class DoctorDashboardController : ControllerBase
     {
         private readonly IMediator _mediator;

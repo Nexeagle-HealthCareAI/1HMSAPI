@@ -13,6 +13,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ExcludeFromCodeCoverage]
     [ApiController]
     [Route("patient-profile")]
+    [EasyHMSAPI.Api.Common.RequiresPermission("patients")]
     public class PatientProfileController : ControllerBase
     {
         private readonly IMediator _mediator;

@@ -19,6 +19,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("abdm")]
     [Authorize]
+    [RequiresPermission("abdm")]
     public class AbdmController : ControllerBase
     {
         private readonly IMediator _mediator;

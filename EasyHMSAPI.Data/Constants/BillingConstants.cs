@@ -60,6 +60,7 @@ namespace EasyHMSAPI.Data.Constants
             public const string Receipt = "RCPT";
             public const string Encounter = "ENC";
             public const string LabAccession = "LABACC";
+            public const string LabReport = "LABRPT";
             public const string RadStudy = "RADSTUDY";
             public const string Admission = "ADM";
             public const string Token = "TOKEN";

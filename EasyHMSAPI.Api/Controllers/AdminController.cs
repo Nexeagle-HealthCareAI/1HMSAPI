@@ -14,6 +14,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Authorize]
     [EasyHMSAPI.Api.Common.SkipHospitalAccessCheck]
+    [EasyHMSAPI.Api.Common.RequiresPermission("admin_panel")]
     public class AdminController : ControllerBase
     {
         private readonly IMediator _mediator;

@@ -10,6 +10,7 @@ namespace EasyHMSAPI.Api.Controllers
 {
     [Route("medicines")]
     [ApiController]
+    [EasyHMSAPI.Api.Common.RequiresPermission("pharmacy")]
     public class MedicinesController : ControllerBase
     {
         private readonly IMediator _mediator;

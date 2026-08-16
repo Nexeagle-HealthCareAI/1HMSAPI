@@ -13,6 +13,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ExcludeFromCodeCoverage]
     [Route("leads")]
     [ApiController]
+    [EasyHMSAPI.Api.Common.RequiresPermission("leads")]
     public class LeadsController : ControllerBase
     {
         private readonly IMediator _mediator;

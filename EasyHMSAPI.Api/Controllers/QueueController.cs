@@ -15,6 +15,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("queue")]
     [Authorize]
+    [EasyHMSAPI.Api.Common.RequiresPermission("appointment_scheduler")]
     public class QueueController : ControllerBase
     {
         private readonly IMediator _mediator;

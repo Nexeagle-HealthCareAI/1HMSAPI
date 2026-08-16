@@ -213,6 +213,15 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<ConsultantIncentiveLedger> ConsultantIncentiveLedger { get; set; }
         public DbSet<PublicApiClient> PublicApiClient { get; set; }
 
+        // Pathology
+        public DbSet<PathologyTestMaster> PathologyTestMaster { get; set; }
+        public DbSet<PathologyReportTemplate> PathologyReportTemplate { get; set; }
+        public DbSet<PathologyOrder> PathologyOrder { get; set; }
+        public DbSet<PathologyOrderLine> PathologyOrderLine { get; set; }
+        public DbSet<PathologyResult> PathologyResult { get; set; }
+        public DbSet<PathologyReport> PathologyReport { get; set; }
+        public DbSet<LabConfiguration> LabConfiguration { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<User>().ToTable("Users");
