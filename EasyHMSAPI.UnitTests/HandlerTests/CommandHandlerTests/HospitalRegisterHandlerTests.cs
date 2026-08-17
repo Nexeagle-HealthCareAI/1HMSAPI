@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Threading;
@@ -126,6 +127,62 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var hospitalUser = await _context.HospitalUsers.FirstOrDefaultAsync(hu => hu.HospitalID == response.HospitalId);
             Assert.That(hospitalUser, Is.Not.Null);
             Assert.That(hospitalUser!.IsPrimary, Is.True);
+        }
+
+        [Test]
+        public async Task Handle_ValidRequest_ClonesHospitalScopedRoleInsteadOfMutatingGlobalRole()
+        {
+            // Arrange -- global "AdminDoctor" Role (HospitalID == null), the shared template
+            // every registering user with this RoleName links to (see UserRegistrationHandler).
+            var user = TestDataFactory.SeedUser(_context, role: "AdminDoctor");
+            var userProfile = new UserProfile { UserID = user.UserID, FullName = "Test User", UserStatusId = 1, EmployeeID = "EMP001" };
+            _context.UserProfiles.Add(userProfile);
+
+            var globalRole = _context.Roles.Single(r => r.RoleName == "AdminDoctor");
+            _context.RolePermissions.Add(new RolePermission { RoleID = globalRole.RoleID, PermissionKey = "ipd", IsAllowed = true });
+            _context.RolePermissions.Add(new RolePermission { RoleID = globalRole.RoleID, PermissionKey = "inventory", IsAllowed = true });
+            await _context.SaveChangesAsync();
+
+            var request = new HospitalRegisterRequestModel
+            {
+                UserId = user.UserID,
+                Name = "Grand Hospital",
+                Type = "General",
+                Email = "info@grand.com",
+                Contact = "9876543210",
+                Location = "Down Town",
+                City = "Metropolis",
+                State = "NY",
+                Country = "USA",
+                Pincode = "10001",
+                RegistrationNumber = "REG123"
+            };
+
+            // Act
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            // Assert
+            Assert.That(response.Success, Is.True);
+
+            // The global role itself must be untouched -- still HospitalID == null, still
+            // carrying its own permissions, still available as a template for the NEXT
+            // hospital to clone from. This is the exact bug: it used to get mutated in place.
+            var reloadedGlobalRole = await _context.Roles.FindAsync(globalRole.RoleID);
+            Assert.That(reloadedGlobalRole!.HospitalID, Is.Null);
+            var globalPerms = await _context.RolePermissions
+                .Where(rp => rp.RoleID == globalRole.RoleID).Select(rp => rp.PermissionKey).ToListAsync();
+            Assert.That(globalPerms, Is.EquivalentTo(new[] { "ipd", "inventory" }));
+
+            // The user's UserRole must now point at a NEW, hospital-scoped clone carrying the
+            // same permissions the global role had at clone time.
+            var userRole = await _context.UserRoles.Include(ur => ur.Role).SingleAsync(ur => ur.UserID == user.UserID);
+            Assert.That(userRole.RoleID, Is.Not.EqualTo(globalRole.RoleID));
+            Assert.That(userRole.Role.HospitalID, Is.EqualTo(response.HospitalId));
+            Assert.That(userRole.Role.RoleName, Is.EqualTo("AdminDoctor"));
+
+            var hospitalRolePerms = await _context.RolePermissions
+                .Where(rp => rp.RoleID == userRole.RoleID).Select(rp => rp.PermissionKey).ToListAsync();
+            Assert.That(hospitalRolePerms, Is.EquivalentTo(new[] { "ipd", "inventory" }));
         }
 
         [Test]
