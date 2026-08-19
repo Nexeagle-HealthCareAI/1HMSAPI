@@ -30,5 +30,7 @@ namespace EasyHMSAPI.Application.Services
         // Single whole-platform entry — unlike PublicDoctorsList there's no per-request filter
         // combo to key on, this is just "all bookable categories right now".
         public const string PublicSpecialtiesList = "public:specialties";
+
+        public static string DoctorRoster(Guid hospitalId) => $"public:doctor-roster:{hospitalId}";
     }
 }

@@ -176,6 +176,31 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Internal hospital roster for Vita's voice assistant (phonetic name-correction context in
+        // its system prompt, NOT a tool-call result) -- unlike GetDoctors above, does NOT filter on
+        // Doctor.IsPubliclyListed/IsDelistedByAdmin (a hospital's own front desk needs every real
+        // doctor regardless of marketplace opt-in/delisting). Still excludes a Revoked user, so a
+        // roster entry always resolves via find_doctors too. Route grouped under doctors/* like the
+        // other doctor endpoints above, not hospitals/*, since the response shape is doctor-centric.
+        [HttpGet("doctors/roster")]
+        public async Task<ActionResult<GetPublicDoctorRosterResponseModel>> GetDoctorRoster([FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetPublicDoctorRosterRequestModel { HospitalId = hospitalId });
+                if (!response.Success) return BadRequest(response);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetDoctorRoster for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching the doctor roster." });
+            }
+        }
+
         [HttpGet("specialties")]
         public async Task<ActionResult<GetPublicSpecialtiesResponseModel>> GetSpecialties()
         {
