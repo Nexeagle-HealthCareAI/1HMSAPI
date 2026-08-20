@@ -12,6 +12,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     public class MarkArrivedRequestModel : IRequest<IssueQueueTokenResponseModel>
     {
         public Guid AppointmentId { get; set; }
+        public Guid HospitalId { get; set; }
         [JsonIgnore]
         public Guid DoctorId { get; set; }
     }

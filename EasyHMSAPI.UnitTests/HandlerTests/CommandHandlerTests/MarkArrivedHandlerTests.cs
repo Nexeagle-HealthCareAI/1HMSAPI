@@ -61,7 +61,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         {
             var appt = SeedAppointment();
 
-            var response = await _handler.Handle(new MarkArrivedRequestModel { AppointmentId = appt.ApptId, DoctorId = _doctorId }, CancellationToken.None);
+            var response = await _handler.Handle(new MarkArrivedRequestModel { AppointmentId = appt.ApptId, HospitalId = _hospitalId, DoctorId = _doctorId }, CancellationToken.None);
 
             Assert.That(response.Success, Is.True);
             Assert.That(response.TokenNo, Is.EqualTo(1));
@@ -75,7 +75,31 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         {
             var appt = SeedAppointment(doctorId: Guid.NewGuid());
 
-            var response = await _handler.Handle(new MarkArrivedRequestModel { AppointmentId = appt.ApptId, DoctorId = _doctorId }, CancellationToken.None);
+            var response = await _handler.Handle(new MarkArrivedRequestModel { AppointmentId = appt.ApptId, HospitalId = _hospitalId, DoctorId = _doctorId }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+        }
+
+        [Test]
+        public async Task Handle_HospitalMismatch_Rejects()
+        {
+            // Appointment genuinely belongs to _doctorId (so the doctor check alone would pass) but
+            // the caller claims a different hospital -- guards the fix for the pre-existing gap where
+            // MarkArrivedRequestModel carried no HospitalId at all and HospitalAccessFilter fails open
+            // when a request has no hospitalId to extract.
+            var appt = SeedAppointment();
+
+            var response = await _handler.Handle(new MarkArrivedRequestModel { AppointmentId = appt.ApptId, HospitalId = Guid.NewGuid(), DoctorId = _doctorId }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+        }
+
+        [Test]
+        public async Task Handle_MissingHospitalId_Rejects()
+        {
+            var appt = SeedAppointment();
+
+            var response = await _handler.Handle(new MarkArrivedRequestModel { AppointmentId = appt.ApptId, HospitalId = Guid.Empty, DoctorId = _doctorId }, CancellationToken.None);
 
             Assert.That(response.Success, Is.False);
         }
@@ -83,7 +107,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task Handle_AppointmentNotFound_Rejects()
         {
-            var response = await _handler.Handle(new MarkArrivedRequestModel { AppointmentId = Guid.NewGuid(), DoctorId = _doctorId }, CancellationToken.None);
+            var response = await _handler.Handle(new MarkArrivedRequestModel { AppointmentId = Guid.NewGuid(), HospitalId = _hospitalId, DoctorId = _doctorId }, CancellationToken.None);
 
             Assert.That(response.Success, Is.False);
         }

@@ -91,5 +91,24 @@ namespace EasyHMSAPI.UnitTests.CommonTests
             var second = await _filter.ResolveGrantedPermissionsAsync(user.UserID);
             Assert.That(second, Does.Contain("doc_board"), "expected the 60s cache to still serve the pre-revocation result");
         }
+
+        [Test]
+        public async Task ResolveGrantedPermissionsAsync_VitaServiceAccountRole_GrantsExactlyAppointmentSchedulerAndPatients()
+        {
+            // Regression guard for seed_vita_service_role.sql: VitaServiceAccount is Vita's
+            // staff-equivalent credential and is deliberately its own bespoke role so that
+            // revoking its RolePermissions rows is a surgical kill-switch that can't affect any
+            // other role. If this ever starts returning more than these two keys, someone widened
+            // the seed without noticing the blast-radius implication -- see that file's own comment.
+            var user = TestDataFactory.SeedUser(_context, role: "VitaServiceAccount");
+            var role = _context.Roles.First(r => r.RoleName == "VitaServiceAccount");
+            _context.RolePermissions.Add(new RolePermission { RoleID = role.RoleID, PermissionKey = "appointment_scheduler", IsAllowed = true });
+            _context.RolePermissions.Add(new RolePermission { RoleID = role.RoleID, PermissionKey = "patients", IsAllowed = true });
+            await _context.SaveChangesAsync();
+
+            var granted = await _filter.ResolveGrantedPermissionsAsync(user.UserID);
+
+            Assert.That(granted, Is.EquivalentTo(new[] { "appointment_scheduler", "patients" }));
+        }
     }
 }
