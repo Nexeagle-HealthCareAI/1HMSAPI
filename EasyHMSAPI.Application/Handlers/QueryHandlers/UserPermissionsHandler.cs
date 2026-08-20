@@ -20,6 +20,24 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
         {
             if (request.UserId != Guid.Empty)
             {
+                // Self-only unless the caller holds admin_panel -- this endpoint returns a
+                // user's real roles/permissions/default hospital, so querying someone ELSE's
+                // requires real justification, not just any valid JWT. CallerUserId is
+                // controller-stamped from the verified JWT, never client-supplied (see
+                // UserController.GetUserPermissions).
+                if (request.CallerUserId != request.UserId)
+                {
+                    var callerIsAdmin = request.CallerUserId != null && await _context.UserRoles
+                        .Where(ur => ur.UserID == request.CallerUserId)
+                        .SelectMany(ur => ur.Role.RolePermissions)
+                        .AnyAsync(rp => rp.PermissionKey == "admin_panel" && rp.IsAllowed, cancellationToken);
+
+                    if (!callerIsAdmin)
+                    {
+                        return new UserPermissionsResponseModel { Forbidden = true };
+                    }
+                }
+
                 var userExists = await _context.Users
                     .AnyAsync(u => u.UserID == request.UserId && u.UserStatusId != (int)UserStatusEnum.Revoked, cancellationToken);
 
