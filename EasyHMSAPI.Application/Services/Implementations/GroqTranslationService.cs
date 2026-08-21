@@ -125,6 +125,24 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
             if (!string.IsNullOrWhiteSpace(translatedJsonStr))
             {
+                // Strip potential markdown blocks
+                translatedJsonStr = translatedJsonStr.Trim();
+                if (translatedJsonStr.StartsWith("```json", StringComparison.OrdinalIgnoreCase))
+                {
+                    translatedJsonStr = translatedJsonStr.Substring(7);
+                }
+                else if (translatedJsonStr.StartsWith("```"))
+                {
+                    translatedJsonStr = translatedJsonStr.Substring(3);
+                }
+                
+                if (translatedJsonStr.EndsWith("```"))
+                {
+                    translatedJsonStr = translatedJsonStr.Substring(0, translatedJsonStr.Length - 3);
+                }
+                
+                translatedJsonStr = translatedJsonStr.Trim();
+
                 try
                 {
                     var translatedMap = JsonSerializer.Deserialize<Dictionary<string, string>>(translatedJsonStr);
@@ -136,9 +154,9 @@ namespace EasyHMSAPI.Application.Services.Implementations
                         }
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Fallback if LLM failed to return valid JSON
+                    Console.WriteLine($"Failed to parse JSON from Groq: {ex.Message}. Response was: {translatedJsonStr}");
                 }
             }
 
