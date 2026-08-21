@@ -182,6 +182,8 @@ builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmEncry
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmGatewayService, EasyHMSAPI.Application.Services.Implementations.AbdmGatewayService>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmAbhaService, EasyHMSAPI.Application.Services.Implementations.AbdmAbhaService>();
 
+builder.Services.AddHttpClient<ITranslationService, GroqTranslationService>();
+
 // RxNorm (RxNav): free, unauthenticated NLM API used to enrich a medicine's generic/salt
 // ingredients (available strengths, US-naming cross-reference). Fixed public base URL, no
 // per-environment config needed.
