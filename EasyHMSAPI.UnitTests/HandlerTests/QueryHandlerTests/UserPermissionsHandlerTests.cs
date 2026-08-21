@@ -101,12 +101,15 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         }
 
         [Test]
-        public async Task Handle_CallerQueriesSomeoneElse_WithAdminPanel_Succeeds()
+        public async Task Handle_CallerQueriesSomeoneElse_WithAdminPanel_SameHospital_Succeeds()
         {
             var target = TestDataFactory.SeedUser(_context, role: "Doctor", email: "target2@example.com", phone: "3333333333");
             var caller = TestDataFactory.SeedUser(_context, role: "Admin", email: "caller2@example.com", phone: "4444444444");
             var adminRole = _context.Roles.First(r => r.RoleName == "Admin");
             _context.RolePermissions.Add(new RolePermission { RoleID = adminRole.RoleID, PermissionKey = "admin_panel", IsAllowed = true });
+            var hospital = TestDataFactory.SeedHospital(_context, caller.UserID);
+            _context.HospitalUsers.Add(new HospitalUser { HospitalUserID = Guid.NewGuid(), HospitalID = hospital.HospitalID, UserID = caller.UserID });
+            _context.HospitalUsers.Add(new HospitalUser { HospitalUserID = Guid.NewGuid(), HospitalID = hospital.HospitalID, UserID = target.UserID });
             await _context.SaveChangesAsync();
 
             var request = new UserPermissionsRequestModel { UserId = target.UserID, CallerUserId = caller.UserID };
@@ -115,6 +118,34 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
 
             Assert.That(response, Is.Not.Null);
             Assert.That(response!.Forbidden, Is.False);
+        }
+
+        [Test]
+        public async Task Handle_CallerQueriesSomeoneElse_WithAdminPanel_DifferentHospital_ReturnsForbidden()
+        {
+            // admin_panel is granted PER HOSPITAL (every hospital's own Admin/AdminDoctor role
+            // gets it at seed time -- hospital registration clones a hospital-scoped Role row,
+            // it isn't one shared global row), not as a platform-wide superadmin flag. Without
+            // this hospital-membership check, any hospital's admin could pull ANY OTHER
+            // hospital's user's roles/permissions/default hospital -- this is the regression
+            // guard for that gap.
+            var target = TestDataFactory.SeedUser(_context, role: "Doctor", email: "target3@example.com", phone: "5555555555");
+            var caller = TestDataFactory.SeedUser(_context, role: "Admin", email: "caller3@example.com", phone: "6666666666");
+            var adminRole = _context.Roles.First(r => r.RoleName == "Admin");
+            _context.RolePermissions.Add(new RolePermission { RoleID = adminRole.RoleID, PermissionKey = "admin_panel", IsAllowed = true });
+            var callerHospital = TestDataFactory.SeedHospital(_context, caller.UserID, city: "Caller City");
+            var targetHospital = TestDataFactory.SeedHospital(_context, target.UserID, city: "Target City");
+            _context.HospitalUsers.Add(new HospitalUser { HospitalUserID = Guid.NewGuid(), HospitalID = callerHospital.HospitalID, UserID = caller.UserID });
+            _context.HospitalUsers.Add(new HospitalUser { HospitalUserID = Guid.NewGuid(), HospitalID = targetHospital.HospitalID, UserID = target.UserID });
+            await _context.SaveChangesAsync();
+
+            var request = new UserPermissionsRequestModel { UserId = target.UserID, CallerUserId = caller.UserID };
+
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            Assert.That(response, Is.Not.Null);
+            Assert.That(response!.Forbidden, Is.True);
+            Assert.That(response.PermissionKeys, Is.Null);
         }
 
         [Test]

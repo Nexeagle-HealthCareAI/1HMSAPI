@@ -28,7 +28,10 @@
       "Bash(pnpm --filter @vita/web-sdk build)",
       "Bash(node -e ' *)",
       "Bash(./.venv/Scripts/python.exe -c ' *)",
-      "Bash(./.venv/Scripts/python.exe -m pytest -q -m slow)"
+      "Bash(./.venv/Scripts/python.exe -m pytest -q -m slow)",
+      "Bash(pnpm test:ci)",
+      "Bash(git checkout *)",
+      "Bash(git merge *)"
     ],
     "additionalDirectories": [
       "c:\\Users\\mtnoo\\OneDrive\\Desktop\\EasyHMS\\Vita\\tera\\apps\\audio-preprocess\\app"

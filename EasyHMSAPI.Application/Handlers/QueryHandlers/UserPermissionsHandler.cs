@@ -20,11 +20,22 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
         {
             if (request.UserId != Guid.Empty)
             {
-                // Self-only unless the caller holds admin_panel -- this endpoint returns a
-                // user's real roles/permissions/default hospital, so querying someone ELSE's
-                // requires real justification, not just any valid JWT. CallerUserId is
-                // controller-stamped from the verified JWT, never client-supplied (see
-                // UserController.GetUserPermissions).
+                // Self-only unless the caller holds admin_panel AND shares a hospital with the
+                // target -- this endpoint returns a user's real roles/permissions/default
+                // hospital, so querying someone ELSE's requires real justification, not just
+                // any valid JWT. CallerUserId is controller-stamped from the verified JWT,
+                // never client-supplied (see UserController.GetUserPermissions).
+                //
+                // admin_panel alone is NOT enough: it's granted per-hospital (every hospital's
+                // own Admin/AdminDoctor role gets it at seed time, and hospital registration
+                // now clones a hospital-scoped Role row rather than sharing one global row --
+                // see HospitalRegisterHandler), not as a platform-wide superadmin flag. Without
+                // the hospital check below, ANY hospital's admin could pull ANY OTHER
+                // hospital's user's roles/permissions/default hospital -- this controller also
+                // carries [SkipHospitalAccessCheck], so nothing else backstops that. Same
+                // "admin role + hospital membership" pairing QuickAddUserHandler already
+                // requires (CallerGuards.IsAdminAsync + its own hu.HospitalID check) for its
+                // own admin_panel-gated actions.
                 if (request.CallerUserId != request.UserId)
                 {
                     var callerIsAdmin = request.CallerUserId != null && await _context.UserRoles
@@ -32,7 +43,12 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         .SelectMany(ur => ur.Role.RolePermissions)
                         .AnyAsync(rp => rp.PermissionKey == "admin_panel" && rp.IsAllowed, cancellationToken);
 
-                    if (!callerIsAdmin)
+                    var sharesHospitalWithTarget = callerIsAdmin && await _context.HospitalUsers
+                        .Where(hu => hu.UserID == request.CallerUserId)
+                        .AnyAsync(caller => _context.HospitalUsers.Any(target =>
+                            target.UserID == request.UserId && target.HospitalID == caller.HospitalID), cancellationToken);
+
+                    if (!sharesHospitalWithTarget)
                     {
                         return new UserPermissionsResponseModel { Forbidden = true };
                     }
