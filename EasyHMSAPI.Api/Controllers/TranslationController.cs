@@ -3,12 +3,14 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using EasyHMSAPI.Application.Services.Interfaces;
+using EasyHMSAPI.Api.Common;
 
 namespace EasyHMSAPI.Api.Controllers
 {
     [ApiController]
     [Route("api/v1/translation")]
-    // [Authorize] // Assuming we want it authorized eventually, but uncomment if it breaks
+    [Authorize]
+    [SkipHospitalAccessCheck]
     public class TranslationController : ControllerBase
     {
         private readonly ITranslationService _translationService;
