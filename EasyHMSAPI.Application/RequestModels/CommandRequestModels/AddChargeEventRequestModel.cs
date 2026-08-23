@@ -17,12 +17,6 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? PlaceOfSupplyStateCode { get; set; }
         public string? BuyerGstin { get; set; }
 
-        // Backdated billing: applies to the whole batch (one bill = one transaction), not per line.
-        // Null => post at "now", byte-identical to pre-backdating behavior. A past date requires
-        // BackdateReason -- see BillingBackdateGuard.
-        public DateTime? ServiceDate { get; set; }
-        public string? BackdateReason { get; set; }
-
         [JsonIgnore]
         public string? LoggedInUserName { get; set; }
         [JsonIgnore]

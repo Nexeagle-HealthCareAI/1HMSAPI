@@ -31,7 +31,6 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public DateTime InvoiceDate { get; set; }
         public string? StatusCode { get; set; }
         public decimal? NetAmount { get; set; }
-        public bool IsBackdated { get; set; }
     }
 
     public class CurrentInvoiceInfo
@@ -57,9 +56,6 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
 
         public bool? IsReopened { get; set; }
         public string? ReopenedReason { get; set; }
-
-        public bool IsBackdated { get; set; }
-        public string? BackdateReason { get; set; }
     }
 
     public class BillingChargeDetail
@@ -87,8 +83,6 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public bool IsInterState { get; set; }
 
         public DateTime ServiceDate { get; set; }
-        public bool IsBackdated { get; set; }
-        public string? BackdateReason { get; set; }
 
         public string? StatusCode { get; set; }
         public bool IsInvoiced { get; set; }

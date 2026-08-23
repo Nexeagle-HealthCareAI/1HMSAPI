@@ -58,8 +58,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     InvoiceNo = i.InvoiceNo,
                     InvoiceDate = i.InvoiceDate,
                     StatusCode = i.StatusCode,
-                    NetAmount = i.NetAmount,
-                    IsBackdated = i.IsBackdated
+                    NetAmount = i.NetAmount
                 }).ToList();
 
                 // All payments for this encounter (sum across all invoices for the encounter)
@@ -92,8 +91,6 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     IsTaxInclusive = ce.IsTaxInclusive,
                     IsInterState = ce.IsInterState,
                     ServiceDate = ce.ServiceDate,
-                    IsBackdated = ce.IsBackdated,
-                    BackdateReason = ce.BackdateReason,
                     StatusCode = ce.StatusCode,
                     IsInvoiced = invoicedChargeIds.Contains(ce.ChargeEventId)
                 }).ToList();
@@ -141,9 +138,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     BuyerGstin = currentInvoice.BuyerGstin,
                     PlaceOfSupplyStateCode = currentInvoice.PlaceOfSupplyStateCode,
                     IsReopened = currentInvoice.IsReopened,
-                    ReopenedReason = currentInvoice.ReopenedReason,
-                    IsBackdated = currentInvoice.IsBackdated,
-                    BackdateReason = currentInvoice.BackdateReason
+                    ReopenedReason = currentInvoice.ReopenedReason
                 };
 
                 return new GetBillingEventsResponseModel

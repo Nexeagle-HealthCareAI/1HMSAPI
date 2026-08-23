@@ -29,6 +29,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (!patientExists)
                     return new CreateManualEncounterResponseModel { Success = false, Message = $"Patient {request.PatientId} not found." };
 
+                if (request.ServiceDate.HasValue && request.ServiceDate.Value.Date > DateTime.UtcNow.Date)
+                    return new CreateManualEncounterResponseModel { Success = false, Message = "Visit date cannot be in the future." };
+
                 var typeCode = string.IsNullOrWhiteSpace(request.EncounterType)
                     ? BillingConstants.EncounterType.Ipd
                     : request.EncounterType!.Trim().ToUpperInvariant();
@@ -54,6 +57,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     SourceId = null,
                     PrimaryDoctorId = request.DoctorId,
                     StatusCode = BillingConstants.EncounterStatus.Open,
+                    ServiceDate = request.ServiceDate,
                     CreatedAt = now,
                     CreatedBy = request.LoggedInUserName,
                     UpdatedAt = now,

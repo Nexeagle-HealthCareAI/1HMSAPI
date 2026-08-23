@@ -40,10 +40,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         return new AddChargeEventResponseModel { Success = false, Message = "Discount cannot be negative." };
                 }
 
-                var backdate = BillingBackdateGuard.ValidateDate(request.ServiceDate, request.BackdateReason, DateTime.UtcNow);
-                if (!backdate.Success)
-                    return new AddChargeEventResponseModel { Success = false, Message = backdate.Error };
-
                 if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
                 {
                     var alreadyPosted = await _context.BillingChargeEvent
@@ -65,25 +61,29 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (encounter.StatusCode != BillingConstants.EncounterStatus.Open)
                     return new AddChargeEventResponseModel { Success = false, Message = $"Encounter is not open (current status: {encounter.StatusCode})." };
 
-                if (backdate.IsBackdated)
+                var now = DateTime.UtcNow;
+                // The visit's own chosen date (set once at visit creation), combined with the
+                // actual time-of-day so charges added throughout the day get distinct timestamps
+                // instead of one frozen batch stamp. Null ServiceDate -> unchanged, real-time behavior.
+                var effectiveServiceDate = encounter.ServiceDate.HasValue
+                    ? encounter.ServiceDate.Value.Date + now.TimeOfDay
+                    : now;
+
+                // A visit dated before "now" could otherwise land inside a day whose interim bill
+                // is already closed and printed -- same invariant UpdateChargeEventHandler/
+                // DeleteBillingEventHandler enforce for edits. Cheap to check unconditionally.
+                var closedDays = await _context.AdmissionDayBill
+                    .Where(b => b.EncounterId == request.EncounterId && b.HospitalId == request.HospitalId
+                             && b.StatusCode == BillingConstants.DayBillStatus.Closed)
+                    .ToListAsync(cancellationToken);
+                var blockingDay = AdmissionDayLockGuard.FindBlockingClosedDay(closedDays, effectiveServiceDate);
+                if (blockingDay != null)
                 {
-                    // A backdated ServiceDate could otherwise land inside a day whose interim bill
-                    // is already closed and printed -- same invariant UpdateChargeEventHandler/
-                    // DeleteBillingEventHandler enforce for edits, but this is the first time a
-                    // freshly-posted charge can even have a date that falls before "now."
-                    var closedDays = await _context.AdmissionDayBill
-                        .Where(b => b.EncounterId == request.EncounterId && b.HospitalId == request.HospitalId
-                                 && b.StatusCode == BillingConstants.DayBillStatus.Closed)
-                        .ToListAsync(cancellationToken);
-                    var blocking = BillingBackdateGuard.FindBlockingClosedDay(closedDays, backdate.EffectiveDate);
-                    if (blocking != null)
+                    return new AddChargeEventResponseModel
                     {
-                        return new AddChargeEventResponseModel
-                        {
-                            Success = false,
-                            Message = $"This date falls before Day {blocking.DayNumber}'s closed interim bill ({blocking.InterimBillNo}). Reopen that day first."
-                        };
-                    }
+                        Success = false,
+                        Message = $"This date falls before Day {blockingDay.DayNumber}'s closed interim bill ({blockingDay.InterimBillNo}). Reopen that day first."
+                    };
                 }
 
                 var sourceModule = string.IsNullOrWhiteSpace(encounter.EncounterTypeCode)
@@ -156,7 +156,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         .Where(m => m.HospitalId == request.HospitalId && chargeIds.Contains(m.ChargeId))
                         .ToDictionaryAsync(m => m.ChargeId, cancellationToken);
 
-                var now = DateTime.UtcNow;
                 var details = new List<ChargeEventDetail>();
                 decimal totalGross = 0, totalDiscount = 0, totalNet = 0, totalIncentive = 0;
                 decimal totalTaxable = 0, totalCgst = 0, totalSgst = 0, totalIgst = 0, totalTax = 0;
@@ -253,9 +252,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         IsInterState = isInterState,
                         IdempotencyKey = request.IdempotencyKey,
                         StatusCode = BillingConstants.ChargeEventStatus.Posted,
-                        ServiceDate = backdate.EffectiveDate,
-                        IsBackdated = backdate.IsBackdated,
-                        BackdateReason = backdate.IsBackdated ? request.BackdateReason : null,
+                        ServiceDate = effectiveServiceDate,
                         PostedAt = now,
                         PostedBy = request.LoggedInUserName,
                         CreatedAt = now,
@@ -316,8 +313,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         TaxAmount = taxable.TaxAmount,
                         IsTaxInclusive = taxInclusive,
                         IsInterState = isInterState,
-                        ServiceDate = backdate.EffectiveDate,
-                        IsBackdated = backdate.IsBackdated,
                         DiscountApprovalId = null,
                         DiscountApprovalRequired = false,
                         DiscountCapPercent = null,
@@ -381,8 +376,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     TaxAmount = e.TaxAmount,
                     IsTaxInclusive = e.IsTaxInclusive,
                     IsInterState = e.IsInterState,
-                    ServiceDate = e.ServiceDate,
-                    IsBackdated = e.IsBackdated,
                     DiscountApprovalId = approval?.DiscountApprovalId,
                     DiscountApprovalRequired = approval != null,
                     DiscountCapPercent = approval?.CapPercent,

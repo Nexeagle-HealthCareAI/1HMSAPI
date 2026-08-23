@@ -185,16 +185,19 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
-        public async Task Handle_PostsBackdatedCharge_WhenReasonProvided()
+        public async Task Handle_UsesEncounterServiceDate_ForNewCharges()
         {
-            var pastDate = DateTime.UtcNow.AddDays(-3);
+            // The date now lives once on the visit (Encounter.ServiceDate), not per Add-Charge call.
+            var encounter = _context.Encounter.Single(e => e.EncounterId == _encounterId);
+            var visitDate = DateTime.UtcNow.AddDays(-3).Date;
+            encounter.ServiceDate = visitDate;
+            await _context.SaveChangesAsync();
+
             var response = await _handler.Handle(new AddChargeEventRequestModel
             {
                 HospitalId = _hospitalId,
                 PatientId = "PT001",
                 EncounterId = _encounterId,
-                ServiceDate = pastDate,
-                BackdateReason = "Missed billing this visit",
                 Charges = new List<ChargeDetail>
                 {
                     new ChargeDetail { DisplayName = "Consultation", Qty = 1, Rate = 500, DiscountPercent = 0, CategoryCode = "CONSULT" },
@@ -202,137 +205,15 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             }, CancellationToken.None);
 
             Assert.That(response.Success, Is.True);
-            var detail = response.Data!.ChargeEvents!.Single();
-            Assert.That(detail.IsBackdated, Is.True);
-            Assert.That(detail.ServiceDate, Is.EqualTo(pastDate));
-
             var posted = _context.BillingChargeEvent.Single(c => c.EncounterId == _encounterId);
-            Assert.That(posted.IsBackdated, Is.True);
-            Assert.That(posted.BackdateReason, Is.EqualTo("Missed billing this visit"));
-            Assert.That(posted.ServiceDate, Is.EqualTo(pastDate));
+            Assert.That(posted.ServiceDate.Date, Is.EqualTo(visitDate), "The charge must land on the visit's chosen date.");
         }
 
         [Test]
-        public async Task Handle_RejectsBackdatedCharge_WhenReasonMissing()
+        public async Task Handle_DefaultsServiceDateToNow_WhenEncounterServiceDateNotSet()
         {
-            var response = await _handler.Handle(new AddChargeEventRequestModel
-            {
-                HospitalId = _hospitalId,
-                PatientId = "PT001",
-                EncounterId = _encounterId,
-                ServiceDate = DateTime.UtcNow.AddDays(-3),
-                Charges = new List<ChargeDetail>
-                {
-                    new ChargeDetail { DisplayName = "Consultation", Qty = 1, Rate = 500, DiscountPercent = 0, CategoryCode = "CONSULT" },
-                },
-            }, CancellationToken.None);
-
-            Assert.That(response.Success, Is.False);
-            Assert.That(response.Message, Does.Contain("reason"));
-            Assert.That(_context.BillingChargeEvent.Count(), Is.EqualTo(0));
-        }
-
-        [Test]
-        public async Task Handle_RejectsCharge_WhenServiceDateInFuture()
-        {
-            var response = await _handler.Handle(new AddChargeEventRequestModel
-            {
-                HospitalId = _hospitalId,
-                PatientId = "PT001",
-                EncounterId = _encounterId,
-                ServiceDate = DateTime.UtcNow.AddDays(1),
-                Charges = new List<ChargeDetail>
-                {
-                    new ChargeDetail { DisplayName = "Consultation", Qty = 1, Rate = 500, DiscountPercent = 0, CategoryCode = "CONSULT" },
-                },
-            }, CancellationToken.None);
-
-            Assert.That(response.Success, Is.False);
-            Assert.That(response.Message, Does.Contain("future"));
-        }
-
-        [Test]
-        public async Task Handle_RejectsBackdatedCharge_WhenItFallsBeforeAnAlreadyClosedDay()
-        {
-            var dayBill = new AdmissionDayBill
-            {
-                AdmissionDayBillId = Guid.NewGuid(),
-                HospitalId = _hospitalId,
-                EncounterId = _encounterId,
-                PatientId = "PT001",
-                DayNumber = 1,
-                FromUtc = DateTime.UtcNow.AddDays(-5),
-                ToUtc = DateTime.UtcNow.AddDays(-4),
-                InterimBillNo = "IB-1",
-                StatusCode = BillingConstants.DayBillStatus.Closed,
-                ClosedAt = DateTime.UtcNow,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
-            };
-            _context.AdmissionDayBill.Add(dayBill);
-            await _context.SaveChangesAsync();
-
-            var response = await _handler.Handle(new AddChargeEventRequestModel
-            {
-                HospitalId = _hospitalId,
-                PatientId = "PT001",
-                EncounterId = _encounterId,
-                ServiceDate = DateTime.UtcNow.AddDays(-5), // inside Day 1's already-closed window
-                BackdateReason = "Late entry",
-                Charges = new List<ChargeDetail>
-                {
-                    new ChargeDetail { DisplayName = "Consultation", Qty = 1, Rate = 500, DiscountPercent = 0, CategoryCode = "CONSULT" },
-                },
-            }, CancellationToken.None);
-
-            Assert.That(response.Success, Is.False);
-            Assert.That(response.Message, Does.Contain("Day 1"));
-            Assert.That(response.Message, Does.Contain("IB-1"));
-            Assert.That(_context.BillingChargeEvent.Count(), Is.EqualTo(0));
-        }
-
-        [Test]
-        public async Task Handle_AllowsBackdatedCharge_WhenDatedAfterTheLatestClosedDay()
-        {
-            var dayBill = new AdmissionDayBill
-            {
-                AdmissionDayBillId = Guid.NewGuid(),
-                HospitalId = _hospitalId,
-                EncounterId = _encounterId,
-                PatientId = "PT001",
-                DayNumber = 1,
-                FromUtc = DateTime.UtcNow.AddDays(-5),
-                ToUtc = DateTime.UtcNow.AddDays(-4),
-                InterimBillNo = "IB-1",
-                StatusCode = BillingConstants.DayBillStatus.Closed,
-                ClosedAt = DateTime.UtcNow,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
-            };
-            _context.AdmissionDayBill.Add(dayBill);
-            await _context.SaveChangesAsync();
-
-            var response = await _handler.Handle(new AddChargeEventRequestModel
-            {
-                HospitalId = _hospitalId,
-                PatientId = "PT001",
-                EncounterId = _encounterId,
-                ServiceDate = DateTime.UtcNow.AddDays(-2), // after Day 1's window closed
-                BackdateReason = "Late entry",
-                Charges = new List<ChargeDetail>
-                {
-                    new ChargeDetail { DisplayName = "Consultation", Qty = 1, Rate = 500, DiscountPercent = 0, CategoryCode = "CONSULT" },
-                },
-            }, CancellationToken.None);
-
-            Assert.That(response.Success, Is.True);
-        }
-
-        [Test]
-        public async Task Handle_DefaultsServiceDateToNow_WhenNotSupplied()
-        {
-            // Regression guard: omitting ServiceDate must stay byte-identical to pre-backdating
-            // behavior -- no reason required, IsBackdated false, dated "now."
+            // Regression guard: a visit with no ServiceDate override must stay byte-identical to
+            // pre-feature behavior -- charges post at real "now".
             var before = DateTime.UtcNow;
             var response = await _handler.Handle(new AddChargeEventRequestModel
             {
@@ -347,9 +228,85 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var after = DateTime.UtcNow;
 
             Assert.That(response.Success, Is.True);
-            var detail = response.Data!.ChargeEvents!.Single();
-            Assert.That(detail.IsBackdated, Is.False);
-            Assert.That(detail.ServiceDate, Is.InRange(before, after));
+            var posted = _context.BillingChargeEvent.Single(c => c.EncounterId == _encounterId);
+            Assert.That(posted.ServiceDate, Is.InRange(before, after));
+        }
+
+        [Test]
+        public async Task Handle_RejectsCharge_WhenVisitDateFallsBeforeAnAlreadyClosedDay()
+        {
+            var dayBill = new AdmissionDayBill
+            {
+                AdmissionDayBillId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                EncounterId = _encounterId,
+                PatientId = "PT001",
+                DayNumber = 1,
+                FromUtc = DateTime.UtcNow.AddDays(-5),
+                ToUtc = DateTime.UtcNow.AddDays(-4),
+                InterimBillNo = "IB-1",
+                StatusCode = BillingConstants.DayBillStatus.Closed,
+                ClosedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            _context.AdmissionDayBill.Add(dayBill);
+            var encounter = _context.Encounter.Single(e => e.EncounterId == _encounterId);
+            encounter.ServiceDate = DateTime.UtcNow.AddDays(-5); // inside Day 1's already-closed window
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new AddChargeEventRequestModel
+            {
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+                Charges = new List<ChargeDetail>
+                {
+                    new ChargeDetail { DisplayName = "Consultation", Qty = 1, Rate = 500, DiscountPercent = 0, CategoryCode = "CONSULT" },
+                },
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Does.Contain("Day 1"));
+            Assert.That(response.Message, Does.Contain("IB-1"));
+            Assert.That(_context.BillingChargeEvent.Count(), Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task Handle_AllowsCharge_WhenVisitDateIsAfterTheLatestClosedDay()
+        {
+            var dayBill = new AdmissionDayBill
+            {
+                AdmissionDayBillId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                EncounterId = _encounterId,
+                PatientId = "PT001",
+                DayNumber = 1,
+                FromUtc = DateTime.UtcNow.AddDays(-5),
+                ToUtc = DateTime.UtcNow.AddDays(-4),
+                InterimBillNo = "IB-1",
+                StatusCode = BillingConstants.DayBillStatus.Closed,
+                ClosedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            _context.AdmissionDayBill.Add(dayBill);
+            var encounter = _context.Encounter.Single(e => e.EncounterId == _encounterId);
+            encounter.ServiceDate = DateTime.UtcNow.AddDays(-2); // after Day 1's window closed
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new AddChargeEventRequestModel
+            {
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+                Charges = new List<ChargeDetail>
+                {
+                    new ChargeDetail { DisplayName = "Consultation", Qty = 1, Rate = 500, DiscountPercent = 0, CategoryCode = "CONSULT" },
+                },
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
         }
     }
 }
