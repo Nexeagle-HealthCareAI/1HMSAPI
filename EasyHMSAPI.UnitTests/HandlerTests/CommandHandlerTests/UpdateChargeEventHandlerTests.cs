@@ -146,6 +146,103 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task Handle_RejectsEdit_WhenChargeBelongsToAClosedAdmissionDayBill()
+        {
+            // Regression guard: a closed interim bill is already printed/handed to the patient or
+            // TPA. The invoice's own FINALIZED status doesn't cover this -- day-wise closes happen
+            // mid-stay, well before discharge/finalize -- so before this fix, editing this exact
+            // charge here would silently make the printed interim bill and the live ledger
+            // disagree, with nothing in the system catching it.
+            var charge = SeedCharge(qty: 1, rate: 1000); // net = 1000
+
+            var dayBill = new AdmissionDayBill
+            {
+                AdmissionDayBillId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                EncounterId = _encounterId,
+                PatientId = "PT001",
+                DayNumber = 1,
+                FromUtc = DateTime.UtcNow.AddDays(-1),
+                ToUtc = DateTime.UtcNow,
+                InterimBillNo = "IB-1",
+                StatusCode = BillingConstants.DayBillStatus.Closed,
+                ClosedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            _context.AdmissionDayBill.Add(dayBill);
+            _context.AdmissionDayBillLine.Add(new AdmissionDayBillLine
+            {
+                AdmissionDayBillLineId = Guid.NewGuid(),
+                AdmissionDayBillId = dayBill.AdmissionDayBillId,
+                HospitalId = _hospitalId,
+                ChargeEventId = charge.ChargeEventId,
+                DisplayName = "X-Ray",
+                ServiceDate = DateTime.UtcNow,
+                Qty = 1,
+                UnitPrice = 1000,
+                GrossAmount = 1000,
+                NetAmount = 1000,
+                CreatedAt = DateTime.UtcNow,
+            });
+            _context.SaveChanges();
+
+            var response = await _handler.Handle(new UpdateChargeEventRequestModel
+            {
+                HospitalId = _hospitalId,
+                ChargeEventId = charge.ChargeEventId,
+                Qty = 5,
+                Rate = 1000,
+                DiscountPercent = 0,
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Does.Contain("Day 1"));
+            Assert.That(response.Message, Does.Contain("IB-1"));
+            var reloaded = _context.BillingChargeEvent.Single(c => c.ChargeEventId == charge.ChargeEventId);
+            Assert.That(reloaded.Qty, Is.EqualTo(1), "The charge must be completely untouched.");
+        }
+
+        [Test]
+        public async Task Handle_AllowsEdit_WhenAdmissionDayBillWasReopened()
+        {
+            // ReopenAdmissionDayHandler deletes the AdmissionDayBillLine rows for a reopened day --
+            // this proves the lock releases correctly once that happens, not just that it engages.
+            var charge = SeedCharge(qty: 1, rate: 1000);
+
+            var dayBill = new AdmissionDayBill
+            {
+                AdmissionDayBillId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                EncounterId = _encounterId,
+                PatientId = "PT001",
+                DayNumber = 1,
+                FromUtc = DateTime.UtcNow.AddDays(-1),
+                ToUtc = DateTime.UtcNow,
+                InterimBillNo = "IB-1",
+                StatusCode = BillingConstants.DayBillStatus.Reopened, // already reopened; no lines exist
+                ClosedAt = DateTime.UtcNow,
+                ReopenedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            _context.AdmissionDayBill.Add(dayBill);
+            // No AdmissionDayBillLine seeded -- ReopenAdmissionDayHandler removes it on reopen.
+            _context.SaveChanges();
+
+            var response = await _handler.Handle(new UpdateChargeEventRequestModel
+            {
+                HospitalId = _hospitalId,
+                ChargeEventId = charge.ChargeEventId,
+                Qty = 5,
+                Rate = 1000,
+                DiscountPercent = 0,
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+        }
+
+        [Test]
         public async Task Handle_RejectsReduction_BelowAlreadyPaidAmount()
         {
             var charge = SeedCharge(qty: 2, rate: 500); // net = 1000

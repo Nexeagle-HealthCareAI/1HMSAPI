@@ -33,6 +33,26 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     };
                 }
 
+                // HospitalAccessFilter only proves the caller belongs to request.HospitalId -- it
+                // says nothing about whether request.EncounterId itself belongs to that hospital.
+                // Unlike AddChargeEventHandler (which validates this before touching anything),
+                // this handler previously went straight to LoadInvoiceAsync() with no ownership
+                // check at all, so a billing user at one hospital could post a real
+                // PAYMENT/ADVANCE/REFUND against another hospital's encounter/invoice just by
+                // knowing its EncounterId. Same check, same shape, as AddChargeEventHandler's.
+                var encounter = await _context.Encounter
+                    .FirstOrDefaultAsync(e => e.EncounterId == request.EncounterId
+                                           && e.HospitalId == request.HospitalId
+                                           && e.PatientId == request.PatientId, cancellationToken);
+                if (encounter == null)
+                {
+                    return new AddPaymentEventResponseModel
+                    {
+                        Success = false,
+                        Message = "Encounter not found for the given hospital/patient."
+                    };
+                }
+
                 var normalizedPaymentType = (request.Payment.PaymentType ?? string.Empty).Trim().ToUpperInvariant();
                 var allowedPaymentTypes = new[]
                 {

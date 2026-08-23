@@ -55,8 +55,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
         private async Task<DeleteBillingEventResponseModel> DeleteChargeEvent(DeleteBillingEventRequestModel request, CancellationToken cancellationToken)
         {
+            // HospitalAccessFilter only proves the caller belongs to request.HospitalId -- it says
+            // nothing about whether EventId itself belongs to that hospital. Without this filter,
+            // any billing user could delete/void another hospital's charge by ID alone (e.g. a GUID
+            // leaked in a screenshot, log line, or shared printed document). Everything looked up
+            // below (invoiceChargeEvents, billingInvoice, allocations) is derived FROM this
+            // already-scoped chargeEvent, so scoping this one lookup is sufficient.
             var chargeEvent = await _context.BillingChargeEvent
-                .Where(bce => bce.ChargeEventId == request.EventId)
+                .Where(bce => bce.ChargeEventId == request.EventId && bce.HospitalId == request.HospitalId)
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (chargeEvent == null)
@@ -66,6 +72,28 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     Success = false,
                     Message = "Charge event not found."
                 };
+            }
+
+            // Same day-lock enforcement as UpdateChargeEventHandler -- see its comment. A closed
+            // interim bill has already been printed/handed out; voiding one of its charges here
+            // would silently make it disagree with the live ledger, with no invoice-FINALIZED
+            // check catching it (day-closes happen mid-stay, well before discharge/finalize).
+            var dayBillLineForDelete = await _context.AdmissionDayBillLine
+                .Where(l => l.ChargeEventId == request.EventId && l.HospitalId == request.HospitalId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (dayBillLineForDelete != null)
+            {
+                var dayBillForDelete = await _context.AdmissionDayBill
+                    .Where(b => b.AdmissionDayBillId == dayBillLineForDelete.AdmissionDayBillId)
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (dayBillForDelete != null && dayBillForDelete.StatusCode == BillingConstants.DayBillStatus.Closed)
+                {
+                    return new DeleteBillingEventResponseModel
+                    {
+                        Success = false,
+                        Message = $"Cannot delete this charge — it's part of Day {dayBillForDelete.DayNumber}'s closed interim bill ({dayBillForDelete.InterimBillNo}). Reopen that day first."
+                    };
+                }
             }
 
             var invoiceChargeEvents = await _context.BillingInvoiceChargeEvent
@@ -206,8 +234,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
         private async Task<DeleteBillingEventResponseModel> DeletePaymentEvent(DeleteBillingEventRequestModel request, CancellationToken cancellationToken)
         {
+            // Same tenant-scoping fix as DeleteChargeEvent above -- see its comment.
             var payment = await _context.BillingPayment
-                .Where(bp => bp.PaymentId == request.EventId)
+                .Where(bp => bp.PaymentId == request.EventId && bp.HospitalId == request.HospitalId)
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (payment == null)

@@ -89,6 +89,76 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task Handle_RejectsDelete_WhenChargeBelongsToAClosedAdmissionDayBill()
+        {
+            // Same day-lock regression guard as UpdateChargeEventHandlerTests -- see its comment.
+            // Deliberately never linked to a BillingInvoice, so this hits the "charge never linked
+            // to an invoice" branch that would otherwise delete it outright with no lock check at
+            // all if the day-bill check weren't ordered before it.
+            var charge = new BillingChargeEvent
+            {
+                ChargeEventId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+                DisplayName = "X-Ray",
+                Qty = 1,
+                UnitPrice = 1000,
+                GrossAmount = 1000,
+                NetAmount = 1000,
+                StatusCode = "POSTED",
+                ServiceDate = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            _context.BillingChargeEvent.Add(charge);
+
+            var dayBill = new AdmissionDayBill
+            {
+                AdmissionDayBillId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                EncounterId = _encounterId,
+                PatientId = "PT001",
+                DayNumber = 1,
+                FromUtc = DateTime.UtcNow.AddDays(-1),
+                ToUtc = DateTime.UtcNow,
+                InterimBillNo = "IB-1",
+                StatusCode = "CLOSED",
+                ClosedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            _context.AdmissionDayBill.Add(dayBill);
+            _context.AdmissionDayBillLine.Add(new AdmissionDayBillLine
+            {
+                AdmissionDayBillLineId = Guid.NewGuid(),
+                AdmissionDayBillId = dayBill.AdmissionDayBillId,
+                HospitalId = _hospitalId,
+                ChargeEventId = charge.ChargeEventId,
+                DisplayName = "X-Ray",
+                ServiceDate = DateTime.UtcNow,
+                Qty = 1,
+                UnitPrice = 1000,
+                GrossAmount = 1000,
+                NetAmount = 1000,
+                CreatedAt = DateTime.UtcNow,
+            });
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new DeleteBillingEventRequestModel
+            {
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EventId = charge.ChargeEventId,
+                Type = "Charges",
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Does.Contain("Day 1"));
+            Assert.That(_context.BillingChargeEvent.Any(c => c.ChargeEventId == charge.ChargeEventId), Is.True);
+        }
+
+        [Test]
         public async Task Handle_ChargeNeverLinkedToAnInvoice_DeletesDirectlyInsteadOfFailing()
         {
             // Posted but the auto-createDraftInvoice step never ran (e.g. BillingPage's best-effort
@@ -260,6 +330,78 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(response.Success, Is.True);
             var reloaded = _context.ConsultantIncentiveLedger.First(l => l.ConsultantIncentiveLedgerId == ledgerEntry.ConsultantIncentiveLedgerId);
             Assert.That(reloaded.StatusCode, Is.EqualTo("PAID"));
+        }
+
+        [Test]
+        public async Task Handle_ChargeBelongsToAnotherHospital_ReturnsNotFound_DoesNotDelete()
+        {
+            // Regression guard: HospitalAccessFilter only proves the caller belongs to
+            // request.HospitalId -- it says nothing about whether EventId itself belongs to that
+            // hospital. Before the fix, this lookup had no HospitalId filter at all, so a billing
+            // user at ANY hospital could delete/void a charge belonging to a DIFFERENT hospital
+            // just by supplying its ChargeEventId.
+            var otherHospitalId = Guid.NewGuid();
+            var charge = new BillingChargeEvent
+            {
+                ChargeEventId = Guid.NewGuid(),
+                HospitalId = otherHospitalId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+                DisplayName = "Consult",
+                Qty = 1,
+                UnitPrice = 300,
+                GrossAmount = 300,
+                NetAmount = 300,
+                StatusCode = "POSTED",
+                ServiceDate = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            _context.BillingChargeEvent.Add(charge);
+            await _context.SaveChangesAsync();
+
+            // Attacker calls with THEIR OWN (different) hospitalId, but the victim's charge id.
+            var response = await _handler.Handle(new DeleteBillingEventRequestModel
+            {
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EventId = charge.ChargeEventId,
+                Type = "Charges",
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(_context.BillingChargeEvent.Any(c => c.ChargeEventId == charge.ChargeEventId), Is.True);
+        }
+
+        [Test]
+        public async Task Handle_PaymentBelongsToAnotherHospital_ReturnsNotFound_DoesNotDelete()
+        {
+            var otherHospitalId = Guid.NewGuid();
+            var payment = new BillingPayment
+            {
+                PaymentId = Guid.NewGuid(),
+                HospitalId = otherHospitalId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+                PaymentType = "PAYMENT",
+                Amount = 200,
+                PaidAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            _context.BillingPayment.Add(payment);
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new DeleteBillingEventRequestModel
+            {
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EventId = payment.PaymentId,
+                Type = "Payment",
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(_context.BillingPayment.Any(p => p.PaymentId == payment.PaymentId), Is.True);
         }
 
         [Test]

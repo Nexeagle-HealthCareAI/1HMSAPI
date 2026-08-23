@@ -61,6 +61,31 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return new UpdateChargeEventResponseModel { Success = false, Message = "Cannot edit a charge on a finalized or cancelled invoice." };
                 }
 
+                // A closed admission day's interim bill has already been printed/handed to the
+                // patient or TPA -- the invoice's own FINALIZED status doesn't cover this case,
+                // since day-wise closes happen mid-stay, well before discharge/finalize. Without
+                // this check, editing a charge here would silently make the printed interim bill
+                // and the live ledger disagree, with nothing catching it. ReopenAdmissionDayHandler
+                // is the only path that removes a charge's AdmissionDayBillLine row, so its
+                // presence (against a still-Closed day) is exactly "this charge is day-locked."
+                var dayBillLine = await _context.AdmissionDayBillLine
+                    .Where(l => l.ChargeEventId == request.ChargeEventId && l.HospitalId == request.HospitalId)
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (dayBillLine != null)
+                {
+                    var dayBill = await _context.AdmissionDayBill
+                        .Where(b => b.AdmissionDayBillId == dayBillLine.AdmissionDayBillId)
+                        .FirstOrDefaultAsync(cancellationToken);
+                    if (dayBill != null && dayBill.StatusCode == BillingConstants.DayBillStatus.Closed)
+                    {
+                        return new UpdateChargeEventResponseModel
+                        {
+                            Success = false,
+                            Message = $"Cannot edit this charge — it's part of Day {dayBill.DayNumber}'s closed interim bill ({dayBill.InterimBillNo}). Reopen that day first."
+                        };
+                    }
+                }
+
                 // Isolate the invoice-level (overall, not tied to any one line) discount BEFORE this
                 // charge's own DiscountAmount is mutated below — otherwise recomputing
                 // billingInvoice.DiscountAmount from just the per-line sum would silently wipe out
