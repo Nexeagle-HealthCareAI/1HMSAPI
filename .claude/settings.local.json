@@ -30,7 +30,13 @@
       "Bash(\"/c/Program Files/Python312/python.exe\" -m uvicorn app:app --host 127.0.0.1 --port 5005)",
       "Bash(echo \"started pid $!\")",
       "Bash(cat /tmp/uvicorn_route_test.log 2>&1)",
-      "Bash(curl -s -X POST http://127.0.0.1:5005/route-symptom -H \"Content-Type: application/json\" -d '{\"query\":\"pet mein dard hai\"}' --max-time 15)"
+      "Bash(curl -s -X POST http://127.0.0.1:5005/route-symptom -H \"Content-Type: application/json\" -d '{\"query\":\"pet mein dard hai\"}' --max-time 15)",
+      "Bash(node spike-embed.mjs)",
+      "Bash(pnpm --filter @vita/orchestrator typecheck)",
+      "Bash(pnpm --filter @vita/orchestrator test -- run)",
+      "Bash(pnpm typecheck *)",
+      "Bash(pnpm build *)",
+      "Bash(pnpm test:ci)"
     ]
   }
 }

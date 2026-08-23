@@ -32,6 +32,10 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? InsuranceId { get; set; }
         public string? PaymentMode { get; set; }
         public string? AppointmentType { get; set; }
+        // How this appointment was created (e.g. "NEXEAGLE_PUBLIC" for public self-booking) --
+        // stamped once at creation and never touched again, so unlike FinalStatusCode it survives
+        // front-desk confirmation. Lets the dashboard tell "booked online" from "still pending".
+        public string? BookingSource { get; set; }
         public Guid? ReferrerId { get; set; }
         public string? ReferrerName { get; set; }
         public string? ReferrerType { get; set; }

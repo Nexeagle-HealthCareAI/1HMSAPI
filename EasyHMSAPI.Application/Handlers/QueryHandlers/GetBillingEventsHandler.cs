@@ -48,6 +48,19 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 var currentInvoice = invoices.FirstOrDefault(i => i.StatusCode == BillingConstants.InvoiceStatus.Draft)
                                      ?? invoices.FirstOrDefault();
 
+                // Every invoice this encounter has ever had (draft, finalized, cancelled) -- lets
+                // the ledger show invoice history instead of only the single current one, and lets
+                // a specific one be targeted (e.g. for delete) instead of "whichever one happens to
+                // be current." `invoices` above is already the full, CreatedAt-descending list.
+                var invoiceSummaries = invoices.Select(i => new InvoiceSummary
+                {
+                    InvoiceId = i.InvoiceId,
+                    InvoiceNo = i.InvoiceNo,
+                    InvoiceDate = i.InvoiceDate,
+                    StatusCode = i.StatusCode,
+                    NetAmount = i.NetAmount
+                }).ToList();
+
                 // All payments for this encounter (sum across all invoices for the encounter)
                 var payments = await _context.BillingPayment
                     .Where(p => p.EncounterId == request.EncounterId
@@ -77,6 +90,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     TaxAmount = ce.TaxAmount,
                     IsTaxInclusive = ce.IsTaxInclusive,
                     IsInterState = ce.IsInterState,
+                    ServiceDate = ce.ServiceDate,
                     StatusCode = ce.StatusCode,
                     IsInvoiced = invoicedChargeIds.Contains(ce.ChargeEventId)
                 }).ToList();
@@ -84,7 +98,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 var paymentDetails = payments.Select(p => new BillingPaymentDetail
                 {
                     PaymentId = p.PaymentId,
-                    CreatedDateTime = p.CreatedAt,
+                    // PaidAt, not CreatedAt: on a backdated visit these differ (PaidAt follows
+                    // Encounter.ServiceDate, CreatedAt is real audit time) and the ledger should
+                    // show the visit's date, not when the row was actually keyed in.
+                    CreatedDateTime = p.PaidAt,
                     PaymentType = p.PaymentType,
                     PaymentMode = p.PaymentMode,
                     PaymentDescription = p.PaymentDescription,
@@ -137,6 +154,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         AmountReceived = totalReceived,
                         NetBalance = netBalance,
                         CurrentInvoice = invoiceInfo,
+                        Invoices = invoiceSummaries,
                         Charges = chargeDetails,
                         Payments = paymentDetails
                     }

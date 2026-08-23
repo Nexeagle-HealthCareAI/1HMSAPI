@@ -43,8 +43,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     };
                 }
 
+                // encounter above is already HospitalId-scoped, so an invoice found by its
+                // EncounterId can only ever belong to this hospital in practice -- this filter is
+                // defense-in-depth/consistency with the other billing handlers, not closing a
+                // reachable gap on its own.
                 var billingInvoice = await _context.BillingInvoice
-                    .Where(bi => bi.EncounterId == request.EncounterId)
+                    .Where(bi => bi.EncounterId == request.EncounterId && bi.HospitalId == request.HospitalId)
                     .FirstOrDefaultAsync(cancellationToken);
 
                 if (billingInvoice == null)

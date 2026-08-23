@@ -22,7 +22,19 @@
       "Bash(curl -s http://127.0.0.1:5004/model-info --max-time 10)",
       "Bash(curl -s -X POST http://127.0.0.1:5004/route-symptom -H \"Content-Type: application/json\" -d '{\"query\":\"pet mein dard hai\"}' --max-time 10)",
       "Bash(cat /tmp/uvicorn_final_test.log 2>&1)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(python -c ' *)",
+      "Bash(pnpm --filter @vita/protocol build)",
+      "Bash(pnpm --filter @vita/web-sdk build)",
+      "Bash(node -e ' *)",
+      "Bash(./.venv/Scripts/python.exe -c ' *)",
+      "Bash(./.venv/Scripts/python.exe -m pytest -q -m slow)",
+      "Bash(pnpm test:ci)",
+      "Bash(git checkout *)",
+      "Bash(git merge *)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\mtnoo\\OneDrive\\Desktop\\EasyHMS\\Vita\\tera\\apps\\audio-preprocess\\app"
     ]
   }
 }

@@ -18,6 +18,10 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? EncounterType { get; set; }   // IPD / OPD / ER / LAB / PHARMACY
         public Guid? DoctorId { get; set; }            // optional attending doctor
 
+        // Optional visit-date override -- every charge/invoice on this visit will silently use
+        // this date instead of "now". Null (the default) means unchanged, real-time behavior.
+        public DateTime? ServiceDate { get; set; }
+
         [JsonIgnore]
         public string? LoggedInUserName { get; set; }
     }

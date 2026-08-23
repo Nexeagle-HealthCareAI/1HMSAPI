@@ -14,6 +14,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("admission")]
     [Authorize]
+    [RequiresPermission("ipd")]
     public class AdmissionController : ControllerBase
     {
         private readonly IMediator _mediator;

@@ -11,6 +11,21 @@
 		},
 		{
 			"path": "../../../../easyHMSWeb"
+		},
+		{
+			"path": "../../../../CMS"
+		},
+		{
+			"path": "../../../../CMSAPI"
+		},
+		{
+			"path": "../../../../CMSDatabase"
+		},
+		{
+			"path": "../../../../NexEagleWebsite"
+		},
+		{
+			"path": "../../../../WHatspp Backened"
 		}
 	]
 }

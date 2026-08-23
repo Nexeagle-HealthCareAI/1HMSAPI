@@ -13,6 +13,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ExcludeFromCodeCoverage]
     [ApiController]
     [Route("appointments")]
+    [RequiresPermission("appointment_scheduler", "appointment_booking")]
     public class AppointmentsController : ControllerBase
     {
         private readonly IMediator _mediator;

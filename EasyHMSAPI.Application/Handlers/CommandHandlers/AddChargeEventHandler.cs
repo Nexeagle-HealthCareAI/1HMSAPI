@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Data.Services;
 using EasyHMSAPI.Domain.Context;
@@ -25,6 +26,20 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (request.Charges == null || request.Charges.Count == 0)
                     return new AddChargeEventResponseModel { Success = false, Message = "No charges provided." };
 
+                // Same guardrails UpdateChargeEventHandler enforces on a single-line edit -- without
+                // them a zero/negative Qty, a negative Rate, or a negative/>100% DiscountPercent
+                // posts straight through into GrossAmount/NetAmount with no server-side check
+                // (the web UI validates, but this endpoint is reachable directly).
+                foreach (var c in request.Charges)
+                {
+                    if (c.Qty <= 0)
+                        return new AddChargeEventResponseModel { Success = false, Message = "Quantity must be greater than zero." };
+                    if (c.Rate < 0)
+                        return new AddChargeEventResponseModel { Success = false, Message = "Rate cannot be negative." };
+                    if (c.DiscountPercent < 0)
+                        return new AddChargeEventResponseModel { Success = false, Message = "Discount cannot be negative." };
+                }
+
                 if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
                 {
                     var alreadyPosted = await _context.BillingChargeEvent
@@ -45,6 +60,31 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 if (encounter.StatusCode != BillingConstants.EncounterStatus.Open)
                     return new AddChargeEventResponseModel { Success = false, Message = $"Encounter is not open (current status: {encounter.StatusCode})." };
+
+                var now = DateTime.UtcNow;
+                // The visit's own chosen date (set once at visit creation), combined with the
+                // actual time-of-day so charges added throughout the day get distinct timestamps
+                // instead of one frozen batch stamp. Null ServiceDate -> unchanged, real-time behavior.
+                var effectiveServiceDate = encounter.ServiceDate.HasValue
+                    ? encounter.ServiceDate.Value.Date + now.TimeOfDay
+                    : now;
+
+                // A visit dated before "now" could otherwise land inside a day whose interim bill
+                // is already closed and printed -- same invariant UpdateChargeEventHandler/
+                // DeleteBillingEventHandler enforce for edits. Cheap to check unconditionally.
+                var closedDays = await _context.AdmissionDayBill
+                    .Where(b => b.EncounterId == request.EncounterId && b.HospitalId == request.HospitalId
+                             && b.StatusCode == BillingConstants.DayBillStatus.Closed)
+                    .ToListAsync(cancellationToken);
+                var blockingDay = AdmissionDayLockGuard.FindBlockingClosedDay(closedDays, effectiveServiceDate);
+                if (blockingDay != null)
+                {
+                    return new AddChargeEventResponseModel
+                    {
+                        Success = false,
+                        Message = $"This date falls before Day {blockingDay.DayNumber}'s closed interim bill ({blockingDay.InterimBillNo}). Reopen that day first."
+                    };
+                }
 
                 var sourceModule = string.IsNullOrWhiteSpace(encounter.EncounterTypeCode)
                     ? BillingConstants.SourceModule.Manual
@@ -116,7 +156,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         .Where(m => m.HospitalId == request.HospitalId && chargeIds.Contains(m.ChargeId))
                         .ToDictionaryAsync(m => m.ChargeId, cancellationToken);
 
-                var now = DateTime.UtcNow;
                 var details = new List<ChargeEventDetail>();
                 decimal totalGross = 0, totalDiscount = 0, totalNet = 0, totalIncentive = 0;
                 decimal totalTaxable = 0, totalCgst = 0, totalSgst = 0, totalIgst = 0, totalTax = 0;
@@ -155,6 +194,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                     var gross = charge.Qty * rate;
                     var discount = Math.Round(gross * (charge.DiscountPercent / 100m), 2);
+                    if (discount > gross) discount = gross;
                     var net = gross - discount;
 
                     ChargeMaster? master = (charge.ChargeId.HasValue && masters.TryGetValue(charge.ChargeId.Value, out var m)) ? m : null;
@@ -164,9 +204,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                     var isPharmacyItem = string.Equals(master?.AppliesTo, "PHARMACY", StringComparison.OrdinalIgnoreCase)
                         || string.Equals(charge.CategoryCode, "PHARMACY", StringComparison.OrdinalIgnoreCase);
-                    var effectiveSourceModule = isPharmacyItem
+                    var effectiveSourceModule = charge.SourceModule ?? (isPharmacyItem
                         ? (isIpdEncounter ? BillingConstants.SourceModule.PharmacyIpd : BillingConstants.SourceModule.PharmacyCounter)
-                        : sourceModule;
+                        : sourceModule);
 
                     // Resolves ICU/room-threshold/pharmacy exemptions on top of the item's own
                     // configured GST treatment — see GstResolver's remarks for full rule precedence.
@@ -191,6 +231,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         EncounterId = request.EncounterId,
                         ChargeId = charge.ChargeId,
                         SourceModule = effectiveSourceModule,
+                        SourceRefId = charge.SourceRefId,
                         CategoryCode = charge.CategoryCode,
                         DisplayName = charge.DisplayName,
                         Qty = charge.Qty,
@@ -211,7 +252,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         IsInterState = isInterState,
                         IdempotencyKey = request.IdempotencyKey,
                         StatusCode = BillingConstants.ChargeEventStatus.Posted,
-                        ServiceDate = now,
+                        ServiceDate = effectiveServiceDate,
                         PostedAt = now,
                         PostedBy = request.LoggedInUserName,
                         CreatedAt = now,

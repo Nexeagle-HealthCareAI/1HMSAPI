@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModel;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
@@ -126,6 +127,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     PAN = request.PanNumber ?? string.Empty,
                     NABH_NABL = request.NabhNabl ?? string.Empty
                 };
+                hospital.HospitalCode = await HospitalCodeHelper.GenerateUniqueCodeAsync(_context, cancellationToken);
                 _context.Hospitals.Add(hospital);
 
                 var employeeId = await _context.UserProfiles
@@ -192,13 +194,58 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     var userRole = await _context.UserRoles
                         .Include(ur => ur.Role)
                         .FirstOrDefaultAsync(ur => ur.UserID == request.UserId, cancellationToken);
-                    if (userRole != null && userRole.Role != null)
+                    if (userRole != null && userRole.Role != null
+                        && (userRole.Role.HospitalID == null || userRole.Role.HospitalID == Guid.Empty))
                     {
-                        // If the role is not already associated with a hospital, associate it
-                        if (userRole.Role.HospitalID == null || userRole.Role.HospitalID == Guid.Empty)
+                        // BUG FIX: this used to mutate userRole.Role.HospitalID directly. That Role row
+                        // is a shared global template -- every user who registers with this RoleName
+                        // (UserRegistrationHandler.cs) gets linked to the SAME row -- so mutating it in
+                        // place silently "hijacked" the global role for whichever hospital happened to
+                        // register first, permanently freezing that hospital on whatever RolePermissions
+                        // existed at that moment while every subsequent grant to the (now orphaned, since
+                        // a global-lookup no longer finds it) global role never reached it. Confirmed live:
+                        // hospital 024835b8...'s AdminDoctor role was frozen at 5 permissions this way while
+                        // a freshly re-seeded global AdminDoctor row had 17.
+                        //
+                        // Correct behavior: clone a hospital-scoped Role (with the global role's current
+                        // permissions) and repoint only THIS user's own UserRole to the clone -- never touch
+                        // the shared global row. RoleID is part of UserRole's composite PK, so it can't be
+                        // reassigned on the tracked entity in place; remove + re-add instead.
+                        var globalRole = userRole.Role;
+                        var hospitalRole = await _context.Roles.FirstOrDefaultAsync(
+                            r => r.HospitalID == hospitalId && r.RoleName == globalRole.RoleName, cancellationToken);
+
+                        if (hospitalRole == null)
                         {
-                            userRole.Role.HospitalID = hospitalId;
+                            hospitalRole = new Role
+                            {
+                                RoleID = Guid.NewGuid(),
+                                HospitalID = hospitalId,
+                                RoleName = globalRole.RoleName,
+                                Description = globalRole.Description,
+                                IsSystemDefined = globalRole.IsSystemDefined,
+                                IsActive = true,
+                                CreatedByUserID = request.UserId,
+                                CreatedAt = DateTime.UtcNow
+                            };
+                            _context.Roles.Add(hospitalRole);
+
+                            var globalPermissions = await _context.RolePermissions
+                                .Where(rp => rp.RoleID == globalRole.RoleID)
+                                .ToListAsync(cancellationToken);
+                            foreach (var perm in globalPermissions)
+                            {
+                                _context.RolePermissions.Add(new RolePermission
+                                {
+                                    RoleID = hospitalRole.RoleID,
+                                    PermissionKey = perm.PermissionKey,
+                                    IsAllowed = perm.IsAllowed
+                                });
+                            }
                         }
+
+                        _context.UserRoles.Remove(userRole);
+                        _context.UserRoles.Add(new UserRole { UserID = request.UserId, RoleID = hospitalRole.RoleID });
                     }
                 }
                 // --- End UserRoles update ---

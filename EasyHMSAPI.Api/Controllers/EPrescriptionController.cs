@@ -29,6 +29,47 @@ namespace EasyHMSAPI.Api.Controllers
             _logger = logger;
         }
 
+        // Ready-to-print PNG (NexEagle logo centered) encoding the given attachment id's
+        // WhatsApp-delivery link. No DB lookup -- the caller (frontend) generates AttachmentId
+        // client-side before the PrescriptionAttachment row exists (see the request model's own
+        // comment for why), so this just renders whatever id it's given.
+        [HttpGet("qr-code")]
+        [Authorize]
+        public async Task<IActionResult> GetQrCode([FromQuery] Guid attachmentId)
+        {
+            try
+            {
+                var response = await _mediator.Send(new GetPrescriptionAttachmentQrCodeRequestModel { AttachmentId = attachmentId });
+                if (!response.Success || response.Content == null) return BadRequest(new { response.Message });
+                return File(response.Content, response.ContentType);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetQrCode for attachmentId: {AttachmentId}", attachmentId);
+                return StatusCode(500, new { Message = "An error occurred while generating the QR code." });
+            }
+        }
+
+        // Same idea as GetQrCode above, but for the structured e-prescription flow
+        // (EPrescriptionPad -> uploadVisitSummary -> Appointment.PdfUrl), keyed by AppointmentId
+        // instead of a PrescriptionAttachment id.
+        [HttpGet("qr-code/visit-summary")]
+        [Authorize]
+        public async Task<IActionResult> GetVisitSummaryQrCode([FromQuery] Guid appointmentId)
+        {
+            try
+            {
+                var response = await _mediator.Send(new GetVisitSummaryQrCodeRequestModel { AppointmentId = appointmentId });
+                if (!response.Success || response.Content == null) return BadRequest(new { response.Message });
+                return File(response.Content, response.ContentType);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetVisitSummaryQrCode for appointmentId: {AppointmentId}", appointmentId);
+                return StatusCode(500, new { Message = "An error occurred while generating the QR code." });
+            }
+        }
+
         [HttpGet("patient-details/vitals")]
         [Authorize]
         public async Task<IActionResult> GetPatientVitals([FromQuery] string patientId, [FromQuery] Guid appointmentId)

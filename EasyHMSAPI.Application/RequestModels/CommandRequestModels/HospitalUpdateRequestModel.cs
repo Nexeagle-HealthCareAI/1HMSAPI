@@ -22,8 +22,11 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModel
         public string? Pincode { get; set; }
         public string? RegistrationNumber { get; set; }
         public string? TimeZone { get; set; }
+        [JsonPropertyName("gstin")]
         public string? GstIn { get; set; }
+        [JsonPropertyName("pan")]
         public string? PanNumber { get; set; }
+        [JsonPropertyName("nabhNumber")]
         public string? NabhNabl { get; set; }
         // Nullable bool, not the string-empty-means-unset sentinel every other field here
         // uses — the handler checks .HasValue explicitly before applying it.

@@ -98,6 +98,50 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Idempotent -- issues a HospitalCode if this hospital doesn't have one yet (returns the
+        // existing one otherwise), for staff to print onto an OPD QR code.
+        [HttpPost("{hospitalId}/generate-code")]
+        [Authorize]
+        public async Task<ActionResult<GenerateHospitalCodeResponseModel>> GenerateHospitalCode(Guid hospitalId)
+        {
+            try
+            {
+                if (hospitalId == Guid.Empty)
+                    return BadRequest(new { Message = "Hospital ID is required and cannot be empty." });
+
+                var response = await _mediator.Send(new GenerateHospitalCodeRequestModel { HospitalId = hospitalId });
+                if (!response.Success) return NotFound(response);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GenerateHospitalCode for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while generating the hospital code." });
+            }
+        }
+
+        // Ready-to-print PNG (NexEagle logo centered) encoding this hospital's check-in URL --
+        // requires a HospitalCode to already exist (see GenerateHospitalCode above).
+        [HttpGet("{hospitalId}/qr-code")]
+        [Authorize]
+        public async Task<IActionResult> GetHospitalQrCode(Guid hospitalId)
+        {
+            try
+            {
+                if (hospitalId == Guid.Empty)
+                    return BadRequest(new { Message = "Hospital ID is required and cannot be empty." });
+
+                var response = await _mediator.Send(new GetHospitalQrCodeRequestModel { HospitalId = hospitalId });
+                if (!response.Success || response.Content == null) return BadRequest(new { response.Message });
+                return File(response.Content, response.ContentType);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetHospitalQrCode for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while generating the QR code." });
+            }
+        }
+
         [HttpGet("{hospitalId}")]
         [Authorize]
         public async Task<ActionResult<GetHospitalDetailsResponseModel>> GetHospitalById(Guid hospitalId)

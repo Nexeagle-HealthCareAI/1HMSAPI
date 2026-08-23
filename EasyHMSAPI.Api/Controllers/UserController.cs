@@ -76,17 +76,18 @@ namespace EasyHMSAPI.Api.Controllers
             _logger.LogInformation("GetUserPermissions API started at {Time} for userId: {UserId}", DateTime.UtcNow, userId);
             try
             {
-                UserPermissionsRequestModel request = new();
-                if (userId == Guid.Empty)
-                {
-                    request.UserId = Guid.Empty;
-                }
-                else
-                {
-                    request.UserId = userId;
-                }
+                // CallerUserId is resolved from the verified JWT here, never trusted from the
+                // client -- same pattern as AdminController.QuickAddUser stamping
+                // request.CallerUserId. The handler uses it to enforce self-only access
+                // (see UserPermissionsHandler's own comment for why).
+                var callerId = EasyHMSAPI.Api.Common.UserContextHelper.GetUserId(User);
+                UserPermissionsRequestModel request = new() { UserId = userId == Guid.Empty ? Guid.Empty : userId, CallerUserId = callerId };
 
                 var response = await _mediator.Send(request);
+                if (response?.Forbidden == true)
+                {
+                    return StatusCode(403, new { message = "You don't have permission to access this resource." });
+                }
 
                 return Ok(response);
             }

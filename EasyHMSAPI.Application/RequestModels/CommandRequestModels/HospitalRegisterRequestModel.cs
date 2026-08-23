@@ -21,8 +21,11 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModel
         public string Country { get; set; } = null!;
         public string Pincode { get; set; } = null!;
         public string? TimeZone { get; set; }
+        [JsonPropertyName("gstin")]
         public string? GstIn { get; set; }
+        [JsonPropertyName("pan")]
         public string? PanNumber { get; set; }
+        [JsonPropertyName("nabhNumber")]
         public string? NabhNabl { get; set; }
         // When set, onboard this hospital into an existing chain (caller must be the chain owner).
         public Guid? ChainId { get; set; }

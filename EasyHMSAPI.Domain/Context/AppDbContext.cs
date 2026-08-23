@@ -69,6 +69,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<PublicPatientAuth> PublicPatientAuths { get; set; }
         public DbSet<WebsiteVisit> WebsiteVisits { get; set; }
         public DbSet<AnalyticsEvent> AnalyticsEvents { get; set; }
+        public DbSet<HospitalLead> HospitalLeads { get; set; }
         public DbSet<PatientHealthLockerDocument> PatientHealthLockerDocuments { get; set; }
         public DbSet<UserProfile> UserProfiles { get; set; }
         public DbSet<Role> Roles { get; set; }
@@ -212,8 +213,17 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<ConsultantIncentiveLedger> ConsultantIncentiveLedger { get; set; }
         public DbSet<PublicApiClient> PublicApiClient { get; set; }
 
+        // Pathology
+        public DbSet<PathologyTestMaster> PathologyTestMaster { get; set; }
+        public DbSet<PathologyReportTemplate> PathologyReportTemplate { get; set; }
+        public DbSet<PathologyOrder> PathologyOrder { get; set; }
+        public DbSet<PathologyOrderLine> PathologyOrderLine { get; set; }
+        public DbSet<PathologyResult> PathologyResult { get; set; }
+        public DbSet<PathologyReport> PathologyReport { get; set; }
+        public DbSet<LabConfiguration> LabConfiguration { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
-        {   
+        {
             modelBuilder.Entity<User>().ToTable("Users");
             modelBuilder.Entity<UserAuth>().ToTable("UserAuth");
             modelBuilder.Entity<UserProfile>().ToTable("UserProfiles");
@@ -223,6 +233,7 @@ namespace EasyHMSAPI.Domain.Context
             modelBuilder.Entity<UserRole>().ToTable("UserRoles");
 
             modelBuilder.Entity<Hospital>().ToTable("Hospitals");
+            modelBuilder.Entity<Hospital>().HasIndex(h => h.HospitalCode).IsUnique().HasFilter("[HospitalCode] IS NOT NULL");
             modelBuilder.Entity<HospitalChain>().ToTable("HospitalChains");
             modelBuilder.Entity<HospitalUser>().ToTable("HospitalUsers");
             modelBuilder.Entity<HospitalProfileStatus>().ToTable("HospitalProfileStatus");

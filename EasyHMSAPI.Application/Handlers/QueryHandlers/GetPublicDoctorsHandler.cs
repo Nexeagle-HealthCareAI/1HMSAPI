@@ -59,7 +59,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             // One cache entry per filter combo now (not one whole-platform entry) — see
             // PublicDirectoryCacheKeys.PublicDoctorsList. Presigned photo URLs are valid for 24h
             // (Storage:S3:UrlExpiryHours), so a 60s-stale cache entry never serves an expired one.
-            var cacheKey = PublicDirectoryCacheKeys.PublicDoctorsList(page, pageSize, request.City, request.State, request.SpecialtyCategory, request.Search);
+            var cacheKey = PublicDirectoryCacheKeys.PublicDoctorsList(page, pageSize, request.City, request.State, request.SpecialtyCategory, request.Search, request.HospitalId, request.DoctorId);
             if (_cache.TryGetValue(cacheKey, out GetPublicDoctorsResponseModel? cached) && cached != null)
             {
                 return cached;
@@ -71,7 +71,18 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             // otherwise does for every row, which is pure waste on data that's never saved back.
             _context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
 
-            var hospitalQuery = _context.Hospitals.Where(h => h.IsPubliclyListed && h.IsActive && !h.IsArchived);
+            var hospitalQuery = _context.Hospitals.Where(h => h.IsActive && !h.IsArchived);
+            if (request.HospitalId.HasValue)
+            {
+                // Scanning your own hospital's QR code is a different consent context than
+                // platform-wide marketplace browsing -- bypass IsPubliclyListed, but a deactivated/
+                // archived hospital still returns nothing either way.
+                hospitalQuery = hospitalQuery.Where(h => h.HospitalID == request.HospitalId.Value);
+            }
+            else
+            {
+                hospitalQuery = hospitalQuery.Where(h => h.IsPubliclyListed);
+            }
             if (!string.IsNullOrWhiteSpace(request.City))
                 hospitalQuery = hospitalQuery.Where(h => h.City == request.City);
             if (!string.IsNullOrWhiteSpace(request.State))
@@ -116,6 +127,11 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 where u.UserStatusId != (int)UserStatusEnum.Revoked
                 join up in _context.UserProfiles on u.UserID equals up.UserID
                 select new { d, up.FullName };
+
+            if (request.DoctorId.HasValue)
+            {
+                filteredQuery = filteredQuery.Where(x => x.d.DoctorID == request.DoctorId.Value);
+            }
 
             if (!string.IsNullOrWhiteSpace(request.SpecialtyCategory))
             {

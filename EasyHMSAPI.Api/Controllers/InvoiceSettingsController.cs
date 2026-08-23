@@ -13,6 +13,7 @@ namespace EasyHMSAPI.Api.Controllers
     [Route("invoice-settings")]
     [ApiController]
     [Authorize]
+    [EasyHMSAPI.Api.Common.RequiresPermission("billing")]
     public class InvoiceSettingsController : ControllerBase
     {
         private readonly IMediator _mediator;

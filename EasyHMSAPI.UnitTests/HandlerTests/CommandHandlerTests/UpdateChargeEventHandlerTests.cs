@@ -146,6 +146,103 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task Handle_RejectsEdit_WhenChargeBelongsToAClosedAdmissionDayBill()
+        {
+            // Regression guard: a closed interim bill is already printed/handed to the patient or
+            // TPA. The invoice's own FINALIZED status doesn't cover this -- day-wise closes happen
+            // mid-stay, well before discharge/finalize -- so before this fix, editing this exact
+            // charge here would silently make the printed interim bill and the live ledger
+            // disagree, with nothing in the system catching it.
+            var charge = SeedCharge(qty: 1, rate: 1000); // net = 1000
+
+            var dayBill = new AdmissionDayBill
+            {
+                AdmissionDayBillId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                EncounterId = _encounterId,
+                PatientId = "PT001",
+                DayNumber = 1,
+                FromUtc = DateTime.UtcNow.AddDays(-1),
+                ToUtc = DateTime.UtcNow,
+                InterimBillNo = "IB-1",
+                StatusCode = BillingConstants.DayBillStatus.Closed,
+                ClosedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            _context.AdmissionDayBill.Add(dayBill);
+            _context.AdmissionDayBillLine.Add(new AdmissionDayBillLine
+            {
+                AdmissionDayBillLineId = Guid.NewGuid(),
+                AdmissionDayBillId = dayBill.AdmissionDayBillId,
+                HospitalId = _hospitalId,
+                ChargeEventId = charge.ChargeEventId,
+                DisplayName = "X-Ray",
+                ServiceDate = DateTime.UtcNow,
+                Qty = 1,
+                UnitPrice = 1000,
+                GrossAmount = 1000,
+                NetAmount = 1000,
+                CreatedAt = DateTime.UtcNow,
+            });
+            _context.SaveChanges();
+
+            var response = await _handler.Handle(new UpdateChargeEventRequestModel
+            {
+                HospitalId = _hospitalId,
+                ChargeEventId = charge.ChargeEventId,
+                Qty = 5,
+                Rate = 1000,
+                DiscountPercent = 0,
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Does.Contain("Day 1"));
+            Assert.That(response.Message, Does.Contain("IB-1"));
+            var reloaded = _context.BillingChargeEvent.Single(c => c.ChargeEventId == charge.ChargeEventId);
+            Assert.That(reloaded.Qty, Is.EqualTo(1), "The charge must be completely untouched.");
+        }
+
+        [Test]
+        public async Task Handle_AllowsEdit_WhenAdmissionDayBillWasReopened()
+        {
+            // ReopenAdmissionDayHandler deletes the AdmissionDayBillLine rows for a reopened day --
+            // this proves the lock releases correctly once that happens, not just that it engages.
+            var charge = SeedCharge(qty: 1, rate: 1000);
+
+            var dayBill = new AdmissionDayBill
+            {
+                AdmissionDayBillId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                EncounterId = _encounterId,
+                PatientId = "PT001",
+                DayNumber = 1,
+                FromUtc = DateTime.UtcNow.AddDays(-1),
+                ToUtc = DateTime.UtcNow,
+                InterimBillNo = "IB-1",
+                StatusCode = BillingConstants.DayBillStatus.Reopened, // already reopened; no lines exist
+                ClosedAt = DateTime.UtcNow,
+                ReopenedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            _context.AdmissionDayBill.Add(dayBill);
+            // No AdmissionDayBillLine seeded -- ReopenAdmissionDayHandler removes it on reopen.
+            _context.SaveChanges();
+
+            var response = await _handler.Handle(new UpdateChargeEventRequestModel
+            {
+                HospitalId = _hospitalId,
+                ChargeEventId = charge.ChargeEventId,
+                Qty = 5,
+                Rate = 1000,
+                DiscountPercent = 0,
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+        }
+
+        [Test]
         public async Task Handle_RejectsReduction_BelowAlreadyPaidAmount()
         {
             var charge = SeedCharge(qty: 2, rate: 500); // net = 1000
@@ -240,6 +337,84 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             // New gross = 3*500 = 1500; the pre-existing 100 overall discount must still apply.
             Assert.That(updatedInvoice.DiscountAmount, Is.EqualTo(100), "Editing a charge must not silently drop the invoice-level discount.");
             Assert.That(updatedInvoice.NetAmount, Is.EqualTo(1400));
+        }
+
+        [Test]
+        public async Task Handle_ScalesGstBreakdown_ByInvoiceLevelDiscountRatio()
+        {
+            // Regression guard for the Medium-severity GST reconciliation bug: an invoice-level
+            // "Add Discount" (not tied to any one line) must shrink Taxable/Cgst/Sgst/Tax by the
+            // same proportion it shrinks NetAmount -- otherwise the printed invoice's tax section
+            // stops reconciling with the discounted grand total.
+            var charge = new BillingChargeEvent
+            {
+                ChargeEventId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+                DisplayName = "Procedure",
+                Qty = 1,
+                UnitPrice = 1000,
+                GrossAmount = 1000,
+                DiscountAmount = 0,
+                NetAmount = 1000,
+                GstRate = 18,
+                IsTaxInclusive = false,
+                IsInterState = false,
+                TaxableAmount = 1000,
+                CgstAmount = 90,
+                SgstAmount = 90,
+                IgstAmount = 0,
+                TaxAmount = 180,
+                StatusCode = "POSTED",
+                ServiceDate = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            _context.BillingChargeEvent.Add(charge);
+
+            var invoice = new BillingInvoice
+            {
+                InvoiceId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                EncounterId = _encounterId,
+                PatientId = "PT001",
+                InvoiceNo = "INV-1",
+                InvoiceDate = DateTime.UtcNow,
+                StatusCode = BillingConstants.InvoiceStatus.Draft,
+                GrossAmount = 1000,
+                DiscountAmount = 100, // overall "Add Discount", not tied to the line above
+                NetAmount = 900,
+                TaxableAmount = 1000,
+                CgstAmount = 90,
+                SgstAmount = 90,
+                TaxAmount = 180,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            _context.BillingInvoice.Add(invoice);
+            _context.BillingInvoiceChargeEvent.Add(new BillingInvoiceChargeEvent { InvoiceId = invoice.InvoiceId, ChargeEventId = charge.ChargeEventId });
+            await _context.SaveChangesAsync();
+
+            // Edit that leaves this charge's own qty/rate/discount unchanged in effect -- isolates
+            // the invoice-level discount as the only thing driving the scaling.
+            var response = await _handler.Handle(new UpdateChargeEventRequestModel
+            {
+                HospitalId = _hospitalId,
+                ChargeEventId = charge.ChargeEventId,
+                Qty = 1,
+                Rate = 1000,
+                DiscountPercent = 0,
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+
+            var updatedInvoice = _context.BillingInvoice.First(i => i.InvoiceId == invoice.InvoiceId);
+            Assert.That(updatedInvoice.NetAmount, Is.EqualTo(900));
+            Assert.That(updatedInvoice.TaxableAmount, Is.EqualTo(900), "Taxable must scale down with the invoice-level discount.");
+            Assert.That(updatedInvoice.CgstAmount, Is.EqualTo(81));
+            Assert.That(updatedInvoice.SgstAmount, Is.EqualTo(81));
+            Assert.That(updatedInvoice.TaxAmount, Is.EqualTo(162));
         }
 
         [Test]

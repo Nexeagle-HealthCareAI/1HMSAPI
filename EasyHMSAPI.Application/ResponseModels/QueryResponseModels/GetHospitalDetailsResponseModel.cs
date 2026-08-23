@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json.Serialization;
 
 namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
 {
@@ -24,6 +25,15 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public bool IsPubliclyListed { get; set; }
         public decimal? Latitude { get; set; }
         public decimal? Longitude { get; set; }
+        [JsonPropertyName("gstin")]
+        public string? GstIn { get; set; }
+        [JsonPropertyName("pan")]
+        public string? PanNumber { get; set; }
+        [JsonPropertyName("nabhNumber")]
+        public string? NabhNabl { get; set; }
+        // Null until POST hospitals/{hospitalId}/generate-code is called (or auto-assigned at
+        // registration). Resolves a scanned OPD QR code to this hospital.
+        public string? HospitalCode { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime LastUpdatedAt { get; set; }
         public HospitalProfileStatusDto? ProfileStatus { get; set; }

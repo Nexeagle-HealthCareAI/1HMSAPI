@@ -40,12 +40,21 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return new CloseAdmissionDayResponseModel { Success = false, Message = "No charges on this visit to bill." };
 
                 var now = DateTime.UtcNow;
-                var anchor = DateTime.SpecifyKind(charges.Min(c => c.ServiceDate), DateTimeKind.Utc);
 
                 var closedBills = await _context.AdmissionDayBill
                     .Where(b => b.EncounterId == request.EncounterId && b.HospitalId == request.HospitalId
                                 && b.StatusCode == BillingConstants.DayBillStatus.Closed)
                     .ToListAsync(cancellationToken);
+
+                // Anchor is fixed at first-close time (Day 1's FromUtc IS the anchor, since
+                // from = anchor.AddDays(dayNumber - 1) with dayNumber = 1 below). Re-deriving it
+                // from Min(ServiceDate) on every close would let a charge posted after Day 1 closed,
+                // but backdated to an even earlier ServiceDate, shift the window boundaries for
+                // EVERY day -- including ones already closed and printed. Only compute it fresh on
+                // the very first close, when there's no prior anchor to preserve.
+                var anchor = closedBills.Count > 0
+                    ? closedBills.OrderBy(b => b.DayNumber).First().FromUtc
+                    : DateTime.SpecifyKind(charges.Min(c => c.ServiceDate), DateTimeKind.Utc);
 
                 var maxClosedDay = closedBills.Count > 0 ? closedBills.Max(b => b.DayNumber) : 0;
                 var dayNumber = maxClosedDay + 1;

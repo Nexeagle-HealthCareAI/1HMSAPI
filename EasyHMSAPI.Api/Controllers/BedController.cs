@@ -14,6 +14,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("bed")]
     [Authorize]
+    [RequiresPermission("ipd")]
     public class BedController : ControllerBase
     {
         private readonly IMediator _mediator;

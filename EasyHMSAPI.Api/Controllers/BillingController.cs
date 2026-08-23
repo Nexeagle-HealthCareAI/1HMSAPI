@@ -14,6 +14,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("billing")]
     [Authorize]
+    [RequiresPermission("billing")]
     public class BillingController : ControllerBase
     {
         private readonly IMediator _mediator;
@@ -60,6 +61,45 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 _logger.LogError(ex, "Error in GetBillingDashboard for hospitalId: {HospitalId}", hospitalId);
                 return StatusCode(500, new { Message = "An error occurred while fetching the billing dashboard." });
+            }
+        }
+
+        [HttpGet("analytics/summary")]
+        public async Task<ActionResult<GetBillingCategoryAnalyticsResponseModel>> GetBillingAnalyticsSummary(
+            [FromQuery] Guid hospitalId, [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var request = new GetBillingCategoryAnalyticsRequestModel { HospitalId = hospitalId, StartDate = startDate, EndDate = endDate };
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetBillingAnalyticsSummary for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching billing analytics." });
+            }
+        }
+
+        [HttpGet("analytics/ai-insights")]
+        public async Task<ActionResult<GetBillingAiInsightsResponseModel>> GetBillingAiInsights([FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var request = new GetBillingAiInsightsRequestModel { HospitalId = hospitalId };
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetBillingAiInsights for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while generating AI insights." });
             }
         }
 
@@ -190,8 +230,8 @@ namespace EasyHMSAPI.Api.Controllers
         [HttpPost("delete-invoice")]
         public async Task<ActionResult<DeleteInvoiceResponseModel>> DeleteInvoice([FromBody] DeleteInvoiceRequestModel request)
         {
-            if (request.HospitalId == Guid.Empty || request.EncounterId == Guid.Empty)
-                return BadRequest(new { Message = "hospitalId and encounterId are required." });
+            if (request.HospitalId == Guid.Empty || request.EncounterId == Guid.Empty || request.InvoiceId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId, encounterId and invoiceId are required." });
 
             try
             {

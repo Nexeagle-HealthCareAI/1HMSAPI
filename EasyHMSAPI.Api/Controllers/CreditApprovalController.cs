@@ -14,6 +14,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("credit-approvals")]
     [Authorize]
+    [RequiresPermission("billing")]
     public class CreditApprovalController : ControllerBase
     {
         private readonly IMediator _mediator;

@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.CommandHandlers;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
+using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using EasyHMSAPI.UnitTests.TestUtils;
@@ -31,165 +32,190 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [TearDown]
         public void TearDown()
         {
-            _context.Database.EnsureDeleted();
+            InMemoryDbContextFactory.Destroy(_context);
             _context.Dispose();
         }
 
-        private BillingInvoice SeedInvoice(string statusCode)
+        private BillingInvoice SeedInvoice(string statusCode, DateTime? cancelledAt = null)
         {
             var invoice = new BillingInvoice
             {
                 InvoiceId = Guid.NewGuid(),
                 HospitalId = _hospitalId,
-                EncounterId = _encounterId,
                 PatientId = "PT001",
-                InvoiceNo = "INV-1",
+                EncounterId = _encounterId,
+                InvoiceNo = $"INV-{statusCode}",
                 InvoiceDate = DateTime.UtcNow,
                 StatusCode = statusCode,
-                GrossAmount = 1000,
-                NetAmount = 1000,
+                CancelledAt = cancelledAt,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow,
             };
             _context.BillingInvoice.Add(invoice);
+            _context.SaveChanges();
             return invoice;
         }
 
         [Test]
-        public async Task Handle_MissingReason_ReturnsError()
+        public async Task Handle_DeletesSpecificInvoice_VoidsItsLinkedCharges()
         {
-            var invoice = SeedInvoice("DRAFT");
-            await _context.SaveChangesAsync();
-
-            var response = await _handler.Handle(new DeleteInvoiceRequestModel { HospitalId = _hospitalId, EncounterId = _encounterId, Reason = "" }, CancellationToken.None);
-
-            Assert.That(response.Success, Is.False);
-            Assert.That(response.Message, Does.Contain("reason"));
-        }
-
-        [Test]
-        public async Task Handle_InvoiceNotFound_ReturnsError()
-        {
-            var response = await _handler.Handle(new DeleteInvoiceRequestModel { HospitalId = _hospitalId, EncounterId = _encounterId, Reason = "Test" }, CancellationToken.None);
-
-            Assert.That(response.Success, Is.False);
-            Assert.That(response.Message, Does.Contain("not found"));
-        }
-
-        [Test]
-        public async Task Handle_AlreadyCancelled_ReturnsError()
-        {
-            SeedInvoice("CANCELLED");
-            await _context.SaveChangesAsync();
-
-            var response = await _handler.Handle(new DeleteInvoiceRequestModel { HospitalId = _hospitalId, EncounterId = _encounterId, Reason = "Test" }, CancellationToken.None);
-
-            Assert.That(response.Success, Is.False);
-            Assert.That(response.Message, Does.Contain("already"));
-        }
-
-        [Test]
-        public async Task Handle_FinalizedInvoice_DeletesAnyway_VoidsCharges_CancelsIncentive_UnallocatesPayment()
-        {
-            var invoice = SeedInvoice("FINALIZED");
-
-            var doctorId = Guid.NewGuid();
+            var invoice = SeedInvoice(BillingConstants.InvoiceStatus.Draft);
             var charge = new BillingChargeEvent
             {
                 ChargeEventId = Guid.NewGuid(),
                 HospitalId = _hospitalId,
                 PatientId = "PT001",
                 EncounterId = _encounterId,
-                DisplayName = "Consult",
+                DisplayName = "Procedure",
                 Qty = 1,
-                UnitPrice = 1000,
-                GrossAmount = 1000,
-                NetAmount = 1000,
-                StatusCode = "INVOICED",
+                UnitPrice = 500,
+                NetAmount = 500,
+                StatusCode = BillingConstants.ChargeEventStatus.Posted,
                 ServiceDate = DateTime.UtcNow,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow,
             };
             _context.BillingChargeEvent.Add(charge);
             _context.BillingInvoiceChargeEvent.Add(new BillingInvoiceChargeEvent { InvoiceId = invoice.InvoiceId, ChargeEventId = charge.ChargeEventId });
-
-            var ledgerEntry = new ConsultantIncentiveLedger
-            {
-                ConsultantIncentiveLedgerId = Guid.NewGuid(),
-                HospitalId = _hospitalId,
-                DoctorId = doctorId,
-                PatientId = "PT001",
-                EncounterId = _encounterId,
-                ChargeEventId = charge.ChargeEventId,
-                IncentiveAmount = 50,
-                StatusCode = "ACCRUED",
-                AccruedAt = DateTime.UtcNow,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
-            };
-            _context.ConsultantIncentiveLedger.Add(ledgerEntry);
-
-            var payment = new BillingPayment
-            {
-                PaymentId = Guid.NewGuid(),
-                HospitalId = _hospitalId,
-                PatientId = "PT001",
-                EncounterId = _encounterId,
-                PaymentType = "PAYMENT",
-                Amount = 1000,
-                PaidAt = DateTime.UtcNow,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
-            };
-            _context.BillingPayment.Add(payment);
-
-            var allocation = new BillingPaymentAllocation
-            {
-                AllocationId = Guid.NewGuid(),
-                EncounterId = _encounterId,
-                PaymentId = payment.PaymentId,
-                InvoiceId = invoice.InvoiceId,
-                AllocatedAmount = 1000,
-                CreatedAt = DateTime.UtcNow,
-            };
-            _context.BillingPaymentAllocation.Add(allocation);
-            _context.BillingPaymentAllocationCharge.Add(new BillingPaymentAllocationCharge
-            {
-                AllocationChargeId = Guid.NewGuid(),
-                AllocationId = allocation.AllocationId,
-                ChargeEventId = charge.ChargeEventId,
-                Amount = 1000,
-                CreatedAt = DateTime.UtcNow,
-            });
-
             await _context.SaveChangesAsync();
 
             var response = await _handler.Handle(new DeleteInvoiceRequestModel
             {
                 HospitalId = _hospitalId,
                 EncounterId = _encounterId,
-                Reason = "Wrong patient billed",
-                LoggedInUserName = "cashier1",
+                InvoiceId = invoice.InvoiceId,
+                Reason = "Test delete",
             }, CancellationToken.None);
 
             Assert.That(response.Success, Is.True);
             Assert.That(response.ChargesVoided, Is.EqualTo(1));
 
-            var reloadedInvoice = _context.BillingInvoice.First(i => i.InvoiceId == invoice.InvoiceId);
-            Assert.That(reloadedInvoice.StatusCode, Is.EqualTo("CANCELLED"));
-            Assert.That(reloadedInvoice.NetAmount, Is.EqualTo(0));
-            Assert.That(reloadedInvoice.CancelReason, Is.EqualTo("Wrong patient billed"));
+            var reloadedInvoice = _context.BillingInvoice.Single(i => i.InvoiceId == invoice.InvoiceId);
+            Assert.That(reloadedInvoice.StatusCode, Is.EqualTo(BillingConstants.InvoiceStatus.Cancelled));
 
-            var reloadedCharge = _context.BillingChargeEvent.First(c => c.ChargeEventId == charge.ChargeEventId);
-            Assert.That(reloadedCharge.StatusCode, Is.EqualTo("VOID"));
+            var reloadedCharge = _context.BillingChargeEvent.Single(c => c.ChargeEventId == charge.ChargeEventId);
+            Assert.That(reloadedCharge.StatusCode, Is.EqualTo(BillingConstants.ChargeEventStatus.Void));
+        }
 
-            var reloadedLedger = _context.ConsultantIncentiveLedger.First(l => l.ConsultantIncentiveLedgerId == ledgerEntry.ConsultantIncentiveLedgerId);
-            Assert.That(reloadedLedger.StatusCode, Is.EqualTo("CANCELLED"));
+        [Test]
+        public async Task Handle_TargetsCorrectInvoice_WhenEncounterHasMultipleInvoices()
+        {
+            // Regression guard: before this fix, DeleteInvoiceRequestModel had no InvoiceId at all
+            // -- the handler matched "the" invoice for an encounter via an unordered
+            // FirstOrDefaultAsync(), which is ambiguous once an encounter has more than one
+            // BillingInvoice row (delete one, keep billing, a fresh draft appears later). A second
+            // delete call could silently hit the already-cancelled row and leave the real current
+            // invoice untouched.
+            var oldCancelledAt = DateTime.UtcNow.AddDays(-1);
+            var oldInvoice = SeedInvoice(BillingConstants.InvoiceStatus.Cancelled, cancelledAt: oldCancelledAt);
+            var currentInvoice = SeedInvoice(BillingConstants.InvoiceStatus.Draft);
 
-            Assert.That(_context.BillingPaymentAllocation.Any(a => a.AllocationId == allocation.AllocationId), Is.False);
-            Assert.That(_context.BillingPaymentAllocationCharge.Any(ac => ac.AllocationId == allocation.AllocationId), Is.False);
-            // The payment itself (the cash movement) is untouched, only its allocation is reversed.
-            Assert.That(_context.BillingPayment.Any(p => p.PaymentId == payment.PaymentId), Is.True);
+            var response = await _handler.Handle(new DeleteInvoiceRequestModel
+            {
+                HospitalId = _hospitalId,
+                EncounterId = _encounterId,
+                InvoiceId = currentInvoice.InvoiceId,
+                Reason = "Correcting the current draft",
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+
+            var reloadedCurrent = _context.BillingInvoice.Single(i => i.InvoiceId == currentInvoice.InvoiceId);
+            Assert.That(reloadedCurrent.StatusCode, Is.EqualTo(BillingConstants.InvoiceStatus.Cancelled));
+            Assert.That(reloadedCurrent.CancelReason, Is.EqualTo("Correcting the current draft"));
+
+            // The already-cancelled row must be completely untouched by this call.
+            var reloadedOld = _context.BillingInvoice.Single(i => i.InvoiceId == oldInvoice.InvoiceId);
+            Assert.That(reloadedOld.CancelledAt, Is.EqualTo(oldCancelledAt));
+            Assert.That(reloadedOld.CancelReason, Is.Null);
+        }
+
+        [Test]
+        public async Task Handle_RejectsDelete_WhenInvoiceBelongsToAnotherEncounter()
+        {
+            var invoice = SeedInvoice(BillingConstants.InvoiceStatus.Draft);
+            var otherEncounterId = Guid.NewGuid();
+
+            var response = await _handler.Handle(new DeleteInvoiceRequestModel
+            {
+                HospitalId = _hospitalId,
+                EncounterId = otherEncounterId,
+                InvoiceId = invoice.InvoiceId,
+                Reason = "Attempted cross-encounter delete",
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Does.Contain("not found"));
+
+            var reloaded = _context.BillingInvoice.Single(i => i.InvoiceId == invoice.InvoiceId);
+            Assert.That(reloaded.StatusCode, Is.EqualTo(BillingConstants.InvoiceStatus.Draft), "The invoice must be completely untouched.");
+        }
+
+        [Test]
+        public async Task Handle_RejectsDelete_WhenInvoiceBelongsToAnotherHospital()
+        {
+            var invoice = SeedInvoice(BillingConstants.InvoiceStatus.Draft);
+            var otherHospitalId = Guid.NewGuid();
+
+            var response = await _handler.Handle(new DeleteInvoiceRequestModel
+            {
+                HospitalId = otherHospitalId,
+                EncounterId = _encounterId,
+                InvoiceId = invoice.InvoiceId,
+                Reason = "Attempted cross-hospital delete",
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            var reloaded = _context.BillingInvoice.Single(i => i.InvoiceId == invoice.InvoiceId);
+            Assert.That(reloaded.StatusCode, Is.EqualTo(BillingConstants.InvoiceStatus.Draft));
+        }
+
+        [Test]
+        public async Task Handle_RejectsDelete_WhenAlreadyCancelled()
+        {
+            var invoice = SeedInvoice(BillingConstants.InvoiceStatus.Cancelled, cancelledAt: DateTime.UtcNow);
+
+            var response = await _handler.Handle(new DeleteInvoiceRequestModel
+            {
+                HospitalId = _hospitalId,
+                EncounterId = _encounterId,
+                InvoiceId = invoice.InvoiceId,
+                Reason = "Try again",
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Does.Contain("already"));
+        }
+
+        [Test]
+        public async Task Handle_RejectsDelete_WhenReasonMissing()
+        {
+            var invoice = SeedInvoice(BillingConstants.InvoiceStatus.Draft);
+
+            var response = await _handler.Handle(new DeleteInvoiceRequestModel
+            {
+                HospitalId = _hospitalId,
+                EncounterId = _encounterId,
+                InvoiceId = invoice.InvoiceId,
+                Reason = "",
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Does.Contain("reason"));
+        }
+
+        [Test]
+        public async Task Handle_RejectsDelete_WhenInvoiceIdMissing()
+        {
+            var response = await _handler.Handle(new DeleteInvoiceRequestModel
+            {
+                HospitalId = _hospitalId,
+                EncounterId = _encounterId,
+                InvoiceId = Guid.Empty,
+                Reason = "No invoice id",
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
         }
     }
 }

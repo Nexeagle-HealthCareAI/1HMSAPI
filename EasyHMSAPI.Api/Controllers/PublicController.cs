@@ -87,11 +87,72 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Records one hospital-scoped marketing lead for the Lead Generation page -- see
+        // AppConstants.LeadSource_*/LeadType_* for valid values. Called by both NexEagleWebsite
+        // (doctor profile/hospital page views, name searches) and the WhatsApp bot (name
+        // searches, resolved server-side via hms_client.record_lead). Same generous rate-limit
+        // tier and error-swallowing posture as TrackEvent.
+        [HttpPost("leads")]
+        [EnableRateLimiting("TrackVisitPolicy")]
+        public async Task<ActionResult<RecordLeadResponseModel>> RecordLead([FromBody] RecordLeadRequestModel request)
+        {
+            try
+            {
+                request.IpAddress = EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(HttpContext, _proxyForwardingSecret);
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.RecordLead");
+                return Ok(new RecordLeadResponseModel { Success = false });
+            }
+        }
+
+        // Resolves a scanned OPD QR code to a hospital -- the bot gateway's GET /c/{hospital_code}
+        // calls this to know which hospital's context to load. No auth beyond the controller's
+        // optional X-Api-Key, same as every other endpoint here.
+        [HttpGet("hospitals/by-code/{hospitalCode}")]
+        public async Task<ActionResult<GetHospitalByCodeResponseModel>> GetHospitalByCode(string hospitalCode)
+        {
+            try
+            {
+                var response = await _mediator.Send(new GetHospitalByCodeRequestModel { HospitalCode = hospitalCode });
+                if (!response.Success) return NotFound(response);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetHospitalByCode for hospitalCode: {HospitalCode}", hospitalCode);
+                return StatusCode(500, new { Message = "An error occurred while resolving the hospital code." });
+            }
+        }
+
+        // Platform-wide, publicly-listed hospitals -- e.g. the WhatsApp bot's new hospital-name
+        // matching (resolver.match_hospital_by_query via hms_client.list_hospitals), which had
+        // no bulk-listing endpoint to fuzzy-match against before this (only the exact single-code
+        // lookup above).
+        [HttpGet("hospitals")]
+        public async Task<ActionResult<GetPublicHospitalsResponseModel>> GetHospitals()
+        {
+            try
+            {
+                var response = await _mediator.Send(new GetPublicHospitalsRequestModel());
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetHospitals");
+                return StatusCode(500, new { Message = "An error occurred while fetching hospitals." });
+            }
+        }
+
         [HttpGet("doctors")]
         public async Task<ActionResult<GetPublicDoctorsResponseModel>> GetDoctors(
             [FromQuery] int page = 1, [FromQuery] int pageSize = 24,
             [FromQuery] string? city = null, [FromQuery] string? state = null,
-            [FromQuery] string? specialtyCategory = null, [FromQuery] string? search = null)
+            [FromQuery] string? specialtyCategory = null, [FromQuery] string? search = null,
+            [FromQuery] Guid? hospitalId = null)
         {
             try
             {
@@ -103,6 +164,7 @@ namespace EasyHMSAPI.Api.Controllers
                     State = state,
                     SpecialtyCategory = specialtyCategory,
                     Search = search,
+                    HospitalId = hospitalId,
                 };
                 var response = await _mediator.Send(request);
                 return Ok(response);
@@ -111,6 +173,31 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 _logger.LogError(ex, "Error in PublicController.GetDoctors");
                 return StatusCode(500, new { Message = "An error occurred while fetching doctors." });
+            }
+        }
+
+        // Internal hospital roster for Vita's voice assistant (phonetic name-correction context in
+        // its system prompt, NOT a tool-call result) -- unlike GetDoctors above, does NOT filter on
+        // Doctor.IsPubliclyListed/IsDelistedByAdmin (a hospital's own front desk needs every real
+        // doctor regardless of marketplace opt-in/delisting). Still excludes a Revoked user, so a
+        // roster entry always resolves via find_doctors too. Route grouped under doctors/* like the
+        // other doctor endpoints above, not hospitals/*, since the response shape is doctor-centric.
+        [HttpGet("doctors/roster")]
+        public async Task<ActionResult<GetPublicDoctorRosterResponseModel>> GetDoctorRoster([FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetPublicDoctorRosterRequestModel { HospitalId = hospitalId });
+                if (!response.Success) return BadRequest(response);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetDoctorRoster for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching the doctor roster." });
             }
         }
 
@@ -126,6 +213,69 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 _logger.LogError(ex, "Error in PublicController.GetSpecialties");
                 return StatusCode(500, new { Message = "An error occurred while fetching specialties." });
+            }
+        }
+
+        // Single-doctor lookup -- previously there was no dedicated endpoint for this (see the
+        // note in NexEagleWebsite's server.ts getDoctorById); used directly by the WhatsApp
+        // bot's deterministic DRBOOK <doctorId> trigger (GET /doc/{doctorId} in webhook.py) to
+        // resolve exactly one doctor, no name-matching involved.
+        [HttpGet("doctors/{doctorId:guid}")]
+        public async Task<ActionResult<GetPublicDoctorByIdResponseModel>> GetDoctorById(Guid doctorId)
+        {
+            try
+            {
+                var response = await _mediator.Send(new GetPublicDoctorsRequestModel { DoctorId = doctorId, Page = 1, PageSize = 1 });
+                var doctor = response.Doctors.FirstOrDefault();
+                if (doctor == null)
+                    return NotFound(new { Message = "Doctor not found." });
+                return Ok(new GetPublicDoctorByIdResponseModel { Success = true, Doctor = doctor });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetDoctorById for doctorId: {DoctorId}", doctorId);
+                return StatusCode(500, new { Message = "An error occurred while fetching the doctor." });
+            }
+        }
+
+        // Doctor's own WhatsApp-booking QR (NexEagle logo centered) -- rendered on their Doctor
+        // Dekho profile page. Scanning it lands the patient straight into a booking flow for
+        // THIS exact doctor (skips specialty/name search entirely) -- see the bot's DRBOOK
+        // trigger in conversation.py.
+        [HttpGet("doctors/{doctorId:guid}/qr-code")]
+        public async Task<IActionResult> GetDoctorQrCode(Guid doctorId)
+        {
+            try
+            {
+                var response = await _mediator.Send(new GetPublicDoctorQrCodeRequestModel { DoctorId = doctorId });
+                if (!response.Success || response.Content == null)
+                    return NotFound(new { response.Message });
+                return File(response.Content, response.ContentType);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetDoctorQrCode for doctorId: {DoctorId}", doctorId);
+                return StatusCode(500, new { Message = "An error occurred while generating the QR code." });
+            }
+        }
+
+        // Generic "chat with us on WhatsApp" QR (NexEagle logo centered) -- e.g. the Doctor
+        // Dekho homepage's WhatsApp CTA. Content never varies per call; callers are expected to
+        // cache the response rather than re-fetch on every page view.
+        [HttpGet("whatsapp-qr-code")]
+        public async Task<IActionResult> GetWhatsAppEntryQrCode()
+        {
+            try
+            {
+                var response = await _mediator.Send(new GetWhatsAppEntryQrCodeRequestModel());
+                if (!response.Success || response.Content == null)
+                    return NotFound(new { response.Message });
+                return File(response.Content, response.ContentType);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetWhatsAppEntryQrCode");
+                return StatusCode(500, new { Message = "An error occurred while generating the QR code." });
             }
         }
 
@@ -169,6 +319,106 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 _logger.LogError(ex, "Error in PublicController.BookAppointment");
                 return StatusCode(500, new { Message = "An error occurred while booking the appointment." });
+            }
+        }
+
+        // Anonymous cancel — the ONLY gate is knowing the AppointmentId (unguessable GUID), same
+        // trust model as GetAppointment below, plus a Mobile cross-check in the handler. Built
+        // for the WhatsApp bot (which only ever knows AppointmentId + the visitor's own phone
+        // number, never a PatientId/HospitalId or a staff session) — see
+        // PublicCancelAppointmentHandler for why this can't reuse the staff-JWT cancel endpoint.
+        [HttpPatch("appointments/{appointmentId:guid}/cancel")]
+        public async Task<ActionResult<PublicCancelAppointmentResponseModel>> CancelAppointment(
+            Guid appointmentId, [FromBody] PublicCancelAppointmentRequestModel request, CancellationToken cancellationToken)
+        {
+            try
+            {
+                request.AppointmentId = appointmentId;
+                var response = await _mediator.Send(request, cancellationToken);
+                if (!response.Success) return BadRequest(response);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.CancelAppointment for appointmentId: {AppointmentId}", appointmentId);
+                return StatusCode(500, new { Message = "An error occurred while cancelling the appointment." });
+            }
+        }
+
+        // Anonymous reschedule — same AppointmentId + Mobile gate as CancelAppointment above.
+        [HttpPatch("appointments/{appointmentId:guid}/reschedule")]
+        public async Task<ActionResult<PublicRescheduleAppointmentResponseModel>> RescheduleAppointment(
+            Guid appointmentId, [FromBody] PublicRescheduleAppointmentRequestModel request, CancellationToken cancellationToken)
+        {
+            try
+            {
+                request.AppointmentId = appointmentId;
+                var response = await _mediator.Send(request, cancellationToken);
+                if (!response.Success) return BadRequest(response);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.RescheduleAppointment for appointmentId: {AppointmentId}", appointmentId);
+                return StatusCode(500, new { Message = "An error occurred while rescheduling the appointment." });
+            }
+        }
+
+        // OPD QR check-in: converts a booked appointment into a queue token after a geofence check.
+        // See IssueQueueTokenHandler for the idempotency/geofence details.
+        [HttpPost("tokens")]
+        public async Task<ActionResult<IssueQueueTokenResponseModel>> IssueQueueToken([FromBody] IssueQueueTokenRequestModel request, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var response = await _mediator.Send(request, cancellationToken);
+                if (!response.Success) return BadRequest(response);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.IssueQueueToken for appointmentId: {AppointmentId}", request.AppointmentId);
+                return StatusCode(500, new { Message = "An error occurred while checking in." });
+            }
+        }
+
+        // On-demand queue status snapshot -- deliberately a plain JSON GET, not SSE (no such
+        // infrastructure exists in this codebase, and the bot's own POST /events/token-called
+        // already handles real-time push delivery; this just serves a one-shot read for the bot's
+        // "type STATUS" handler to call).
+        [HttpGet("tokens/{appointmentId:guid}")]
+        public async Task<ActionResult<GetQueueTokenStatusResponseModel>> GetQueueTokenStatus(Guid appointmentId, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var response = await _mediator.Send(new GetQueueTokenStatusRequestModel { AppointmentId = appointmentId }, cancellationToken);
+                if (!response.Success) return NotFound(response);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetQueueTokenStatus for appointmentId: {AppointmentId}", appointmentId);
+                return StatusCode(500, new { Message = "An error occurred while fetching queue status." });
+            }
+        }
+
+        // Walk-in OPD QR check-in: resolves "my appointment today at this hospital" from just a
+        // phone number, for patients whose appointment wasn't booked through this bot (so the
+        // bot doesn't already know an AppointmentId). See ResolveCheckInHandler for why this is
+        // safe to expose anonymously (geofence-gated before any mobile lookup).
+        [HttpPost("checkin/resolve")]
+        public async Task<ActionResult<ResolveCheckInResponseModel>> ResolveCheckIn([FromBody] ResolveCheckInRequestModel request, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var response = await _mediator.Send(request, cancellationToken);
+                if (!response.Success) return BadRequest(response);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.ResolveCheckIn for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred while checking in." });
             }
         }
 

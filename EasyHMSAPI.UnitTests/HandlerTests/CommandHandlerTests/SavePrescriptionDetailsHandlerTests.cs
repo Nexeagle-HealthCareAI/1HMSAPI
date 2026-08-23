@@ -11,6 +11,7 @@ using EasyHMSAPI.Domain.Entities;
 using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.UnitTests.TestUtils;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Moq;
@@ -25,6 +26,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         private Mock<IDoctorValidationHelper> _mockDoctorValidationHelper = null!;
         private Mock<IBlobStorageService> _mockBlobStorageService = null!;
         private Mock<IConfiguration> _mockConfiguration = null!;
+        private Mock<IMediator> _mockMediator = null!;
         private SavePrescriptionDetailsHandler _handler = null!;
 
         [SetUp]
@@ -35,8 +37,9 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             _mockBlobStorageService = new Mock<IBlobStorageService>();
             _mockConfiguration = new Mock<IConfiguration>();
             _mockConfiguration.Setup(x => x["BlobStorage:PrescriptionsContainer"]).Returns("prescriptions");
+            _mockMediator = new Mock<IMediator>();
 
-            _handler = new SavePrescriptionDetailsHandler(_context, _mockDoctorValidationHelper.Object, _mockBlobStorageService.Object, _mockConfiguration.Object);
+            _handler = new SavePrescriptionDetailsHandler(_context, _mockDoctorValidationHelper.Object, _mockBlobStorageService.Object, _mockConfiguration.Object, _mockMediator.Object);
         }
 
         [TearDown]

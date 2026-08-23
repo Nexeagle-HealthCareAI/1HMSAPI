@@ -1,4 +1,4 @@
-﻿using EasyHMSAPI.Application.Helpers.Interfaces;
+using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
@@ -18,13 +18,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         private readonly IDoctorValidationHelper _doctorValidationHelper;
         private readonly IBlobStorageService _blobStorageService;
         private readonly string _containerName;
+        private readonly IMediator _mediator;
 
-        public SavePrescriptionDetailsHandler(AppDbContext context, IDoctorValidationHelper doctorValidationHelper, IBlobStorageService blobStorageService, IConfiguration configuration)
+        public SavePrescriptionDetailsHandler(AppDbContext context, IDoctorValidationHelper doctorValidationHelper, IBlobStorageService blobStorageService, IConfiguration configuration, IMediator mediator)
         {
             _context = context;
             _doctorValidationHelper = doctorValidationHelper;
             _blobStorageService = blobStorageService;
             _containerName = configuration["BlobStorage:PrescriptionsContainer"] ?? string.Empty;
+            _mediator = mediator;
         }
 
         public async Task<SavePrescriptionDetailsResponseModel> Handle(SavePrescriptionDetailsRequestModel request, CancellationToken cancellationToken)
@@ -167,7 +169,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                     }
                                 }
 
-                                if (request.Orders.Investigations is not null)
+                                if (request.Orders.Investigations is not null && request.Orders.Investigations.Any())
                                 {
                                     var investigationLookup = await _context.LookupTypes
                                         .Where(x => x.LookupTypeCode == AppConstants.LookupType_Investigation)
@@ -189,6 +191,29 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                         UpdateBy = request.LoggedInUserName,
                                     };
                                     _context.PrescriptionInvestigation.Add(investigation);
+
+                                    // Auto-create Pathology Order for recognized tests
+                                    var testNames = request.Orders.Investigations.Select(i => i.Trim().ToLower()).ToList();
+                                    var testIds = await _context.PathologyTestMaster
+                                        .Where(t => t.HospitalId == request.HospitalId && testNames.Contains(t.TestName.ToLower()))
+                                        .Select(t => t.TestId)
+                                        .ToListAsync(cancellationToken);
+
+                                    if (testIds.Any())
+                                    {
+                                        var orderReq = new CreatePathologyOrderRequestModel
+                                        {
+                                            HospitalId = request.HospitalId,
+                                            PatientId = existingAppointment.PatientId ?? string.Empty,
+                                            EncounterId = existingAppointment.ApptId, // Using ApptId as EncounterId or we check if there's a real encounter
+                                            OrderedByDoctorId = request.DoctorId,
+                                            TestIds = testIds,
+                                            Notes = "Auto-generated from prescription",
+                                            LoggedInUserId = request.LoggedInUserId,
+                                            LoggedInUserName = request.LoggedInUserName
+                                        };
+                                        await _mediator.Send(orderReq, cancellationToken);
+                                    }
                                 }
 
                                 if(request.Orders.Procedures is not null)

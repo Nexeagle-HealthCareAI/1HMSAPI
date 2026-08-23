@@ -18,8 +18,8 @@ namespace EasyHMSAPI.Application.Services
         // page-2 "all doctors" request are genuinely different result sets, so they must not
         // share a cache slot. Still a plain 60s TTL per entry (see CacheTtl in
         // GetPublicDoctorsHandler); many small entries costs nothing meaningful at this scale.
-        public static string PublicDoctorsList(int page, int pageSize, string? city, string? state, string? specialtyCategory, string? search) =>
-            $"public:doctors:{page}:{pageSize}:{city?.Trim().ToLowerInvariant()}:{state?.Trim().ToLowerInvariant()}:{specialtyCategory?.Trim().ToLowerInvariant()}:{search?.Trim().ToLowerInvariant()}";
+        public static string PublicDoctorsList(int page, int pageSize, string? city, string? state, string? specialtyCategory, string? search, Guid? hospitalId = null, Guid? doctorId = null) =>
+            $"public:doctors:{page}:{pageSize}:{city?.Trim().ToLowerInvariant()}:{state?.Trim().ToLowerInvariant()}:{specialtyCategory?.Trim().ToLowerInvariant()}:{search?.Trim().ToLowerInvariant()}:{hospitalId}:{doctorId}";
 
         public static string DoctorAvailability(Guid doctorId, DateTime date) =>
             $"public:doctor-availability:{doctorId}:{date:yyyyMMdd}";
@@ -30,5 +30,7 @@ namespace EasyHMSAPI.Application.Services
         // Single whole-platform entry — unlike PublicDoctorsList there's no per-request filter
         // combo to key on, this is just "all bookable categories right now".
         public const string PublicSpecialtiesList = "public:specialties";
+
+        public static string DoctorRoster(Guid hospitalId) => $"public:doctor-roster:{hospitalId}";
     }
 }

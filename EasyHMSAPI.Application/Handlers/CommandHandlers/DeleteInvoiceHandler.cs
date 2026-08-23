@@ -21,14 +21,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         {
             try
             {
-                if (request.HospitalId == Guid.Empty || request.EncounterId == Guid.Empty)
-                    return new DeleteInvoiceResponseModel { Success = false, Message = "HospitalId and EncounterId are required." };
+                if (request.HospitalId == Guid.Empty || request.EncounterId == Guid.Empty || request.InvoiceId == Guid.Empty)
+                    return new DeleteInvoiceResponseModel { Success = false, Message = "HospitalId, EncounterId and InvoiceId are required." };
 
                 if (string.IsNullOrWhiteSpace(request.Reason))
                     return new DeleteInvoiceResponseModel { Success = false, Message = "A reason is required to delete an invoice." };
 
+                // Scoped by all three -- an encounter can accumulate more than one BillingInvoice
+                // row over its life (delete one, keep billing, a fresh draft appears later), so
+                // matching on EncounterId alone would be ambiguous once that's happened.
                 var invoice = await _context.BillingInvoice
-                    .Where(bi => bi.EncounterId == request.EncounterId && bi.HospitalId == request.HospitalId)
+                    .Where(bi => bi.InvoiceId == request.InvoiceId
+                              && bi.EncounterId == request.EncounterId
+                              && bi.HospitalId == request.HospitalId)
                     .FirstOrDefaultAsync(cancellationToken);
 
                 if (invoice == null)

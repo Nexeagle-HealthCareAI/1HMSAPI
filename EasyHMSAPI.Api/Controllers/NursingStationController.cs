@@ -14,6 +14,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("nursing-station")]
     [Authorize]
+    [RequiresPermission("nursing_station")]
     public class NursingStationController : ControllerBase
     {
         private readonly IMediator _mediator;

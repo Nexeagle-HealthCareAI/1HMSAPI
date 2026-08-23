@@ -16,6 +16,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("clinical-order")]
     [Authorize]
+    [RequiresPermission("ipd")]
     public class ClinicalOrderController : ControllerBase
     {
         private readonly IMediator _mediator;

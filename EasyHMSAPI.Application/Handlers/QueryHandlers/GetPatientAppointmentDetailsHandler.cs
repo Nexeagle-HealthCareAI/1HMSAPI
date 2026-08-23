@@ -185,6 +185,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     LastStatusAt = a.LastStatusCodeAt,
                     CreatedAt = a.CreatedAt,
                     AppointmentType = a.AppointmentType,
+                    BookingSource = a.BookingSource,
                     ReferrerId = a.ReferredByReferrerId,
                     ReferrerName = a.ReferredByReferrerId.HasValue && referrerInfoById.TryGetValue(a.ReferredByReferrerId.Value, out var rInfo) ? rInfo.Name : null,
                     ReferrerType = a.ReferredByReferrerId.HasValue && referrerInfoById.TryGetValue(a.ReferredByReferrerId.Value, out var rInfo2) ? rInfo2.Type : null,

@@ -61,6 +61,31 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return new UpdateChargeEventResponseModel { Success = false, Message = "Cannot edit a charge on a finalized or cancelled invoice." };
                 }
 
+                // A closed admission day's interim bill has already been printed/handed to the
+                // patient or TPA -- the invoice's own FINALIZED status doesn't cover this case,
+                // since day-wise closes happen mid-stay, well before discharge/finalize. Without
+                // this check, editing a charge here would silently make the printed interim bill
+                // and the live ledger disagree, with nothing catching it. ReopenAdmissionDayHandler
+                // is the only path that removes a charge's AdmissionDayBillLine row, so its
+                // presence (against a still-Closed day) is exactly "this charge is day-locked."
+                var dayBillLine = await _context.AdmissionDayBillLine
+                    .Where(l => l.ChargeEventId == request.ChargeEventId && l.HospitalId == request.HospitalId)
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (dayBillLine != null)
+                {
+                    var dayBill = await _context.AdmissionDayBill
+                        .Where(b => b.AdmissionDayBillId == dayBillLine.AdmissionDayBillId)
+                        .FirstOrDefaultAsync(cancellationToken);
+                    if (dayBill != null && dayBill.StatusCode == BillingConstants.DayBillStatus.Closed)
+                    {
+                        return new UpdateChargeEventResponseModel
+                        {
+                            Success = false,
+                            Message = $"Cannot edit this charge — it's part of Day {dayBill.DayNumber}'s closed interim bill ({dayBill.InterimBillNo}). Reopen that day first."
+                        };
+                    }
+                }
+
                 // Isolate the invoice-level (overall, not tied to any one line) discount BEFORE this
                 // charge's own DiscountAmount is mutated below — otherwise recomputing
                 // billingInvoice.DiscountAmount from just the per-line sum would silently wipe out
@@ -183,6 +208,21 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     decimal totalDiscountAmount = totalLineDiscountAmount + invoiceLevelDiscount;
                     if (totalDiscountAmount > totalGrossAmount) totalDiscountAmount = totalGrossAmount;
                     decimal totalNetAmount = totalGrossAmount - totalDiscountAmount;
+
+                    // Same invoice-level-discount GST scaling as CreateDraftInvoiceHandler -- see
+                    // its comment. totalTaxableAmount/totalCgst/totalSgst/totalIgst/totalTax above
+                    // are pure per-line snapshot sums and never account for invoiceLevelDiscount,
+                    // which isn't tied to any one line.
+                    decimal netBeforeInvoiceLevelDiscount = totalGrossAmount - totalLineDiscountAmount;
+                    if (invoiceLevelDiscount > 0 && netBeforeInvoiceLevelDiscount > 0)
+                    {
+                        var ratio = totalNetAmount / netBeforeInvoiceLevelDiscount;
+                        totalTaxableAmount = Math.Round(totalTaxableAmount * ratio, 2);
+                        totalCgst = Math.Round(totalCgst * ratio, 2);
+                        totalSgst = Math.Round(totalSgst * ratio, 2);
+                        totalIgst = Math.Round(totalIgst * ratio, 2);
+                        totalTax = Math.Round(totalTax * ratio, 2);
+                    }
 
                     billingInvoice.GrossAmount = totalGrossAmount;
                     billingInvoice.DiscountAmount = totalDiscountAmount;

@@ -39,11 +39,15 @@ builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 // Multi-tenant guard: blocks a signed-in user from acting on a hospital they don't belong to.
 builder.Services.AddScoped<EasyHMSAPI.Api.Common.HospitalAccessFilter>();
+// Board-level guard: blocks a signed-in user from an action carrying [RequiresPermission(...)]
+// unless their role(s) grant one of the listed PermissionKeys. Fails open when unannotated.
+builder.Services.AddScoped<EasyHMSAPI.Api.Common.PermissionAuthorizationFilter>();
 // Public (Nexeagle) API-key gate — applied per-controller via [ServiceFilter], not globally.
 builder.Services.AddScoped<EasyHMSAPI.Api.Common.PublicApiKeyFilter>();
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<EasyHMSAPI.Api.Common.HospitalAccessFilter>();
+    options.Filters.Add<EasyHMSAPI.Api.Common.PermissionAuthorizationFilter>();
 });
 
 // ------------------------------------------------------------
@@ -171,11 +175,15 @@ builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IPatientTo
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IGeoIpLookupService, EasyHMSAPI.Application.Services.Implementations.IpApiGeoLookupService>();
 builder.Services.AddScoped<IVoiceRxService, VoiceRxService>();
 builder.Services.AddScoped<IDoctorValidationHelper, DoctorValidationHelper>();
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IWhatsAppQueueNotifier, EasyHMSAPI.Application.Services.WhatsAppQueueNotifier>();
 builder.Services.AddScoped<ISubscriptionLimitHelper, SubscriptionLimitHelper>();
 // ABDM M1: ABHA creation (Aadhaar-OTP) + existing-ABHA login (Mobile/Aadhaar-OTP).
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmEncryptionService, EasyHMSAPI.Application.Services.Implementations.AbdmEncryptionService>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmGatewayService, EasyHMSAPI.Application.Services.Implementations.AbdmGatewayService>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmAbhaService, EasyHMSAPI.Application.Services.Implementations.AbdmAbhaService>();
+
+builder.Services.AddHttpClient<ITranslationService, GroqTranslationService>();
+builder.Services.AddHttpClient<IBillingInsightService, GroqBillingInsightService>();
 
 // RxNorm (RxNav): free, unauthenticated NLM API used to enrich a medicine's generic/salt
 // ingredients (available strengths, US-naming cross-reference). Fixed public base URL, no

@@ -22,5 +22,21 @@ namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
         // between NexEagleWebsite's specialtyId taxonomy and this DB's NMC categories.
         public string? SpecialtyCategory { get; set; }
         public string? Search { get; set; }
+
+        // When set, scopes the listing to one hospital (e.g. the OPD QR flow, after resolving a
+        // scanned code to a HospitalId) instead of the whole platform-wide directory. A hospitalId-
+        // scoped query bypasses Hospital.IsPubliclyListed (a marketplace opt-in flag unrelated to a
+        // hospital's own front-desk QR usage) -- it still requires the hospital be IsActive and not
+        // archived. Doctor.IsPubliclyListed/IsDelistedByAdmin are unchanged either way: an
+        // individual doctor's own opt-out is respected regardless of how they're being looked up.
+        public Guid? HospitalId { get; set; }
+
+        // When set, narrows to exactly one doctor -- e.g. PublicController's single-doctor
+        // lookup (GET public/doctors/{doctorId}, used by the WhatsApp bot's deterministic
+        // DRBOOK trigger and by the QR-code endpoint). Still requires the SAME
+        // IsPubliclyListed/IsActive/not-archived/not-delisted gates as the platform-wide
+        // listing -- a doctor's own profile page can only exist for a doctor that already
+        // passes those, so there is nothing to bypass here (unlike HospitalId above).
+        public Guid? DoctorId { get; set; }
     }
 }
