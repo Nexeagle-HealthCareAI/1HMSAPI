@@ -217,6 +217,24 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             decimal igst = linkedChargeEvents.Sum(ce => ce.IgstAmount);
             decimal tax  = linkedChargeEvents.Sum(ce => ce.TaxAmount);
 
+            // The invoice-level discount isn't tied to any one line, so it's already fully
+            // reflected in `net` above but NOT in the Taxable/Cgst/Sgst/Igst/Tax sums, which are
+            // pure per-line snapshots computed from each line's own (line-discount-only) net.
+            // Left unscaled, applying an "Add Discount" at the invoice level shrinks NetAmount
+            // while the printed GST breakdown stays at its pre-discount value and stops
+            // reconciling with the grand total. Scale the breakdown by the same fraction the
+            // invoice-level discount takes off the already-line-discounted net.
+            decimal netBeforeInvoiceLevelDiscount = gross - lineDiscount;
+            if (invoiceLevelDiscount > 0 && netBeforeInvoiceLevelDiscount > 0)
+            {
+                var ratio = net / netBeforeInvoiceLevelDiscount;
+                taxable = Math.Round(taxable * ratio, 2);
+                cgst = Math.Round(cgst * ratio, 2);
+                sgst = Math.Round(sgst * ratio, 2);
+                igst = Math.Round(igst * ratio, 2);
+                tax = Math.Round(tax * ratio, 2);
+            }
+
             invoice.GrossAmount = gross;
             invoice.DiscountAmount = totalDiscount;
             invoice.NetAmount = net;

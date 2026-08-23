@@ -25,6 +25,20 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (request.Charges == null || request.Charges.Count == 0)
                     return new AddChargeEventResponseModel { Success = false, Message = "No charges provided." };
 
+                // Same guardrails UpdateChargeEventHandler enforces on a single-line edit -- without
+                // them a zero/negative Qty, a negative Rate, or a negative/>100% DiscountPercent
+                // posts straight through into GrossAmount/NetAmount with no server-side check
+                // (the web UI validates, but this endpoint is reachable directly).
+                foreach (var c in request.Charges)
+                {
+                    if (c.Qty <= 0)
+                        return new AddChargeEventResponseModel { Success = false, Message = "Quantity must be greater than zero." };
+                    if (c.Rate < 0)
+                        return new AddChargeEventResponseModel { Success = false, Message = "Rate cannot be negative." };
+                    if (c.DiscountPercent < 0)
+                        return new AddChargeEventResponseModel { Success = false, Message = "Discount cannot be negative." };
+                }
+
                 if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
                 {
                     var alreadyPosted = await _context.BillingChargeEvent
@@ -155,6 +169,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                     var gross = charge.Qty * rate;
                     var discount = Math.Round(gross * (charge.DiscountPercent / 100m), 2);
+                    if (discount > gross) discount = gross;
                     var net = gross - discount;
 
                     ChargeMaster? master = (charge.ChargeId.HasValue && masters.TryGetValue(charge.ChargeId.Value, out var m)) ? m : null;

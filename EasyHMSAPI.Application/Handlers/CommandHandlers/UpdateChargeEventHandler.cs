@@ -209,6 +209,21 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     if (totalDiscountAmount > totalGrossAmount) totalDiscountAmount = totalGrossAmount;
                     decimal totalNetAmount = totalGrossAmount - totalDiscountAmount;
 
+                    // Same invoice-level-discount GST scaling as CreateDraftInvoiceHandler -- see
+                    // its comment. totalTaxableAmount/totalCgst/totalSgst/totalIgst/totalTax above
+                    // are pure per-line snapshot sums and never account for invoiceLevelDiscount,
+                    // which isn't tied to any one line.
+                    decimal netBeforeInvoiceLevelDiscount = totalGrossAmount - totalLineDiscountAmount;
+                    if (invoiceLevelDiscount > 0 && netBeforeInvoiceLevelDiscount > 0)
+                    {
+                        var ratio = totalNetAmount / netBeforeInvoiceLevelDiscount;
+                        totalTaxableAmount = Math.Round(totalTaxableAmount * ratio, 2);
+                        totalCgst = Math.Round(totalCgst * ratio, 2);
+                        totalSgst = Math.Round(totalSgst * ratio, 2);
+                        totalIgst = Math.Round(totalIgst * ratio, 2);
+                        totalTax = Math.Round(totalTax * ratio, 2);
+                    }
+
                     billingInvoice.GrossAmount = totalGrossAmount;
                     billingInvoice.DiscountAmount = totalDiscountAmount;
                     billingInvoice.NetAmount = totalNetAmount;

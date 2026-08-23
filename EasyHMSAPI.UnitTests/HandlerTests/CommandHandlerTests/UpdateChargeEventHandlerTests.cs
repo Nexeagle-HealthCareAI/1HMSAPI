@@ -340,6 +340,84 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task Handle_ScalesGstBreakdown_ByInvoiceLevelDiscountRatio()
+        {
+            // Regression guard for the Medium-severity GST reconciliation bug: an invoice-level
+            // "Add Discount" (not tied to any one line) must shrink Taxable/Cgst/Sgst/Tax by the
+            // same proportion it shrinks NetAmount -- otherwise the printed invoice's tax section
+            // stops reconciling with the discounted grand total.
+            var charge = new BillingChargeEvent
+            {
+                ChargeEventId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+                DisplayName = "Procedure",
+                Qty = 1,
+                UnitPrice = 1000,
+                GrossAmount = 1000,
+                DiscountAmount = 0,
+                NetAmount = 1000,
+                GstRate = 18,
+                IsTaxInclusive = false,
+                IsInterState = false,
+                TaxableAmount = 1000,
+                CgstAmount = 90,
+                SgstAmount = 90,
+                IgstAmount = 0,
+                TaxAmount = 180,
+                StatusCode = "POSTED",
+                ServiceDate = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            _context.BillingChargeEvent.Add(charge);
+
+            var invoice = new BillingInvoice
+            {
+                InvoiceId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                EncounterId = _encounterId,
+                PatientId = "PT001",
+                InvoiceNo = "INV-1",
+                InvoiceDate = DateTime.UtcNow,
+                StatusCode = BillingConstants.InvoiceStatus.Draft,
+                GrossAmount = 1000,
+                DiscountAmount = 100, // overall "Add Discount", not tied to the line above
+                NetAmount = 900,
+                TaxableAmount = 1000,
+                CgstAmount = 90,
+                SgstAmount = 90,
+                TaxAmount = 180,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            _context.BillingInvoice.Add(invoice);
+            _context.BillingInvoiceChargeEvent.Add(new BillingInvoiceChargeEvent { InvoiceId = invoice.InvoiceId, ChargeEventId = charge.ChargeEventId });
+            await _context.SaveChangesAsync();
+
+            // Edit that leaves this charge's own qty/rate/discount unchanged in effect -- isolates
+            // the invoice-level discount as the only thing driving the scaling.
+            var response = await _handler.Handle(new UpdateChargeEventRequestModel
+            {
+                HospitalId = _hospitalId,
+                ChargeEventId = charge.ChargeEventId,
+                Qty = 1,
+                Rate = 1000,
+                DiscountPercent = 0,
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+
+            var updatedInvoice = _context.BillingInvoice.First(i => i.InvoiceId == invoice.InvoiceId);
+            Assert.That(updatedInvoice.NetAmount, Is.EqualTo(900));
+            Assert.That(updatedInvoice.TaxableAmount, Is.EqualTo(900), "Taxable must scale down with the invoice-level discount.");
+            Assert.That(updatedInvoice.CgstAmount, Is.EqualTo(81));
+            Assert.That(updatedInvoice.SgstAmount, Is.EqualTo(81));
+            Assert.That(updatedInvoice.TaxAmount, Is.EqualTo(162));
+        }
+
+        [Test]
         public async Task Handle_ChargeNotFound_ReturnsFailure()
         {
             var response = await _handler.Handle(new UpdateChargeEventRequestModel

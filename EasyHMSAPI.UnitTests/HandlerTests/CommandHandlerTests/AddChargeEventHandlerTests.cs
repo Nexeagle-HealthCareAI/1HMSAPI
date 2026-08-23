@@ -99,5 +99,89 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(posted.DiscountAmount, Is.EqualTo(500));
             Assert.That(posted.StatusCode, Is.EqualTo(BillingConstants.ChargeEventStatus.Posted));
         }
+
+        [TestCase(0)]
+        [TestCase(-1)]
+        public async Task Handle_RejectsCharge_WhenQtyIsZeroOrNegative(decimal qty)
+        {
+            // Regression guard: this endpoint is reachable directly (not just via the web UI's own
+            // validation), and previously a zero/negative Qty posted straight through into
+            // GrossAmount/NetAmount with no server-side check -- same guardrail
+            // UpdateChargeEventHandler already enforces on a single-line edit.
+            var response = await _handler.Handle(new AddChargeEventRequestModel
+            {
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+                Charges = new List<ChargeDetail>
+                {
+                    new ChargeDetail { DisplayName = "Bad Line", Qty = qty, Rate = 100, DiscountPercent = 0, CategoryCode = "PROCEDURE" },
+                },
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Does.Contain("Quantity"));
+            Assert.That(_context.BillingChargeEvent.Count(), Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task Handle_RejectsCharge_WhenRateIsNegative()
+        {
+            var response = await _handler.Handle(new AddChargeEventRequestModel
+            {
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+                Charges = new List<ChargeDetail>
+                {
+                    new ChargeDetail { DisplayName = "Bad Line", Qty = 1, Rate = -50, DiscountPercent = 0, CategoryCode = "PROCEDURE" },
+                },
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Does.Contain("Rate"));
+            Assert.That(_context.BillingChargeEvent.Count(), Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task Handle_RejectsCharge_WhenDiscountPercentIsNegative()
+        {
+            var response = await _handler.Handle(new AddChargeEventRequestModel
+            {
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+                Charges = new List<ChargeDetail>
+                {
+                    new ChargeDetail { DisplayName = "Bad Line", Qty = 1, Rate = 100, DiscountPercent = -10, CategoryCode = "PROCEDURE" },
+                },
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Does.Contain("Discount"));
+            Assert.That(_context.BillingChargeEvent.Count(), Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task Handle_CapsDiscount_WhenDiscountPercentExceeds100()
+        {
+            // Without a cap, a >100% discount drives NetAmount negative -- a charge that pays the
+            // patient. Same cap-at-gross UpdateChargeEventHandler already applies.
+            var response = await _handler.Handle(new AddChargeEventRequestModel
+            {
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+                Charges = new List<ChargeDetail>
+                {
+                    new ChargeDetail { DisplayName = "Line", Qty = 1, Rate = 1000, DiscountPercent = 150, CategoryCode = "PROCEDURE" },
+                },
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            var detail = response.Data!.ChargeEvents!.Single();
+            Assert.That(detail.DiscountAmount, Is.EqualTo(1000));
+            Assert.That(detail.NetAmount, Is.EqualTo(0));
+        }
     }
 }
