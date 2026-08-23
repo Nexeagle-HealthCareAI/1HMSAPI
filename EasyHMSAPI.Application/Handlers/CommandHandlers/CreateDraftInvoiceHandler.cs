@@ -79,6 +79,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 };
             }
 
+            var backdate = BillingBackdateGuard.ValidateDate(request.InvoiceDate, request.BackdateReason, DateTime.UtcNow);
+            if (!backdate.Success)
+            {
+                return new CreateDraftInvoiceResponseModel { Success = false, Message = backdate.Error };
+            }
+
             var allChargeEvents = await _context.BillingChargeEvent
                 .Where(ce => ce.EncounterId == request.EncounterId
                           && ce.HospitalId == request.HospitalId
@@ -132,6 +138,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     };
                 }
 
+                // An invoice can't predate the last service it's billing for. Harmless to check
+                // unconditionally: when InvoiceDate wasn't backdated, backdate.EffectiveDate == now,
+                // which is always >= any (never-future) charge ServiceDate already.
+                var latestChargeServiceDate = unlinkedCharges.Max(c => c.ServiceDate);
+                if (backdate.EffectiveDate < latestChargeServiceDate)
+                {
+                    return new CreateDraftInvoiceResponseModel
+                    {
+                        Success = false,
+                        Message = "Invoice date cannot be earlier than the latest charge it's billing for."
+                    };
+                }
+
                 // Use the hospital's invoice series, auto-creating it with platform defaults
                 // (INV-YYYY-000001) when not yet configured — so numbering works for any hospital.
                 var numberSeries = await NumberSeriesDefaults.GetOrCreateAsync(
@@ -143,7 +162,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     numberSeries.YearFormat,
                     numberSeries.Separator,
                     numberSeries.PadLength,
-                    numberSeries.CurrentValue);
+                    numberSeries.CurrentValue,
+                    backdate.EffectiveDate);
 
                 invoice = new BillingInvoice
                 {
@@ -152,7 +172,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     PatientId = request.PatientId,
                     EncounterId = request.EncounterId,
                     InvoiceNo = invoiceNo,
-                    InvoiceDate = now,
+                    InvoiceDate = backdate.EffectiveDate,
+                    IsBackdated = backdate.IsBackdated,
+                    BackdateReason = backdate.IsBackdated ? request.BackdateReason : null,
                     StatusCode = BillingConstants.InvoiceStatus.Draft,
                     CreatedAt = now,
                     CreatedBy = request.LoggedInUserName,
@@ -301,6 +323,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             await _context.SaveChangesAsync(cancellationToken);
             await tx.CommitAsync(cancellationToken);
 
+            // NumberSeries.CurrentValue is a flat per-hospital counter, never reset per financial
+            // year -- so a backdated invoice number won't look locally sequential for its stated
+            // year once it crosses a financial-year boundary. Not fixed here (a real per-FY series
+            // is a separate, larger change); just surfaced so the frontend can warn instead of
+            // silently hiding the gap.
+            string? numberingCaveat = null;
+            if (!wasReused && invoice.IsBackdated
+                && IndianFinancialYearStart(invoice.InvoiceDate) != IndianFinancialYearStart(now))
+            {
+                numberingCaveat = "This invoice's number is not reset per financial year — a backdated invoice number may not appear sequential for its stated year.";
+            }
+
             return new CreateDraftInvoiceResponseModel
             {
                 Success = true,
@@ -321,9 +355,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     SgstAmount = sgst,
                     IgstAmount = igst,
                     TaxAmount = tax,
-                    WasReused = wasReused
+                    WasReused = wasReused,
+                    IsBackdated = invoice.IsBackdated,
+                    NumberingCaveat = numberingCaveat
                 }
             };
         }
+
+        // April-March, the Indian statutory financial year. Returns the calendar year the FY started in.
+        private static int IndianFinancialYearStart(DateTime date) => date.Month >= 4 ? date.Year : date.Year - 1;
     }
 }

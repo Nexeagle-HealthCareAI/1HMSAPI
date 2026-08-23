@@ -16,8 +16,22 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public decimal AmountReceived { get; set; }
         public decimal NetBalance { get; set; }
         public CurrentInvoiceInfo? CurrentInvoice { get; set; }
+        public List<InvoiceSummary>? Invoices { get; set; }
         public List<BillingChargeDetail>? Charges { get; set; }
         public List<BillingPaymentDetail>? Payments { get; set; }
+    }
+
+    // Every invoice ever issued for the encounter (draft, finalized, cancelled), newest first --
+    // lets the ledger show invoice history instead of only the single current one, and lets a
+    // specific past invoice be targeted (e.g. for delete) instead of only "the current invoice."
+    public class InvoiceSummary
+    {
+        public Guid InvoiceId { get; set; }
+        public string? InvoiceNo { get; set; }
+        public DateTime InvoiceDate { get; set; }
+        public string? StatusCode { get; set; }
+        public decimal? NetAmount { get; set; }
+        public bool IsBackdated { get; set; }
     }
 
     public class CurrentInvoiceInfo
@@ -43,6 +57,9 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
 
         public bool? IsReopened { get; set; }
         public string? ReopenedReason { get; set; }
+
+        public bool IsBackdated { get; set; }
+        public string? BackdateReason { get; set; }
     }
 
     public class BillingChargeDetail
@@ -68,6 +85,10 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public decimal TaxAmount { get; set; }
         public bool IsTaxInclusive { get; set; }
         public bool IsInterState { get; set; }
+
+        public DateTime ServiceDate { get; set; }
+        public bool IsBackdated { get; set; }
+        public string? BackdateReason { get; set; }
 
         public string? StatusCode { get; set; }
         public bool IsInvoiced { get; set; }

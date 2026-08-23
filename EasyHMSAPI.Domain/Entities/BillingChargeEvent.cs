@@ -55,6 +55,8 @@ namespace EasyHMSAPI.Domain.Entities
 
         public string? StatusCode { get; set; }
         public DateTime ServiceDate { get; set; }
+        public bool IsBackdated { get; set; }
+        public string? BackdateReason { get; set; }
         public DateTime? PostedAt { get; set; }
         public string? PostedBy { get; set; }
         public DateTime? VoidedAt { get; set; }

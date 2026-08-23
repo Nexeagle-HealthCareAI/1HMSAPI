@@ -12,6 +12,12 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? PatientId { get; set; }
         public Guid EncounterId { get; set; }
         public decimal? InvoiceDiscountAmount { get; set; }
+
+        // Backdated billing: only applied when a NEW draft is created -- reusing an existing draft
+        // never touches its original InvoiceDate. Null => "now", unchanged from pre-backdating
+        // behavior. A past date requires BackdateReason -- see BillingBackdateGuard.
+        public DateTime? InvoiceDate { get; set; }
+        public string? BackdateReason { get; set; }
         [JsonIgnore]
         public string? LoggedInUserName { get; set; }
         [JsonIgnore]

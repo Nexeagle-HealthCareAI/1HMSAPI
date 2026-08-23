@@ -191,8 +191,8 @@ namespace EasyHMSAPI.Api.Controllers
         [HttpPost("delete-invoice")]
         public async Task<ActionResult<DeleteInvoiceResponseModel>> DeleteInvoice([FromBody] DeleteInvoiceRequestModel request)
         {
-            if (request.HospitalId == Guid.Empty || request.EncounterId == Guid.Empty)
-                return BadRequest(new { Message = "hospitalId and encounterId are required." });
+            if (request.HospitalId == Guid.Empty || request.EncounterId == Guid.Empty || request.InvoiceId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId, encounterId and invoiceId are required." });
 
             try
             {

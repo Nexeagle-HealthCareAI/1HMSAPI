@@ -32,5 +32,12 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public decimal TaxAmount { get; set; }
 
         public bool WasReused { get; set; }
+        public bool IsBackdated { get; set; }
+
+        // Set only when a backdated InvoiceDate falls in a different Indian financial year
+        // (April-March) than today -- NumberSeries.CurrentValue is a flat per-hospital counter,
+        // never reset per financial year, so the printed number won't look locally sequential for
+        // its stated year. Surfaced so the frontend can warn instead of silently hiding the gap.
+        public string? NumberingCaveat { get; set; }
     }
 }

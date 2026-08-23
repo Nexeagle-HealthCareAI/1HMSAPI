@@ -41,6 +41,8 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public decimal DiscountAmount { get; set; }
         public decimal NetAmount { get; set; }
         public decimal? IncentiveAmount { get; set; }
+        public DateTime ServiceDate { get; set; }
+        public bool IsBackdated { get; set; }
 
         // GST snapshot for the line
         public string? HsnSacCode { get; set; }

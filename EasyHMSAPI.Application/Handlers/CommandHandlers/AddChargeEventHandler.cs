@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Data.Services;
 using EasyHMSAPI.Domain.Context;
@@ -39,6 +40,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         return new AddChargeEventResponseModel { Success = false, Message = "Discount cannot be negative." };
                 }
 
+                var backdate = BillingBackdateGuard.ValidateDate(request.ServiceDate, request.BackdateReason, DateTime.UtcNow);
+                if (!backdate.Success)
+                    return new AddChargeEventResponseModel { Success = false, Message = backdate.Error };
+
                 if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
                 {
                     var alreadyPosted = await _context.BillingChargeEvent
@@ -59,6 +64,27 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 if (encounter.StatusCode != BillingConstants.EncounterStatus.Open)
                     return new AddChargeEventResponseModel { Success = false, Message = $"Encounter is not open (current status: {encounter.StatusCode})." };
+
+                if (backdate.IsBackdated)
+                {
+                    // A backdated ServiceDate could otherwise land inside a day whose interim bill
+                    // is already closed and printed -- same invariant UpdateChargeEventHandler/
+                    // DeleteBillingEventHandler enforce for edits, but this is the first time a
+                    // freshly-posted charge can even have a date that falls before "now."
+                    var closedDays = await _context.AdmissionDayBill
+                        .Where(b => b.EncounterId == request.EncounterId && b.HospitalId == request.HospitalId
+                                 && b.StatusCode == BillingConstants.DayBillStatus.Closed)
+                        .ToListAsync(cancellationToken);
+                    var blocking = BillingBackdateGuard.FindBlockingClosedDay(closedDays, backdate.EffectiveDate);
+                    if (blocking != null)
+                    {
+                        return new AddChargeEventResponseModel
+                        {
+                            Success = false,
+                            Message = $"This date falls before Day {blocking.DayNumber}'s closed interim bill ({blocking.InterimBillNo}). Reopen that day first."
+                        };
+                    }
+                }
 
                 var sourceModule = string.IsNullOrWhiteSpace(encounter.EncounterTypeCode)
                     ? BillingConstants.SourceModule.Manual
@@ -227,7 +253,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         IsInterState = isInterState,
                         IdempotencyKey = request.IdempotencyKey,
                         StatusCode = BillingConstants.ChargeEventStatus.Posted,
-                        ServiceDate = now,
+                        ServiceDate = backdate.EffectiveDate,
+                        IsBackdated = backdate.IsBackdated,
+                        BackdateReason = backdate.IsBackdated ? request.BackdateReason : null,
                         PostedAt = now,
                         PostedBy = request.LoggedInUserName,
                         CreatedAt = now,
@@ -288,6 +316,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         TaxAmount = taxable.TaxAmount,
                         IsTaxInclusive = taxInclusive,
                         IsInterState = isInterState,
+                        ServiceDate = backdate.EffectiveDate,
+                        IsBackdated = backdate.IsBackdated,
                         DiscountApprovalId = null,
                         DiscountApprovalRequired = false,
                         DiscountCapPercent = null,
@@ -351,6 +381,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     TaxAmount = e.TaxAmount,
                     IsTaxInclusive = e.IsTaxInclusive,
                     IsInterState = e.IsInterState,
+                    ServiceDate = e.ServiceDate,
+                    IsBackdated = e.IsBackdated,
                     DiscountApprovalId = approval?.DiscountApprovalId,
                     DiscountApprovalRequired = approval != null,
                     DiscountCapPercent = approval?.CapPercent,

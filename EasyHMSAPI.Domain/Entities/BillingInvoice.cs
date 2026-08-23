@@ -15,6 +15,8 @@ namespace EasyHMSAPI.Domain.Entities
         public Guid EncounterId { get; set; }
         public string? InvoiceNo { get; set; }
         public DateTime InvoiceDate { get; set; }
+        public bool IsBackdated { get; set; }
+        public string? BackdateReason { get; set; }
         public string? StatusCode { get; set; }
         public DateTime? FinalizedAt { get; set; }
         public string? FinalizedBy { get; set; }

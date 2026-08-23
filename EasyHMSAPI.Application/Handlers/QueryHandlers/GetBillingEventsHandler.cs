@@ -48,6 +48,20 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 var currentInvoice = invoices.FirstOrDefault(i => i.StatusCode == BillingConstants.InvoiceStatus.Draft)
                                      ?? invoices.FirstOrDefault();
 
+                // Every invoice this encounter has ever had (draft, finalized, cancelled) -- lets
+                // the ledger show invoice history instead of only the single current one, and lets
+                // a specific one be targeted (e.g. for delete) instead of "whichever one happens to
+                // be current." `invoices` above is already the full, CreatedAt-descending list.
+                var invoiceSummaries = invoices.Select(i => new InvoiceSummary
+                {
+                    InvoiceId = i.InvoiceId,
+                    InvoiceNo = i.InvoiceNo,
+                    InvoiceDate = i.InvoiceDate,
+                    StatusCode = i.StatusCode,
+                    NetAmount = i.NetAmount,
+                    IsBackdated = i.IsBackdated
+                }).ToList();
+
                 // All payments for this encounter (sum across all invoices for the encounter)
                 var payments = await _context.BillingPayment
                     .Where(p => p.EncounterId == request.EncounterId
@@ -77,6 +91,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     TaxAmount = ce.TaxAmount,
                     IsTaxInclusive = ce.IsTaxInclusive,
                     IsInterState = ce.IsInterState,
+                    ServiceDate = ce.ServiceDate,
+                    IsBackdated = ce.IsBackdated,
+                    BackdateReason = ce.BackdateReason,
                     StatusCode = ce.StatusCode,
                     IsInvoiced = invoicedChargeIds.Contains(ce.ChargeEventId)
                 }).ToList();
@@ -124,7 +141,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     BuyerGstin = currentInvoice.BuyerGstin,
                     PlaceOfSupplyStateCode = currentInvoice.PlaceOfSupplyStateCode,
                     IsReopened = currentInvoice.IsReopened,
-                    ReopenedReason = currentInvoice.ReopenedReason
+                    ReopenedReason = currentInvoice.ReopenedReason,
+                    IsBackdated = currentInvoice.IsBackdated,
+                    BackdateReason = currentInvoice.BackdateReason
                 };
 
                 return new GetBillingEventsResponseModel
@@ -137,6 +156,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         AmountReceived = totalReceived,
                         NetBalance = netBalance,
                         CurrentInvoice = invoiceInfo,
+                        Invoices = invoiceSummaries,
                         Charges = chargeDetails,
                         Payments = paymentDetails
                     }

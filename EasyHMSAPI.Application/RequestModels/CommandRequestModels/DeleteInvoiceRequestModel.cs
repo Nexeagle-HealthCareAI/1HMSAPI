@@ -16,6 +16,11 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public Guid HospitalId { get; set; }
         public string? PatientId { get; set; }
         public Guid EncounterId { get; set; }
+
+        // Which invoice on this encounter to delete. Required -- an encounter can accumulate more
+        // than one BillingInvoice row over time (delete one, keep billing, a fresh draft appears
+        // later), so "the invoice for this encounter" is not a safe lookup on its own.
+        public Guid InvoiceId { get; set; }
         public string Reason { get; set; } = null!;
         [JsonIgnore]
         public string? LoggedInUserName { get; set; }

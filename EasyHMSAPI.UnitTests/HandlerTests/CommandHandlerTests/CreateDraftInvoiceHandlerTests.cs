@@ -196,5 +196,151 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(invoice.SgstAmount, Is.EqualTo(81));
             Assert.That(invoice.TaxAmount, Is.EqualTo(162));
         }
+
+        private Guid SeedOpenEncounterWithCharge(DateTime chargeServiceDate)
+        {
+            _context.Encounter.Add(new Encounter
+            {
+                EncounterId = _encounterId,
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                StatusCode = BillingConstants.EncounterStatus.Open,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            });
+            var chargeId = Guid.NewGuid();
+            _context.BillingChargeEvent.Add(new BillingChargeEvent
+            {
+                ChargeEventId = chargeId,
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+                DisplayName = "Procedure",
+                Qty = 1,
+                UnitPrice = 1000,
+                GrossAmount = 1000,
+                DiscountAmount = 0,
+                NetAmount = 1000,
+                StatusCode = BillingConstants.ChargeEventStatus.Posted,
+                ServiceDate = chargeServiceDate,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            });
+            _context.SaveChanges();
+            return chargeId;
+        }
+
+        [Test]
+        public async Task Handle_CreatesBackdatedInvoice_WhenReasonProvided()
+        {
+            var chargeDate = DateTime.UtcNow.AddDays(-5);
+            SeedOpenEncounterWithCharge(chargeDate);
+
+            var response = await _handler.Handle(new CreateDraftInvoiceRequestModel
+            {
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+                InvoiceDate = chargeDate,
+                BackdateReason = "Backdated to match the visit date",
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.Data!.IsBackdated, Is.True);
+
+            var invoice = _context.BillingInvoice.Single(i => i.EncounterId == _encounterId);
+            Assert.That(invoice.InvoiceDate, Is.EqualTo(chargeDate));
+            Assert.That(invoice.IsBackdated, Is.True);
+            Assert.That(invoice.BackdateReason, Is.EqualTo("Backdated to match the visit date"));
+        }
+
+        [Test]
+        public async Task Handle_RejectsBackdatedInvoice_WhenReasonMissing()
+        {
+            SeedOpenEncounterWithCharge(DateTime.UtcNow.AddDays(-5));
+
+            var response = await _handler.Handle(new CreateDraftInvoiceRequestModel
+            {
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+                InvoiceDate = DateTime.UtcNow.AddDays(-5),
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Does.Contain("reason"));
+            Assert.That(_context.BillingInvoice.Count(), Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task Handle_RejectsInvoiceDate_EarlierThanItsLatestCharge()
+        {
+            var chargeDate = DateTime.UtcNow.AddDays(-2);
+            SeedOpenEncounterWithCharge(chargeDate);
+
+            var response = await _handler.Handle(new CreateDraftInvoiceRequestModel
+            {
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+                InvoiceDate = chargeDate.AddDays(-1), // before the charge it's invoicing
+                BackdateReason = "Backdating",
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Does.Contain("earlier"));
+            Assert.That(_context.BillingInvoice.Count(), Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task Handle_PreservesOriginalInvoiceDate_WhenReusingExistingDraft()
+        {
+            var chargeDate = DateTime.UtcNow.AddDays(-5);
+            SeedOpenEncounterWithCharge(chargeDate);
+
+            var first = await _handler.Handle(new CreateDraftInvoiceRequestModel
+            {
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+                InvoiceDate = chargeDate,
+                BackdateReason = "Backdated",
+            }, CancellationToken.None);
+            Assert.That(first.Success, Is.True);
+            var originalDate = _context.BillingInvoice.Single(i => i.EncounterId == _encounterId).InvoiceDate;
+
+            // A second, unrelated charge triggers the existing draft to be reused/relinked --
+            // its original (backdated) InvoiceDate must not be silently overwritten with "now."
+            _context.BillingChargeEvent.Add(new BillingChargeEvent
+            {
+                ChargeEventId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+                DisplayName = "Extra",
+                Qty = 1,
+                UnitPrice = 200,
+                GrossAmount = 200,
+                DiscountAmount = 0,
+                NetAmount = 200,
+                StatusCode = BillingConstants.ChargeEventStatus.Posted,
+                ServiceDate = chargeDate,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            });
+            await _context.SaveChangesAsync();
+
+            var second = await _handler.Handle(new CreateDraftInvoiceRequestModel
+            {
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+            }, CancellationToken.None);
+
+            Assert.That(second.Success, Is.True);
+            Assert.That(second.Data!.WasReused, Is.True);
+            var updated = _context.BillingInvoice.Single(i => i.EncounterId == _encounterId);
+            Assert.That(updated.InvoiceDate, Is.EqualTo(originalDate));
+        }
     }
 }
