@@ -81,5 +81,40 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             Assert.That(response.Data.Invoices![1].InvoiceNo, Is.EqualTo("INV-OLD"));
             Assert.That(response.Data.CurrentInvoice!.InvoiceNo, Is.EqualTo("INV-CURRENT"));
         }
+
+        [Test]
+        public async Task Handle_PaymentRow_UsesPaidAt_NotCreatedAt()
+        {
+            // On a backdated visit PaidAt (visit-date-derived) and CreatedAt (real audit time)
+            // diverge -- the ledger must show PaidAt so a backdated visit's payment doesn't display
+            // today's date.
+            var paidAt = DateTime.UtcNow.Date.AddDays(-7);
+            var createdAt = DateTime.UtcNow;
+            _context.BillingPayment.Add(new BillingPayment
+            {
+                PaymentId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+                PaymentType = BillingConstants.PaymentType.Payment,
+                Amount = 500,
+                PaidAt = paidAt,
+                CreatedAt = createdAt,
+                UpdatedAt = createdAt,
+            });
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetBillingEventsRequestModel
+            {
+                HospitalId = _hospitalId,
+                PatientId = "PT001",
+                EncounterId = _encounterId,
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            var payment = response.Data!.Payments!.Single();
+            Assert.That(payment.CreatedDateTime, Is.EqualTo(paidAt));
+            Assert.That(payment.CreatedDateTime, Is.Not.EqualTo(createdAt));
+        }
     }
 }

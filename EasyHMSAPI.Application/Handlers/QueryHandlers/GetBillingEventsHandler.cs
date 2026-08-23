@@ -98,7 +98,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 var paymentDetails = payments.Select(p => new BillingPaymentDetail
                 {
                     PaymentId = p.PaymentId,
-                    CreatedDateTime = p.CreatedAt,
+                    // PaidAt, not CreatedAt: on a backdated visit these differ (PaidAt follows
+                    // Encounter.ServiceDate, CreatedAt is real audit time) and the ledger should
+                    // show the visit's date, not when the row was actually keyed in.
+                    CreatedDateTime = p.PaidAt,
                     PaymentType = p.PaymentType,
                     PaymentMode = p.PaymentMode,
                     PaymentDescription = p.PaymentDescription,

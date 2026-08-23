@@ -53,6 +53,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     };
                 }
 
+                var now = DateTime.UtcNow;
+                // The visit's own chosen date (set once at visit creation), combined with the
+                // actual time-of-day -- same pattern AddChargeEventHandler/CreateDraftInvoiceHandler
+                // use, so a payment recorded against a backdated visit shows that date too, not
+                // today's. Null Encounter.ServiceDate -> unchanged, real-time behavior.
+                var effectivePaymentDate = encounter.ServiceDate.HasValue
+                    ? encounter.ServiceDate.Value.Date + now.TimeOfDay
+                    : now;
+
                 var normalizedPaymentType = (request.Payment.PaymentType ?? string.Empty).Trim().ToUpperInvariant();
                 var allowedPaymentTypes = new[]
                 {
@@ -102,12 +111,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             DiscountAmount = 0,
                             NetAmount = extraCharge.Amount,
                             StatusCode = BillingConstants.ChargeEventStatus.Posted,
-                            ServiceDate = DateTime.UtcNow,
-                            PostedAt = DateTime.UtcNow,
+                            ServiceDate = effectivePaymentDate,
+                            PostedAt = now,
                             PostedBy = request.LoggedInUserName,
-                            CreatedAt = DateTime.UtcNow,
+                            CreatedAt = now,
                             CreatedBy = request.LoggedInUserName,
-                            UpdatedAt = DateTime.UtcNow,
+                            UpdatedAt = now,
                             UpdatedBy = request.LoggedInUserName
                         };
                         _context.BillingChargeEvent.Add(chargeEvent);
@@ -153,7 +162,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     // CreateDraftInvoiceHandler auto-allocates it once the first charge posts.
                     if (normalizedPaymentType == BillingConstants.PaymentType.Advance)
                     {
-                        return await RecordChargeLessAdvanceAsync(request, cancellationToken);
+                        return await RecordChargeLessAdvanceAsync(request, effectivePaymentDate, cancellationToken);
                     }
                     return new AddPaymentEventResponseModel
                     {
@@ -272,7 +281,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     numberSeries.YearFormat,
                     numberSeries.Separator,
                     numberSeries.PadLength,
-                    numberSeries.CurrentValue);
+                    numberSeries.CurrentValue,
+                    effectivePaymentDate);
 
                 var billingPayment = new BillingPayment
                 {
@@ -286,10 +296,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     PaymentDescription = request.Payment.Description,
                     TransactionId = request.Payment.TransactionId,
                     Amount = request.Payment.Amount,
-                    PaidAt = DateTime.UtcNow,
-                    CreatedAt = DateTime.UtcNow,
+                    PaidAt = effectivePaymentDate,
+                    CreatedAt = now,
                     CreatedBy = request.LoggedInUserName,
-                    UpdatedAt = DateTime.UtcNow,
+                    UpdatedAt = now,
                     UpdatedBy = request.LoggedInUserName
                 };
 
@@ -346,13 +356,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         // Deposit-before-any-charge: records the ADVANCE with no BillingPaymentAllocation (there's
         // no invoice yet to allocate against). CreateDraftInvoiceHandler picks up any unallocated
         // ADVANCE payments for the encounter and allocates them against the first real invoice.
-        private async Task<AddPaymentEventResponseModel> RecordChargeLessAdvanceAsync(AddPaymentEventRequestModel request, CancellationToken cancellationToken)
+        private async Task<AddPaymentEventResponseModel> RecordChargeLessAdvanceAsync(AddPaymentEventRequestModel request, DateTime effectivePaymentDate, CancellationToken cancellationToken)
         {
             var numberSeries = await NumberSeriesDefaults.GetOrCreateAsync(
                 _context, request.HospitalId, BillingConstants.NumberSeriesCode.Receipt, request.LoggedInUserName, cancellationToken);
             numberSeries.CurrentValue++;
             var receiptNo = NumberSeriesFormatter.Format(
-                numberSeries.Prefix, numberSeries.YearFormat, numberSeries.Separator, numberSeries.PadLength, numberSeries.CurrentValue);
+                numberSeries.Prefix, numberSeries.YearFormat, numberSeries.Separator, numberSeries.PadLength, numberSeries.CurrentValue, effectivePaymentDate);
 
             var now = DateTime.UtcNow;
             var billingPayment = new BillingPayment
@@ -367,7 +377,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 PaymentDescription = request.Payment.Description,
                 TransactionId = request.Payment.TransactionId,
                 Amount = request.Payment.Amount,
-                PaidAt = now,
+                PaidAt = effectivePaymentDate,
                 CreatedAt = now,
                 CreatedBy = request.LoggedInUserName,
                 UpdatedAt = now,

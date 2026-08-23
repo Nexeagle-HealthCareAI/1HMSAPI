@@ -37,16 +37,22 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     .ToListAsync(cancellationToken);
 
                 var now = DateTime.UtcNow;
-                // Anchor Day 1 on the earliest charge's service date; fall back to now when empty.
-                var anchor = charges.Count > 0
-                    ? DateTime.SpecifyKind(charges.Min(c => c.ServiceDate), DateTimeKind.Utc)
-                    : now;
 
                 var closedBills = await _context.AdmissionDayBill
                     .Where(b => b.EncounterId == request.EncounterId && b.HospitalId == request.HospitalId
                                 && b.StatusCode == BillingConstants.DayBillStatus.Closed)
                     .OrderBy(b => b.DayNumber)
                     .ToListAsync(cancellationToken);
+
+                // Anchor is fixed at first-close time (same invariant CloseAdmissionDayHandler
+                // enforces) -- re-deriving it from Min(ServiceDate) on every read would let a later
+                // charge with an earlier ServiceDate shift window boundaries for days already
+                // closed and printed. Only compute it fresh when nothing has closed yet.
+                var anchor = closedBills.Count > 0
+                    ? closedBills.First().FromUtc
+                    : charges.Count > 0
+                        ? DateTime.SpecifyKind(charges.Min(c => c.ServiceDate), DateTimeKind.Utc)
+                        : now;
 
                 var closedIds = closedBills.Select(b => b.AdmissionDayBillId).ToList();
                 var closedLines = closedIds.Count == 0
@@ -77,8 +83,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     list.Add(c);
                 }
 
-                var elapsedDays = DayIndexOf(now, anchor);
-                var totalDays = Math.Max(Math.Max(elapsedDays, maxClosedDay), liveByDay.Count > 0 ? liveByDay.Keys.Max() : 0);
+                // Deliberately NOT factoring in how much real time has passed since the anchor
+                // (e.g. DayIndexOf(now, anchor)) -- that conflated "days since this visit's date"
+                // with "days that actually have billing content," so a backdated visit (anchor
+                // days/weeks in the past, no ongoing stay) synthesized a wall of empty day-rows
+                // stretching from the backdated date all the way to today. Only show a day once it
+                // actually has a closed bill or at least one live charge.
+                var totalDays = Math.Max(maxClosedDay, liveByDay.Count > 0 ? liveByDay.Keys.Max() : 0);
                 if (totalDays < 1) totalDays = 1;
 
                 var closedByDay = closedBills.ToDictionary(b => b.DayNumber);
