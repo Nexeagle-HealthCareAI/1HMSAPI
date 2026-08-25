@@ -79,13 +79,19 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .OrderByDescending(t => t.CreatedAt)
                 .ToListAsync(cancellationToken);
 
-            var doctorNames = await (from a in _context.Appointments
-                                    join d in _context.Doctors on a.DoctorId equals d.DoctorID
+            // Doctor/department lookup keyed by the small set of DISTINCT doctors on these
+            // appointments (each Appointment already carries its own DoctorId in memory) --
+            // deliberately not a rejoin back through Appointments filtered by a potentially huge
+            // ApptId IN-list, which is what this used to do and is a large part of why this
+            // handler was timing out on hospital-wide, doctor-unfiltered date-range queries.
+            var doctorIds = appts.Select(a => a.DoctorId).Distinct().ToList();
+            var doctorInfoById = await (from d in _context.Doctors
                                     join u in _context.UserProfiles on d.UserID equals u.UserID
                                     join dp in _context.Departments on d.PrimaryDepartmentID equals dp.DepartmentID into deptJoin
                                     from dept in deptJoin.DefaultIfEmpty()
-                                    where appts.Select(x => x.ApptId).Contains(a.ApptId)
-                                    select new { a.ApptId, DoctorName = u.FullName, DepartmentId = d.PrimaryDepartmentID, DepartmentName = dept.Name }).ToListAsync(cancellationToken);
+                                    where doctorIds.Contains(d.DoctorID)
+                                    select new { d.DoctorID, DoctorName = u.FullName, DepartmentId = d.PrimaryDepartmentID, DepartmentName = dept.Name })
+                .ToDictionaryAsync(x => x.DoctorID, cancellationToken);
 
             // Referrer ("Referred By") name + type for appointments that carry one — the edit form
             // needs both (plus the id, already on the appointment row) to pre-select the exact
@@ -142,7 +148,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     patients.TryGetValue(a.PatientId, out p);
                 }
                 var token = tokens.FirstOrDefault(t => t.ApptId == a.ApptId);
-                var doctorInfo = doctorNames.FirstOrDefault(x => x.ApptId == a.ApptId);
+                doctorInfoById.TryGetValue(a.DoctorId, out var doctorInfo);
                 string? doctorName = doctorInfo?.DoctorName;
                 Guid? departmentId = doctorInfo?.DepartmentId;
                 string? departmentName = doctorInfo?.DepartmentName;
