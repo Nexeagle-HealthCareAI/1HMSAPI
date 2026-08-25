@@ -229,5 +229,45 @@ namespace EasyHMSAPI.Api.Controllers
                 return StatusCode(500, new { Message = "An error occurred while retrieving all hospitals" + ex.Message + ex.InnerException + ex.StackTrace });
             }
         }
+
+        [HttpGet("analytics/patient-volume-forecast")]
+        [Authorize]
+        public async Task<ActionResult<GetPatientVolumeForecastResponseModel>> GetPatientVolumeForecast([FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var request = new GetPatientVolumeForecastRequestModel { HospitalId = hospitalId };
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetPatientVolumeForecast for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while generating the patient volume forecast." });
+            }
+        }
+
+        [HttpGet("analytics/lapsed-patients")]
+        [Authorize]
+        public async Task<ActionResult<GetLapsedPatientsResponseModel>> GetLapsedPatients([FromQuery] Guid hospitalId, [FromQuery] int page = 1, [FromQuery] int limit = 20)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var request = new GetLapsedPatientsRequestModel { HospitalId = hospitalId, Page = page, Limit = limit };
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetLapsedPatients for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while retrieving lapsed patients." });
+            }
+        }
     }
 }
