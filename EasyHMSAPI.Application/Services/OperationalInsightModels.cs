@@ -4,7 +4,7 @@ namespace EasyHMSAPI.Application.Services
     public record DoctorLoadForecastEntry(
         Guid DoctorId,
         string DoctorName,
-        decimal PredictedNext7DayAppointments,
+        decimal PredictedNext30DayAppointments,
         decimal MonthOverMonthChangePercent,
         bool IsOverloaded
     );

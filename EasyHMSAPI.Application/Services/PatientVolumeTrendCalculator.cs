@@ -2,6 +2,7 @@ namespace EasyHMSAPI.Application.Services
 {
     public record DailyPatientCount(DateTime Date, int TotalAppointments, int UniquePatients);
     public record SpecialtyTrend(string SpecialtyName, int Last30Days, int Prior30Days, decimal ChangePercent, bool IsSurging);
+    public record MonthlySeasonalFactor(int Month, string MonthName, decimal Index, bool IsNotable);
 
     public record PatientVolumeTrendSummary(
         decimal Avg7DayAppointments,
@@ -10,10 +11,11 @@ namespace EasyHMSAPI.Application.Services
         decimal Avg30DayUniquePatients,
         decimal MonthOverMonthAppointmentChangePercent,
         decimal MonthOverMonthUniquePatientChangePercent,
-        decimal PredictedNext7DayAppointments,
-        decimal PredictedNext7DayUniquePatients,
+        decimal PredictedNext30DayAppointments,
+        decimal PredictedNext30DayUniquePatients,
         List<SpecialtyTrend> SpecialtyTrends,
-        List<DailyPatientCount> ProjectedNext7Days
+        List<MonthlySeasonalFactor> MonthlySeasonalFactors,
+        List<DailyPatientCount> ProjectedNext30Days
     );
 
     /// <summary>
@@ -21,24 +23,44 @@ namespace EasyHMSAPI.Application.Services
     /// actual "prediction" behind the AI Patient Volume Forecast panel. No AI involved here; Groq
     /// only narrates these already-computed numbers (see GroqPatientVolumeInsightService), it
     /// never invents them. Mirrors BillingTrendCalculator's shape and static-pure-function
-    /// convention, with two deliberate differences: a 7-day (not 30-day) forecast horizon --
-    /// staffing decisions are short-term, unlike a monthly revenue cycle -- and day-of-week
-    /// seasonality in the projection, since hospitals have real weekly visit patterns that a flat
-    /// carry-forward would miss.
+    /// convention (same 30-day forecast horizon).
+    ///
+    /// Three multiplicative factors make up a projected day, each answering a different question
+    /// over a different amount of history (classic trend x seasonal decomposition):
+    ///   - Day-of-week baseline, from the last 365 days (or all history if shorter) -- "what does a
+    ///     typical week look like RIGHT NOW." Old data is a poor guide here: e.g. if Saturday clinic
+    ///     hours started a year ago, appointments from 3 years back would show zero Saturday volume
+    ///     and wrongly drag the average down.
+    ///   - Month-of-year seasonal index, from ALL available history -- "does this calendar month
+    ///     structurally behave differently every year" (e.g. a quieter December). This is exactly
+    ///     where more history helps: a month needs to recur across years before it's a real pattern
+    ///     and not noise from one unusual year.
+    ///   - Short-term trend multiplier (7-day avg / 30-day avg, clamped 0.5x-1.5x) -- already
+    ///     recency-scoped, catches recent momentum the other two factors can't.
+    /// Each factor is independently clamped so they can't compound into something absurd, and each
+    /// falls back to neutral (no adjustment) when there isn't enough history to trust it -- the same
+    /// "insufficient data stays quiet" convention used throughout this class.
     /// </summary>
     public static class PatientVolumeTrendCalculator
     {
+        private const int ForecastHorizonDays = 30;
         private const int SurgeThresholdPercent = 20; // a specialty up 20%+ month-over-month is flagged as likely needing more staffing
-        private const int OverloadThresholdPercent = 25; // a doctor whose predicted week exceeds their own typical week by 25%+ is flagged as overloaded
+        private const int OverloadThresholdPercent = 25; // a doctor whose predicted month exceeds their own typical month by 25%+ is flagged as overloaded
+        private const int WeekdayBaselineWindowDays = 365; // "typical week" is judged from the last year, not all-time
+        private const int MinDaysForMonthlySeasonality = 20; // total days (across all years) needed before trusting a calendar month's index
+        private const decimal MonthlySeasonalIndexMin = 0.7m;
+        private const decimal MonthlySeasonalIndexMax = 1.3m;
+        private const decimal NotableSeasonalIndexLowerBound = 0.9m;
+        private const decimal NotableSeasonalIndexUpperBound = 1.1m;
 
-        /// <summary>Compares a doctor's own predicted next-7-day load against their own typical
-        /// week (their 30-day daily average x 7) -- "overloaded" is relative to that doctor's usual
+        /// <summary>Compares a doctor's own predicted next-30-day load against their own typical
+        /// month (their 30-day daily average x 30) -- "overloaded" is relative to that doctor's usual
         /// pace, not a fixed number, so it's fair across doctors with very different caseloads.</summary>
-        public static bool IsOverloaded(decimal predictedNext7Day, decimal avg30DayDaily)
+        public static bool IsOverloaded(decimal predictedNext30Day, decimal avg30DayDaily)
         {
-            var typicalWeek = avg30DayDaily * 7m;
-            if (typicalWeek <= 0m) return false;
-            return predictedNext7Day > typicalWeek * (1 + OverloadThresholdPercent / 100m);
+            var typicalMonth = avg30DayDaily * ForecastHorizonDays;
+            if (typicalMonth <= 0m) return false;
+            return predictedNext30Day > typicalMonth * (1 + OverloadThresholdPercent / 100m);
         }
 
         public static decimal MovingAverage(IReadOnlyList<DailyPatientCount> days, int windowDays, bool useUniquePatients = false)
@@ -88,39 +110,93 @@ namespace EasyHMSAPI.Application.Services
         }
 
         /// <summary>
+        /// A calendar month's index = (that month's average daily volume, across every year present)
+        /// / (the overall average daily volume across all history). 1.0 = no seasonal effect; below 1
+        /// = historically quieter; above 1 = historically busier. Requires at least
+        /// MinDaysForMonthlySeasonality total observed days for that month before trusting it --
+        /// with only a few months of history most calendar months simply won't appear here, which is
+        /// the correct, safe outcome (neutral wherever looked up), not an error.
+        /// </summary>
+        public static Dictionary<int, decimal> ComputeMonthlySeasonalIndex(IReadOnlyList<DailyPatientCount> allDays, bool useUniquePatients = false)
+        {
+            var result = new Dictionary<int, decimal>();
+            if (allDays.Count == 0) return result;
+
+            var overallAvg = useUniquePatients ? (decimal)allDays.Average(d => d.UniquePatients) : (decimal)allDays.Average(d => d.TotalAppointments);
+            if (overallAvg <= 0m) return result;
+
+            foreach (var group in allDays.GroupBy(d => d.Date.Month))
+            {
+                var daysInGroup = group.ToList();
+                if (daysInGroup.Count < MinDaysForMonthlySeasonality) continue;
+
+                var monthAvg = useUniquePatients ? (decimal)daysInGroup.Average(d => d.UniquePatients) : (decimal)daysInGroup.Average(d => d.TotalAppointments);
+                var rawIndex = monthAvg / overallAvg;
+                result[group.Key] = Math.Round(Clamp(rawIndex, MonthlySeasonalIndexMin, MonthlySeasonalIndexMax), 2);
+            }
+
+            return result;
+        }
+
+        private static List<MonthlySeasonalFactor> BuildMonthlySeasonalFactors(Dictionary<int, decimal> indexByMonth)
+        {
+            return indexByMonth
+                .OrderBy(kv => kv.Key)
+                .Select(kv => new MonthlySeasonalFactor(
+                    kv.Key,
+                    new DateTime(2000, kv.Key, 1).ToString("MMMM"),
+                    kv.Value,
+                    kv.Value < NotableSeasonalIndexLowerBound || kv.Value > NotableSeasonalIndexUpperBound
+                ))
+                .ToList();
+        }
+
+        /// <summary>
         /// Naive trend-continuation forecast, same explainable philosophy as BillingTrendCalculator:
-        /// each of the next 7 days starts from that weekday's historical average (falling back to
-        /// the flat 7-day average when a weekday has no history yet, e.g. a new hospital), then is
-        /// adjusted by the ratio of the 7-day average to the 30-day average (the recent trend
-        /// direction), clamped to +/-50% so a short noisy spike/dip can't run away.
+        /// each of the next 30 days starts from that weekday's seasonal baseline (last 365 days),
+        /// adjusted by that day's month-of-year seasonal index (all available history) and the
+        /// recent 7-vs-30-day trend multiplier -- see the class doc comment for why each factor uses
+        /// a different amount of history. <paramref name="allDays"/> should be the hospital's (or
+        /// doctor's) full available appointment history, zero-filled with no gaps, not just a recent
+        /// slice -- callers no longer pre-trim to 90 days.
         /// </summary>
         public static PatientVolumeTrendSummary Compute(
-            List<DailyPatientCount> last90Days,
+            List<DailyPatientCount> allDays,
             Dictionary<string, List<(DateTime Date, int Count)>> appointmentsBySpecialty)
         {
-            var avg7Appt = MovingAverage(last90Days, 7);
-            var avg30Appt = MovingAverage(last90Days, 30);
-            var avg7Unique = MovingAverage(last90Days, 7, useUniquePatients: true);
-            var avg30Unique = MovingAverage(last90Days, 30, useUniquePatients: true);
+            var avg7Appt = MovingAverage(allDays, 7);
+            var avg30Appt = MovingAverage(allDays, 30);
+            var avg7Unique = MovingAverage(allDays, 7, useUniquePatients: true);
+            var avg30Unique = MovingAverage(allDays, 30, useUniquePatients: true);
 
             var trendMultiplierAppt = avg30Appt > 0 ? Clamp(avg7Appt / avg30Appt, 0.5m, 1.5m) : 1m;
             var trendMultiplierUnique = avg30Unique > 0 ? Clamp(avg7Unique / avg30Unique, 0.5m, 1.5m) : 1m;
 
+            var weekdayBaselineCutoff = DateTime.UtcNow.Date.AddDays(-WeekdayBaselineWindowDays);
+            var recentForWeekday = allDays.Where(d => d.Date >= weekdayBaselineCutoff).ToList();
+            if (recentForWeekday.Count == 0) recentForWeekday = allDays; // hospital's data starts in the future relative to "today" in a test, or is otherwise all older -- fall back to whatever exists
+
+            var monthIndexAppt = ComputeMonthlySeasonalIndex(allDays);
+            var monthIndexUnique = ComputeMonthlySeasonalIndex(allDays, useUniquePatients: true);
+
             var projected = new List<DailyPatientCount>();
             var startDate = DateTime.UtcNow.Date.AddDays(1);
-            for (var i = 0; i < 7; i++)
+            for (var i = 0; i < ForecastHorizonDays; i++)
             {
                 var date = startDate.AddDays(i);
 
-                var baselineAppt = WeekdayAverage(last90Days, date.DayOfWeek);
+                var baselineAppt = WeekdayAverage(recentForWeekday, date.DayOfWeek);
                 if (baselineAppt == 0m) baselineAppt = avg7Appt;
-                var baselineUnique = WeekdayAverage(last90Days, date.DayOfWeek, useUniquePatients: true);
+                var baselineUnique = WeekdayAverage(recentForWeekday, date.DayOfWeek, useUniquePatients: true);
                 if (baselineUnique == 0m) baselineUnique = avg7Unique;
+
+                var seasonalApptIndex = monthIndexAppt.TryGetValue(date.Month, out var mi) ? mi : 1m;
+                var seasonalUniqueIndex = monthIndexUnique.TryGetValue(date.Month, out var mu) ? mu : 1m;
 
                 projected.Add(new DailyPatientCount(
                     date,
-                    (int)Math.Round(baselineAppt * trendMultiplierAppt),
-                    (int)Math.Round(baselineUnique * trendMultiplierUnique)
+                    (int)Math.Round(baselineAppt * trendMultiplierAppt * seasonalApptIndex),
+                    (int)Math.Round(baselineUnique * trendMultiplierUnique * seasonalUniqueIndex)
                 ));
             }
 
@@ -129,12 +205,13 @@ namespace EasyHMSAPI.Application.Services
                 Avg30DayAppointments: Math.Round(avg30Appt, 1),
                 Avg7DayUniquePatients: Math.Round(avg7Unique, 1),
                 Avg30DayUniquePatients: Math.Round(avg30Unique, 1),
-                MonthOverMonthAppointmentChangePercent: MonthOverMonthChangePercent(last90Days),
-                MonthOverMonthUniquePatientChangePercent: MonthOverMonthChangePercent(last90Days, useUniquePatients: true),
-                PredictedNext7DayAppointments: projected.Sum(p => p.TotalAppointments),
-                PredictedNext7DayUniquePatients: projected.Sum(p => p.UniquePatients),
+                MonthOverMonthAppointmentChangePercent: MonthOverMonthChangePercent(allDays),
+                MonthOverMonthUniquePatientChangePercent: MonthOverMonthChangePercent(allDays, useUniquePatients: true),
+                PredictedNext30DayAppointments: projected.Sum(p => p.TotalAppointments),
+                PredictedNext30DayUniquePatients: projected.Sum(p => p.UniquePatients),
                 SpecialtyTrends: ComputeSpecialtyTrends(appointmentsBySpecialty),
-                ProjectedNext7Days: projected
+                MonthlySeasonalFactors: BuildMonthlySeasonalFactors(monthIndexAppt),
+                ProjectedNext30Days: projected
             );
         }
 
