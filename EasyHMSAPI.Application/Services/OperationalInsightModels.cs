@@ -1,9 +1,11 @@
 namespace EasyHMSAPI.Application.Services
 {
-    /// <summary>A single doctor's own 90-day series, forecast via PatientVolumeTrendCalculator.Compute().</summary>
+    /// <summary>A single doctor's own full-history series, forecast via PatientVolumeTrendCalculator.Compute().</summary>
     public record DoctorLoadForecastEntry(
         Guid DoctorId,
         string DoctorName,
+        decimal PredictedTomorrowAppointments,
+        decimal PredictedNext7DayAppointments,
         decimal PredictedNext30DayAppointments,
         decimal MonthOverMonthChangePercent,
         bool IsOverloaded

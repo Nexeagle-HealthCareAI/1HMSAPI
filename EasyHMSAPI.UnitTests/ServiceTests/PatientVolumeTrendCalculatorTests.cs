@@ -124,6 +124,22 @@ namespace EasyHMSAPI.UnitTests.ServiceTests
             Assert.That(summary.PredictedNext30DayAppointments, Is.EqualTo(1500m));
             Assert.That(summary.PredictedNext30DayUniquePatients, Is.EqualTo(1200m));
             Assert.That(summary.ProjectedNext30Days, Has.Count.EqualTo(30));
+            Assert.That(summary.PredictedTomorrowAppointments, Is.EqualTo(50m));
+            Assert.That(summary.PredictedTomorrowUniquePatients, Is.EqualTo(40m));
+            Assert.That(summary.PredictedNext7DayAppointments, Is.EqualTo(350m));
+            Assert.That(summary.PredictedNext7DayUniquePatients, Is.EqualTo(280m));
+        }
+
+        [Test]
+        public void Compute_TomorrowAndWeekSums_MatchTheProjectedDailyList()
+        {
+            var days = ConstantSeries(90, 20, 15);
+            var summary = PatientVolumeTrendCalculator.Compute(days, new Dictionary<string, List<(DateTime, int)>>());
+
+            Assert.That(summary.PredictedTomorrowAppointments, Is.EqualTo(summary.ProjectedNext30Days[0].TotalAppointments));
+            Assert.That(summary.PredictedTomorrowUniquePatients, Is.EqualTo(summary.ProjectedNext30Days[0].UniquePatients));
+            Assert.That(summary.PredictedNext7DayAppointments, Is.EqualTo(summary.ProjectedNext30Days.Take(7).Sum(d => d.TotalAppointments)));
+            Assert.That(summary.PredictedNext7DayUniquePatients, Is.EqualTo(summary.ProjectedNext30Days.Take(7).Sum(d => d.UniquePatients)));
         }
 
         [Test]

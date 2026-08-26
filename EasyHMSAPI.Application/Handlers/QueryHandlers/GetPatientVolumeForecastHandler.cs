@@ -113,6 +113,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     doctorLoadForecast.Add(new DoctorLoadForecastEntry(
                         doctorId,
                         doctorName,
+                        doctorTrend.PredictedTomorrowAppointments,
+                        doctorTrend.PredictedNext7DayAppointments,
                         doctorTrend.PredictedNext30DayAppointments,
                         doctorTrend.MonthOverMonthAppointmentChangePercent,
                         PatientVolumeTrendCalculator.IsOverloaded(doctorTrend.PredictedNext30DayAppointments, doctorTrend.Avg30DayAppointments)
@@ -145,7 +147,15 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     .ToList();
                 var anomalies = KpiAnomalyDetector.DetectAnomalies(operationalDays);
 
-                var narrative = await _insightService.GenerateInsightsAsync(new PatientVolumeInsightContext(trend, doctorLoadForecast, anomalies));
+                // No-show-adjusted "expected attending" view -- a separate, clearly-labeled
+                // post-processing multiply-through on the already-computed predictions, not blended
+                // into the core forecast. Reuses the same 90-day operational data as anomaly watch.
+                var noShowRate = KpiAnomalyDetector.ComputeNoShowRate(operationalDays);
+                var expectedAttendingTomorrow = Math.Round(trend.PredictedTomorrowAppointments * (1 - noShowRate), 1);
+                var expectedAttendingNext7Days = Math.Round(trend.PredictedNext7DayAppointments * (1 - noShowRate), 1);
+                var expectedAttendingNext30Days = Math.Round(trend.PredictedNext30DayAppointments * (1 - noShowRate), 1);
+
+                var narrative = await _insightService.GenerateInsightsAsync(new PatientVolumeInsightContext(trend, doctorLoadForecast, anomalies, noShowRate));
 
                 // Only the recent slice goes back over the wire for charting -- the frontend chart
                 // shows the last 30 days regardless of how much history fed the seasonal math.
@@ -157,6 +167,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     Message = "Patient volume forecast generated.",
                     Data = new PatientVolumeForecastData
                     {
+                        PredictedTomorrowAppointments = trend.PredictedTomorrowAppointments,
+                        PredictedTomorrowUniquePatients = trend.PredictedTomorrowUniquePatients,
+                        PredictedNext7DayAppointments = trend.PredictedNext7DayAppointments,
+                        PredictedNext7DayUniquePatients = trend.PredictedNext7DayUniquePatients,
                         PredictedNext30DayAppointments = trend.PredictedNext30DayAppointments,
                         PredictedNext30DayUniquePatients = trend.PredictedNext30DayUniquePatients,
                         Avg7DayAppointments = trend.Avg7DayAppointments,
@@ -165,6 +179,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         Avg30DayUniquePatients = trend.Avg30DayUniquePatients,
                         MonthOverMonthAppointmentChangePercent = trend.MonthOverMonthAppointmentChangePercent,
                         MonthOverMonthUniquePatientChangePercent = trend.MonthOverMonthUniquePatientChangePercent,
+                        NoShowRate = noShowRate,
+                        ExpectedAttendingTomorrow = expectedAttendingTomorrow,
+                        ExpectedAttendingNext7Days = expectedAttendingNext7Days,
+                        ExpectedAttendingNext30Days = expectedAttendingNext30Days,
                         Outlook = narrative.Outlook,
                         Insights = narrative.Insights,
                         SpecialtyTrends = trend.SpecialtyTrends.Select(s => new SpecialtyTrendItem
@@ -177,6 +195,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         {
                             DoctorId = d.DoctorId,
                             DoctorName = d.DoctorName,
+                            PredictedTomorrowAppointments = d.PredictedTomorrowAppointments,
+                            PredictedNext7DayAppointments = d.PredictedNext7DayAppointments,
                             PredictedNext30DayAppointments = d.PredictedNext30DayAppointments,
                             MonthOverMonthChangePercent = d.MonthOverMonthChangePercent,
                             IsOverloaded = d.IsOverloaded

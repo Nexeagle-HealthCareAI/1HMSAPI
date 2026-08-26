@@ -42,8 +42,11 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 $"30-day average daily unique patients: {t.Avg30DayUniquePatients}\n" +
                 $"Month-over-month appointment volume change: {t.MonthOverMonthAppointmentChangePercent}%\n" +
                 $"Month-over-month unique patient change: {t.MonthOverMonthUniquePatientChangePercent}%\n" +
+                $"Predicted tomorrow appointments: {t.PredictedTomorrowAppointments}\n" +
+                $"Predicted next-7-day appointments: {t.PredictedNext7DayAppointments}\n" +
                 $"Predicted next-30-day appointments: {t.PredictedNext30DayAppointments}\n" +
                 $"Predicted next-30-day unique patients: {t.PredictedNext30DayUniquePatients}\n" +
+                $"Historical no-show rate (last ~90 days): {Math.Round(context.NoShowRate * 100, 1)}% -- of the predicted appointments above, roughly that share typically don't show up\n" +
                 $"Busiest predicted day next month: {(busiestDay == null ? "none" : $"{busiestDay.Date:dddd, MMM d} with {busiestDay.TotalAppointments} appointments")}\n" +
                 $"Specialty trends (month-over-month % change): {string.Join(", ", t.SpecialtyTrends.Select(s => $"{s.SpecialtyName}: {s.ChangePercent}%"))}\n" +
                 $"Specialties flagged as surging 20%+ (may need more staffing): {(surging.Count == 0 ? "none" : string.Join(", ", surging.Select(s => s.SpecialtyName)))}\n" +
@@ -52,7 +55,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 $"Calendar months that historically run notably busier/quieter for this hospital (from its full history): {(notableMonths.Count == 0 ? "none" : string.Join(", ", notableMonths.Select(m => $"{m.MonthName}: {(m.Index > 1 ? "+" : "")}{Math.Round((m.Index - 1) * 100, 0)}% vs. average")))}\n\n" +
                 "Respond with JSON only, no markdown fences, in exactly this shape:\n" +
                 "{\"outlook\": \"one sentence summarizing the expected patient load over the next 30 days\", " +
-                "\"insights\": [\"3 to 6 short, specific, actionable sentences -- prioritize calling out any surging specialty or overloaded doctor as needing more staffing attention, the busiest predicted day as one to prepare for, any anomaly, and any notable upcoming seasonal month within the next 30 days. " +
+                "\"insights\": [\"3 to 7 short, specific, actionable sentences -- prioritize calling out any surging specialty or overloaded doctor as needing more staffing attention, the busiest predicted day as one to prepare for, any anomaly, any notable upcoming seasonal month within the next 30 days, and what the no-show rate implies for how many patients will actually attend vs. how many are booked. " +
                 "For an anomaly, you were NOT told the actual cause -- suggest 1-2 plausible, general reasons an administrator should check (e.g. a holiday, a reminder-system issue, a doctor's leave), phrased clearly as possibilities to investigate, never as a confirmed cause\"]}";
 
             var requestBody = new
@@ -126,6 +129,12 @@ namespace EasyHMSAPI.Application.Services.Implementations
             {
                 var seasonalDirection = seasonal.Index > 1 ? "busier" : "quieter";
                 insights.Add($"{seasonal.MonthName} has historically run about {Math.Abs(Math.Round((seasonal.Index - 1) * 100, 0))}% {seasonalDirection} than average for this hospital.");
+            }
+
+            if (context.NoShowRate > 0m)
+            {
+                var expectedNext7 = Math.Round(t.PredictedNext7DayAppointments * (1 - context.NoShowRate), 0);
+                insights.Add($"With a {Math.Round(context.NoShowRate * 100, 0)}% historical no-show rate, expect roughly {expectedNext7:0} of the {t.PredictedNext7DayAppointments:0} appointments predicted for the next 7 days to actually attend.");
             }
 
             var outlook = $"Based on this hospital's appointment history, patient volume is trending {direction} and is projected at roughly {t.PredictedNext30DayAppointments:0} appointments over the next 30 days if current patterns hold.";

@@ -15,6 +15,10 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
     {
         // All figures below are computed deterministically from historical appointment data (see
         // PatientVolumeTrendCalculator) -- Groq narrates them, it never invents the numbers.
+        public decimal PredictedTomorrowAppointments { get; set; }
+        public decimal PredictedTomorrowUniquePatients { get; set; }
+        public decimal PredictedNext7DayAppointments { get; set; }
+        public decimal PredictedNext7DayUniquePatients { get; set; }
         public decimal PredictedNext30DayAppointments { get; set; }
         public decimal PredictedNext30DayUniquePatients { get; set; }
         public decimal Avg7DayAppointments { get; set; }
@@ -23,6 +27,12 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public decimal Avg30DayUniquePatients { get; set; }
         public decimal MonthOverMonthAppointmentChangePercent { get; set; }
         public decimal MonthOverMonthUniquePatientChangePercent { get; set; }
+        // No-show-adjusted view: "predicted" above is booked appointments; these are what the
+        // hospital's own historical no-show rate suggests will actually attend.
+        public decimal NoShowRate { get; set; }
+        public decimal ExpectedAttendingTomorrow { get; set; }
+        public decimal ExpectedAttendingNext7Days { get; set; }
+        public decimal ExpectedAttendingNext30Days { get; set; }
         public string Outlook { get; set; } = string.Empty;
         public List<SpecialtyTrendItem> SpecialtyTrends { get; set; } = new();
         public List<DoctorLoadForecastItem> DoctorLoadForecast { get; set; } = new();
@@ -46,6 +56,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
     {
         public Guid DoctorId { get; set; }
         public string DoctorName { get; set; } = string.Empty;
+        public decimal PredictedTomorrowAppointments { get; set; }
+        public decimal PredictedNext7DayAppointments { get; set; }
         public decimal PredictedNext30DayAppointments { get; set; }
         public decimal MonthOverMonthChangePercent { get; set; }
         public bool IsOverloaded { get; set; }
