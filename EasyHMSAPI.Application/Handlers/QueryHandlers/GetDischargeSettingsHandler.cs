@@ -80,6 +80,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         URI = dischargeSettings.URI,
                         CreatedAtUtc = dischargeSettings.CreatedAt,
                         UpdatedAtUtc = dischargeSettings.UpdatedAt,
+                        UseSystemDefaultLetterhead = dischargeSettings.UseSystemDefaultLetterhead,
                     };
 
                     // Re-sign the template URL from its object key so it never goes stale

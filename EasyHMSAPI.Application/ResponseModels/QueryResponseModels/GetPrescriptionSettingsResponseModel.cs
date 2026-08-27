@@ -27,6 +27,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? TextColour { get; set; }
         public string? URI { get; set; }
         public int ValidUpto{ get; set; }
+        public bool UseSystemDefaultLetterhead { get; set; }
         public string? CreatedBy { get; set; }
         public DateTime CreatedAtUtc { get; set; }
         public DateTime UpdatedAtUtc { get; set; }

@@ -76,7 +76,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         CreatedAt = currentDateTime,
                         UpdatedAt = currentDateTime,
                         CreatedByUserId = request.LoggedInUserId,
-                        ValidDuration = request.ValidUpto is not null ? request.ValidUpto.Value : 0
+                        ValidDuration = request.ValidUpto is not null ? request.ValidUpto.Value : 0,
+                        UseSystemDefaultLetterhead = request.UseSystemDefaultLetterhead ?? false
                     };
                     _context.PrescriptionSettings.Add(newSettings);
 
@@ -106,6 +107,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         existingSettings.TextColour = request.TextColour;
                     if(request.ValidUpto.HasValue)
                         existingSettings.ValidDuration = request.ValidUpto.Value;
+                    if (request.UseSystemDefaultLetterhead.HasValue)
+                        existingSettings.UseSystemDefaultLetterhead = request.UseSystemDefaultLetterhead.Value;
                     existingSettings.UpdatedAt = currentDateTime;
 
                     response.PrescriptionSettingId = existingSettings.PrescriptionSettingId;

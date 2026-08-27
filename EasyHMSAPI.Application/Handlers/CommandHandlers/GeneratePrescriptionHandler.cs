@@ -112,6 +112,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         TextColour = prescriptionSettings.TextColour,
                         Uri = prescriptionSettings.URI,
                         ValidUpto = prescriptionSettings.ValidDuration,
+                        UseSystemDefaultLetterhead = prescriptionSettings.UseSystemDefaultLetterhead,
                         CreatedBy = null,
                         CreatedAtUtc = prescriptionSettings.CreatedAt,
                         UpdatedAtUtc = prescriptionSettings.UpdatedAt,

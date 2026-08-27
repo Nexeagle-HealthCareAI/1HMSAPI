@@ -75,6 +75,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         CreatedAt = currentDateTime,
                         UpdatedAt = currentDateTime,
                         CreatedByUserId = request.LoggedInUserId,
+                        UseSystemDefaultLetterhead = request.UseSystemDefaultLetterhead ?? false,
                     };
                     _context.DischargeSettings.Add(newSettings);
 
@@ -102,6 +103,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         existingSettings.FontWeight = request.FontWeight;
                     if (!string.IsNullOrEmpty(request.TextColour))
                         existingSettings.TextColour = request.TextColour;
+                    if (request.UseSystemDefaultLetterhead.HasValue)
+                        existingSettings.UseSystemDefaultLetterhead = request.UseSystemDefaultLetterhead.Value;
                     existingSettings.UpdatedAt = currentDateTime;
 
                     response.DischargeSettingId = existingSettings.DischargeSettingId;
