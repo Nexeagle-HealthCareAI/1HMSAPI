@@ -280,6 +280,27 @@ builder.Services.AddRateLimiter(options =>
 // --- App Pipeline ---
 var app = builder.Build();
 
+// Safety net for anything that throws OUTSIDE an individual controller action's own try/catch --
+// most notably the globally-registered action filters (HospitalAccessFilter,
+// PermissionAuthorizationFilter), which run before the action method body starts, so an unhandled
+// exception there bypasses every per-controller catch block entirely. Without this, that exception
+// falls through to the framework's own default handling: an unlogged, opaque 500 with no
+// diagnostic trail. Registered first so it wraps the entire pipeline. Never echoes ex.Message to
+// the client -- only the server-side log gets the real exception.
+app.UseExceptionHandler(exceptionApp =>
+{
+    exceptionApp.Run(async context =>
+    {
+        var exceptionFeature = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>();
+        var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+        logger.LogError(exceptionFeature?.Error, "Unhandled exception for {Method} {Path}", context.Request.Method, context.Request.Path);
+
+        context.Response.ContentType = "application/json";
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        await context.Response.WriteAsJsonAsync(new { Message = "An unexpected error occurred. Please try again." });
+    });
+});
+
 // Always enable Swagger, regardless of environment
 app.UseSwagger();
 app.UseSwaggerUI(c =>

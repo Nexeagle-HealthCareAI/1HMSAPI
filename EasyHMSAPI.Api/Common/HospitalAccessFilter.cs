@@ -125,10 +125,7 @@ namespace EasyHMSAPI.Api.Common
                 && !HttpMethods.IsHead(context.HttpContext.Request.Method)
                 && !HttpMethods.IsOptions(context.HttpContext.Request.Method);
 
-            if (isWriteRequest && (
-                subStatus.Equals("Expired", StringComparison.OrdinalIgnoreCase) ||
-                subStatus.Equals("Blocked", StringComparison.OrdinalIgnoreCase) ||
-                subStatus.Equals("Rejected", StringComparison.OrdinalIgnoreCase)))
+            if (isWriteRequest && SubscriptionLockoutPolicy.IsLockedOut(subStatus))
             {
                 // Check if user is Admin or AdminDoctor
                 var roles = await _db.UserRoles
@@ -139,7 +136,7 @@ namespace EasyHMSAPI.Api.Common
                     .ToListAsync();
 
                 bool isAdmin = roles.Contains("Admin") || roles.Contains("AdminDoctor");
-                var isRejected = subStatus.Equals("Rejected", StringComparison.OrdinalIgnoreCase);
+                var isRejected = SubscriptionLockoutPolicy.IsRejected(subStatus);
 
                 if (isAdmin)
                 {
