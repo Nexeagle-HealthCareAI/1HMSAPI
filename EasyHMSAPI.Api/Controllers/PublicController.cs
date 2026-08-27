@@ -364,6 +364,48 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Anonymous doctor reassignment — same AppointmentId + Mobile gate as CancelAppointment
+        // above. See PublicUpdateDoctorAppointmentHandler for why this is stricter than
+        // reschedule's own ToDoctorId path.
+        [HttpPatch("appointments/{appointmentId:guid}/update-doctor")]
+        public async Task<ActionResult<PublicUpdateDoctorAppointmentResponseModel>> UpdateAppointmentDoctor(
+            Guid appointmentId, [FromBody] PublicUpdateDoctorAppointmentRequestModel request, CancellationToken cancellationToken)
+        {
+            try
+            {
+                request.AppointmentId = appointmentId;
+                var response = await _mediator.Send(request, cancellationToken);
+                if (!response.Success) return BadRequest(response);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.UpdateAppointmentDoctor for appointmentId: {AppointmentId}", appointmentId);
+                return StatusCode(500, new { Message = "An error occurred while updating the doctor." });
+            }
+        }
+
+        // Anonymous patient-detail correction — same AppointmentId + Mobile gate as
+        // CancelAppointment above. See PublicUpdatePatientAppointmentHandler for the shared-record
+        // scope this writes to.
+        [HttpPatch("appointments/{appointmentId:guid}/update-patient")]
+        public async Task<ActionResult<PublicUpdatePatientAppointmentResponseModel>> UpdateAppointmentPatient(
+            Guid appointmentId, [FromBody] PublicUpdatePatientAppointmentRequestModel request, CancellationToken cancellationToken)
+        {
+            try
+            {
+                request.AppointmentId = appointmentId;
+                var response = await _mediator.Send(request, cancellationToken);
+                if (!response.Success) return BadRequest(response);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.UpdateAppointmentPatient for appointmentId: {AppointmentId}", appointmentId);
+                return StatusCode(500, new { Message = "An error occurred while updating patient details." });
+            }
+        }
+
         // OPD QR check-in: converts a booked appointment into a queue token after a geofence check.
         // See IssueQueueTokenHandler for the idempotency/geofence details.
         [HttpPost("tokens")]
