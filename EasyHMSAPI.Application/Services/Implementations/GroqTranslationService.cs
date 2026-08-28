@@ -79,7 +79,6 @@ namespace EasyHMSAPI.Application.Services.Implementations
             
             // Build a JSON mapping of Key -> Text for bulk translation
             var keys = new List<string>();
-            var index = 0;
             var requestMap = new Dictionary<string, string>();
             
             foreach (var kvp in texts)
