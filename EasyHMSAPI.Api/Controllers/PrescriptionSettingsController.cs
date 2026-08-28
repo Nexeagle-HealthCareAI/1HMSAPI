@@ -92,6 +92,7 @@ namespace EasyHMSAPI.Api.Controllers
 
         [Authorize]
         [HttpPost("upload-template")]
+        [RequestSizeLimit(10 * 1024 * 1024)]
         public async Task<ActionResult<UploadPrescriptionAttachmentsResponseModel>> UploadPrescriptionTemplate([FromForm] UploadPrescriptionTemplateRequestModel request)
         {
             _logger.LogInformation("UploadAsset started at {Time} for doctorId: {DoctorId} & hospitalId: {HospitalId}", DateTime.UtcNow, request.DoctorId, request.HospitalId);

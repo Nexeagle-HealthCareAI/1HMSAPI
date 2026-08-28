@@ -1,6 +1,7 @@
 using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
@@ -48,6 +49,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 {
                     response.Success = false;
                     response.Message = "Doctor is not associated with the specified hospital.";
+                    return response;
+                }
+
+                if (!string.IsNullOrEmpty(request.TextColour) && !TextColourValidator.IsValid(request.TextColour))
+                {
+                    response.Success = false;
+                    response.Message = "Text colour must be a hex value like #111827 or #111827FF.";
                     return response;
                 }
 

@@ -146,6 +146,25 @@ namespace EasyHMSAPI.UnitTests.TestUtils
             };
         }
 
+        public static DischargeSetting CreateDischargeSetting(Guid hospitalId, Guid doctorId)
+        {
+            return new DischargeSetting
+            {
+                DischargeSettingId = Guid.NewGuid(),
+                HospitalId = hospitalId,
+                DoctorId = doctorId,
+                HeaderHeight = 20,
+                FooterHeight = 20,
+                ContentLeftMargin = 20,
+                ContentRightMargin = 20,
+                FontSize = 11,
+                FontFamily = "Arial",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+                RowVersion = new byte[0],
+            };
+        }
+
         public static Prescription CreatePrescription(Guid prescriptionId, Guid appointmentId, Guid doctorId, Guid hospitalId, string patientId)
         {
             return new Prescription
