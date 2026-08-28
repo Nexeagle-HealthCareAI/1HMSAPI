@@ -122,6 +122,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 var opdFee = doctorFees?.FirstOrDefault(f => f.FeeType == "OPD_CONSULT")?.Amount;
                 var ipdFee = doctorFees?.FirstOrDefault(f => f.FeeType == "IPD_VISIT")?.Amount;
                 var emergencyFee = doctorFees?.FirstOrDefault(f => f.FeeType == "EMERGENCY")?.Amount;
+                var freeFollowUpDays = doctorFees?.FirstOrDefault(f => f.FeeType == "OPD_CONSULT")?.FreeFollowUpDays ?? 0;
                 var specializations = await _context.DoctorSpecializations
                     .Where(ds => ds.DoctorID == r.DoctorID && ds.Specialization != null && ds.Specialization.IsActive)
                     .Select(ds => ds.Specialization.Name)
@@ -145,6 +146,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     OpdConsultFee = opdFee,
                     IpdVisitFee = ipdFee,
                     EmergencyFee = emergencyFee,
+                    FreeFollowUpDays = freeFollowUpDays,
                     Specializations = specializations
                         .Where(s => !string.IsNullOrWhiteSpace(s))
                         .Select(s => s.Trim())

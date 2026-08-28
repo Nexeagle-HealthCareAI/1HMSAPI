@@ -71,6 +71,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         OpdConsultFee = Of(OpdConsult),
                         IpdVisitFee = Of(IpdVisit),
                         EmergencyFee = Of(Emergency),
+                        FreeFollowUpDays = list?.FirstOrDefault(f => f.FeeType == OpdConsult)?.FreeFollowUpDays ?? 0,
                     };
                 })
                 .ToList();

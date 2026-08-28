@@ -376,6 +376,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             // preview always agree. Inputs mirror the previous inline logic exactly.
             var result = await AppointmentTypeResolver.ResolveAsync(
                 _context,
+                request.HospitalId,
                 request.Patient?.PatientId,
                 patient.PatientId,
                 request.Patient?.FullName,

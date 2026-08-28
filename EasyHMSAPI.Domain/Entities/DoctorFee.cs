@@ -13,6 +13,10 @@ namespace EasyHMSAPI.Domain.Entities
         public string FeeType { get; set; } = string.Empty; // OPD_CONSULT / IPD_VISIT
         public decimal Amount { get; set; }
         public bool IsActive { get; set; } = true;
+        // OPD_CONSULT only. Days after a paid visit that a follow-up stays free. 0 = no free
+        // window at all, every visit is chargeable (opposite polarity of PrescriptionSetting's
+        // ValidDuration, which treats 0 as "never expires").
+        public int FreeFollowUpDays { get; set; }
         public DateTime CreatedAt { get; set; }
         public string? CreatedBy { get; set; }
         public DateTime UpdatedAt { get; set; }

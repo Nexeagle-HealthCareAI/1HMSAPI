@@ -27,29 +27,32 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .Select(ps => (int?)ps.ValidDuration)
                 .FirstOrDefaultAsync(cancellationToken);
 
-            // Doctor's active OPD consult fee (if any).
+            // Doctor's active OPD consult fee and free-follow-up window (if any).
             var doctorFee = await _context.DoctorFees
                 .Where(f => f.HospitalId == request.HospitalId
                          && f.DoctorId == request.DoctorId
                          && f.FeeType == "OPD_CONSULT"
                          && f.IsActive)
-                .Select(f => (decimal?)f.Amount)
+                .Select(f => new { Amount = (decimal?)f.Amount, f.FreeFollowUpDays })
                 .FirstOrDefaultAsync(cancellationToken);
+            var freeFollowUpDays = doctorFee?.FreeFollowUpDays ?? 0;
 
             // Preview the next visit using the SAME rule the booking uses.
             var preview = await AppointmentTypeResolver.ResolveAsync(
-                _context, request.PatientId, request.PatientId, null,
+                _context, request.HospitalId, request.PatientId, request.PatientId, null,
                 request.DoctorId, targetDate, null, cancellationToken);
 
             var response = new GetConsultTimelineResponseModel
             {
                 PrescriptionValidDays = validDuration ?? 0,
-                NeverExpires = (validDuration ?? 0) == 0,
+                // The free-follow-up window is always a finite number of days (or none) under the
+                // DoctorFee.FreeFollowUpDays model - there is no "infinite" option to represent here.
+                NeverExpires = false,
                 NextVisit = new ConsultNextVisit
                 {
                     AppointmentType = preview.AppointmentType,
                     FeeApplies = preview.FeeApplies,
-                    Fee = preview.FeeApplies ? (doctorFee ?? 0m) : 0m,
+                    Fee = preview.FeeApplies ? (doctorFee?.Amount ?? 0m) : 0m,
                 }
             };
 
@@ -151,7 +154,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
             if (lastFee != null)
             {
-                response.ValidUptoDate = AppointmentTypeResolver.GetPrescriptionExpiry(lastFee.ApptDate, validDuration);
+                response.ValidUptoDate = AppointmentTypeResolver.CalculateFreeFollowUpUpto(lastFee.ApptDate, freeFollowUpDays);
                 response.FreeFollowUpCount = response.History.Count(v =>
                     string.Equals(v.AppointmentType, AppConstants.AppointmentType_OldNoFee, StringComparison.OrdinalIgnoreCase)
                     && v.ApptDate >= lastFee.ApptDate);

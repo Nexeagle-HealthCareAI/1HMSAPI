@@ -17,5 +17,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public decimal OpdConsultFee { get; set; }
         public decimal IpdVisitFee { get; set; }
         public decimal EmergencyFee { get; set; }
+        // OPD_CONSULT only. Days a follow-up stays free after a paid visit. 0 = no free window,
+        // every visit is chargeable.
+        public int FreeFollowUpDays { get; set; }
     }
 }

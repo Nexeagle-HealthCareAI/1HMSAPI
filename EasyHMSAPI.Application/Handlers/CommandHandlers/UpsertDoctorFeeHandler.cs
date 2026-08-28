@@ -26,6 +26,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 return new UpsertDoctorFeeResponseModel { IsSuccess = false, Message = "DoctorId is required." };
             if (request.OpdConsultFee < 0 || request.IpdVisitFee < 0 || request.EmergencyFee < 0)
                 return new UpsertDoctorFeeResponseModel { IsSuccess = false, Message = "Fees cannot be negative." };
+            if (request.FreeFollowUpDays < 0)
+                return new UpsertDoctorFeeResponseModel { IsSuccess = false, Message = "Free follow-up days cannot be negative." };
 
             var existing = await _context.DoctorFees
                 .Where(f => f.HospitalId == request.HospitalId && f.DoctorId == request.DoctorId)
@@ -33,7 +35,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
             var now = DateTime.UtcNow;
 
-            void Apply(string feeType, decimal amount)
+            void Apply(string feeType, decimal amount, int freeFollowUpDays = 0)
             {
                 var row = existing.FirstOrDefault(f => f.FeeType == feeType);
                 if (row == null)
@@ -45,6 +47,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         DoctorId = request.DoctorId,
                         FeeType = feeType,
                         Amount = amount,
+                        FreeFollowUpDays = freeFollowUpDays,
                         IsActive = true,
                         CreatedAt = now,
                         CreatedBy = request.LoggedInUserName,
@@ -55,13 +58,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 else
                 {
                     row.Amount = amount;
+                    row.FreeFollowUpDays = freeFollowUpDays;
                     row.IsActive = true;
                     row.UpdatedAt = now;
                     row.UpdatedBy = request.LoggedInUserName;
                 }
             }
 
-            Apply(OpdConsult, request.OpdConsultFee);
+            Apply(OpdConsult, request.OpdConsultFee, request.FreeFollowUpDays);
             Apply(IpdVisit, request.IpdVisitFee);
             Apply(Emergency, request.EmergencyFee);
 

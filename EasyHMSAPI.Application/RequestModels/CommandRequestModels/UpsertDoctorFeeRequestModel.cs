@@ -14,6 +14,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public decimal OpdConsultFee { get; set; }
         public decimal IpdVisitFee { get; set; }
         public decimal EmergencyFee { get; set; }
+        public int FreeFollowUpDays { get; set; }
         [JsonIgnore]
         public string? LoggedInUserName { get; set; }
     }

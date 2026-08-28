@@ -77,6 +77,22 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             history.Add(new { status = newStatus, timestamp = DateTime.UtcNow });
             appointment.StatusHistoryJson = JsonSerializer.Serialize(history);
 
+            // The pre-appointment's real date is only known now (booking only had a non-binding
+            // "preferred" placeholder), so this is the first point the New/Old-Fee/Old-No-Fee
+            // classification can be resolved — mirrors RegisterAppointmentHandler.SetAppointmentType.
+            var typeResult = await AppointmentTypeResolver.ResolveAsync(
+                _context,
+                request.HospitalId,
+                null,
+                appointment.PatientId,
+                null,
+                appointment.DoctorId,
+                appointment.ApptDate,
+                appointment.ApptId,
+                cancellationToken);
+            appointment.AppointmentType = typeResult.AppointmentType;
+            appointment.ValidUptoDate = typeResult.ValidUptoDate;
+
             await _context.SaveChangesAsync(cancellationToken);
 
             // Invalidate both the slot it moved OUT of and the one it moved INTO — the receptionist
