@@ -19,9 +19,17 @@ namespace EasyHMSAPI.Domain.Entities
         
         public Guid? OrderedByDoctorId { get; set; }
         public string? Notes { get; set; }
-        
+
         // Status: PLACED, IN_PROGRESS, COMPLETED, CANCELLED
-        public string Status { get; set; } = "PLACED"; 
+        public string Status { get; set; } = "PLACED";
+
+        // OPD, IPD, EMERGENCY, WALK_IN -- EncounterId/AdmissionId alone don't cleanly distinguish
+        // OPD from Emergency (both can carry an EncounterId), so the caller passes this explicitly
+        // at order-creation time. Drives the Pathology Workspace's source-filter tabs.
+        public string? SourceType { get; set; }
+
+        // STAT/urgent order -- sorts to the top of the worklist and highlights in the UI.
+        public bool IsStat { get; set; }
         
         public DateTime CreatedAt { get; set; }
         public string? CreatedBy { get; set; }

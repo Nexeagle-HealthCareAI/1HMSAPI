@@ -24,6 +24,19 @@ namespace EasyHMSAPI.Domain.Entities
         public DateTime? GeneratedAt { get; set; }
         public DateTime? ApprovedAt { get; set; }
         public Guid? ApprovedByUserId { get; set; }
+
+        // Dual sign-off: technician sign-off happens first (transitions DRAFT -> a
+        // technician-signed state), pathologist approval finalizes (-> APPROVED). Both identities
+        // are captured at their own sign-off time, not derived later, so the PDF's signature block
+        // always reflects who actually signed even if their profile changes afterward.
+        public Guid? TechnicianUserId { get; set; }
+        public string? TechnicianName { get; set; }
+        public string? TechnicianRegNo { get; set; }
+        public DateTime? TechnicianSignedAt { get; set; }
+
+        public Guid? PathologistDoctorId { get; set; }
+        public string? PathologistName { get; set; }
+        public string? PathologistRegNo { get; set; }
         
         public DateTime CreatedAt { get; set; }
         public string? CreatedBy { get; set; }
