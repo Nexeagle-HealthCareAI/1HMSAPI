@@ -205,32 +205,77 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task TrackA_PfDeductedAt12PercentOfBasicEarned()
         {
-            // Arrange: full month present (31 days), basic = ₹17,000
+            // Arrange: full month present (31 days), basic = ₹17,000 -- deliberately above the
+            // ₹15,000 EPF wage cap, so this also proves the cap is applied (SalariedPayrollStrategy's
+            // documented rule: PF is capped at ₹1,800/mo once Basic > ₹15,000).
             await SeedFullMonthAttendance(_salariedEmployee.HrEmployeeId);
             var strategy = new SalariedPayrollStrategy(_context);
 
             // Act
             var result = await strategy.ComputeAsync(_salariedEmployee, _august2026, CancellationToken.None);
 
-            // Assert: PF = 12% of BasicEarned (full month, no proration)
-            decimal expectedPf = Math.Round(result.BasicEarned * 0.12m, 2);
+            // Assert: PF = 12% of BasicEarned, capped at a ₹15,000 wage base once configured
+            // Basic exceeds it -- mirrors the cap logic in SalariedPayrollStrategy.ComputeAsync.
+            decimal pfWageBase = Math.Min(result.BasicEarned, TestBasic > 15_000m ? 15_000m : result.BasicEarned);
+            decimal expectedPf = Math.Round(pfWageBase * 0.12m, 2);
             Assert.That(result.PfEmployee, Is.EqualTo(expectedPf),
-                $"PF should be 12% of Basic earned (₹{result.BasicEarned}). Expected ₹{expectedPf}, got ₹{result.PfEmployee}");
+                $"PF should be 12% of the (possibly capped) PF wage base (₹{pfWageBase}). Expected ₹{expectedPf}, got ₹{result.PfEmployee}");
         }
 
         [Test]
         public async Task TrackA_EsiDeductedAt075PercentWhenEsiEligible()
         {
-            // Arrange: full month, ESIC is manually eligible for this test employee
-            await SeedFullMonthAttendance(_salariedEmployee.HrEmployeeId);
+            // Arrange: a distinct, lower-gross employee whose Gross stays within the ESIC wage
+            // ceiling (₹21,000/mo) -- the shared _salariedEmployee's gross (~₹35,000) is
+            // deliberately above the ceiling, so ESI must NOT be deducted for them regardless of
+            // IsEsiEligible (see SalariedPayrollStrategy.ComputeAsync's ceiling check).
+            var esiEmployee = new HrEmployee
+            {
+                HrEmployeeId = Guid.NewGuid(),
+                HospitalId = _salariedEmployee.HospitalId,
+                EmployeeCode = "EMP-2023-0099",
+                FirstName = "Kavita",
+                LastName = "Rao",
+                Gender = "Female",
+                DateOfBirth = new DateOnly(1998, 3, 20),
+                ContactNumber = "+91-9822233344",
+                EmploymentType = "FULL_TIME_SALARIED",
+                DepartmentId = _salariedEmployee.DepartmentId,
+                Designation = "Ward Attendant",
+                DateOfJoining = new DateOnly(2023, 6, 1),
+                PanNumber = "EFGHI5678L",
+                PayrollTrack = "TRACK_A_SALARIED",
+                IsActive = true,
+                Status = "ACTIVE",
+            };
+            var esiSalaryStructure = new HrSalaryStructure
+            {
+                HrSalaryStructureId = Guid.NewGuid(),
+                HrEmployeeId = esiEmployee.HrEmployeeId,
+                EffectiveFrom = new DateOnly(2023, 6, 1),
+                MonthlyGrossCtc = 20_000m,
+                BasicSalary = 12_000m,
+                Hra = 4_000m,
+                DearnessAllowance = 1_000m,
+                SpecialAllowance = 2_000m,
+                MedicalAllowance = 1_000m,
+                IsPfEligible = true,
+                IsEsiEligible = true,
+                ProfessionalTax = 200m,
+                IsActive = true,
+            };
+            _context.Set<HrEmployee>().Add(esiEmployee);
+            _context.Set<HrSalaryStructure>().Add(esiSalaryStructure);
+            await _context.SaveChangesAsync();
+            await SeedFullMonthAttendance(esiEmployee.HrEmployeeId);
             var strategy = new SalariedPayrollStrategy(_context);
 
             // Act
-            var result = await strategy.ComputeAsync(_salariedEmployee, _august2026, CancellationToken.None);
+            var result = await strategy.ComputeAsync(esiEmployee, _august2026, CancellationToken.None);
 
-            // Assert: ESIC = 0.75% of Gross (if IsEsiEligible = true in salary structure)
-            // Note: In real production, ESIC is only applied when Gross ≤ ₹21,000.
-            // Our test salary structure has IsEsiEligible = true for test coverage purposes.
+            // Assert: ESIC = 0.75% of Gross, since Gross (₹20,000) is within the ₹21,000 ceiling
+            // and IsEsiEligible = true.
+            Assert.That(result.GrossEarnings, Is.LessThanOrEqualTo(21_000m), "Test fixture must stay within the ESIC ceiling to exercise the eligible path.");
             decimal expectedEsi = Math.Round(result.GrossEarnings * 0.0075m, 2);
             Assert.That(result.EsiEmployee, Is.EqualTo(expectedEsi),
                 $"ESIC employee should be 0.75% of Gross (₹{result.GrossEarnings}). Expected ₹{expectedEsi}, got ₹{result.EsiEmployee}");

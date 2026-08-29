@@ -1,3 +1,4 @@
+using EasyHMSAPI.Api.Common;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
@@ -13,6 +14,7 @@ namespace EasyHMSAPI.Api.Controllers.V1
     [Route("api/v1/[controller]")]
     [ApiController]
     [Authorize]
+    [ServiceFilter(typeof(HospitalAccessFilter))]
     public class HrController : ControllerBase
     {
         private readonly IMediator _mediator;
@@ -24,10 +26,13 @@ namespace EasyHMSAPI.Api.Controllers.V1
 
         // ─── Employees ────────────────────────────────────────────────────────
         [HttpPost("employees")]
-        [Authorize(Policy = "RequireAdminOrDoctor")]
+        [RequiresPermission("hr.manage_employees")]
         public async Task<ActionResult<CreateHrEmployeeResponseModel>> CreateEmployee(
             [FromBody] CreateHrEmployeeRequestModel request)
         {
+            // UserId here means "who performed this creation" (audit trail), not the new
+            // employee's own login -- always the caller's identity, never client-supplied.
+            request.UserId = UserContextHelper.GetUserId(User) ?? Guid.Empty;
             var result = await _mediator.Send(request);
             if (result.Success)
             {
@@ -50,7 +55,8 @@ namespace EasyHMSAPI.Api.Controllers.V1
                 DepartmentId = dept,
                 EmploymentType = type,
                 PageNumber = page,
-                PageSize = take
+                PageSize = take,
+                LoggedInUserId = UserContextHelper.GetUserId(User) ?? Guid.Empty
             };
             var result = await _mediator.Send(request);
             return Ok(result);
@@ -58,19 +64,13 @@ namespace EasyHMSAPI.Api.Controllers.V1
 
         // ─── Payroll ──────────────────────────────────────────────────────────
         [HttpPost("payroll/run")]
-        [Authorize(Policy = "RequireAdmin")]
+        [RequiresPermission("hr.manage_payroll")]
         public async Task<ActionResult<RunMonthlyPayrollResponseModel>> RunMonthlyPayroll(
             [FromQuery] Guid hospitalId,
             [FromQuery] int month,
             [FromQuery] int year)
         {
-            // Extract the user triggering the payroll run
-            var userIdString = User.FindFirst("UserId")?.Value ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            Guid processedByUserId = Guid.Empty;
-            if (!string.IsNullOrEmpty(userIdString))
-            {
-                Guid.TryParse(userIdString, out processedByUserId);
-            }
+            var processedByUserId = UserContextHelper.GetUserId(User) ?? Guid.Empty;
 
             var request = new RunMonthlyPayrollRequestModel
             {
@@ -89,7 +89,7 @@ namespace EasyHMSAPI.Api.Controllers.V1
         }
 
         [HttpGet("payroll/run")]
-        [Authorize(Policy = "RequireAdmin")]
+        [RequiresPermission("hr.manage_payroll")]
         public async Task<ActionResult<GetHrPayrollRunsResponseModel>> GetPayrollRuns(
             [FromQuery] Guid hospitalId,
             [FromQuery] int? month = null,
@@ -112,7 +112,7 @@ namespace EasyHMSAPI.Api.Controllers.V1
         }
 
         [HttpGet("payroll/export-bank")]
-        [Authorize(Policy = "RequireAdmin")]
+        [RequiresPermission("hr.manage_payroll")]
         public async Task<IActionResult> ExportBankFile(
             [FromQuery] Guid hrPayrollRunId,
             [FromQuery] string format = "HDFC")
@@ -127,10 +127,33 @@ namespace EasyHMSAPI.Api.Controllers.V1
             return BadRequest(result.Message);
         }
 
+        [HttpGet("payroll/{hrPayrollRunId}/payslips")]
+        public async Task<IActionResult> GetPayslipsByRun(Guid hrPayrollRunId)
+        {
+            var request = new GetPayslipsByRunRequestModel 
+            { 
+                HrPayrollRunId = hrPayrollRunId,
+                LoggedInUserId = UserContextHelper.GetUserId(User) ?? Guid.Empty
+            };
+            var result = await _mediator.Send(request);
+            return Ok(result);
+        }
+
+        [HttpPost("payroll/{hrPayrollRunId}/dispatch")]
+        [RequiresPermission("hr.manage_payroll")]
+        public async Task<IActionResult> DispatchPayslips(Guid hrPayrollRunId)
+        {
+            var result = await _mediator.Send(new DispatchPayslipsRequestModel { HrPayrollRunId = hrPayrollRunId });
+            if (!result.Success)
+            {
+                return BadRequest(result);
+            }
+            return Ok(result);
+        }
+
         // ─── Leaves & Roster ──────────────────────────────────────────────────
 
         [HttpGet("leave-requests")]
-        [Authorize(Policy = "RequireHrAdmin")]
         public async Task<ActionResult<GetHrLeaveRequestsResponseModel>> GetLeaveRequests(
             [FromQuery] Guid? hospitalId,
             [FromQuery] Guid? employeeId,
@@ -140,19 +163,21 @@ namespace EasyHMSAPI.Api.Controllers.V1
             {
                 HospitalId = hospitalId,
                 EmployeeId = employeeId,
-                Status = status
+                Status = status,
+                LoggedInUserId = UserContextHelper.GetUserId(User) ?? Guid.Empty
             };
             var result = await _mediator.Send(request);
             return Ok(result);
         }
 
         [HttpPut("leave-requests/{leaveId}/status")]
-        [Authorize(Policy = "RequireHrAdmin")]
+        [RequiresPermission("hr.manage_leaves")]
         public async Task<ActionResult<DecideHrLeaveResponseModel>> DecideLeave(
             Guid leaveId,
             [FromBody] DecideHrLeaveRequestModel request)
         {
             request.LeaveId = leaveId;
+            request.ApprovedByUserId = UserContextHelper.GetUserId(User) ?? Guid.Empty;
             var result = await _mediator.Send(request);
             if (result.Success)
             {
@@ -163,7 +188,6 @@ namespace EasyHMSAPI.Api.Controllers.V1
 
 
         [HttpGet("leave-balances")]
-        [Authorize(Policy = "RequireHrAdmin")]
         public async Task<ActionResult<GetHrLeaveBalanceResponseModel>> GetLeaveBalance(
             [FromQuery] Guid employeeId,
             [FromQuery] int? year)
@@ -171,24 +195,24 @@ namespace EasyHMSAPI.Api.Controllers.V1
             var request = new GetHrLeaveBalanceRequestModel
             {
                 EmployeeId = employeeId,
-                Year = year
+                Year = year,
+                LoggedInUserId = UserContextHelper.GetUserId(User) ?? Guid.Empty
             };
             var result = await _mediator.Send(request);
             return Ok(result);
         }
 
         [HttpGet("shifts")]
-        [Authorize(Policy = "RequireHrAdmin")]
         public async Task<ActionResult<GetHrHospitalShiftsResponseModel>> GetShifts(
             [FromQuery] Guid hospitalId)
         {
+            // Shifts are public knowledge across the hospital generally
             var request = new GetHrHospitalShiftsRequestModel { HospitalId = hospitalId };
             var result = await _mediator.Send(request);
             return Ok(result);
         }
 
         [HttpGet("rosters")]
-        [Authorize(Policy = "RequireHrAdmin")]
         public async Task<ActionResult<GetHrDutyRostersResponseModel>> GetDutyRosters(
             [FromQuery] Guid hospitalId,
             [FromQuery] DateTime startDate,
@@ -198,14 +222,14 @@ namespace EasyHMSAPI.Api.Controllers.V1
             {
                 HospitalId = hospitalId,
                 StartDate = startDate,
-                EndDate = endDate
+                EndDate = endDate,
+                LoggedInUserId = UserContextHelper.GetUserId(User) ?? Guid.Empty
             };
             var result = await _mediator.Send(request);
             return Ok(result);
         }
 
         [HttpGet("attendance-today")]
-        [Authorize(Policy = "RequireHrAdmin")]
         public async Task<ActionResult<GetHrAttendanceTodayResponseModel>> GetAttendanceToday(
             [FromQuery] Guid hospitalId,
             [FromQuery] DateTime date)
@@ -213,29 +237,10 @@ namespace EasyHMSAPI.Api.Controllers.V1
             var request = new GetHrAttendanceTodayRequestModel
             {
                 HospitalId = hospitalId,
-                Date = DateOnly.FromDateTime(date)
+                Date = DateOnly.FromDateTime(date),
+                LoggedInUserId = UserContextHelper.GetUserId(User) ?? Guid.Empty
             };
             var result = await _mediator.Send(request);
-            return Ok(result);
-        }
-
-        [HttpGet("payroll/{hrPayrollRunId}/payslips")]
-        [Authorize(Policy = "RequireAdmin")]
-        public async Task<IActionResult> GetPayslipsByRun(Guid hrPayrollRunId)
-        {
-            var result = await _mediator.Send(new GetPayslipsByRunRequestModel { HrPayrollRunId = hrPayrollRunId });
-            return Ok(result);
-        }
-
-        [HttpPost("payroll/{hrPayrollRunId}/dispatch")]
-        [Authorize(Policy = "RequireAdmin")]
-        public async Task<IActionResult> DispatchPayslips(Guid hrPayrollRunId)
-        {
-            var result = await _mediator.Send(new DispatchPayslipsRequestModel { HrPayrollRunId = hrPayrollRunId });
-            if (!result.Success)
-            {
-                return BadRequest(result);
-            }
             return Ok(result);
         }
 
@@ -262,6 +267,7 @@ namespace EasyHMSAPI.Api.Controllers.V1
         }
 
         [HttpGet("attendance/exceptions")]
+        [RequiresPermission("hr.view_dashboard")]
         public async Task<ActionResult<GetAttendanceExceptionsResponseModel>> GetExceptions(
             [FromQuery] Guid hospitalId,
             [FromQuery] DateTime startDate,
@@ -279,14 +285,20 @@ namespace EasyHMSAPI.Api.Controllers.V1
 
         // ─── Dashboard & KPI ──────────────────────────────────────────────────
         [HttpGet("kpi-summary")]
+        [RequiresPermission("hr.view_dashboard")]
         public async Task<ActionResult<GetHrKpiSummaryResponseModel>> GetKpiSummary([FromQuery] Guid hospitalId)
         {
-            var request = new GetHrKpiSummaryRequestModel { HospitalId = hospitalId };
+            var request = new GetHrKpiSummaryRequestModel 
+            { 
+                HospitalId = hospitalId,
+                LoggedInUserId = UserContextHelper.GetUserId(User) ?? Guid.Empty
+            };
             var result = await _mediator.Send(request);
             return Ok(result);
         }
 
         [HttpGet("license-alerts")]
+        [RequiresPermission("hr.view_dashboard")]
         public async Task<ActionResult<GetLicenseExpiryAlertsResponseModel>> GetLicenseAlerts([FromQuery] Guid hospitalId)
         {
             var request = new GetLicenseExpiryAlertsRequestModel { HospitalId = hospitalId };

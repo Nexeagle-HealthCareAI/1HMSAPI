@@ -55,5 +55,14 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         [Required]
         [MaxLength(30)]
         public string PayrollTrack { get; set; } = "TRACK_A_SALARIED"; // TRACK_A_SALARIED | TRACK_B_CONSULTANT
+
+        [MaxLength(100)]
+        public string? BankName { get; set; }
+
+        [MaxLength(50)]
+        public string? BankAccountNumber { get; set; }
+
+        [MaxLength(20)]
+        public string? BankIfsc { get; set; }
     }
 }

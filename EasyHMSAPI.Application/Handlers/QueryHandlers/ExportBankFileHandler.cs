@@ -42,16 +42,16 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 sb.AppendLine("Beneficiary Name,Beneficiary Account,IFSC,Amount,Remarks");
                 foreach (var ps in payslips)
                 {
-                    sb.AppendLine($"{ps.HrEmployee.FirstName} {ps.HrEmployee.LastName},1234567890,HDFC0001234,{ps.NetSalary},Salary {run.Month}/{run.Year}");
+                    sb.AppendLine($"{ps.HrEmployee.FirstName} {ps.HrEmployee.LastName},{ps.HrEmployee.BankAccountNumber},{ps.HrEmployee.BankIfsc},{ps.NetSalary},Salary {run.Month}/{run.Year}");
                 }
             }
             else if (request.BankFormat == "SBI")
             {
                 // Simple SBI Corporate Template
-                sb.AppendLine("Account Number,Amount,Beneficiary Name,Debit Account,Narration");
+                sb.AppendLine("Account Number,Amount,Beneficiary Name,IFSC,Narration");
                 foreach (var ps in payslips)
                 {
-                    sb.AppendLine($"1234567890,{ps.NetSalary},{ps.HrEmployee.FirstName} {ps.HrEmployee.LastName},333333333,Salary {run.Month}/{run.Year}");
+                    sb.AppendLine($"{ps.HrEmployee.BankAccountNumber},{ps.NetSalary},{ps.HrEmployee.FirstName} {ps.HrEmployee.LastName},{ps.HrEmployee.BankIfsc},Salary {run.Month}/{run.Year}");
                 }
             }
             else
@@ -60,7 +60,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 sb.AppendLine("EmpCode,Name,Amount,Bank_Name,Account_Number,IFSC");
                 foreach (var ps in payslips)
                 {
-                    sb.AppendLine($"{ps.HrEmployee.EmployeeCode},{ps.HrEmployee.FirstName} {ps.HrEmployee.LastName},{ps.NetSalary},GENERIC BANK,1234567890,GEN00123");
+                    sb.AppendLine($"{ps.HrEmployee.EmployeeCode},{ps.HrEmployee.FirstName} {ps.HrEmployee.LastName},{ps.NetSalary},{ps.HrEmployee.BankName},{ps.HrEmployee.BankAccountNumber},{ps.HrEmployee.BankIfsc}");
                 }
             }
 

@@ -14,8 +14,13 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
     {
         public Guid HrDutyRosterId { get; set; }
         public Guid HospitalId { get; set; }
-        public Guid HrEmployeeId { get; set; }
-        public Guid HrHospitalShiftId { get; set; }
+        public Guid EmployeeId { get; set; }
+        public string EmployeeName { get; set; } = null!;
+        public string EmployeeCode { get; set; } = null!;
+        public string DepartmentName { get; set; } = null!;
+        public Guid ShiftId { get; set; }
+        public string ShiftCode { get; set; } = null!;
+        public string ShiftName { get; set; } = null!;
         public DateOnly RosterDate { get; set; }
         public bool IsOnCall { get; set; }
         public Guid? WardId { get; set; }
