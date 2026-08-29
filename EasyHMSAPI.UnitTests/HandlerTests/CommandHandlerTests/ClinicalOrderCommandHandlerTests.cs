@@ -94,5 +94,138 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(saved.SourceOrderSetId, Is.Null);
             Assert.That(saved.SourceOrderSetNameSnapshot, Is.Null);
         }
+
+        [Test]
+        public async Task Handle_MedicationOrder_NeverCreatesPathologyOrder()
+        {
+            var admission = SeedAdmission();
+
+            var response = await _handler.Handle(new PlaceClinicalOrderRequestModel
+            {
+                HospitalId = admission.HospitalId,
+                AdmissionId = admission.AdmissionId,
+                OrderType = "MEDICATION",
+                Lines = new() { new ClinicalOrderLineInput { ItemName = "Paracetamol", Dose = "500mg" } },
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True, response.Message);
+            Assert.That(_context.PathologyOrder.Any(), Is.False);
+        }
+
+        private PathologyTestMaster SeedPathologyTest(Guid hospitalId, Guid chargeId)
+        {
+            var test = new PathologyTestMaster
+            {
+                TestId = Guid.NewGuid(),
+                HospitalId = hospitalId,
+                TestCode = "CBC",
+                TestName = "Complete Blood Count",
+                ChargeId = chargeId,
+                IsActive = true,
+            };
+            _context.PathologyTestMaster.Add(test);
+            _context.SaveChanges();
+            return test;
+        }
+
+        [Test]
+        public async Task Handle_LabOrderLineWithCatalogedCharge_CreatesLinkedPathologyOrder()
+        {
+            var admission = SeedAdmission();
+            var chargeId = Guid.NewGuid();
+            var test = SeedPathologyTest(admission.HospitalId, chargeId);
+
+            var response = await _handler.Handle(new PlaceClinicalOrderRequestModel
+            {
+                HospitalId = admission.HospitalId,
+                AdmissionId = admission.AdmissionId,
+                OrderType = "LAB",
+                Lines = new() { new ClinicalOrderLineInput { ItemName = "CBC", ChargeId = chargeId } },
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True, response.Message);
+
+            var pathOrder = _context.PathologyOrder.Single(o => o.AdmissionId == admission.AdmissionId);
+            Assert.That(pathOrder.SourceType, Is.EqualTo("IPD"));
+            Assert.That(pathOrder.PatientId, Is.EqualTo(admission.PatientId));
+            Assert.That(pathOrder.HospitalId, Is.EqualTo(admission.HospitalId));
+
+            var pathLine = _context.PathologyOrderLine.Single(l => l.OrderId == pathOrder.OrderId);
+            Assert.That(pathLine.TestId, Is.EqualTo(test.TestId));
+            Assert.That(pathLine.Status, Is.EqualTo("PENDING"));
+
+            var clinicalLine = _context.ClinicalOrderLine.Single(l => l.OrderId == response.OrderId);
+            Assert.That(clinicalLine.LinkedPathologyOrderLineId, Is.EqualTo(pathLine.OrderLineId));
+        }
+
+        [Test]
+        public async Task Handle_LabOrderLineWithStatUrgency_SetsIsStatOnPathologyOrder()
+        {
+            var admission = SeedAdmission();
+            var chargeId = Guid.NewGuid();
+            SeedPathologyTest(admission.HospitalId, chargeId);
+
+            await _handler.Handle(new PlaceClinicalOrderRequestModel
+            {
+                HospitalId = admission.HospitalId,
+                AdmissionId = admission.AdmissionId,
+                OrderType = "LAB",
+                Lines = new() { new ClinicalOrderLineInput { ItemName = "CBC", ChargeId = chargeId, Urgency = "STAT" } },
+            }, CancellationToken.None);
+
+            var pathOrder = _context.PathologyOrder.Single(o => o.AdmissionId == admission.AdmissionId);
+            Assert.That(pathOrder.IsStat, Is.True);
+        }
+
+        [Test]
+        public async Task Handle_LabOrderLineWithNoMatchingCatalogTest_DoesNotCreatePathologyOrder()
+        {
+            var admission = SeedAdmission();
+
+            var response = await _handler.Handle(new PlaceClinicalOrderRequestModel
+            {
+                HospitalId = admission.HospitalId,
+                AdmissionId = admission.AdmissionId,
+                OrderType = "LAB",
+                // Free-text line, no ChargeId at all -- nothing to resolve against the catalog.
+                Lines = new() { new ClinicalOrderLineInput { ItemName = "Some ad-hoc lab item" } },
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True, response.Message);
+            Assert.That(_context.PathologyOrder.Any(), Is.False);
+
+            var clinicalLine = _context.ClinicalOrderLine.Single(l => l.OrderId == response.OrderId);
+            Assert.That(clinicalLine.LinkedPathologyOrderLineId, Is.Null);
+        }
+
+        [Test]
+        public async Task Handle_LabOrderWithMixedLines_LinksOnlyTheCatalogedOne()
+        {
+            var admission = SeedAdmission();
+            var chargeId = Guid.NewGuid();
+            var test = SeedPathologyTest(admission.HospitalId, chargeId);
+
+            var response = await _handler.Handle(new PlaceClinicalOrderRequestModel
+            {
+                HospitalId = admission.HospitalId,
+                AdmissionId = admission.AdmissionId,
+                OrderType = "LAB",
+                Lines = new()
+                {
+                    new ClinicalOrderLineInput { ItemName = "CBC", ChargeId = chargeId },
+                    new ClinicalOrderLineInput { ItemName = "Uncatalogued lab item" },
+                },
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True, response.Message);
+
+            var pathOrder = _context.PathologyOrder.Single(o => o.AdmissionId == admission.AdmissionId);
+            Assert.That(_context.PathologyOrderLine.Count(l => l.OrderId == pathOrder.OrderId), Is.EqualTo(1));
+            Assert.That(_context.PathologyOrderLine.Single(l => l.OrderId == pathOrder.OrderId).TestId, Is.EqualTo(test.TestId));
+
+            var clinicalLines = _context.ClinicalOrderLine.Where(l => l.OrderId == response.OrderId).ToList();
+            Assert.That(clinicalLines.Count(l => l.LinkedPathologyOrderLineId.HasValue), Is.EqualTo(1));
+            Assert.That(clinicalLines.Count(l => !l.LinkedPathologyOrderLineId.HasValue), Is.EqualTo(1));
+        }
     }
 }

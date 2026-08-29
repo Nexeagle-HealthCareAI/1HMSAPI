@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
@@ -164,6 +165,94 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                                 for (int k = 0; k < chargeableIndices.Count; k++)
                                     lines[chargeableIndices[k]].ChargeEventId = chargeResponse.Data.ChargeEvents[k].ChargeEventId;
+                            }
+                        }
+
+                        // ── Lab orders also get a linked PathologyOrder, so they surface in the
+                        // Pathology Lab workspace's structured results/report pipeline instead of
+                        // staying invisible to it. Billing already happened above via the generic
+                        // ChargeMaster charge-on-event path -- this never bills again, it only maps
+                        // chargeable lines onto PathologyTestMaster (matched by ChargeId) to build
+                        // the structured order. Lines with no ChargeId, or a ChargeId that doesn't
+                        // resolve to a catalogued test, are left as plain ClinicalOrderLine entries.
+                        if (orderType == IpdConstants.ClinicalOrderType.Lab)
+                        {
+                            var chargeIds = lines.Where(l => l.ChargeId.HasValue).Select(l => l.ChargeId!.Value).Distinct().ToList();
+                            var matchedTests = chargeIds.Count == 0
+                                ? new List<PathologyTestMaster>()
+                                : await _context.PathologyTestMaster
+                                    .Where(t => t.HospitalId == request.HospitalId && t.IsActive && t.ChargeId.HasValue && chargeIds.Contains(t.ChargeId.Value))
+                                    .ToListAsync(cancellationToken);
+
+                            if (matchedTests.Count > 0)
+                            {
+                                var testByChargeId = matchedTests.ToDictionary(t => t.ChargeId!.Value, t => t);
+                                var pathologyLines = lines.Where(l => l.ChargeId.HasValue && testByChargeId.ContainsKey(l.ChargeId.Value)).ToList();
+
+                                if (pathologyLines.Count > 0)
+                                {
+                                    string pathOrderNo = string.Empty;
+                                    var pathNow = DateTime.UtcNow;
+                                    for (int attempt = 0; attempt < 5; attempt++)
+                                    {
+                                        try
+                                        {
+                                            var numberSeries = await NumberSeriesDefaults.GetOrCreateAsync(
+                                                _context, request.HospitalId, BillingConstants.NumberSeriesCode.LabAccession, request.LoggedInUserName, cancellationToken);
+                                            numberSeries.CurrentValue++;
+                                            pathOrderNo = NumberSeriesFormatter.Format(
+                                                numberSeries.Prefix, numberSeries.YearFormat, numberSeries.Separator, numberSeries.PadLength, numberSeries.CurrentValue);
+                                            numberSeries.UpdatedAt = pathNow;
+                                            numberSeries.UpdatedBy = request.LoggedInUserName;
+                                            break;
+                                        }
+                                        catch (DbUpdateException)
+                                        {
+                                            _context.ChangeTracker.Clear();
+                                            if (attempt == 4) throw;
+                                        }
+                                    }
+
+                                    var pathOrder = new PathologyOrder
+                                    {
+                                        OrderId = Guid.NewGuid(),
+                                        HospitalId = request.HospitalId,
+                                        PatientId = admission.PatientId,
+                                        EncounterId = admission.EncounterId,
+                                        AdmissionId = admission.AdmissionId,
+                                        OrderedByDoctorId = order.OrderedByDoctorId,
+                                        Notes = order.Notes,
+                                        OrderNo = pathOrderNo,
+                                        OrderDate = pathNow,
+                                        Status = "PLACED",
+                                        SourceType = "IPD",
+                                        IsStat = pathologyLines.Any(l => string.Equals(l.Urgency, "STAT", StringComparison.OrdinalIgnoreCase)),
+                                        CreatedAt = pathNow,
+                                        CreatedBy = request.LoggedInUserName,
+                                        UpdatedAt = pathNow,
+                                        UpdatedBy = request.LoggedInUserName,
+                                    };
+                                    _context.PathologyOrder.Add(pathOrder);
+
+                                    foreach (var clinicalLine in pathologyLines)
+                                    {
+                                        var test = testByChargeId[clinicalLine.ChargeId!.Value];
+                                        var pathLine = new PathologyOrderLine
+                                        {
+                                            OrderLineId = Guid.NewGuid(),
+                                            HospitalId = request.HospitalId,
+                                            OrderId = pathOrder.OrderId,
+                                            TestId = test.TestId,
+                                            Status = "PENDING",
+                                            CreatedAt = pathNow,
+                                            CreatedBy = request.LoggedInUserName,
+                                            UpdatedAt = pathNow,
+                                            UpdatedBy = request.LoggedInUserName,
+                                        };
+                                        _context.PathologyOrderLine.Add(pathLine);
+                                        clinicalLine.LinkedPathologyOrderLineId = pathLine.OrderLineId;
+                                    }
+                                }
                             }
                         }
 

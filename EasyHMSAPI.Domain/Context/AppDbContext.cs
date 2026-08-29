@@ -213,6 +213,21 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<ConsultantIncentiveLedger> ConsultantIncentiveLedger { get; set; }
         public DbSet<PublicApiClient> PublicApiClient { get; set; }
 
+        // ─── 1HR Suite — Hospital Workforce Management ────────────────────────
+        public DbSet<HrEmployee> HrEmployee { get; set; }
+        public DbSet<HrEmployeeCredential> HrEmployeeCredential { get; set; }
+        public DbSet<HrVaccinationRecord> HrVaccinationRecord { get; set; }
+        public DbSet<HrNeedleStickLog> HrNeedleStickLog { get; set; }
+        public DbSet<HrHospitalShift> HrHospitalShift { get; set; }
+        public DbSet<HrDutyRoster> HrDutyRoster { get; set; }
+        public DbSet<HrAttendanceLog> HrAttendanceLog { get; set; }
+        public DbSet<HrLeaveBalance> HrLeaveBalance { get; set; }
+        public DbSet<HrLeaveRequest> HrLeaveRequest { get; set; }
+        public DbSet<HrSalaryStructure> HrSalaryStructure { get; set; }
+        public DbSet<HrConsultantFeeConfig> HrConsultantFeeConfig { get; set; }
+        public DbSet<HrPayrollRun> HrPayrollRun { get; set; }
+        public DbSet<HrPayslip> HrPayslip { get; set; }
+
         // Pathology
         public DbSet<PathologyTestMaster> PathologyTestMaster { get; set; }
         public DbSet<PathologyReportTemplate> PathologyReportTemplate { get; set; }

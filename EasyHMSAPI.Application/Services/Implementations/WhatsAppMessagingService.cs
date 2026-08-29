@@ -310,6 +310,44 @@ namespace EasyHMSAPI.Application.Services.Implementations
             return SendAsync(nameof(SendDischargeSummaryAsync), mobileNumber, payload);
         }
 
+        public Task<bool> SendPayslipNotificationAsync(string mobileNumber, string employeeName, string monthYear, decimal netSalary, string hospitalName)
+        {
+            if (!IsEnabled)
+            {
+                _logger.LogInformation("WhatsApp is disabled (WhatsApp:IsEnabled); skipping {Method} for {Mobile}", nameof(SendPayslipNotificationAsync), MaskMobile(mobileNumber));
+                return Task.FromResult(false);
+            }
+
+            var to = NormalizeToE164(mobileNumber);
+            var payload = new
+            {
+                messaging_product = "whatsapp",
+                to,
+                type = "template",
+                template = new
+                {
+                    name = "payslip_generated_eng",
+                    language = new { code = "en" },
+                    components = new object[]
+                    {
+                        new
+                        {
+                            type = "body",
+                            parameters = new object[]
+                            {
+                                new { type = "text", text = employeeName },
+                                new { type = "text", text = monthYear },
+                                new { type = "text", text = netSalary.ToString("C") },
+                                new { type = "text", text = hospitalName }
+                            }
+                        }
+                    }
+                }
+            };
+
+            return SendAsync(nameof(SendPayslipNotificationAsync), mobileNumber, payload);
+        }
+
         public Task<bool> SendDischargeNotificationAsync(string mobileNumber, string patientName, string hospitalName, string dischargeDate)
         {
             if (!IsEnabled)
