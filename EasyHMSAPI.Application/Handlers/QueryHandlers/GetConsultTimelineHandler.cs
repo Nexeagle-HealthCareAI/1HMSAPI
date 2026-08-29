@@ -57,11 +57,18 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             };
 
             // Appointment history for this patient + doctor (exclude cancelled), most recent first.
+            // Bounded to ApptDate <= targetDate: this feeds LastFeeVisit/LastPaidDate/ValidUptoDate
+            // below, which anchor off "the most recent visit before the one being previewed" - the
+            // same rule AppointmentTypeResolver already applies. Without this bound, a visit dated
+            // AFTER targetDate (e.g. booked out of chronological order) could win the
+            // OrderByDescending(ApptDate) and get shown as "Last paid" for an earlier backdated
+            // booking, even though it hasn't happened yet relative to that booking.
             var appts = await _context.Appointments
                 .Where(a => a.HospitalId == request.HospitalId
                          && a.PatientId == request.PatientId
                          && a.DoctorId == request.DoctorId
-                         && a.CurrentStatusCode != AppConstants.AppointmentStatus_Cancelled)
+                         && a.CurrentStatusCode != AppConstants.AppointmentStatus_Cancelled
+                         && a.ApptDate <= targetDate)
                 .OrderByDescending(a => a.ApptDate)
                 .Select(a => new { a.ApptId, a.ApptDate, a.AppointmentType, a.CurrentStatusCode })
                 .Take(50)

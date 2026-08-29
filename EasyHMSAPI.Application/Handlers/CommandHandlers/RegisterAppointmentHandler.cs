@@ -59,6 +59,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 // Set status to 'Future' if appointment date is in the future
                 var status = AppointmentBookingHelpers.ResolveInitialStatus(request.ApptDate);
 
+                // Captured before the update below so a reschedule can evict the OLD date's
+                // booked-slots cache too, not just the new one (see cache eviction after save).
+                DateTime? previousApptDate = request.AppointmentId is not null
+                    ? await _context.Appointments
+                        .Where(x => x.ApptId == request.AppointmentId)
+                        .Select(x => (DateTime?)x.ApptDate)
+                        .FirstOrDefaultAsync(cancellationToken)
+                    : null;
+
                 var (appointment, isNewAppointment) = await CreateOrUpdateAppointment(request, patient, status, cancellationToken);
 
                 (bool billRefunded, decimal refundAmount, string? refundReceiptNo) refundResult = (false, 0m, null);
@@ -93,6 +102,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 // cache until it naturally expires, or the NEXT staff member checking this
                 // doctor+date would see a slot as open that was just taken.
                 _cache.Remove(PublicDirectoryCacheKeys.BookedSlots(appointment.HospitalId, appointment.DoctorId, appointment.ApptDate));
+                // A reschedule also vacates whatever slot it moved AWAY from — evict that date too,
+                // or the freed slot keeps showing as booked to everyone else until the TTL expires.
+                if (previousApptDate.HasValue && previousApptDate.Value.Date != appointment.ApptDate.Date)
+                {
+                    _cache.Remove(PublicDirectoryCacheKeys.BookedSlots(appointment.HospitalId, appointment.DoctorId, previousApptDate.Value));
+                }
 
                 // Auto OPD billing: when the visit is chargeable (New / Old-Fee) and the billing
                 // policy's OPD consult trigger is AUTO, create the encounter + consult charge and a
@@ -319,12 +334,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         int slotDurationMinutes = shiftDetails.FirstOrDefault()?.SlotDurationInMinutes ?? 10;
                         var availableSlotStart = FindFirstAvailableSlot(bookedSlots, shiftDetails, slotDurationMinutes, request.ApptDate);
 
-                        if (availableSlotStart.HasValue)
-                        {
-                            existingAppointment.StartAt = availableSlotStart.Value;
-                            request.StartAt = availableSlotStart.Value;
-                            existingAppointment.EndAt = availableSlotStart.Value.AddMinutes(slotDurationMinutes);
-                        }
+                        // Whatever happens, StartAt/EndAt must land on the SAME calendar date as the
+                        // ApptDate we just set above — every appointment-listing query (Future
+                        // Appointments, Doc Board Upcoming, the availability calendar) buckets by
+                        // StartAt, not ApptDate. Leaving StartAt on the old date here made a
+                        // rescheduled appointment silently vanish from every one of those views even
+                        // though ApptDate itself, and the "success" response, both looked correct.
+                        var resolvedSlotStart = availableSlotStart
+                            ?? request.ApptDate.Date.Add(existingAppointment.StartAt.TimeOfDay);
+                        existingAppointment.StartAt = resolvedSlotStart;
+                        request.StartAt = resolvedSlotStart;
+                        existingAppointment.EndAt = resolvedSlotStart.AddMinutes(slotDurationMinutes);
                     }
 
                     return (existingAppointment, isNew);

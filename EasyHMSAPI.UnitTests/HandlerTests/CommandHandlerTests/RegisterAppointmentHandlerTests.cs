@@ -98,5 +98,52 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var ex = Assert.ThrowsAsync<Exception>(() => _handler.Handle(request, CancellationToken.None));
             Assert.That(ex.Message, Does.Contain("Failed to register appointment"));
         }
+
+        [Test]
+        public async Task Handle_RescheduleWithoutExplicitSlot_MovesStartAtToTheNewDate()
+        {
+            // RescheduleDialog (the frontend's only reschedule entry point) sends a new ApptDate
+            // but never a StartAt, relying on the auto-pick-first-available-slot fallback below.
+            // With no DoctorShiftOverrides/DoctorShiftTemplates seeded, that fallback can't find a
+            // slot at all -- it used to leave StartAt/EndAt on the OLD date entirely in that case.
+            // Every appointment-listing view (Future Appointments, Doc Board Upcoming, the
+            // availability calendar) buckets by StartAt, not ApptDate, so a "successfully"
+            // rescheduled appointment would silently vanish from all of them.
+            var user = TestDataFactory.SeedUser(_context);
+            var doctor = TestDataFactory.SeedDoctor(_context, user);
+            var hospitalId = Guid.NewGuid();
+            var hospital = new Hospital { HospitalID = hospitalId, Name = "Hosp", Email = "e@m.com", Type = "General", RegistrationNumber = "REG002", Contact = "1234567890", Location = "Test Location", City = "Test City", State = "Test State", Country = "Test Country", Pincode = "123456", CreatedByUserID = Guid.NewGuid() };
+            _context.Hospitals.Add(hospital);
+            await _context.SaveChangesAsync();
+
+            var originalDate = DateTime.Today.AddDays(1);
+            var created = await _handler.Handle(new RegisterAppointmentRequestModel
+            {
+                UserId = user.UserID,
+                DoctorId = doctor.DoctorID,
+                HospitalId = hospitalId,
+                ApptDate = originalDate,
+                StartAt = originalDate.AddHours(10),
+                Patient = new Patient { FullName = "Reschedule Patient", Mobile = "9876500000", Age = 40, Sex = "Female" },
+                AllocateToken = true
+            }, CancellationToken.None);
+
+            var newDate = DateTime.Today.AddDays(5);
+            await _handler.Handle(new RegisterAppointmentRequestModel
+            {
+                UserId = user.UserID,
+                DoctorId = doctor.DoctorID,
+                HospitalId = hospitalId,
+                ApptDate = newDate,
+                AppointmentId = created.AppointmentId,
+                // No StartAt -- mirrors RescheduleDialog exactly.
+            }, CancellationToken.None);
+
+            var appointment = await _context.Appointments.FindAsync(created.AppointmentId);
+            Assert.That(appointment, Is.Not.Null);
+            Assert.That(appointment!.ApptDate.Date, Is.EqualTo(newDate.Date));
+            Assert.That(appointment.StartAt.Date, Is.EqualTo(newDate.Date));
+            Assert.That(appointment.EndAt.Date, Is.EqualTo(newDate.Date));
+        }
     }
 }
