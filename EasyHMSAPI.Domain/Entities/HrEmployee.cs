@@ -119,6 +119,9 @@ namespace EasyHMSAPI.Domain.Entities
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
         public string? UpdatedBy { get; set; }
 
+        public Guid? UserId { get; set; }
+        public User? User { get; set; }
+
         [Timestamp]
         public byte[]? RowVersion { get; set; }
 

@@ -7,5 +7,6 @@ namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
     public class GetHrKpiSummaryRequestModel : IRequest<GetHrKpiSummaryResponseModel>
     {
         public Guid HospitalId { get; set; }
+        public Guid LoggedInUserId { get; set; }
     }
 }

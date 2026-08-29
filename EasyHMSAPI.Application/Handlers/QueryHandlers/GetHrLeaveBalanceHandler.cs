@@ -23,8 +23,25 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
         {
             var year = request.Year ?? DateTime.UtcNow.Year;
 
-            var balance = await _context.HrLeaveBalance
-                .Where(b => b.HrEmployeeId == request.EmployeeId && b.Year == year)
+            // RBAC Check for Self-Service Isolation
+            var hasManageLeaves = await _context.UserRoles
+                .Include(ur => ur.Role)
+                .ThenInclude(r => r.RolePermissions)
+                .AnyAsync(ur => ur.UserID == request.LoggedInUserId &&
+                                ur.Role.RolePermissions.Any(p => p.PermissionKey == "hr.manage_leaves" && p.IsAllowed), cancellationToken);
+
+            var query = _context.HrLeaveBalance.Include(b => b.HrEmployee).AsQueryable();
+
+            if (!hasManageLeaves)
+            {
+                query = query.Where(b => b.HrEmployee.UserId == request.LoggedInUserId && b.Year == year);
+            }
+            else
+            {
+                query = query.Where(b => b.HrEmployeeId == request.EmployeeId && b.Year == year);
+            }
+
+            var balance = await query
                 .Select(b => new HrLeaveBalanceDto
                 {
                     HrLeaveBalanceId = b.HrLeaveBalanceId,

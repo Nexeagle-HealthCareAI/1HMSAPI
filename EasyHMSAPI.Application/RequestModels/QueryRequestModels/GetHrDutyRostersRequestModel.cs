@@ -9,5 +9,6 @@ namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
         public Guid HospitalId { get; set; }
         public DateTime StartDate { get; set; }
         public DateTime EndDate { get; set; }
+        public Guid LoggedInUserId { get; set; }
     }
 }

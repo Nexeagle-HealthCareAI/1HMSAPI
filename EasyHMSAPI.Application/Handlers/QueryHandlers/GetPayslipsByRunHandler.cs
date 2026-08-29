@@ -20,10 +20,24 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
         public async Task<GetPayslipsByRunResponseModel> Handle(GetPayslipsByRunRequestModel request, CancellationToken cancellationToken)
         {
-            var payslips = await _dbContext.HrPayslip
+            // RBAC Check for Self-Service Isolation
+            var hasManagePayroll = await _dbContext.UserRoles
+                .Include(ur => ur.Role)
+                .ThenInclude(r => r.RolePermissions)
+                .AnyAsync(ur => ur.UserID == request.LoggedInUserId &&
+                                ur.Role.RolePermissions.Any(p => p.PermissionKey == "hr.manage_payroll" && p.IsAllowed), cancellationToken);
+
+            var query = _dbContext.HrPayslip
                 .Include(p => p.HrEmployee)
                     .ThenInclude(e => e.Department)
-                .Where(p => p.HrPayrollRunId == request.HrPayrollRunId)
+                .Where(p => p.HrPayrollRunId == request.HrPayrollRunId);
+
+            if (!hasManagePayroll)
+            {
+                query = query.Where(p => p.HrEmployee.UserId == request.LoggedInUserId);
+            }
+
+            var payslips = await query
                 .Select(p => new HrPayslipDto
                 {
                     HrPayslipId = p.HrPayslipId,

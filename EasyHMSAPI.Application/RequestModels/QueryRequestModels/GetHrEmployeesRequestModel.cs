@@ -12,5 +12,6 @@ namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
         public string? EmploymentType { get; set; }
         public int PageNumber { get; set; } = 1;
         public int PageSize { get; set; } = 20;
+        public Guid LoggedInUserId { get; set; }
     }
 }

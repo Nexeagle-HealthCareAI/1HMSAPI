@@ -9,5 +9,6 @@ namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
         public Guid? HospitalId { get; set; }
         public Guid? EmployeeId { get; set; }
         public string? Status { get; set; }
+        public Guid LoggedInUserId { get; set; }
     }
 }
