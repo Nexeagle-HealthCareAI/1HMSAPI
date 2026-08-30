@@ -119,6 +119,28 @@ namespace EasyHMSAPI.Api.Controllers.V1
             }
         }
 
+        [HttpPost("{hospitalId}/{orderId}/lines/{orderLineId}/collect-sample")]
+        public async Task<IActionResult> CollectSample(Guid hospitalId, Guid orderId, Guid orderLineId, [FromBody] CollectPathologySampleCommand request)
+        {
+            request.HospitalId = hospitalId;
+            request.OrderId = orderId;
+            request.OrderLineId = orderLineId;
+            request.LoggedInUserId = UserContextHelper.GetUserId(User) ?? Guid.Empty;
+            request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+
+            try
+            {
+                var success = await _mediator.Send(request);
+                if (!success) return BadRequest(new { success = false, message = "Could not mark this sample collected -- it may already have moved past Pending." });
+                return Ok(new { success = true });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error collecting pathology sample for order line {OrderLineId}", orderLineId);
+                return StatusCode(500, new { Message = "An error occurred while recording sample collection." });
+            }
+        }
+
         [HttpPost("{hospitalId}/{orderId}/report")]
         public async Task<IActionResult> GenerateReport(Guid hospitalId, Guid orderId, [FromBody] GeneratePathologyReportCommand request)
         {

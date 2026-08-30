@@ -53,7 +53,9 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string TestCode { get; set; } = null!;
         public string Status { get; set; } = null!;
         public string? ParameterSchemaJson { get; set; }
-        
+        public string? SampleBarcode { get; set; }
+        public DateTime? SampleCollectedAt { get; set; }
+
         public PathologyResultDto? Result { get; set; }
     }
 

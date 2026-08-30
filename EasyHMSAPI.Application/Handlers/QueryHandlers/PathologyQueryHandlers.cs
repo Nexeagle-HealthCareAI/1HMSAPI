@@ -144,6 +144,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     TestCode = test?.TestCode ?? "Unknown Code",
                     Status = line.Status,
                     ParameterSchemaJson = test?.ParameterSchemaJson,
+                    SampleBarcode = line.SampleBarcode,
+                    SampleCollectedAt = line.SampleCollectedAt,
                     Result = result == null ? null : new PathologyResultDto
                     {
                         ResultId = result.ResultId,
