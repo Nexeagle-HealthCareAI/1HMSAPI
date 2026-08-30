@@ -90,50 +90,33 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 await _context.SaveChangesAsync(cancellationToken);
 
                 // 2. Billing Integration
-                if (autoBill && request.EncounterId.HasValue)
+                if (autoBill)
                 {
-                    var tests = await _context.PathologyTestMaster
-                        .Where(t => request.TestIds.Contains(t.TestId) && t.HospitalId == request.HospitalId)
-                        .ToListAsync(cancellationToken);
+                    // IPD orders carry AdmissionId instead of EncounterId -- resolve the admission's
+                    // own encounter (same lookup ClinicalOrderCommandHandlers uses for bed/CPOE
+                    // charges) so an admission-only order still bills instead of silently skipping.
+                    var billingEncounterId = await PathologyAutoBillingHelper.ResolveBillingEncounterIdAsync(
+                        _context, request.HospitalId, request.EncounterId, request.AdmissionId, cancellationToken);
 
-                    var chargeIds = tests.Where(t => t.ChargeId.HasValue).Select(t => t.ChargeId!.Value).Distinct().ToList();
-                    var chargeMasters = chargeIds.Count == 0
-                        ? new Dictionary<Guid, ChargeMaster>()
-                        : await _context.ChargeMaster
-                            .Where(c => c.HospitalId == request.HospitalId && chargeIds.Contains(c.ChargeId))
-                            .ToDictionaryAsync(c => c.ChargeId, cancellationToken);
-
-                    var charges = new List<ChargeDetail>();
-                    foreach (var test in tests)
+                    if (billingEncounterId.HasValue)
                     {
-                        if (test.ChargeId.HasValue && chargeMasters.TryGetValue(test.ChargeId.Value, out var master))
+                        var charges = await PathologyAutoBillingHelper.BuildChargeDetailsAsync(
+                            _context, request.HospitalId, request.TestIds, order.OrderId.ToString(), request.OrderedByDoctorId, cancellationToken);
+
+                        if (charges.Any())
                         {
-                            charges.Add(new ChargeDetail
+                            var chargeRequest = new AddChargeEventRequestModel
                             {
-                                ChargeId = test.ChargeId.Value,
-                                Qty = 1,
-                                Rate = master.DefaultRate,
-                                CategoryCode = "LAB_PATH",
-                                SourceModule = BillingConstants.SourceModule.LabPath,
-                                SourceRefId = order.OrderId.ToString(),
-                                AttributedDoctorId = request.OrderedByDoctorId
-                            });
+                                HospitalId = request.HospitalId,
+                                PatientId = request.PatientId,
+                                EncounterId = billingEncounterId.Value,
+                                Charges = charges,
+                                LoggedInUserId = request.LoggedInUserId,
+                                LoggedInUserName = request.LoggedInUserName
+                            };
+
+                            await _mediator.Send(chargeRequest, cancellationToken);
                         }
-                    }
-
-                    if (charges.Any())
-                    {
-                        var chargeRequest = new AddChargeEventRequestModel
-                        {
-                            HospitalId = request.HospitalId,
-                            PatientId = request.PatientId,
-                            EncounterId = request.EncounterId.Value,
-                            Charges = charges,
-                            LoggedInUserId = request.LoggedInUserId,
-                            LoggedInUserName = request.LoggedInUserName
-                        };
-
-                        await _mediator.Send(chargeRequest, cancellationToken);
                     }
                 }
 

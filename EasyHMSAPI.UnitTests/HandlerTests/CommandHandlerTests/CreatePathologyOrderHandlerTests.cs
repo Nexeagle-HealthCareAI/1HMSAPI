@@ -170,5 +170,41 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(response.Success, Is.True, response.Message);
             _mediatorMock.Verify(m => m.Send(It.IsAny<AddChargeEventRequestModel>(), It.IsAny<CancellationToken>()), Times.Never);
         }
+
+        [Test]
+        public async Task Handle_IpdOrderWithResolvableAdmissionEncounter_PostsChargeAgainstAdmissionEncounter()
+        {
+            var (hospitalId, testId, chargeId) = SeedAutoBillCatalog(defaultRate: 300m);
+            var encounterId = Guid.NewGuid();
+            var admissionId = Guid.NewGuid();
+            _context.Admission.Add(new Admission
+            {
+                AdmissionId = admissionId,
+                HospitalId = hospitalId,
+                PatientId = "PTID00000001",
+                EncounterId = encounterId,
+                AdmissionNo = "ADM-1",
+                AdmittedAt = DateTime.UtcNow,
+            });
+            _context.SaveChanges();
+
+            var response = await _handler.Handle(new CreatePathologyOrderRequestModel
+            {
+                HospitalId = hospitalId,
+                PatientId = "PTID00000001",
+                AdmissionId = admissionId,
+                EncounterId = null,
+                TestIds = new() { testId },
+                LoggedInUserName = "tester",
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True, response.Message);
+            _mediatorMock.Verify(m => m.Send(
+                It.Is<AddChargeEventRequestModel>(r =>
+                    r.EncounterId == encounterId &&
+                    r.Charges.Count == 1 &&
+                    r.Charges.Single().ChargeId == chargeId),
+                It.IsAny<CancellationToken>()), Times.Once);
+        }
     }
 }

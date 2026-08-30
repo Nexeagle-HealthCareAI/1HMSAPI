@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Domain.Context;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
@@ -12,10 +14,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     public class ApprovePathologyReportHandler : IRequestHandler<ApprovePathologyReportCommand, bool>
     {
         private readonly AppDbContext _context;
+        private readonly IMediator _mediator;
 
-        public ApprovePathologyReportHandler(AppDbContext context)
+        public ApprovePathologyReportHandler(AppDbContext context, IMediator mediator)
         {
             _context = context;
+            _mediator = mediator;
         }
 
         public async Task<bool> Handle(ApprovePathologyReportCommand request, CancellationToken cancellationToken)
@@ -85,7 +89,51 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
 
             await _context.SaveChangesAsync(cancellationToken);
+
+            // 3. Auto-bill on approval, if the hospital's billing policy is configured for it.
+            // Best-effort and never blocks the approval itself -- the report is already signed
+            // off medico-legally by this point, so a billing hiccup shouldn't undo that.
+            var billingPolicy = await _context.BillingPolicy
+                .FirstOrDefaultAsync(p => p.HospitalId == request.HospitalId, cancellationToken);
+            if (billingPolicy?.LabPathTrigger == "ON_REPORT_APPROVAL")
+            {
+                await DispatchReportApprovalBillingAsync(report.OrderId, orderLines.Select(l => l.TestId), request, cancellationToken);
+            }
+
             return true;
+        }
+
+        private async Task DispatchReportApprovalBillingAsync(
+            Guid orderId, IEnumerable<Guid> testIds, ApprovePathologyReportCommand request, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var order = await _context.PathologyOrder
+                    .FirstOrDefaultAsync(o => o.OrderId == orderId && o.HospitalId == request.HospitalId, cancellationToken);
+                if (order == null) return;
+
+                var billingEncounterId = await PathologyAutoBillingHelper.ResolveBillingEncounterIdAsync(
+                    _context, request.HospitalId, order.EncounterId, order.AdmissionId, cancellationToken);
+                if (!billingEncounterId.HasValue) return;
+
+                var charges = await PathologyAutoBillingHelper.BuildChargeDetailsAsync(
+                    _context, request.HospitalId, testIds, order.OrderId.ToString(), order.OrderedByDoctorId, cancellationToken);
+                if (!charges.Any()) return;
+
+                await _mediator.Send(new AddChargeEventRequestModel
+                {
+                    HospitalId = request.HospitalId,
+                    PatientId = order.PatientId,
+                    EncounterId = billingEncounterId.Value,
+                    Charges = charges,
+                    LoggedInUserId = request.LoggedInUserId,
+                    LoggedInUserName = request.LoggedInUserName
+                }, cancellationToken);
+            }
+            catch
+            {
+                // Swallow -- report approval already succeeded and must not be undone by a billing failure.
+            }
         }
     }
 }
