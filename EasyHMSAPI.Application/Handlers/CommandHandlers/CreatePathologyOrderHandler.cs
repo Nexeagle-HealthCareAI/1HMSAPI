@@ -94,19 +94,25 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 {
                     var tests = await _context.PathologyTestMaster
                         .Where(t => request.TestIds.Contains(t.TestId) && t.HospitalId == request.HospitalId)
-                        .Include(t => t.ChargeId)
                         .ToListAsync(cancellationToken);
+
+                    var chargeIds = tests.Where(t => t.ChargeId.HasValue).Select(t => t.ChargeId!.Value).Distinct().ToList();
+                    var chargeMasters = chargeIds.Count == 0
+                        ? new Dictionary<Guid, ChargeMaster>()
+                        : await _context.ChargeMaster
+                            .Where(c => c.HospitalId == request.HospitalId && chargeIds.Contains(c.ChargeId))
+                            .ToDictionaryAsync(c => c.ChargeId, cancellationToken);
 
                     var charges = new List<ChargeDetail>();
                     foreach (var test in tests)
                     {
-                        if (test.ChargeId.HasValue)
+                        if (test.ChargeId.HasValue && chargeMasters.TryGetValue(test.ChargeId.Value, out var master))
                         {
                             charges.Add(new ChargeDetail
                             {
                                 ChargeId = test.ChargeId.Value,
                                 Qty = 1,
-                                Rate = 0, // Gets mapped from ChargeMaster
+                                Rate = master.DefaultRate,
                                 CategoryCode = "LAB_PATH",
                                 SourceModule = BillingConstants.SourceModule.LabPath,
                                 SourceRefId = order.OrderId.ToString(),
@@ -120,6 +126,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         var chargeRequest = new AddChargeEventRequestModel
                         {
                             HospitalId = request.HospitalId,
+                            PatientId = request.PatientId,
                             EncounterId = request.EncounterId.Value,
                             Charges = charges,
                             LoggedInUserId = request.LoggedInUserId,
