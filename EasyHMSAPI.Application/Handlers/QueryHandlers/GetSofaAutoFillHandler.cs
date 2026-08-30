@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
@@ -9,8 +10,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 {
     /// <summary>
     /// The hybrid auto-pull side of SOFA input capture — latest VitalReading for GCS/MAP-computed,
-    /// plus the last 24h of FluidEntry(Direction=OUT, Subtype=Urine) summed for urine output. Pure
-    /// draft, nothing persisted here.
+    /// the last 24h of FluidEntry(Direction=OUT, Subtype=Urine) summed for urine output, and (when
+    /// the patient has one) their most recently approved pathology report's platelets/bilirubin/
+    /// creatinine (see PathologyLabValueResolver). Pure draft, nothing persisted here.
     /// </summary>
     public class GetSofaAutoFillHandler : IRequestHandler<GetSofaAutoFillRequestModel, GetSofaAutoFillResponseModel>
     {
@@ -39,12 +41,24 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     && f.RecordedAt >= windowStart)
                 .SumAsync(f => (decimal?)f.VolumeMl, cancellationToken);
 
+            var patientId = await _context.Admission
+                .Where(a => a.AdmissionId == request.AdmissionId && a.HospitalId == request.HospitalId)
+                .Select(a => a.PatientId)
+                .FirstOrDefaultAsync(cancellationToken);
+            var (labValues, labApprovedAt) = await PathologyLabValueResolver.GetLatestApprovedValuesAsync(
+                _context, request.HospitalId, patientId, cancellationToken);
+
             return new GetSofaAutoFillResponseModel
             {
                 MapValue = mapValue,
                 GcsTotal = latestVital?.GcsTotal,
                 UrineOutputMlPerDay = urineOutput,
                 SourceVitalRecordedAt = latestVital?.RecordedAt,
+
+                PlateletsCount = PathologyLabValueResolver.TryGet(labValues, "Platelet Count"),
+                BilirubinMgDl = PathologyLabValueResolver.TryGet(labValues, "Bilirubin - Total"),
+                CreatinineMgDl = PathologyLabValueResolver.TryGet(labValues, "Serum Creatinine"),
+                SourceLabReportApprovedAt = labApprovedAt,
             };
         }
     }

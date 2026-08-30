@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -211,6 +212,40 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 TechnicianName = report.TechnicianName,
                 PathologistName = report.PathologistName,
             };
+        }
+    }
+
+    public class GetRecentlyApprovedPathologyReportsHandler : IRequestHandler<GetRecentlyApprovedPathologyReportsQuery, List<PathologyReportReadyDto>>
+    {
+        private readonly AppDbContext _context;
+
+        public GetRecentlyApprovedPathologyReportsHandler(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        public async Task<List<PathologyReportReadyDto>> Handle(GetRecentlyApprovedPathologyReportsQuery request, CancellationToken cancellationToken)
+        {
+            // 30 days is a generous window for "still worth flagging on the board" -- a report
+            // approved that long ago has almost certainly already been seen by the ordering doctor.
+            var since = DateTime.UtcNow.AddDays(-30);
+
+            return await (
+                from report in _context.PathologyReport
+                join order in _context.PathologyOrder on report.OrderId equals order.OrderId
+                where report.HospitalId == request.HospitalId
+                    && report.Status == "APPROVED"
+                    && report.ApprovedAt >= since
+                select new PathologyReportReadyDto
+                {
+                    PatientId = order.PatientId,
+                    ReportId = report.ReportId,
+                    ReportNo = report.ReportNo,
+                    OrderNo = order.OrderNo,
+                    ApprovedAt = report.ApprovedAt,
+                    PdfBlobPath = report.PdfBlobPath,
+                }
+            ).ToListAsync(cancellationToken);
         }
     }
 }

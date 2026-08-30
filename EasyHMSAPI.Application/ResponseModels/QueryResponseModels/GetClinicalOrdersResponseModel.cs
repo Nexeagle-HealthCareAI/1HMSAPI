@@ -43,5 +43,13 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public Guid? ChargeEventId { get; set; }
         public decimal? ChargedAmount { get; set; }
         public bool ChargeVoided { get; set; }
+
+        // Set only for a LAB line whose ChargeId matched a cataloged pathology test at order time
+        // (see ClinicalOrderCommandHandlers' dual-write) -- lets the CPOE panel show "Completed
+        // (View Report)" once the linked PathologyReport is approved, instead of leaving the line
+        // looking permanently "sent to lab" with no visible outcome.
+        public string? LinkedPathologyReportStatus { get; set; }
+        public Guid? LinkedPathologyReportId { get; set; }
+        public string? LinkedPathologyReportNo { get; set; }
     }
 }

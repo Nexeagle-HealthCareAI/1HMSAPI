@@ -9,6 +9,13 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public int? GcsTotal { get; set; }
         public decimal? UrineOutputMlPerDay { get; set; }
         public DateTime? SourceVitalRecordedAt { get; set; }
+
+        // Pulled from the patient's most recent APPROVED pathology report when one exists (see
+        // PathologyLabValueResolver). PaO2/FiO2 ratio stays manual -- ABG isn't a seeded catalog panel.
+        public decimal? PlateletsCount { get; set; }
+        public decimal? BilirubinMgDl { get; set; }
+        public decimal? CreatinineMgDl { get; set; }
+        public DateTime? SourceLabReportApprovedAt { get; set; }
     }
 
     [ExcludeFromCodeCoverage]

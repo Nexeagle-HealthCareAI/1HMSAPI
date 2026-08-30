@@ -22,13 +22,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     public class UploadPathologyReportPdfHandler : IRequestHandler<UploadPathologyReportPdfRequestModel, UploadPathologyReportPdfResponseModel>
     {
         private readonly IBlobStorageService _blobStorageService;
+        private readonly IWhatsAppMessagingService _whatsAppMessagingService;
         private readonly string _containerName;
         private readonly AppDbContext _context;
 
-        public UploadPathologyReportPdfHandler(IConfiguration configuration, IBlobStorageService blobStorageService, AppDbContext context)
+        public UploadPathologyReportPdfHandler(
+            IConfiguration configuration, IBlobStorageService blobStorageService,
+            IWhatsAppMessagingService whatsAppMessagingService, AppDbContext context)
         {
             _containerName = configuration["BlobStorage:PathologyReportsContainer"] ?? "pathology-reports";
             _blobStorageService = blobStorageService;
+            _whatsAppMessagingService = whatsAppMessagingService;
             _context = context;
         }
 
@@ -70,6 +74,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 _context.PathologyReport.Update(report);
                 await _context.SaveChangesAsync(cancellationToken);
 
+                await DispatchWhatsAppLabReportAsync(report.HospitalId, report.OrderId, report.ReportNo, url, cancellationToken);
+
                 return new UploadPathologyReportPdfResponseModel
                 {
                     Success = true,
@@ -81,6 +87,40 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             catch (Exception ex)
             {
                 return new UploadPathologyReportPdfResponseModel { Success = false, Message = $"An error occurred while uploading the report PDF: {ex.Message}" };
+            }
+        }
+
+        // Best-effort push -- swallows every failure, matching UploadPrescriptionAttachmentsHandler's
+        // dispatch helper. A patient not having a WhatsApp-reachable number on file, WhatsApp being
+        // disabled, or the "lab_report_sent" Meta template not being approved yet must never fail
+        // the PDF upload itself -- the report is already finalized by this point.
+        private async Task DispatchWhatsAppLabReportAsync(
+            Guid hospitalId, Guid orderId, string reportNo, string documentLink, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var order = await _context.PathologyOrder
+                    .Where(o => o.OrderId == orderId && o.HospitalId == hospitalId)
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (order == null) return;
+
+                var patient = await _context.PatientRegistrations
+                    .Where(p => p.PatientId == order.PatientId && p.HospitalId == hospitalId)
+                    .Select(p => new { p.Mobile, p.FullName })
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (patient == null || string.IsNullOrWhiteSpace(patient.Mobile)) return;
+
+                var hospitalName = await _context.Hospitals
+                    .Where(h => h.HospitalID == hospitalId)
+                    .Select(h => h.Name)
+                    .FirstOrDefaultAsync(cancellationToken) ?? "Hospital";
+
+                await _whatsAppMessagingService.SendLabReportAsync(
+                    patient.Mobile, documentLink, $"{reportNo}.pdf", hospitalName, patient.FullName ?? "Patient");
+            }
+            catch (Exception)
+            {
+                // Swallowed deliberately -- see method summary.
             }
         }
     }

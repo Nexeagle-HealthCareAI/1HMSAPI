@@ -310,6 +310,49 @@ namespace EasyHMSAPI.Application.Services.Implementations
             return SendAsync(nameof(SendDischargeSummaryAsync), mobileNumber, payload);
         }
 
+        public Task<bool> SendLabReportAsync(string mobileNumber, string documentLink, string fileName, string hospitalName, string patientName)
+        {
+            if (!IsEnabled)
+            {
+                _logger.LogInformation("WhatsApp is disabled (WhatsApp:IsEnabled); skipping {Method} for {Mobile}", nameof(SendLabReportAsync), MaskMobile(mobileNumber));
+                return Task.FromResult(false);
+            }
+
+            var payload = new
+            {
+                messaging_product = "whatsapp",
+                to = mobileNumber,
+                type = "template",
+                template = new
+                {
+                    name = "lab_report_sent",
+                    language = new { code = "en" },
+                    components = new object[]
+                    {
+                        new
+                        {
+                            type = "header",
+                            parameters = new object[]
+                            {
+                                new { type = "document", document = new { link = documentLink, filename = fileName } }
+                            }
+                        },
+                        new
+                        {
+                            type = "body",
+                            parameters = new object[]
+                            {
+                                new { type = "text", text = patientName, parameter_name = "patient_name" },
+                                new { type = "text", text = hospitalName, parameter_name = "hospital_name" }
+                            }
+                        }
+                    }
+                }
+            };
+
+            return SendAsync(nameof(SendLabReportAsync), mobileNumber, payload);
+        }
+
         public Task<bool> SendPayslipNotificationAsync(string mobileNumber, string employeeName, string monthYear, decimal netSalary, string hospitalName)
         {
             if (!IsEnabled)

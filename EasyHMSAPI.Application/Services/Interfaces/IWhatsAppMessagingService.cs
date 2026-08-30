@@ -23,5 +23,11 @@ namespace EasyHMSAPI.Application.Services.Interfaces
         /// <summary>Sends a plain text summary of the payslip. Requires a "payslip_generated_eng"
         /// template approved in Meta Business Manager; returns false until that template exists.</summary>
         Task<bool> SendPayslipNotificationAsync(string mobileNumber, string employeeName, string monthYear, decimal netSalary, string hospitalName);
+
+        /// <summary>Sends the approved pathology report PDF as a WhatsApp document attachment --
+        /// same document-header template shape as SendPrescriptionAsync/SendDischargeSummaryAsync.
+        /// Requires a "lab_report_sent" template approved in Meta Business Manager; returns false
+        /// (no-op) until that template exists.</summary>
+        Task<bool> SendLabReportAsync(string mobileNumber, string documentLink, string fileName, string hospitalName, string patientName);
     }
 }

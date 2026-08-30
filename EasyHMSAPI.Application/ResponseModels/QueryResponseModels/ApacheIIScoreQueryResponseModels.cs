@@ -3,8 +3,9 @@ using System.Diagnostics.CodeAnalysis;
 namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
 {
     // Partial draft — whatever's already captured elsewhere, pre-filled for review/override.
-    // Lab-only fields (sodium, potassium, creatinine, hematocrit, WBC, pH) are always null here —
-    // there's no structured lab-results system to pull them from.
+    // Sodium/potassium/creatinine/hematocrit/WBC are pulled from the patient's most recent
+    // APPROVED PathologyReport when one exists (see PathologyLabValueResolver) -- ArterialPh/
+    // FiO2/PaO2 stay null since ABG isn't one of the seeded catalog panels.
     [ExcludeFromCodeCoverage]
     public class GetApacheIIAutoFillResponseModel
     {
@@ -15,6 +16,13 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public int? GcsTotal { get; set; }
         public int? AgeYears { get; set; }
         public DateTime? SourceVitalRecordedAt { get; set; }
+
+        public decimal? SerumSodium { get; set; }
+        public decimal? SerumPotassium { get; set; }
+        public decimal? SerumCreatinine { get; set; }
+        public decimal? Hematocrit { get; set; }
+        public decimal? Wbc { get; set; }
+        public DateTime? SourceLabReportApprovedAt { get; set; }
     }
 
     [ExcludeFromCodeCoverage]

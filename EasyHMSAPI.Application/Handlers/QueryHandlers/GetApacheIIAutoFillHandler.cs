@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -8,9 +9,11 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 {
     /// <summary>
     /// The hybrid auto-pull side of APACHE II input capture — pulls the admission's latest
-    /// VitalReading (temp/HR/RR/GCS/MAP-computed-from-BP) and the patient's age. Lab-only fields
-    /// are left null; the frontend form fills them in manually. Nothing here is persisted — this
-    /// is a pure draft, same "compose fresh, never save" contract as GetDischargeSummaryDraftHandler.
+    /// VitalReading (temp/HR/RR/GCS/MAP-computed-from-BP), the patient's age, and (when the
+    /// patient has one) their most recently approved pathology report's sodium/potassium/
+    /// creatinine/hematocrit/WBC (see PathologyLabValueResolver). ArterialPh/FiO2/PaO2 stay null —
+    /// ABG isn't one of the seeded catalog panels. Nothing here is persisted — this is a pure
+    /// draft, same "compose fresh, never save" contract as GetDischargeSummaryDraftHandler.
     /// </summary>
     public class GetApacheIIAutoFillHandler : IRequestHandler<GetApacheIIAutoFillRequestModel, GetApacheIIAutoFillResponseModel>
     {
@@ -40,6 +43,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             var patient = admission.PatientId == null ? null : await _context.PatientRegistrations
                 .FirstOrDefaultAsync(p => p.HospitalId == request.HospitalId && p.PatientId == admission.PatientId, cancellationToken);
 
+            var (labValues, labApprovedAt) = await PathologyLabValueResolver.GetLatestApprovedValuesAsync(
+                _context, request.HospitalId, admission.PatientId, cancellationToken);
+
             return new GetApacheIIAutoFillResponseModel
             {
                 Temperature = latestVital?.Temperature,
@@ -49,6 +55,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 GcsTotal = latestVital?.GcsTotal,
                 AgeYears = patient?.Age.HasValue == true ? (int)patient.Age!.Value : null,
                 SourceVitalRecordedAt = latestVital?.RecordedAt,
+
+                SerumSodium = PathologyLabValueResolver.TryGet(labValues, "Serum Sodium (Na+)"),
+                SerumPotassium = PathologyLabValueResolver.TryGet(labValues, "Serum Potassium (K+)"),
+                SerumCreatinine = PathologyLabValueResolver.TryGet(labValues, "Serum Creatinine"),
+                Hematocrit = PathologyLabValueResolver.TryGet(labValues, "PCV / Hematocrit"),
+                Wbc = PathologyLabValueResolver.TryGet(labValues, "Total WBC Count (TLC)"),
+                SourceLabReportApprovedAt = labApprovedAt,
             };
         }
     }

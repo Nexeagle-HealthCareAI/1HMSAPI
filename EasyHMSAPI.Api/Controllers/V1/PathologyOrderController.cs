@@ -63,6 +63,24 @@ namespace EasyHMSAPI.Api.Controllers.V1
             }
         }
 
+        // Powers DocBoard's "Lab Report Ready" badge -- fetched once per hospital, not per
+        // appointment row. Route has two literal segments after {hospitalId}, so it's unambiguous
+        // against GetOrderById's single-segment {hospitalId}/{orderId} below.
+        [HttpGet("{hospitalId}/reports/ready")]
+        public async Task<IActionResult> GetRecentlyApprovedReports(Guid hospitalId)
+        {
+            try
+            {
+                var response = await _mediator.Send(new GetRecentlyApprovedPathologyReportsQuery { HospitalId = hospitalId });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching recently approved pathology reports for hospital {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching ready reports." });
+            }
+        }
+
         [HttpGet("{hospitalId}/{orderId}")]
         public async Task<IActionResult> GetOrderById(Guid hospitalId, Guid orderId)
         {

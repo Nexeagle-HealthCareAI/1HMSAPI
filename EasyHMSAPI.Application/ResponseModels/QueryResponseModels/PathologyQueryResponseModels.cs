@@ -76,4 +76,15 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? TechnicianName { get; set; }
         public string? PathologistName { get; set; }
     }
+
+    [ExcludeFromCodeCoverage]
+    public class PathologyReportReadyDto
+    {
+        public string PatientId { get; set; } = null!;
+        public Guid ReportId { get; set; }
+        public string ReportNo { get; set; } = null!;
+        public string OrderNo { get; set; } = null!;
+        public DateTime? ApprovedAt { get; set; }
+        public string? PdfBlobPath { get; set; }
+    }
 }

@@ -51,6 +51,20 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     .Where(c => chargeEventIds.Contains(c.ChargeEventId))
                     .ToDictionaryAsync(c => c.ChargeEventId, cancellationToken);
 
+                // Lab lines dual-written to a PathologyOrderLine (see ClinicalOrderCommandHandlers)
+                // carry LinkedPathologyOrderLineId -- resolve each one's report status/number so the
+                // panel can show "Completed (View Report)" once it's approved.
+                var linkedPathologyLineIds = lines.Where(l => l.LinkedPathologyOrderLineId.HasValue)
+                    .Select(l => l.LinkedPathologyOrderLineId!.Value).Distinct().ToList();
+                var pathologyReportByLineId = linkedPathologyLineIds.Count == 0
+                    ? new Dictionary<Guid, (string Status, Guid ReportId, string ReportNo)>()
+                    : await (
+                        from pol in _context.PathologyOrderLine
+                        join rep in _context.PathologyReport on pol.ReportId equals rep.ReportId
+                        where linkedPathologyLineIds.Contains(pol.OrderLineId) && pol.ReportId.HasValue
+                        select new { pol.OrderLineId, rep.Status, rep.ReportId, rep.ReportNo }
+                    ).ToDictionaryAsync(x => x.OrderLineId, x => (x.Status, x.ReportId, x.ReportNo), cancellationToken);
+
                 var linesByOrder = lines.GroupBy(l => l.OrderId).ToDictionary(g => g.Key, g => g.ToList());
 
                 var items = orders.Select(o => new ClinicalOrderItem
@@ -64,6 +78,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         .Select(l =>
                         {
                             BillingChargeEvent? charge = l.ChargeEventId.HasValue && chargesById.TryGetValue(l.ChargeEventId.Value, out var c) ? c : null;
+                            var linkedReport = l.LinkedPathologyOrderLineId.HasValue
+                                && pathologyReportByLineId.TryGetValue(l.LinkedPathologyOrderLineId.Value, out var pr)
+                                ? pr : ((string Status, Guid ReportId, string ReportNo)?)null;
                             return new ClinicalOrderLineItem
                             {
                                 OrderLineId = l.OrderLineId,
@@ -83,6 +100,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                                 ChargeEventId = l.ChargeEventId,
                                 ChargedAmount = charge?.NetAmount,
                                 ChargeVoided = charge?.StatusCode == BillingConstants.ChargeEventStatus.Void,
+                                LinkedPathologyReportStatus = linkedReport?.Status,
+                                LinkedPathologyReportId = linkedReport?.ReportId,
+                                LinkedPathologyReportNo = linkedReport?.ReportNo,
                             };
                         }).ToList(),
                 }).ToList();
