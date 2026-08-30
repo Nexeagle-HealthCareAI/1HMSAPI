@@ -230,12 +230,17 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             // approved that long ago has almost certainly already been seen by the ordering doctor.
             var since = DateTime.UtcNow.AddDays(-30);
 
+            // Newest first -- a patient can have multiple approved reports in the window, and the
+            // frontend indexes this list by patientId keeping only the first one seen per patient
+            // (same "ordered desc, first-seen wins" convention as referralsByPatient in
+            // DocBoard.tsx), so the ordering here is what actually decides which report wins.
             return await (
                 from report in _context.PathologyReport
                 join order in _context.PathologyOrder on report.OrderId equals order.OrderId
                 where report.HospitalId == request.HospitalId
                     && report.Status == "APPROVED"
                     && report.ApprovedAt >= since
+                orderby report.ApprovedAt descending
                 select new PathologyReportReadyDto
                 {
                     PatientId = order.PatientId,
