@@ -15,6 +15,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public bool AutoBillOnOrder { get; set; }
         public string? DefaultReportHeaderBlob { get; set; }
         public string? DefaultReportFooterText { get; set; }
+        public string? LetterheadMode { get; set; }
 
         [JsonIgnore]
         public string? LoggedInUserName { get; set; }

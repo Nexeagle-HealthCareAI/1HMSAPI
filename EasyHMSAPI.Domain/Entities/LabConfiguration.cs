@@ -25,9 +25,18 @@ namespace EasyHMSAPI.Domain.Entities
 
         // When true, the report renderer leaves the configured top/bottom margin band blank
         // (physical pre-printed stationery already has the hospital's header/footer on it) instead
-        // of drawing the digital letterhead there.
+        // of drawing the digital letterhead there. Superseded by LetterheadMode below -- left as-is,
+        // unused, rather than removed, since nothing else references it either.
         public bool IsPreprintedStationery { get; set; }
-        
+
+        // CUSTOM_TEMPLATE | BLANK_PREPRINTED | SYSTEM_DEFAULT -- which source the pathology report
+        // PDF draws its header/footer from. A 3-state string rather than a bool: prescription and
+        // discharge's single UseSystemDefaultLetterhead boolean can't distinguish "nothing
+        // configured" from "deliberately left blank" from "deliberately default," so this doesn't
+        // reuse that pattern. CUSTOM_TEMPLATE resolves via whichever PathologyReportTemplate has
+        // IsDefault = true; it isn't a file reference itself.
+        public string LetterheadMode { get; set; } = "SYSTEM_DEFAULT";
+
         public DateTime CreatedAt { get; set; }
         public string? CreatedBy { get; set; }
         public DateTime UpdatedAt { get; set; }
