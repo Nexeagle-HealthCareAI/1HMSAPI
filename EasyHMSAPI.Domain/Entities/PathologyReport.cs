@@ -15,8 +15,8 @@ namespace EasyHMSAPI.Domain.Entities
         
         public string ReportNo { get; set; } = null!;
         
-        // Status: DRAFT, APPROVED
-        public string Status { get; set; } = "DRAFT"; 
+        // Status: DRAFT -> TECH_SIGNED (technician sign-off) -> APPROVED (pathologist approval)
+        public string Status { get; set; } = "DRAFT";
         
         public string? PdfBlobPath { get; set; }
         public string? PdfSha256 { get; set; }

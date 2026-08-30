@@ -4,11 +4,11 @@ using System.Text.Json.Serialization;
 
 namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
 {
-    public class ApprovePathologyReportCommand : IRequest<bool>
+    public class SignPathologyReportAsTechnicianCommand : IRequest<bool>
     {
         public Guid HospitalId { get; set; }
         public Guid ReportId { get; set; }
-        public string PathologistRegNo { get; set; } = null!;
+        public string TechnicianRegNo { get; set; } = null!;
 
         [JsonIgnore]
         public string? LoggedInUserName { get; set; }

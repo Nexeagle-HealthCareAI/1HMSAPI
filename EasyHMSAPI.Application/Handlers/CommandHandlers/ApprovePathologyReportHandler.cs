@@ -33,12 +33,34 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 throw new ApplicationException("This report has already been approved.");
             }
 
+            if (report.Status != "TECH_SIGNED")
+            {
+                throw new ApplicationException("This report must be signed by a technician before it can be approved by a pathologist.");
+            }
+
+            if (string.IsNullOrWhiteSpace(request.PathologistRegNo))
+            {
+                throw new ApplicationException("A pathologist registration number is required to approve this report.");
+            }
+
+            // A pathologist sign-off is a medico-legal act, so the approver must be a registered
+            // Doctor -- an Admin/LabTechnician-only account has no Doctor record to attribute it to.
+            var doctor = await _context.Doctors
+                .FirstOrDefaultAsync(d => d.UserID == request.LoggedInUserId, cancellationToken);
+            if (doctor == null)
+            {
+                throw new ApplicationException("Only a registered doctor can approve a pathology report as the certifying pathologist.");
+            }
+
             var now = DateTime.UtcNow;
 
             // 1. Approve the report
             report.Status = "APPROVED";
             report.ApprovedAt = now;
             report.ApprovedByUserId = request.LoggedInUserId;
+            report.PathologistDoctorId = doctor.DoctorID;
+            report.PathologistName = request.LoggedInUserName;
+            report.PathologistRegNo = request.PathologistRegNo.Trim();
             report.UpdatedAt = now;
             report.UpdatedBy = request.LoggedInUserName ?? "System";
             _context.PathologyReport.Update(report);

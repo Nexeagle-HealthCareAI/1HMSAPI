@@ -90,6 +90,33 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .FirstOrDefaultAsync(cancellationToken);
             order.PatientAgeYears = PathologyAgeCalculator.CalculateAgeYears(patientDob);
 
+            order.HospitalName = await _context.Hospitals
+                .Where(h => h.HospitalID == request.HospitalId)
+                .Select(h => h.Name)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            var report = await _context.PathologyReport
+                .Where(r => r.HospitalId == request.HospitalId && r.OrderId == request.OrderId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (report != null)
+            {
+                order.Report = new PathologyReportDto
+                {
+                    ReportId = report.ReportId,
+                    ReportNo = report.ReportNo,
+                    Status = report.Status,
+                    GeneratedAt = report.GeneratedAt,
+                    TechnicianName = report.TechnicianName,
+                    TechnicianRegNo = report.TechnicianRegNo,
+                    TechnicianSignedAt = report.TechnicianSignedAt,
+                    PathologistName = report.PathologistName,
+                    PathologistRegNo = report.PathologistRegNo,
+                    ApprovedAt = report.ApprovedAt,
+                    PdfBlobPath = report.PdfBlobPath,
+                    PdfSha256 = report.PdfSha256,
+                };
+            }
+
             var lines = await _context.PathologyOrderLine
                 .Where(l => l.HospitalId == request.HospitalId && l.OrderId == request.OrderId)
                 .ToListAsync(cancellationToken);
@@ -122,6 +149,68 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             }
 
             return order;
+        }
+    }
+
+    public class GetPathologyReportVerificationHandler : IRequestHandler<GetPathologyReportVerificationQuery, PathologyReportVerificationResponseModel>
+    {
+        private readonly AppDbContext _context;
+
+        public GetPathologyReportVerificationHandler(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        public async Task<PathologyReportVerificationResponseModel> Handle(GetPathologyReportVerificationQuery request, CancellationToken cancellationToken)
+        {
+            var report = await _context.PathologyReport
+                .FirstOrDefaultAsync(r => r.ReportId == request.ReportId, cancellationToken);
+
+            if (report == null)
+            {
+                return new PathologyReportVerificationResponseModel { IsAuthentic = false, Message = "No report found for this code." };
+            }
+
+            if (report.Status != "APPROVED")
+            {
+                return new PathologyReportVerificationResponseModel { IsAuthentic = false, Message = "This report has not been finalized and approved." };
+            }
+
+            // The QR embedded in the PDF itself can only encode the reportId -- the hash can't be
+            // known until the PDF (QR included) has finished rendering, so it can never be baked
+            // into its own QR payload. A bare QR scan therefore does the basic existence+approved
+            // check below. Supplying ?hash= (e.g. typed in from a "Document Hash" line printed
+            // separately on the report) upgrades this to a strict byte-for-byte tamper check.
+            var providedHash = (request.Sha256 ?? "").Trim();
+            if (!string.IsNullOrEmpty(providedHash))
+            {
+                if (string.IsNullOrEmpty(report.PdfSha256) || !string.Equals(providedHash, report.PdfSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    return new PathologyReportVerificationResponseModel
+                    {
+                        IsAuthentic = false,
+                        Message = "This document's content does not match our records. It may have been altered after issue."
+                    };
+                }
+            }
+
+            var hospitalName = await _context.Hospitals
+                .Where(h => h.HospitalID == report.HospitalId)
+                .Select(h => h.Name)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            return new PathologyReportVerificationResponseModel
+            {
+                IsAuthentic = true,
+                Message = string.IsNullOrEmpty(providedHash)
+                    ? "This report was genuinely issued by this hospital. Enter the document hash for a stricter tamper check."
+                    : "This is a genuine, unaltered report.",
+                ReportNo = report.ReportNo,
+                HospitalName = hospitalName,
+                ApprovedAt = report.ApprovedAt,
+                TechnicianName = report.TechnicianName,
+                PathologistName = report.PathologistName,
+            };
         }
     }
 }
