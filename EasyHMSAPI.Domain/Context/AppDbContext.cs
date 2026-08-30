@@ -917,6 +917,45 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(l => l.UpdatedAt).HasColumnType("datetime2(3)");
             });
 
+            // RowVersion is a SQL Server `rowversion` column (DB-generated, cannot be inserted
+            // explicitly) on all 7 Pathology tables -- without IsRowVersion(), EF sends an explicit
+            // NULL for it on insert and every save fails. Never caught before now because no
+            // controller exposed this pipeline over HTTP until the 1Lab Suite work.
+            modelBuilder.Entity<LabConfiguration>(entity =>
+            {
+                entity.Property(c => c.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<PathologyTestMaster>(entity =>
+            {
+                entity.Property(t => t.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<PathologyReportTemplate>(entity =>
+            {
+                entity.Property(t => t.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<PathologyOrder>(entity =>
+            {
+                entity.Property(o => o.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<PathologyOrderLine>(entity =>
+            {
+                entity.Property(l => l.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<PathologyResult>(entity =>
+            {
+                entity.Property(r => r.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<PathologyReport>(entity =>
+            {
+                entity.Property(r => r.RowVersion).IsRowVersion();
+            });
+
             modelBuilder.Entity<MedicationAdministration>(entity =>
             {
                 entity.ToTable("MedicationAdministration");
