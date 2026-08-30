@@ -14,7 +14,9 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string Status { get; set; } = null!;
         public string PatientId { get; set; } = null!;
         public string PatientName { get; set; } = null!;
-        
+        public int? PatientAgeYears { get; set; }
+        public string? PatientGender { get; set; }
+
         public List<PathologyOrderLineDto> Lines { get; set; } = new();
     }
 

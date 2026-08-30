@@ -1,5 +1,23 @@
+using System;
+
 namespace EasyHMSAPI.Application.Services
 {
+    /// <summary>Shared by GetPathologyOrderByIdHandler (drives the frontend's demographic default)
+    /// and EnterPathologyResultHandler (drives the actual flag computation) so both agree on the
+    /// same patient age at the moment of use.</summary>
+    public static class PathologyAgeCalculator
+    {
+        public static int? CalculateAgeYears(DateTime? dateOfBirth)
+        {
+            if (!dateOfBirth.HasValue) return null;
+            var today = DateTime.UtcNow.Date;
+            var dob = dateOfBirth.Value.Date;
+            var age = today.Year - dob.Year;
+            if (dob > today.AddYears(-age)) age--;
+            return age;
+        }
+    }
+
     /// <summary>One parameter's reference-range schema, as parsed from
     /// PathologyTestMaster.ParameterSchemaJson.</summary>
     public record PathologyParameterRange(

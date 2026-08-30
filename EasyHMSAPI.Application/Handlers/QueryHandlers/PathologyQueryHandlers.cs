@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Domain.Context;
 
 namespace EasyHMSAPI.Application.Handlers.QueryHandlers
@@ -73,11 +74,21 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     PatientName = _context.PatientRegistrations
                         .Where(p => p.PatientId == o.PatientId)
                         .Select(p => p.FullName)
-                        .FirstOrDefault() ?? "Unknown"
+                        .FirstOrDefault() ?? "Unknown",
+                    PatientGender = _context.PatientRegistrations
+                        .Where(p => p.PatientId == o.PatientId)
+                        .Select(p => p.Sex)
+                        .FirstOrDefault(),
                 })
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (order == null) return new PathologyOrderDto();
+
+            var patientDob = await _context.PatientRegistrations
+                .Where(p => p.PatientId == order.PatientId)
+                .Select(p => p.DateOfBirth)
+                .FirstOrDefaultAsync(cancellationToken);
+            order.PatientAgeYears = PathologyAgeCalculator.CalculateAgeYears(patientDob);
 
             var lines = await _context.PathologyOrderLine
                 .Where(l => l.HospitalId == request.HospitalId && l.OrderId == request.OrderId)
