@@ -40,6 +40,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     OrderDate = o.OrderDate,
                     Status = o.Status,
                     PatientId = o.PatientId,
+                    SourceType = o.SourceType,
+                    IsStat = o.IsStat,
                     // Get patient name if possible, assuming PatientRegistration is joined
                     PatientName = _context.PatientRegistrations
                         .Where(p => p.PatientId == o.PatientId)
@@ -72,6 +74,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     OrderDate = o.OrderDate,
                     Status = o.Status,
                     PatientId = o.PatientId,
+                    SourceType = o.SourceType,
+                    IsStat = o.IsStat,
                     PatientName = _context.PatientRegistrations
                         .Where(p => p.PatientId == o.PatientId)
                         .Select(p => p.FullName)

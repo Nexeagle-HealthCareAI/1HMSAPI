@@ -17,6 +17,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public int? PatientAgeYears { get; set; }
         public string? PatientGender { get; set; }
         public string? HospitalName { get; set; }
+        public string? SourceType { get; set; }
+        public bool IsStat { get; set; }
 
         public List<PathologyOrderLineDto> Lines { get; set; } = new();
         // Present once GeneratePathologyReportHandler has created a report for this order --

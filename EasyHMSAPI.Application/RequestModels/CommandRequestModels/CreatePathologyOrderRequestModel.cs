@@ -14,6 +14,11 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? Notes { get; set; }
         public List<Guid> TestIds { get; set; } = new();
 
+        // OPD, IPD, EMERGENCY, WALK_IN -- see PathologyOrder.SourceType. Defaults to OPD when the
+        // caller omits it (every existing caller predates this field).
+        public string? SourceType { get; set; }
+        public bool IsStat { get; set; }
+
         [JsonIgnore]
         public string? LoggedInUserName { get; set; }
         

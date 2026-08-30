@@ -67,6 +67,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     OrderNo = orderNo,
                     OrderDate = DateTime.UtcNow,
                     Status = "PLACED",
+                    SourceType = string.IsNullOrWhiteSpace(request.SourceType) ? "OPD" : request.SourceType,
+                    IsStat = request.IsStat,
                     CreatedBy = request.LoggedInUserName
                 };
 

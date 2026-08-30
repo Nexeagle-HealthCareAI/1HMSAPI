@@ -206,5 +206,47 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                     r.Charges.Single().ChargeId == chargeId),
                 It.IsAny<CancellationToken>()), Times.Once);
         }
+
+        [Test]
+        public async Task Handle_NoSourceTypeGiven_DefaultsToOpd()
+        {
+            var (hospitalId, testId, _) = SeedAutoBillCatalog();
+
+            var response = await _handler.Handle(new CreatePathologyOrderRequestModel
+            {
+                HospitalId = hospitalId,
+                PatientId = "PTID00000001",
+                EncounterId = Guid.NewGuid(),
+                TestIds = new() { testId },
+                LoggedInUserName = "tester",
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True, response.Message);
+            var saved = _context.PathologyOrder.Single(o => o.OrderId == response.OrderId);
+            Assert.That(saved.SourceType, Is.EqualTo("OPD"));
+            Assert.That(saved.IsStat, Is.False);
+        }
+
+        [Test]
+        public async Task Handle_ExplicitSourceTypeAndStat_PersistsAsGiven()
+        {
+            var (hospitalId, testId, _) = SeedAutoBillCatalog();
+
+            var response = await _handler.Handle(new CreatePathologyOrderRequestModel
+            {
+                HospitalId = hospitalId,
+                PatientId = "PTID00000001",
+                EncounterId = Guid.NewGuid(),
+                TestIds = new() { testId },
+                LoggedInUserName = "tester",
+                SourceType = "EMERGENCY",
+                IsStat = true,
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True, response.Message);
+            var saved = _context.PathologyOrder.Single(o => o.OrderId == response.OrderId);
+            Assert.That(saved.SourceType, Is.EqualTo("EMERGENCY"));
+            Assert.That(saved.IsStat, Is.True);
+        }
     }
 }
