@@ -56,6 +56,13 @@ namespace EasyHMSAPI.Application.Services
                     charges.Add(new ChargeDetail
                     {
                         ChargeId = test.ChargeId.Value,
+                        // AddChargeEventHandler writes this straight onto BillingChargeEvent with no
+                        // fallback to the ChargeMaster's own name -- omitting it made every auto-bill
+                        // call here fail silently (a real, live-confirmed bug: the charge post
+                        // returned success:false, but CreatePathologyOrderHandler/CollectPathologySample
+                        // Handler/ApprovePathologyReportHandler never check that response, so the
+                        // order/collection/approval itself always reported success anyway).
+                        DisplayName = master.DisplayName ?? test.TestName,
                         Qty = 1,
                         Rate = master.DefaultRate,
                         CategoryCode = "LAB_PATH",

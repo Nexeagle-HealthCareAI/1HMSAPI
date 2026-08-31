@@ -97,7 +97,13 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                     r.EncounterId == encounterId &&
                     r.Charges.Count == 1 &&
                     r.Charges.Single().ChargeId == chargeId &&
-                    r.Charges.Single().Rate == 250m),
+                    r.Charges.Single().Rate == 250m &&
+                    // Regression: AddChargeEventHandler writes this straight onto BillingChargeEvent
+                    // with no ChargeMaster fallback -- a null DisplayName made every real (unmocked)
+                    // auto-bill call fail silently, invisibly, since nothing here ever checked the
+                    // mediator response. This mock can't catch that failure mode itself (it stubs
+                    // AddChargeEventHandler away entirely), only that the field is populated at all.
+                    !string.IsNullOrEmpty(r.Charges.Single().DisplayName)),
                 It.IsAny<CancellationToken>()), Times.Once);
         }
 
