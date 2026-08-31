@@ -115,5 +115,48 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 
             Assert.That(fetched.LetterheadMode, Is.EqualTo("SYSTEM_DEFAULT"));
         }
+
+        [Test]
+        public async Task Handle_NewConfig_PersistsReportFieldLayoutJson()
+        {
+            var hospitalId = Guid.NewGuid();
+            const string layoutJson = "{\"reportFields\":[{\"key\":\"cf_1\",\"label\":\"Clinical History\",\"order\":0}],\"lineFields\":[]}";
+
+            await _updateHandler.Handle(new UpdateLabConfigurationCommand
+            {
+                HospitalId = hospitalId,
+                LetterheadMode = "SYSTEM_DEFAULT",
+                ReportFieldLayoutJson = layoutJson,
+            }, CancellationToken.None);
+
+            var saved = _context.LabConfiguration.Single(c => c.HospitalId == hospitalId);
+            Assert.That(saved.ReportFieldLayoutJson, Is.EqualTo(layoutJson));
+        }
+
+        [Test]
+        public async Task Handle_ExistingConfig_UpdatesReportFieldLayoutJsonWithoutTouchingLetterheadMode()
+        {
+            var hospitalId = Guid.NewGuid();
+            _context.LabConfiguration.Add(new LabConfiguration
+            {
+                ConfigId = Guid.NewGuid(),
+                HospitalId = hospitalId,
+                LetterheadMode = "BLANK_PREPRINTED",
+                ReportFieldLayoutJson = "{\"reportFields\":[],\"lineFields\":[]}",
+            });
+            _context.SaveChanges();
+
+            const string updatedLayoutJson = "{\"reportFields\":[],\"lineFields\":[{\"key\":\"interpretation\",\"label\":\"Findings\",\"order\":0}]}";
+            await _updateHandler.Handle(new UpdateLabConfigurationCommand
+            {
+                HospitalId = hospitalId,
+                LetterheadMode = "BLANK_PREPRINTED",
+                ReportFieldLayoutJson = updatedLayoutJson,
+            }, CancellationToken.None);
+
+            var saved = _context.LabConfiguration.Single(c => c.HospitalId == hospitalId);
+            Assert.That(saved.ReportFieldLayoutJson, Is.EqualTo(updatedLayoutJson));
+            Assert.That(saved.LetterheadMode, Is.EqualTo("BLANK_PREPRINTED"));
+        }
     }
 }

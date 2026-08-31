@@ -77,6 +77,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     SourceType = o.SourceType,
                     IsStat = o.IsStat,
                     EncounterId = o.EncounterId,
+                    ReportFieldValuesJson = o.ReportFieldValuesJson,
                     PatientName = _context.PatientRegistrations
                         .Where(p => p.PatientId == o.PatientId)
                         .Select(p => p.FullName)

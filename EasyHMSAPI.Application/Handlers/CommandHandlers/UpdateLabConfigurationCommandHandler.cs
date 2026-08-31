@@ -45,6 +45,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     DefaultReportHeaderBlob = request.DefaultReportHeaderBlob,
                     DefaultReportFooterText = request.DefaultReportFooterText,
                     LetterheadMode = letterheadMode,
+                    ReportFieldLayoutJson = request.ReportFieldLayoutJson,
                     CreatedAt = DateTime.UtcNow,
                     CreatedBy = request.LoggedInUserName ?? "System",
                     UpdatedAt = DateTime.UtcNow,
@@ -58,6 +59,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 config.DefaultReportHeaderBlob = request.DefaultReportHeaderBlob;
                 config.DefaultReportFooterText = request.DefaultReportFooterText;
                 config.LetterheadMode = letterheadMode;
+                config.ReportFieldLayoutJson = request.ReportFieldLayoutJson;
                 config.UpdatedAt = DateTime.UtcNow;
                 config.UpdatedBy = request.LoggedInUserName ?? "System";
                 _context.LabConfiguration.Update(config);

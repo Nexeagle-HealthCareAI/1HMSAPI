@@ -30,7 +30,13 @@ namespace EasyHMSAPI.Domain.Entities
 
         // STAT/urgent order -- sorts to the top of the worklist and highlights in the UI.
         public bool IsStat { get; set; }
-        
+
+        // Values for the hospital's configured report-level fields (LabConfiguration.
+        // ReportFieldLayoutJson's "reportFields" list) -- {key: value}, e.g. Clinical History,
+        // Specimen Type. Lives on the order rather than PathologyReport so it's fillable/editable
+        // before a report is ever generated and survives freely regenerating the report.
+        public string? ReportFieldValuesJson { get; set; }
+
         public DateTime CreatedAt { get; set; }
         public string? CreatedBy { get; set; }
         public DateTime UpdatedAt { get; set; }

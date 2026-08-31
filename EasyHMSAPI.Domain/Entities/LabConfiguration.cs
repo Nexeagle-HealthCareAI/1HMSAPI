@@ -37,6 +37,13 @@ namespace EasyHMSAPI.Domain.Entities
         // IsDefault = true; it isn't a file reference itself.
         public string LetterheadMode { get; set; } = "SYSTEM_DEFAULT";
 
+        // Hospital-wide report field layout: { "reportFields": [...], "lineFields": [...] }, each
+        // an ordered PathologyFieldConfigItem list (see pathologyFieldLayoutApi.ts) -- reportFields
+        // fill in once per report (Clinical History, Comments...), lineFields repeat on every test
+        // line alongside the built-in Interpretation / Notes field. Null/empty means "use the
+        // built-in defaults," merged client-side, same evolvable-JSON-blob trick as LetterheadMode.
+        public string? ReportFieldLayoutJson { get; set; }
+
         public DateTime CreatedAt { get; set; }
         public string? CreatedBy { get; set; }
         public DateTime UpdatedAt { get; set; }

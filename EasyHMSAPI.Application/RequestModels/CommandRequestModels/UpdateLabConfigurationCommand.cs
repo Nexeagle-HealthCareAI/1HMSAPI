@@ -16,6 +16,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? DefaultReportHeaderBlob { get; set; }
         public string? DefaultReportFooterText { get; set; }
         public string? LetterheadMode { get; set; }
+        public string? ReportFieldLayoutJson { get; set; }
 
         [JsonIgnore]
         public string? LoggedInUserName { get; set; }

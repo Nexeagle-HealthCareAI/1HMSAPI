@@ -119,6 +119,29 @@ namespace EasyHMSAPI.Api.Controllers.V1
             }
         }
 
+        // Report-level field values (Clinical History, Comments, ... -- see LabConfiguration.
+        // ReportFieldLayoutJson's "reportFields" list), once per order rather than per test line.
+        [HttpPost("{hospitalId}/{orderId}/report-fields")]
+        public async Task<IActionResult> SaveReportFields(Guid hospitalId, Guid orderId, [FromBody] SaveOrderReportFieldsCommand request)
+        {
+            request.HospitalId = hospitalId;
+            request.OrderId = orderId;
+            request.LoggedInUserId = UserContextHelper.GetUserId(User) ?? Guid.Empty;
+            request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+
+            try
+            {
+                var success = await _mediator.Send(request);
+                if (!success) return BadRequest(new { success = false, message = "Order not found." });
+                return Ok(new { success = true });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error saving report field values for order {OrderId}", orderId);
+                return StatusCode(500, new { Message = "An error occurred while saving the report fields." });
+            }
+        }
+
         [HttpPost("{hospitalId}/{orderId}/lines/{orderLineId}/collect-sample")]
         public async Task<IActionResult> CollectSample(Guid hospitalId, Guid orderId, Guid orderLineId, [FromBody] CollectPathologySampleCommand request)
         {
