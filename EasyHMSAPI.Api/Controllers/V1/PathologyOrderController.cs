@@ -162,54 +162,6 @@ namespace EasyHMSAPI.Api.Controllers.V1
             }
         }
 
-        [HttpPost("{hospitalId}/{orderId}/report/{reportId}/sign-technician")]
-        public async Task<IActionResult> SignReportAsTechnician(Guid hospitalId, Guid orderId, Guid reportId, [FromBody] SignPathologyReportAsTechnicianCommand request)
-        {
-            request.HospitalId = hospitalId;
-            request.ReportId = reportId;
-            request.LoggedInUserId = UserContextHelper.GetUserId(User) ?? Guid.Empty;
-            request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
-
-            try
-            {
-                var success = await _mediator.Send(request);
-                return Ok(new { success });
-            }
-            catch (ApplicationException ex)
-            {
-                return BadRequest(new { success = false, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error signing pathology report {ReportId} as technician", reportId);
-                return StatusCode(500, new { Message = "An error occurred while signing the report." });
-            }
-        }
-
-        [HttpPost("{hospitalId}/{orderId}/report/{reportId}/approve")]
-        public async Task<IActionResult> ApproveReport(Guid hospitalId, Guid orderId, Guid reportId, [FromBody] ApprovePathologyReportCommand request)
-        {
-            request.HospitalId = hospitalId;
-            request.ReportId = reportId;
-            request.LoggedInUserId = UserContextHelper.GetUserId(User) ?? Guid.Empty;
-            request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
-
-            try
-            {
-                var success = await _mediator.Send(request);
-                return Ok(new { success });
-            }
-            catch (ApplicationException ex)
-            {
-                return BadRequest(new { success = false, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error approving pathology report {ReportId}", reportId);
-                return StatusCode(500, new { Message = "An error occurred while approving the report." });
-            }
-        }
-
         [HttpPost("{hospitalId}/{orderId}/report/{reportId}/pdf")]
         [RequestSizeLimit(20_000_000)]
         public async Task<IActionResult> UploadReportPdf(Guid hospitalId, Guid orderId, Guid reportId, [FromForm] UploadPathologyReportPdfRequestModel request)

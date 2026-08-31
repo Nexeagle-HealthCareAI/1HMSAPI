@@ -177,6 +177,54 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(entry.GetProperty("flag").GetString(), Is.EqualTo("NORMAL"));
         }
 
+        // Custom/ad-hoc fields (added via OrderResultEntry.tsx's "+ Add Field") submit as
+        // {value, unit} rather than a bare string -- both shapes must coexist in the one
+        // submission without one breaking flag computation for the other.
+        [Test]
+        public async Task Handle_MixedSchemaAndCustomFieldEntry_ComputesFlagAndPersistsCustomUnit()
+        {
+            var (hospitalId, orderId, orderLineId) = SeedOrder(HemoglobinSchema, DateTime.UtcNow.AddYears(-30), "MALE");
+
+            var success = await _handler.Handle(new EnterPathologyResultCommand
+            {
+                HospitalId = hospitalId,
+                OrderId = orderId,
+                OrderLineId = orderLineId,
+                ResultValuesJson = "{\"Hemoglobin\":\"5.0\",\"Peripheral Smear\":{\"value\":\"Microcytic\",\"unit\":\"\"}}",
+                LoggedInUserId = Guid.NewGuid(),
+            }, CancellationToken.None);
+
+            Assert.That(success, Is.True);
+
+            var hemoglobin = GetSavedEntry(orderLineId, "Hemoglobin");
+            Assert.That(hemoglobin.GetProperty("value").GetString(), Is.EqualTo("5.0"));
+            Assert.That(hemoglobin.GetProperty("flag").GetString(), Is.EqualTo("CRITICAL_LOW"));
+            Assert.That(_context.PathologyResult.Single(r => r.OrderLineId == orderLineId).HasCriticalFlag, Is.True);
+
+            var custom = GetSavedEntry(orderLineId, "Peripheral Smear");
+            Assert.That(custom.GetProperty("value").GetString(), Is.EqualTo("Microcytic"));
+            Assert.That(custom.GetProperty("flag").GetString(), Is.EqualTo("NORMAL"));
+        }
+
+        [Test]
+        public async Task Handle_CustomFieldWithUnit_RoundTripsUnitInSavedJson()
+        {
+            var (hospitalId, orderId, orderLineId) = SeedOrder(HemoglobinSchema, DateTime.UtcNow.AddYears(-30), "MALE");
+
+            await _handler.Handle(new EnterPathologyResultCommand
+            {
+                HospitalId = hospitalId,
+                OrderId = orderId,
+                OrderLineId = orderLineId,
+                ResultValuesJson = "{\"Vitamin D\":{\"value\":\"22\",\"unit\":\"ng/mL\"}}",
+                LoggedInUserId = Guid.NewGuid(),
+            }, CancellationToken.None);
+
+            var entry = GetSavedEntry(orderLineId, "Vitamin D");
+            Assert.That(entry.GetProperty("value").GetString(), Is.EqualTo("22"));
+            Assert.That(entry.GetProperty("unit").GetString(), Is.EqualTo("ng/mL"));
+        }
+
         [Test]
         public async Task Handle_UnknownOrderLine_ReturnsFalse()
         {

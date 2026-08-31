@@ -13,6 +13,8 @@ namespace EasyHMSAPI.UnitTests.ServiceTests
     // Covers the shared resolver behind SOFA/APACHE II auto-fill's new lab-value fields --
     // GetSofaAutoFillHandlerTests/GetApacheIIAutoFillHandlerTests cover the handler wiring on top
     // of this; these tests focus on the resolver's own JSON-parsing and report-selection logic.
+    // There's no separate "approved" milestone anymore (the technician/pathologist sign-off
+    // workflow was removed), so selection is by GeneratedAt, not a Status filter.
     [TestFixture]
     public class PathologyLabValueResolverTests
     {
@@ -31,8 +33,8 @@ namespace EasyHMSAPI.UnitTests.ServiceTests
             _context?.Dispose();
         }
 
-        private PathologyReport SeedApprovedReportWithResult(
-            Guid hospitalId, string patientId, string resultValuesJson, DateTime approvedAt)
+        private PathologyReport SeedGeneratedReportWithResult(
+            Guid hospitalId, string patientId, string resultValuesJson, DateTime generatedAt)
         {
             var orderId = Guid.NewGuid();
             var reportId = Guid.NewGuid();
@@ -52,8 +54,8 @@ namespace EasyHMSAPI.UnitTests.ServiceTests
                 HospitalId = hospitalId,
                 OrderId = orderId,
                 ReportNo = "LR-" + reportId,
-                Status = "APPROVED",
-                ApprovedAt = approvedAt,
+                Status = "GENERATED",
+                GeneratedAt = generatedAt,
             };
             _context.PathologyReport.Add(report);
             _context.PathologyOrderLine.Add(new PathologyOrderLine
@@ -62,7 +64,7 @@ namespace EasyHMSAPI.UnitTests.ServiceTests
                 HospitalId = hospitalId,
                 OrderId = orderId,
                 TestId = Guid.NewGuid(),
-                Status = "REPORT_APPROVED",
+                Status = "RESULT_ENTERED",
                 ReportId = reportId,
             });
             _context.PathologyResult.Add(new PathologyResult
@@ -82,27 +84,27 @@ namespace EasyHMSAPI.UnitTests.ServiceTests
         {
             var hospitalId = Guid.NewGuid();
             var patientId = "PTID-1";
-            var approvedAt = DateTime.UtcNow;
-            SeedApprovedReportWithResult(hospitalId, patientId,
+            var generatedAt = DateTime.UtcNow;
+            SeedGeneratedReportWithResult(hospitalId, patientId,
                 "{\"Serum Creatinine\":{\"value\":\"0.95\",\"flag\":\"NORMAL\"},\"Serum Sodium (Na+)\":{\"value\":\"138.0\",\"flag\":\"NORMAL\"}}",
-                approvedAt);
+                generatedAt);
 
-            var (values, resultApprovedAt) = await PathologyLabValueResolver.GetLatestApprovedValuesAsync(
+            var (values, resultGeneratedAt) = await PathologyLabValueResolver.GetLatestApprovedValuesAsync(
                 _context, hospitalId, patientId, CancellationToken.None);
 
             Assert.That(PathologyLabValueResolver.TryGet(values, "Serum Creatinine"), Is.EqualTo(0.95m));
             Assert.That(PathologyLabValueResolver.TryGet(values, "Serum Sodium (Na+)"), Is.EqualTo(138.0m));
-            Assert.That(resultApprovedAt, Is.EqualTo(approvedAt));
+            Assert.That(resultGeneratedAt, Is.EqualTo(generatedAt));
         }
 
         [Test]
-        public async Task GetLatestApprovedValuesAsync_MultipleApprovedReports_PicksMostRecent()
+        public async Task GetLatestApprovedValuesAsync_MultipleGeneratedReports_PicksMostRecent()
         {
             var hospitalId = Guid.NewGuid();
             var patientId = "PTID-2";
-            SeedApprovedReportWithResult(hospitalId, patientId,
+            SeedGeneratedReportWithResult(hospitalId, patientId,
                 "{\"Serum Creatinine\":{\"value\":\"1.10\",\"flag\":\"NORMAL\"}}", DateTime.UtcNow.AddDays(-5));
-            SeedApprovedReportWithResult(hospitalId, patientId,
+            SeedGeneratedReportWithResult(hospitalId, patientId,
                 "{\"Serum Creatinine\":{\"value\":\"0.80\",\"flag\":\"NORMAL\"}}", DateTime.UtcNow);
 
             var (values, _) = await PathologyLabValueResolver.GetLatestApprovedValuesAsync(
@@ -116,7 +118,7 @@ namespace EasyHMSAPI.UnitTests.ServiceTests
         {
             var hospitalId = Guid.NewGuid();
             var patientId = "PTID-3";
-            SeedApprovedReportWithResult(hospitalId, patientId,
+            SeedGeneratedReportWithResult(hospitalId, patientId,
                 "{\"Urine Pregnancy Test\":{\"value\":\"Negative\",\"flag\":\"NORMAL\"},\"Serum Creatinine\":{\"value\":\"0.9\",\"flag\":\"NORMAL\"}}",
                 DateTime.UtcNow);
 
@@ -128,23 +130,23 @@ namespace EasyHMSAPI.UnitTests.ServiceTests
         }
 
         [Test]
-        public async Task GetLatestApprovedValuesAsync_NoApprovedReport_ReturnsEmpty()
+        public async Task GetLatestApprovedValuesAsync_NoGeneratedReport_ReturnsEmpty()
         {
-            var (values, approvedAt) = await PathologyLabValueResolver.GetLatestApprovedValuesAsync(
+            var (values, generatedAt) = await PathologyLabValueResolver.GetLatestApprovedValuesAsync(
                 _context, Guid.NewGuid(), "PTID-NONE", CancellationToken.None);
 
             Assert.That(values, Is.Empty);
-            Assert.That(approvedAt, Is.Null);
+            Assert.That(generatedAt, Is.Null);
         }
 
         [Test]
         public async Task GetLatestApprovedValuesAsync_NullPatientId_ReturnsEmptyWithoutThrowing()
         {
-            var (values, approvedAt) = await PathologyLabValueResolver.GetLatestApprovedValuesAsync(
+            var (values, generatedAt) = await PathologyLabValueResolver.GetLatestApprovedValuesAsync(
                 _context, Guid.NewGuid(), null, CancellationToken.None);
 
             Assert.That(values, Is.Empty);
-            Assert.That(approvedAt, Is.Null);
+            Assert.That(generatedAt, Is.Null);
         }
     }
 }

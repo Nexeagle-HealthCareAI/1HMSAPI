@@ -58,8 +58,8 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             var reportId = Guid.NewGuid();
             var lineId = Guid.NewGuid();
             _context.PathologyOrder.Add(new PathologyOrder { OrderId = orderId, HospitalId = hospitalId, PatientId = patientId, OrderNo = "O-1", Status = "COMPLETED" });
-            _context.PathologyReport.Add(new PathologyReport { ReportId = reportId, HospitalId = hospitalId, OrderId = orderId, ReportNo = "R-1", Status = "APPROVED", ApprovedAt = DateTime.UtcNow });
-            _context.PathologyOrderLine.Add(new PathologyOrderLine { OrderLineId = lineId, HospitalId = hospitalId, OrderId = orderId, TestId = Guid.NewGuid(), Status = "REPORT_APPROVED", ReportId = reportId });
+            _context.PathologyReport.Add(new PathologyReport { ReportId = reportId, HospitalId = hospitalId, OrderId = orderId, ReportNo = "R-1", Status = "GENERATED", GeneratedAt = DateTime.UtcNow });
+            _context.PathologyOrderLine.Add(new PathologyOrderLine { OrderLineId = lineId, HospitalId = hospitalId, OrderId = orderId, TestId = Guid.NewGuid(), Status = "RESULT_ENTERED", ReportId = reportId });
             _context.PathologyResult.Add(new PathologyResult
             {
                 ResultId = Guid.NewGuid(),

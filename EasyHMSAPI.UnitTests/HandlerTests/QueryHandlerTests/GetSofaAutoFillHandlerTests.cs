@@ -58,9 +58,9 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             var reportId = Guid.NewGuid();
             var lineId = Guid.NewGuid();
             _context.PathologyOrder.Add(new PathologyOrder { OrderId = orderId, HospitalId = hospitalId, PatientId = patientId, OrderNo = "O-1", Status = "COMPLETED" });
-            var approvedAt = DateTime.UtcNow;
-            _context.PathologyReport.Add(new PathologyReport { ReportId = reportId, HospitalId = hospitalId, OrderId = orderId, ReportNo = "R-1", Status = "APPROVED", ApprovedAt = approvedAt });
-            _context.PathologyOrderLine.Add(new PathologyOrderLine { OrderLineId = lineId, HospitalId = hospitalId, OrderId = orderId, TestId = Guid.NewGuid(), Status = "REPORT_APPROVED", ReportId = reportId });
+            var generatedAt = DateTime.UtcNow;
+            _context.PathologyReport.Add(new PathologyReport { ReportId = reportId, HospitalId = hospitalId, OrderId = orderId, ReportNo = "R-1", Status = "GENERATED", GeneratedAt = generatedAt });
+            _context.PathologyOrderLine.Add(new PathologyOrderLine { OrderLineId = lineId, HospitalId = hospitalId, OrderId = orderId, TestId = Guid.NewGuid(), Status = "RESULT_ENTERED", ReportId = reportId });
             _context.PathologyResult.Add(new PathologyResult
             {
                 ResultId = Guid.NewGuid(),
@@ -82,7 +82,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             Assert.That(response.PlateletsCount, Is.EqualTo(180000m));
             Assert.That(response.BilirubinMgDl, Is.EqualTo(1.4m));
             Assert.That(response.CreatinineMgDl, Is.EqualTo(1.6m));
-            Assert.That(response.SourceLabReportApprovedAt, Is.EqualTo(approvedAt));
+            Assert.That(response.SourceLabReportApprovedAt, Is.EqualTo(generatedAt));
         }
 
         [Test]

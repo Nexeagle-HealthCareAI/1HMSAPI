@@ -54,7 +54,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             return fileMock;
         }
 
-        private PathologyReport SeedApprovedReport(Guid hospitalId, string? patientId = null)
+        private PathologyReport SeedReport(Guid hospitalId, string? patientId = null)
         {
             var orderId = Guid.NewGuid();
             var report = new PathologyReport
@@ -63,7 +63,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                 HospitalId = hospitalId,
                 OrderId = orderId,
                 ReportNo = "LR-1",
-                Status = "APPROVED",
+                Status = "GENERATED",
             };
             _context.PathologyReport.Add(report);
             _context.PathologyOrder.Add(new PathologyOrder
@@ -95,7 +95,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public async Task Handle_ApprovedReportWithFile_ComputesCorrectHashAndPersists()
         {
             var hospitalId = Guid.NewGuid();
-            var report = SeedApprovedReport(hospitalId);
+            var report = SeedReport(hospitalId);
             var bytes = Encoding.UTF8.GetBytes("%PDF-1.4 fake pdf content for hashing");
             var expectedHash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
 
@@ -118,19 +118,31 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
-        public async Task Handle_ReportNotYetApproved_ReturnsFailureWithoutUploading()
+        public async Task Handle_ReportNotFound_ReturnsFailureWithoutUploading()
+        {
+            var response = await _handler.Handle(new UploadPathologyReportPdfRequestModel
+            {
+                HospitalId = Guid.NewGuid(),
+                ReportId = Guid.NewGuid(),
+                File = FileMockWithContent(Encoding.UTF8.GetBytes("x")).Object,
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            _blobStorageServiceMock.Verify(x => x.UploadAsync(It.IsAny<string>(), It.IsAny<IFormFile>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        // There is no separate approval gate anymore -- generation is a single, freely-repeatable
+        // step (GeneratePathologyReportHandler), so any report that exists can have its PDF
+        // (re-)uploaded regardless of its Status value.
+        [Test]
+        public async Task Handle_ReportExistsRegardlessOfStatus_UploadsSuccessfully()
         {
             var hospitalId = Guid.NewGuid();
-            var report = new PathologyReport
-            {
-                ReportId = Guid.NewGuid(),
-                HospitalId = hospitalId,
-                OrderId = Guid.NewGuid(),
-                ReportNo = "LR-2",
-                Status = "TECH_SIGNED",
-            };
-            _context.PathologyReport.Add(report);
-            _context.SaveChanges();
+            var report = SeedReport(hospitalId);
+
+            _blobStorageServiceMock
+                .Setup(x => x.UploadAsync(It.IsAny<string>(), It.IsAny<IFormFile>(), "pathology-reports", It.IsAny<CancellationToken>()))
+                .ReturnsAsync("https://blob.example/report.pdf");
 
             var response = await _handler.Handle(new UploadPathologyReportPdfRequestModel
             {
@@ -139,15 +151,14 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                 File = FileMockWithContent(Encoding.UTF8.GetBytes("x")).Object,
             }, CancellationToken.None);
 
-            Assert.That(response.Success, Is.False);
-            _blobStorageServiceMock.Verify(x => x.UploadAsync(It.IsAny<string>(), It.IsAny<IFormFile>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            Assert.That(response.Success, Is.True, response.Message);
         }
 
         [Test]
         public async Task Handle_NoFile_ReturnsFailure()
         {
             var hospitalId = Guid.NewGuid();
-            var report = SeedApprovedReport(hospitalId);
+            var report = SeedReport(hospitalId);
 
             var response = await _handler.Handle(new UploadPathologyReportPdfRequestModel
             {
@@ -164,7 +175,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         {
             var hospitalId = Guid.NewGuid();
             var patientId = "PTID-1";
-            var report = SeedApprovedReport(hospitalId, patientId);
+            var report = SeedReport(hospitalId, patientId);
             _context.PatientRegistrations.Add(new PatientRegistration
             {
                 PatientId = patientId,
@@ -193,7 +204,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public async Task Handle_PatientHasNoMobileOnFile_StillSucceedsWithoutDispatching()
         {
             var hospitalId = Guid.NewGuid();
-            var report = SeedApprovedReport(hospitalId); // patientId defaults to one with no PatientRegistration row
+            var report = SeedReport(hospitalId); // patientId defaults to one with no PatientRegistration row
 
             _blobStorageServiceMock
                 .Setup(x => x.UploadAsync(It.IsAny<string>(), It.IsAny<IFormFile>(), "pathology-reports", It.IsAny<CancellationToken>()))

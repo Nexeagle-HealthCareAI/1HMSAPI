@@ -38,12 +38,6 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string ReportNo { get; set; } = null!;
         public string Status { get; set; } = null!;
         public DateTime? GeneratedAt { get; set; }
-        public string? TechnicianName { get; set; }
-        public string? TechnicianRegNo { get; set; }
-        public DateTime? TechnicianSignedAt { get; set; }
-        public string? PathologistName { get; set; }
-        public string? PathologistRegNo { get; set; }
-        public DateTime? ApprovedAt { get; set; }
         public string? PdfBlobPath { get; set; }
         public string? PdfSha256 { get; set; }
     }
@@ -71,20 +65,6 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? Interpretation { get; set; }
     }
 
-    // Deliberately excludes every field that identifies the patient -- this is served to whoever
-    // scans the QR code on a printed/shared report, not just the patient themselves.
-    [ExcludeFromCodeCoverage]
-    public class PathologyReportVerificationResponseModel
-    {
-        public bool IsAuthentic { get; set; }
-        public string Message { get; set; } = null!;
-        public string? ReportNo { get; set; }
-        public string? HospitalName { get; set; }
-        public DateTime? ApprovedAt { get; set; }
-        public string? TechnicianName { get; set; }
-        public string? PathologistName { get; set; }
-    }
-
     [ExcludeFromCodeCoverage]
     public class PathologyReportReadyDto
     {
@@ -92,7 +72,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public Guid ReportId { get; set; }
         public string ReportNo { get; set; } = null!;
         public string OrderNo { get; set; } = null!;
-        public DateTime? ApprovedAt { get; set; }
+        public DateTime? GeneratedAt { get; set; }
         public string? PdfBlobPath { get; set; }
     }
 }

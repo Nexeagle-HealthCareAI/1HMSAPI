@@ -12,7 +12,9 @@ namespace EasyHMSAPI.Domain.Entities
         public Guid OrderId { get; set; }
         public Guid TestId { get; set; }
         
-        // Status: PENDING, SAMPLE_COLLECTED, RESULT_ENTERED, REPORT_APPROVED
+        // Status: PENDING, SAMPLE_COLLECTED, RESULT_ENTERED. RESULT_ENTERED is terminal -- there is
+        // no further approval step (the sign-off workflow was removed; a report can be freely
+        // generated/regenerated from a line's results at any point after they're entered).
         public string Status { get; set; } = "PENDING";
         
         public string? SampleBarcode { get; set; }

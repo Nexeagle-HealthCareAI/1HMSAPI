@@ -12,9 +12,9 @@ using EasyHMSAPI.Domain.Entities;
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
     // Fills the gap PathologyOrderLine.Status always had room for (PENDING -> SAMPLE_COLLECTED ->
-    // RESULT_ENTERED -> REPORT_APPROVED) but nothing ever exercised -- EnterPathologyResultHandler
-    // has always accepted PENDING directly, so collecting a sample stays optional bookkeeping, not
-    // a gate results entry depends on.
+    // RESULT_ENTERED) but nothing ever exercised -- EnterPathologyResultHandler has always accepted
+    // PENDING directly, so collecting a sample stays optional bookkeeping, not a gate results entry
+    // depends on.
     public class CollectPathologySampleHandler : IRequestHandler<CollectPathologySampleCommand, bool>
     {
         private readonly AppDbContext _context;

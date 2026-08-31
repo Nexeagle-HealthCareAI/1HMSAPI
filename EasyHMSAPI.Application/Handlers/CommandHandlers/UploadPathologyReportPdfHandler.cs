@@ -13,12 +13,11 @@ using EasyHMSAPI.Domain.Context;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
-    // The technician/pathologist signature blocks and the QR verification code are only meaningful
-    // once burned into a real PDF, so this is deliberately the LAST step of the sign-off flow --
-    // called by the frontend right after ApprovePathologyReportHandler succeeds, once it has
-    // rendered the final document client-side (see generatePathologyReportPdf.ts). The hash is
-    // always computed here from the actual uploaded bytes, never trusted from the client, so the
-    // public verification endpoint's tamper check means something.
+    // Called by the frontend right after GeneratePathologyReportHandler succeeds, once it has
+    // rendered the report PDF client-side (see generatePathologyReportPdf.ts). Freely re-callable,
+    // same as generation itself -- re-uploading just overwrites the previous blob/hash so the
+    // stored PDF always matches the report's current data. The hash is always computed here from
+    // the actual uploaded bytes, never trusted from the client.
     public class UploadPathologyReportPdfHandler : IRequestHandler<UploadPathologyReportPdfRequestModel, UploadPathologyReportPdfResponseModel>
     {
         private readonly IBlobStorageService _blobStorageService;
@@ -46,11 +45,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (report == null)
                 {
                     return new UploadPathologyReportPdfResponseModel { Success = false, Message = "Report not found." };
-                }
-
-                if (report.Status != "APPROVED")
-                {
-                    return new UploadPathologyReportPdfResponseModel { Success = false, Message = "The final PDF can only be uploaded after pathologist approval." };
                 }
 
                 if (request.File == null || request.File.Length == 0)

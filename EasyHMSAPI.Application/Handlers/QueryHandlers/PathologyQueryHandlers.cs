@@ -112,12 +112,6 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     ReportNo = report.ReportNo,
                     Status = report.Status,
                     GeneratedAt = report.GeneratedAt,
-                    TechnicianName = report.TechnicianName,
-                    TechnicianRegNo = report.TechnicianRegNo,
-                    TechnicianSignedAt = report.TechnicianSignedAt,
-                    PathologistName = report.PathologistName,
-                    PathologistRegNo = report.PathologistRegNo,
-                    ApprovedAt = report.ApprovedAt,
                     PdfBlobPath = report.PdfBlobPath,
                     PdfSha256 = report.PdfSha256,
                 };
@@ -160,68 +154,6 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
         }
     }
 
-    public class GetPathologyReportVerificationHandler : IRequestHandler<GetPathologyReportVerificationQuery, PathologyReportVerificationResponseModel>
-    {
-        private readonly AppDbContext _context;
-
-        public GetPathologyReportVerificationHandler(AppDbContext context)
-        {
-            _context = context;
-        }
-
-        public async Task<PathologyReportVerificationResponseModel> Handle(GetPathologyReportVerificationQuery request, CancellationToken cancellationToken)
-        {
-            var report = await _context.PathologyReport
-                .FirstOrDefaultAsync(r => r.ReportId == request.ReportId, cancellationToken);
-
-            if (report == null)
-            {
-                return new PathologyReportVerificationResponseModel { IsAuthentic = false, Message = "No report found for this code." };
-            }
-
-            if (report.Status != "APPROVED")
-            {
-                return new PathologyReportVerificationResponseModel { IsAuthentic = false, Message = "This report has not been finalized and approved." };
-            }
-
-            // The QR embedded in the PDF itself can only encode the reportId -- the hash can't be
-            // known until the PDF (QR included) has finished rendering, so it can never be baked
-            // into its own QR payload. A bare QR scan therefore does the basic existence+approved
-            // check below. Supplying ?hash= (e.g. typed in from a "Document Hash" line printed
-            // separately on the report) upgrades this to a strict byte-for-byte tamper check.
-            var providedHash = (request.Sha256 ?? "").Trim();
-            if (!string.IsNullOrEmpty(providedHash))
-            {
-                if (string.IsNullOrEmpty(report.PdfSha256) || !string.Equals(providedHash, report.PdfSha256, StringComparison.OrdinalIgnoreCase))
-                {
-                    return new PathologyReportVerificationResponseModel
-                    {
-                        IsAuthentic = false,
-                        Message = "This document's content does not match our records. It may have been altered after issue."
-                    };
-                }
-            }
-
-            var hospitalName = await _context.Hospitals
-                .Where(h => h.HospitalID == report.HospitalId)
-                .Select(h => h.Name)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            return new PathologyReportVerificationResponseModel
-            {
-                IsAuthentic = true,
-                Message = string.IsNullOrEmpty(providedHash)
-                    ? "This report was genuinely issued by this hospital. Enter the document hash for a stricter tamper check."
-                    : "This is a genuine, unaltered report.",
-                ReportNo = report.ReportNo,
-                HospitalName = hospitalName,
-                ApprovedAt = report.ApprovedAt,
-                TechnicianName = report.TechnicianName,
-                PathologistName = report.PathologistName,
-            };
-        }
-    }
-
     public class GetRecentlyApprovedPathologyReportsHandler : IRequestHandler<GetRecentlyApprovedPathologyReportsQuery, List<PathologyReportReadyDto>>
     {
         private readonly AppDbContext _context;
@@ -234,27 +166,29 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
         public async Task<List<PathologyReportReadyDto>> Handle(GetRecentlyApprovedPathologyReportsQuery request, CancellationToken cancellationToken)
         {
             // 30 days is a generous window for "still worth flagging on the board" -- a report
-            // approved that long ago has almost certainly already been seen by the ordering doctor.
+            // generated that long ago has almost certainly already been seen by the ordering doctor.
+            // There's no separate "approved" milestone anymore (the sign-off workflow was removed),
+            // so every generated report qualifies -- GeneratedAt both filters the window and orders
+            // the result.
             var since = DateTime.UtcNow.AddDays(-30);
 
-            // Newest first -- a patient can have multiple approved reports in the window, and the
-            // frontend indexes this list by patientId keeping only the first one seen per patient
-            // (same "ordered desc, first-seen wins" convention as referralsByPatient in
-            // DocBoard.tsx), so the ordering here is what actually decides which report wins.
+            // Newest first -- a patient can have multiple reports in the window, and the frontend
+            // indexes this list by patientId keeping only the first one seen per patient (same
+            // "ordered desc, first-seen wins" convention as referralsByPatient in DocBoard.tsx), so
+            // the ordering here is what actually decides which report wins.
             return await (
                 from report in _context.PathologyReport
                 join order in _context.PathologyOrder on report.OrderId equals order.OrderId
                 where report.HospitalId == request.HospitalId
-                    && report.Status == "APPROVED"
-                    && report.ApprovedAt >= since
-                orderby report.ApprovedAt descending
+                    && report.GeneratedAt >= since
+                orderby report.GeneratedAt descending
                 select new PathologyReportReadyDto
                 {
                     PatientId = order.PatientId,
                     ReportId = report.ReportId,
                     ReportNo = report.ReportNo,
                     OrderNo = order.OrderNo,
-                    ApprovedAt = report.ApprovedAt,
+                    GeneratedAt = report.GeneratedAt,
                     PdfBlobPath = report.PdfBlobPath,
                 }
             ).ToListAsync(cancellationToken);
