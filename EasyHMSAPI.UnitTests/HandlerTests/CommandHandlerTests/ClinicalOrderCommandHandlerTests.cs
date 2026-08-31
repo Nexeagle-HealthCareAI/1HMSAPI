@@ -4,6 +4,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.CommandHandlers;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
+using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using EasyHMSAPI.UnitTests.TestUtils;
@@ -17,13 +19,15 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
     public class ClinicalOrderCommandHandlerTests
     {
         private AppDbContext _context = null!;
+        private Mock<IMediator> _mediatorMock = null!;
         private ClinicalOrderCommandHandlers _handler = null!;
 
         [SetUp]
         public void SetUp()
         {
             _context = InMemoryDbContextFactory.CreateContext();
-            _handler = new ClinicalOrderCommandHandlers(_context, new Mock<IMediator>().Object);
+            _mediatorMock = new Mock<IMediator>();
+            _handler = new ClinicalOrderCommandHandlers(_context, _mediatorMock.Object);
         }
 
         [TearDown]
@@ -156,6 +160,41 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 
             var clinicalLine = _context.ClinicalOrderLine.Single(l => l.OrderId == response.OrderId);
             Assert.That(clinicalLine.LinkedPathologyOrderLineId, Is.EqualTo(pathLine.OrderLineId));
+        }
+
+        [Test]
+        public async Task Handle_LabOrderWithBillableEncounter_TagsChargeAsLabPathSourceModule()
+        {
+            var admission = SeedAdmission();
+            admission.EncounterId = Guid.NewGuid();
+            _context.SaveChanges();
+            var chargeId = Guid.NewGuid();
+            SeedPathologyTest(admission.HospitalId, chargeId);
+
+            AddChargeEventRequestModel? captured = null;
+            _mediatorMock
+                .Setup(m => m.Send(It.IsAny<AddChargeEventRequestModel>(), It.IsAny<CancellationToken>()))
+                .Callback<object, CancellationToken>((req, _) => captured = req as AddChargeEventRequestModel)
+                .ReturnsAsync(new AddChargeEventResponseModel
+                {
+                    Success = true,
+                    Data = new AddChargesData
+                    {
+                        ChargeEvents = new() { new ChargeEventDetail { ChargeEventId = Guid.NewGuid() } },
+                    },
+                });
+
+            var response = await _handler.Handle(new PlaceClinicalOrderRequestModel
+            {
+                HospitalId = admission.HospitalId,
+                AdmissionId = admission.AdmissionId,
+                OrderType = "LAB",
+                Lines = new() { new ClinicalOrderLineInput { ItemName = "CBC", ChargeId = chargeId } },
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True, response.Message);
+            Assert.That(captured, Is.Not.Null);
+            Assert.That(captured!.Charges!.Single().SourceModule, Is.EqualTo(BillingConstants.SourceModule.LabPath));
         }
 
         [Test]

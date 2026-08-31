@@ -139,6 +139,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                         Rate = master?.DefaultRate ?? 0,
                                         DiscountPercent = 0,
                                         CategoryCode = master?.CategoryCode ?? DefaultCategoryFor(orderType),
+                                        // Every Lab-type CPOE line bills as pathology-sourced regardless of the
+                                        // ChargeMaster row's own category, so a downstream "which charges came
+                                        // from the lab" filter (Billing Ledger badges, Pathology's own billing
+                                        // strip) can rely on SourceModule alone instead of guessing from CategoryCode.
+                                        SourceModule = orderType == IpdConstants.ClinicalOrderType.Lab
+                                            ? BillingConstants.SourceModule.LabPath
+                                            : null,
                                         AttributedDoctorId = order.OrderedByDoctorId,
                                     };
                                 }).ToList();

@@ -19,6 +19,10 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? HospitalName { get; set; }
         public string? SourceType { get; set; }
         public bool IsStat { get; set; }
+        // Set when this order was attached to the patient's OPD/IPD billing visit at order time
+        // (CreatePathologyOrderHandler / ClinicalOrderCommandHandlers) -- lets the Pathology
+        // Workspace show which invoice this order's charges landed on, null when it never had one.
+        public Guid? EncounterId { get; set; }
 
         public List<PathologyOrderLineDto> Lines { get; set; } = new();
         // Present once GeneratePathologyReportHandler has created a report for this order --
