@@ -46,7 +46,22 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     PatientName = _context.PatientRegistrations
                         .Where(p => p.PatientId == o.PatientId)
                         .Select(p => p.FullName)
-                        .FirstOrDefault() ?? "Unknown"
+                        .FirstOrDefault() ?? "Unknown",
+                    // Dashboard-list-only fields -- lets the Pathology Lab table show test count and
+                    // report availability/date without a second round-trip per row.
+                    TestCount = _context.PathologyOrderLine.Count(l => l.OrderId == o.OrderId),
+                    ReportNo = _context.PathologyReport
+                        .Where(r => r.OrderId == o.OrderId)
+                        .Select(r => r.ReportNo)
+                        .FirstOrDefault(),
+                    ReportGeneratedAt = _context.PathologyReport
+                        .Where(r => r.OrderId == o.OrderId)
+                        .Select(r => r.GeneratedAt)
+                        .FirstOrDefault(),
+                    ReportPdfBlobPath = _context.PathologyReport
+                        .Where(r => r.OrderId == o.OrderId)
+                        .Select(r => r.PdfBlobPath)
+                        .FirstOrDefault()
                 })
                 .ToListAsync(cancellationToken);
 

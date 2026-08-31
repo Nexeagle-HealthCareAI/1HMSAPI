@@ -27,6 +27,15 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         // client-side against LabConfiguration.ReportFieldLayoutJson's "reportFields" list.
         public string? ReportFieldValuesJson { get; set; }
 
+        // Dashboard-list-only fields (populated by GetPathologyOrdersHandler; left at their
+        // default 0/null on the single-order GetPathologyOrderByIdHandler response, which exposes
+        // the same information via Lines/Report instead) -- lets the Pathology Lab table show test
+        // count and report availability/date without a second round-trip per row.
+        public int TestCount { get; set; }
+        public string? ReportNo { get; set; }
+        public DateTime? ReportGeneratedAt { get; set; }
+        public string? ReportPdfBlobPath { get; set; }
+
         public List<PathologyOrderLineDto> Lines { get; set; } = new();
         // Present once GeneratePathologyReportHandler has created a report for this order --
         // single source of truth for the dual-signature UI so it survives a page reload instead of
