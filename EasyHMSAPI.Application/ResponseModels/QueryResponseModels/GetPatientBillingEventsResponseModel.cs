@@ -19,6 +19,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
     public class PatientEncounterInvoiceDetail
     {
         public Guid EncounterId { get; set; }
+        public string? EncounterTypeCode { get; set; }
         public string? InvoiceNo { get; set; }
         public Guid InvoiceId { get; set; }
         public DateTime InvoiceDate { get; set; }

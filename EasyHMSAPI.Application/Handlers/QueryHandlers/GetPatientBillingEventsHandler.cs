@@ -127,6 +127,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     encounterInvoiceDetails.Add(new PatientEncounterInvoiceDetail
                     {
                         EncounterId = e.EncounterId,
+                        EncounterTypeCode = e.EncounterTypeCode,
                         InvoiceNo = invoiceNo,
                         InvoiceId = invoiceId,
                         InvoiceDate = invoiceDate,
