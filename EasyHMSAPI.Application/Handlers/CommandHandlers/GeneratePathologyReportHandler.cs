@@ -15,12 +15,14 @@ using EasyHMSAPI.Application.Services;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
-    // Single, freely-repeatable "generate/update report" action -- there is no separate
-    // technician-sign or pathologist-approve step anymore (SignPathologyReportAsTechnicianHandler
-    // and ApprovePathologyReportHandler were removed). Calling this again for an order that
-    // already has a report just re-links whatever results exist now instead of rejecting with
-    // "already exists" -- editing a result and clicking "Generate / Update Report" again is the
-    // whole workflow.
+    // Single, freely-repeatable "generate/update report" action, scoped to ONE test line rather
+    // than the whole order -- a multi-test order (e.g. CBC + Lipid Profile) gets one independent
+    // report per line, each generatable as soon as that one line has a result, instead of waiting
+    // for every test in the order to be done. There is no separate technician-sign or
+    // pathologist-approve step anymore (SignPathologyReportAsTechnicianHandler and
+    // ApprovePathologyReportHandler were removed). Calling this again for a line that already has
+    // a report just re-links its current result instead of rejecting with "already exists" --
+    // editing a result and clicking "Generate / Update Report" again is the whole workflow.
     public class GeneratePathologyReportHandler : IRequestHandler<GeneratePathologyReportCommand, GeneratePathologyReportResponseModel>
     {
         private readonly AppDbContext _context;
@@ -45,39 +47,35 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return new GeneratePathologyReportResponseModel { Success = false, Message = "Order not found." };
                 }
 
-                // 2. Validate all order lines have results entered
-                var orderLines = await _context.PathologyOrderLine
-                    .Where(l => l.OrderId == request.OrderId && l.HospitalId == request.HospitalId)
-                    .ToListAsync(cancellationToken);
+                // 2. Validate the target line exists on this order and has a result -- only this one
+                // line's readiness gates generation now, not its siblings'.
+                var line = await _context.PathologyOrderLine
+                    .FirstOrDefaultAsync(l => l.OrderLineId == request.OrderLineId && l.OrderId == request.OrderId && l.HospitalId == request.HospitalId, cancellationToken);
 
-                if (!orderLines.Any())
+                if (line == null)
                 {
-                    return new GeneratePathologyReportResponseModel { Success = false, Message = "No test lines found for this order." };
+                    return new GeneratePathologyReportResponseModel { Success = false, Message = "Test line not found on this order." };
                 }
 
-                var lineIds = orderLines.Select(l => l.OrderLineId).ToList();
-                var results = await _context.PathologyResult
-                    .Where(r => lineIds.Contains(r.OrderLineId) && r.HospitalId == request.HospitalId)
-                    .ToListAsync(cancellationToken);
+                var result = await _context.PathologyResult
+                    .FirstOrDefaultAsync(r => r.OrderLineId == line.OrderLineId && r.HospitalId == request.HospitalId, cancellationToken);
 
-                var linesWithResults = results.Select(r => r.OrderLineId).ToHashSet();
-                var linesWithoutResults = orderLines.Where(l => !linesWithResults.Contains(l.OrderLineId)).ToList();
-
-                if (linesWithoutResults.Any())
+                if (result == null)
                 {
                     return new GeneratePathologyReportResponseModel
                     {
                         Success = false,
-                        Message = $"Results have not been entered for {linesWithoutResults.Count} test(s). Please enter all results before generating a report."
+                        Message = "A result has not been entered for this test yet. Please enter the result before generating a report."
                     };
                 }
 
                 var now = DateTime.UtcNow;
 
-                // 3. Reuse the existing report if this order already has one -- regenerate in place
-                // rather than reject, so results can be edited and the report re-generated freely.
-                var report = await _context.PathologyReport
-                    .FirstOrDefaultAsync(r => r.OrderId == request.OrderId && r.HospitalId == request.HospitalId, cancellationToken);
+                // 3. Reuse the existing report if this line already has one -- regenerate in place
+                // rather than reject, so a result can be edited and the report re-generated freely.
+                var report = line.ReportId.HasValue
+                    ? await _context.PathologyReport.FirstOrDefaultAsync(r => r.ReportId == line.ReportId.Value && r.HospitalId == request.HospitalId, cancellationToken)
+                    : null;
                 var isNewReport = report == null;
 
                 if (report == null)
@@ -136,47 +134,46 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     _context.PathologyReport.Update(report);
                 }
 
-                // 4. Link all current results to this report -- re-links on every regenerate, so a
-                // result added/edited after the first generation is picked up next time too.
-                foreach (var result in results)
-                {
-                    result.ReportId = report.ReportId;
-                    result.UpdatedAt = now;
-                    result.UpdatedBy = request.LoggedInUserName ?? "System";
-                    _context.PathologyResult.Update(result);
-                }
+                // 4. Link this line's current result to its report -- re-links on every regenerate,
+                // so an edited result is picked up next time too.
+                result.ReportId = report.ReportId;
+                result.UpdatedAt = now;
+                result.UpdatedBy = request.LoggedInUserName ?? "System";
+                _context.PathologyResult.Update(result);
 
-                // 5. Order/line bookkeeping -- RESULT_ENTERED is the terminal line status now that
-                // there is no approval step to promote it further.
-                if (order.Status != "COMPLETED")
+                line.ReportId = report.ReportId;
+                line.UpdatedAt = now;
+                line.UpdatedBy = request.LoggedInUserName ?? "System";
+                _context.PathologyOrderLine.Update(line);
+
+                // 5. The order is COMPLETED only once every one of its lines has its own report --
+                // for a single-test order this is unchanged (one line, one report, done).
+                var siblingLines = await _context.PathologyOrderLine
+                    .Where(l => l.OrderId == request.OrderId && l.HospitalId == request.HospitalId && l.OrderLineId != line.OrderLineId)
+                    .ToListAsync(cancellationToken);
+                var allLinesReported = siblingLines.All(l => l.ReportId.HasValue);
+                if (allLinesReported && order.Status != "COMPLETED")
                 {
                     order.Status = "COMPLETED";
                     order.UpdatedAt = now;
                     order.UpdatedBy = request.LoggedInUserName ?? "System";
                     _context.PathologyOrder.Update(order);
                 }
-                foreach (var line in orderLines)
-                {
-                    line.ReportId = report.ReportId;
-                    line.UpdatedAt = now;
-                    line.UpdatedBy = request.LoggedInUserName ?? "System";
-                    _context.PathologyOrderLine.Update(line);
-                }
 
                 await _context.SaveChangesAsync(cancellationToken);
 
-                // 6. Auto-bill the first time a report is generated for this order, if the
-                // hospital's billing policy is configured for it. Deliberately NOT re-dispatched on
-                // a regenerate (isNewReport guard) -- AddChargeEventHandler has no dedup for this
+                // 6. Auto-bill the first time a report is generated for THIS test, if the hospital's
+                // billing policy is configured for it. Deliberately NOT re-dispatched on a
+                // regenerate (isNewReport guard) -- AddChargeEventHandler has no dedup for this
                 // caller, so firing it again on every "Update Report" click would double-bill the
-                // same tests. Best-effort, same as CollectPathologySampleHandler's dispatch.
+                // same test. Best-effort, same as CollectPathologySampleHandler's dispatch.
                 if (isNewReport)
                 {
                     var billingPolicy = await _context.BillingPolicy
                         .FirstOrDefaultAsync(p => p.HospitalId == request.HospitalId, cancellationToken);
                     if (billingPolicy?.LabPathTrigger == "ON_REPORT_APPROVAL")
                     {
-                        await DispatchReportGenerationBillingAsync(order, orderLines.Select(l => l.TestId), request, cancellationToken);
+                        await DispatchReportGenerationBillingAsync(order, new[] { line.TestId }, request, cancellationToken);
                     }
                 }
 

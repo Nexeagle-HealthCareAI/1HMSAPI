@@ -14,13 +14,15 @@ using NUnit.Framework;
 
 namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 {
-    // Covers the report-workflow simplification: there is no longer a separate technician-sign /
+    // Covers per-line report generation: each PathologyOrderLine (test) gets its own independent
+    // report, generatable as soon as that one line has a result -- a sibling line in the same
+    // order lacking a result no longer blocks it. There is no separate technician-sign /
     // pathologist-approve step (both handlers were removed) -- this is the single, freely
-    // re-callable "generate/update report" action. Regenerating an order that already has a report
-    // must reuse it (same ReportId/ReportNo) rather than reject, and must NOT re-dispatch the
-    // ON_REPORT_APPROVAL billing trigger a second time -- AddChargeEventHandler has no dedup for
-    // this caller, so firing it again on every "Update Report" click would double-bill the same
-    // tests.
+    // re-callable "generate/update report" action per line. Regenerating a line that already has a
+    // report must reuse it (same ReportId/ReportNo) rather than reject, and must NOT re-dispatch the
+    // ON_REPORT_APPROVAL billing trigger a second time for that same line -- AddChargeEventHandler
+    // has no dedup for this caller, so firing it again on every "Update Report" click would
+    // double-bill the same test.
     [TestFixture]
     public class GeneratePathologyReportHandlerTests
     {
@@ -46,29 +48,30 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             _context?.Dispose();
         }
 
-        private (Guid HospitalId, Guid OrderId, Guid LineId) SeedOrderWithResult(
-            Guid? chargeId = null, Guid? testIdOverride = null, string lineStatus = "RESULT_ENTERED", Guid? encounterId = null)
+        private Guid SeedOrder(Guid hospitalId, string orderStatus = "IN_PROGRESS", Guid? encounterId = null)
         {
-            var hospitalId = Guid.NewGuid();
             var orderId = Guid.NewGuid();
-            var lineId = Guid.NewGuid();
-            var testId = testIdOverride ?? Guid.NewGuid();
-
             _context.PathologyOrder.Add(new PathologyOrder
             {
                 OrderId = orderId,
                 HospitalId = hospitalId,
                 PatientId = "PTID00000001",
                 OrderNo = "ORD-1",
-                Status = "IN_PROGRESS",
+                Status = orderStatus,
                 EncounterId = encounterId,
             });
+            return orderId;
+        }
+
+        private Guid SeedLineWithResult(Guid hospitalId, Guid orderId, Guid? testIdOverride = null, string lineStatus = "RESULT_ENTERED")
+        {
+            var lineId = Guid.NewGuid();
             _context.PathologyOrderLine.Add(new PathologyOrderLine
             {
                 OrderLineId = lineId,
                 HospitalId = hospitalId,
                 OrderId = orderId,
-                TestId = testId,
+                TestId = testIdOverride ?? Guid.NewGuid(),
                 Status = lineStatus,
             });
             _context.PathologyResult.Add(new PathologyResult
@@ -78,8 +81,31 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                 OrderLineId = lineId,
                 ResultValuesJson = "{\"Hemoglobin\":{\"value\":\"13.5\",\"flag\":\"NORMAL\"}}",
             });
-            _context.SaveChanges();
+            return lineId;
+        }
 
+        private Guid SeedLineWithoutResult(Guid hospitalId, Guid orderId)
+        {
+            var lineId = Guid.NewGuid();
+            _context.PathologyOrderLine.Add(new PathologyOrderLine
+            {
+                OrderLineId = lineId,
+                HospitalId = hospitalId,
+                OrderId = orderId,
+                TestId = Guid.NewGuid(),
+                Status = "PENDING",
+            });
+            return lineId;
+        }
+
+        /// Single-line order, seeded with a result -- the common case. Returns (hospitalId, orderId, lineId).
+        private (Guid HospitalId, Guid OrderId, Guid LineId) SeedSingleLineOrderWithResult(
+            Guid? testIdOverride = null, Guid? encounterId = null)
+        {
+            var hospitalId = Guid.NewGuid();
+            var orderId = SeedOrder(hospitalId, encounterId: encounterId);
+            var lineId = SeedLineWithResult(hospitalId, orderId, testIdOverride);
+            _context.SaveChanges();
             return (hospitalId, orderId, lineId);
         }
 
@@ -90,44 +116,84 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             {
                 HospitalId = Guid.NewGuid(),
                 OrderId = Guid.NewGuid(),
+                OrderLineId = Guid.NewGuid(),
             }, CancellationToken.None);
 
             Assert.That(response.Success, Is.False);
         }
 
         [Test]
-        public async Task Handle_SomeLinesMissingResults_ReturnsFailure()
+        public async Task Handle_LineNotFound_ReturnsFailure()
         {
-            var (hospitalId, orderId, _) = SeedOrderWithResult();
-            _context.PathologyOrderLine.Add(new PathologyOrderLine
-            {
-                OrderLineId = Guid.NewGuid(),
-                HospitalId = hospitalId,
-                OrderId = orderId,
-                TestId = Guid.NewGuid(),
-                Status = "PENDING",
-            });
+            var hospitalId = Guid.NewGuid();
+            var orderId = SeedOrder(hospitalId);
             _context.SaveChanges();
 
             var response = await _handler.Handle(new GeneratePathologyReportCommand
             {
                 HospitalId = hospitalId,
                 OrderId = orderId,
+                OrderLineId = Guid.NewGuid(),
             }, CancellationToken.None);
 
             Assert.That(response.Success, Is.False);
-            Assert.That(_context.PathologyReport.Any(r => r.OrderId == orderId), Is.False);
         }
 
         [Test]
-        public async Task Handle_AllResultsEntered_CreatesReportAndCompletesOrder()
+        public async Task Handle_ResultNotEnteredForLine_ReturnsFailure()
         {
-            var (hospitalId, orderId, lineId) = SeedOrderWithResult();
+            var hospitalId = Guid.NewGuid();
+            var orderId = SeedOrder(hospitalId);
+            var lineId = SeedLineWithoutResult(hospitalId, orderId);
+            _context.SaveChanges();
 
             var response = await _handler.Handle(new GeneratePathologyReportCommand
             {
                 HospitalId = hospitalId,
                 OrderId = orderId,
+                OrderLineId = lineId,
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(_context.PathologyReport.Any(), Is.False);
+        }
+
+        [Test]
+        public async Task Handle_GeneratingOneLine_SucceedsEvenWhileSiblingLineHasNoResult()
+        {
+            var hospitalId = Guid.NewGuid();
+            var orderId = SeedOrder(hospitalId);
+            var readyLineId = SeedLineWithResult(hospitalId, orderId);
+            var pendingLineId = SeedLineWithoutResult(hospitalId, orderId);
+            _context.SaveChanges();
+
+            var response = await _handler.Handle(new GeneratePathologyReportCommand
+            {
+                HospitalId = hospitalId,
+                OrderId = orderId,
+                OrderLineId = readyLineId,
+                LoggedInUserName = "tester",
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True, response.Message);
+
+            var readyLine = _context.PathologyOrderLine.Single(l => l.OrderLineId == readyLineId);
+            Assert.That(readyLine.ReportId, Is.EqualTo(response.ReportId));
+
+            var pendingLine = _context.PathologyOrderLine.Single(l => l.OrderLineId == pendingLineId);
+            Assert.That(pendingLine.ReportId, Is.Null);
+        }
+
+        [Test]
+        public async Task Handle_SingleLineOrder_GeneratingItsReportCompletesOrder()
+        {
+            var (hospitalId, orderId, lineId) = SeedSingleLineOrderWithResult();
+
+            var response = await _handler.Handle(new GeneratePathologyReportCommand
+            {
+                HospitalId = hospitalId,
+                OrderId = orderId,
+                OrderLineId = lineId,
                 LoggedInUserName = "tester",
             }, CancellationToken.None);
 
@@ -150,14 +216,45 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
-        public async Task Handle_CalledAgainForSameOrder_ReusesExistingReportInstead()
+        public async Task Handle_MultiLineOrder_OrderStaysIncompleteUntilAllLinesReported()
         {
-            var (hospitalId, orderId, _) = SeedOrderWithResult();
+            var hospitalId = Guid.NewGuid();
+            var orderId = SeedOrder(hospitalId);
+            var lineOne = SeedLineWithResult(hospitalId, orderId);
+            var lineTwo = SeedLineWithResult(hospitalId, orderId);
+            _context.SaveChanges();
+
+            await _handler.Handle(new GeneratePathologyReportCommand
+            {
+                HospitalId = hospitalId,
+                OrderId = orderId,
+                OrderLineId = lineOne,
+                LoggedInUserName = "tester",
+            }, CancellationToken.None);
+
+            Assert.That(_context.PathologyOrder.Single(o => o.OrderId == orderId).Status, Is.Not.EqualTo("COMPLETED"));
+
+            await _handler.Handle(new GeneratePathologyReportCommand
+            {
+                HospitalId = hospitalId,
+                OrderId = orderId,
+                OrderLineId = lineTwo,
+                LoggedInUserName = "tester",
+            }, CancellationToken.None);
+
+            Assert.That(_context.PathologyOrder.Single(o => o.OrderId == orderId).Status, Is.EqualTo("COMPLETED"));
+        }
+
+        [Test]
+        public async Task Handle_CalledAgainForSameLine_ReusesExistingReport()
+        {
+            var (hospitalId, orderId, lineId) = SeedSingleLineOrderWithResult();
 
             var first = await _handler.Handle(new GeneratePathologyReportCommand
             {
                 HospitalId = hospitalId,
                 OrderId = orderId,
+                OrderLineId = lineId,
                 LoggedInUserName = "tester",
             }, CancellationToken.None);
 
@@ -165,13 +262,45 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             {
                 HospitalId = hospitalId,
                 OrderId = orderId,
+                OrderLineId = lineId,
                 LoggedInUserName = "tester",
             }, CancellationToken.None);
 
             Assert.That(second.Success, Is.True, second.Message);
             Assert.That(second.ReportId, Is.EqualTo(first.ReportId));
             Assert.That(second.ReportNo, Is.EqualTo(first.ReportNo));
-            Assert.That(_context.PathologyReport.Count(r => r.OrderId == orderId), Is.EqualTo(1));
+            Assert.That(_context.PathologyReport.Count(), Is.EqualTo(1));
+        }
+
+        [Test]
+        public async Task Handle_CalledForDifferentLinesInSameOrder_CreatesDistinctReports()
+        {
+            var hospitalId = Guid.NewGuid();
+            var orderId = SeedOrder(hospitalId);
+            var lineOne = SeedLineWithResult(hospitalId, orderId);
+            var lineTwo = SeedLineWithResult(hospitalId, orderId);
+            _context.SaveChanges();
+
+            var first = await _handler.Handle(new GeneratePathologyReportCommand
+            {
+                HospitalId = hospitalId,
+                OrderId = orderId,
+                OrderLineId = lineOne,
+                LoggedInUserName = "tester",
+            }, CancellationToken.None);
+
+            var second = await _handler.Handle(new GeneratePathologyReportCommand
+            {
+                HospitalId = hospitalId,
+                OrderId = orderId,
+                OrderLineId = lineTwo,
+                LoggedInUserName = "tester",
+            }, CancellationToken.None);
+
+            Assert.That(first.Success, Is.True, first.Message);
+            Assert.That(second.Success, Is.True, second.Message);
+            Assert.That(second.ReportId, Is.Not.EqualTo(first.ReportId));
+            Assert.That(_context.PathologyReport.Count(r => r.OrderId == orderId), Is.EqualTo(2));
         }
 
         [Test]
@@ -180,7 +309,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var chargeId = Guid.NewGuid();
             var testId = Guid.NewGuid();
             var encounterId = Guid.NewGuid();
-            var (hospitalId, orderId, _) = SeedOrderWithResult(testIdOverride: testId, encounterId: encounterId);
+            var (hospitalId, orderId, lineId) = SeedSingleLineOrderWithResult(testIdOverride: testId, encounterId: encounterId);
 
             _context.BillingPolicy.Add(new BillingPolicy { HospitalId = hospitalId, LabPathTrigger = "ON_REPORT_APPROVAL" });
             _context.ChargeMaster.Add(new ChargeMaster
@@ -206,6 +335,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             {
                 HospitalId = hospitalId,
                 OrderId = orderId,
+                OrderLineId = lineId,
                 LoggedInUserName = "tester",
             }, CancellationToken.None);
 
@@ -216,11 +346,12 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                     r.Charges.Single().ChargeId == chargeId),
                 It.IsAny<CancellationToken>()), Times.Once);
 
-            // Regenerating the same report must not post the charge a second time.
+            // Regenerating the same line's report must not post the charge a second time.
             await _handler.Handle(new GeneratePathologyReportCommand
             {
                 HospitalId = hospitalId,
                 OrderId = orderId,
+                OrderLineId = lineId,
                 LoggedInUserName = "tester",
             }, CancellationToken.None);
 
@@ -228,9 +359,55 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task Handle_BillingPolicyOnReportGeneration_SecondLineFirstGenerateAlsoBillsIndependently()
+        {
+            var chargeIdOne = Guid.NewGuid();
+            var chargeIdTwo = Guid.NewGuid();
+            var testIdOne = Guid.NewGuid();
+            var testIdTwo = Guid.NewGuid();
+            var encounterId = Guid.NewGuid();
+            var hospitalId = Guid.NewGuid();
+            var orderId = SeedOrder(hospitalId, encounterId: encounterId);
+            var lineOne = SeedLineWithResult(hospitalId, orderId, testIdOverride: testIdOne);
+            var lineTwo = SeedLineWithResult(hospitalId, orderId, testIdOverride: testIdTwo);
+
+            _context.BillingPolicy.Add(new BillingPolicy { HospitalId = hospitalId, LabPathTrigger = "ON_REPORT_APPROVAL" });
+            _context.ChargeMaster.AddRange(
+                new ChargeMaster { ChargeId = chargeIdOne, HospitalId = hospitalId, DisplayName = "Test One", DefaultRate = 100m, IsActive = true },
+                new ChargeMaster { ChargeId = chargeIdTwo, HospitalId = hospitalId, DisplayName = "Test Two", DefaultRate = 200m, IsActive = true });
+            _context.PathologyTestMaster.AddRange(
+                new PathologyTestMaster { TestId = testIdOne, HospitalId = hospitalId, TestCode = "T1", TestName = "Test One", ChargeId = chargeIdOne, IsActive = true },
+                new PathologyTestMaster { TestId = testIdTwo, HospitalId = hospitalId, TestCode = "T2", TestName = "Test Two", ChargeId = chargeIdTwo, IsActive = true });
+            _context.SaveChanges();
+
+            await _handler.Handle(new GeneratePathologyReportCommand
+            {
+                HospitalId = hospitalId,
+                OrderId = orderId,
+                OrderLineId = lineOne,
+                LoggedInUserName = "tester",
+            }, CancellationToken.None);
+
+            await _handler.Handle(new GeneratePathologyReportCommand
+            {
+                HospitalId = hospitalId,
+                OrderId = orderId,
+                OrderLineId = lineTwo,
+                LoggedInUserName = "tester",
+            }, CancellationToken.None);
+
+            _mediatorMock.Verify(m => m.Send(
+                It.Is<AddChargeEventRequestModel>(r => r.Charges.Count == 1 && r.Charges.Single().ChargeId == chargeIdOne),
+                It.IsAny<CancellationToken>()), Times.Once);
+            _mediatorMock.Verify(m => m.Send(
+                It.Is<AddChargeEventRequestModel>(r => r.Charges.Count == 1 && r.Charges.Single().ChargeId == chargeIdTwo),
+                It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Test]
         public async Task Handle_BillingPolicyNotSetToOnReportGeneration_DoesNotPostCharge()
         {
-            var (hospitalId, orderId, _) = SeedOrderWithResult(encounterId: Guid.NewGuid());
+            var (hospitalId, orderId, lineId) = SeedSingleLineOrderWithResult(encounterId: Guid.NewGuid());
             _context.BillingPolicy.Add(new BillingPolicy { HospitalId = hospitalId, LabPathTrigger = "ON_ORDER" });
             _context.SaveChanges();
 
@@ -238,6 +415,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             {
                 HospitalId = hospitalId,
                 OrderId = orderId,
+                OrderLineId = lineId,
                 LoggedInUserName = "tester",
             }, CancellationToken.None);
 

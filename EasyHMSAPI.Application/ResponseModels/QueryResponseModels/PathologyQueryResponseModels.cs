@@ -28,19 +28,14 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? ReportFieldValuesJson { get; set; }
 
         // Dashboard-list-only fields (populated by GetPathologyOrdersHandler; left at their
-        // default 0/null on the single-order GetPathologyOrderByIdHandler response, which exposes
-        // the same information via Lines/Report instead) -- lets the Pathology Lab table show test
-        // count and report availability/date without a second round-trip per row.
+        // default 0 on the single-order GetPathologyOrderByIdHandler response, which exposes the
+        // same information per-line via Lines[].Report instead) -- lets the Pathology Lab table
+        // show test count and how many of this order's tests have a report ready, without a second
+        // round-trip per row.
         public int TestCount { get; set; }
-        public string? ReportNo { get; set; }
-        public DateTime? ReportGeneratedAt { get; set; }
-        public string? ReportPdfBlobPath { get; set; }
+        public int ReportsReadyCount { get; set; }
 
         public List<PathologyOrderLineDto> Lines { get; set; } = new();
-        // Present once GeneratePathologyReportHandler has created a report for this order --
-        // single source of truth for the dual-signature UI so it survives a page reload instead of
-        // relying on local component state left over from whichever action the browser just ran.
-        public PathologyReportDto? Report { get; set; }
     }
 
     [ExcludeFromCodeCoverage]
@@ -67,6 +62,10 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public DateTime? SampleCollectedAt { get; set; }
 
         public PathologyResultDto? Result { get; set; }
+        // This line's own report -- each PathologyOrderLine (test) now gets its own independent
+        // report rather than sharing one report for the whole order (see
+        // GeneratePathologyReportHandler). Null until a report has been generated for this test.
+        public PathologyReportDto? Report { get; set; }
     }
 
     [ExcludeFromCodeCoverage]
@@ -86,5 +85,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string OrderNo { get; set; } = null!;
         public DateTime? GeneratedAt { get; set; }
         public string? PdfBlobPath { get; set; }
+        // Which test this report covers -- a patient can now have more than one ready report per
+        // order (one per test line), so the badge/dialog showing these needs a way to tell them apart.
+        public string? TestName { get; set; }
     }
 }

@@ -164,11 +164,12 @@ namespace EasyHMSAPI.Api.Controllers.V1
             }
         }
 
-        [HttpPost("{hospitalId}/{orderId}/report")]
-        public async Task<IActionResult> GenerateReport(Guid hospitalId, Guid orderId, [FromBody] GeneratePathologyReportCommand request)
+        [HttpPost("{hospitalId}/{orderId}/lines/{orderLineId}/report")]
+        public async Task<IActionResult> GenerateReport(Guid hospitalId, Guid orderId, Guid orderLineId, [FromBody] GeneratePathologyReportCommand request)
         {
             request.HospitalId = hospitalId;
             request.OrderId = orderId;
+            request.OrderLineId = orderLineId;
             request.LoggedInUserId = UserContextHelper.GetUserId(User) ?? Guid.Empty;
             request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
 
@@ -180,7 +181,7 @@ namespace EasyHMSAPI.Api.Controllers.V1
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error generating pathology report for order {OrderId}", orderId);
+                _logger.LogError(ex, "Error generating pathology report for order line {OrderLineId}", orderLineId);
                 return StatusCode(500, new { Message = "An error occurred while generating the report." });
             }
         }

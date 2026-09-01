@@ -48,20 +48,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         .Select(p => p.FullName)
                         .FirstOrDefault() ?? "Unknown",
                     // Dashboard-list-only fields -- lets the Pathology Lab table show test count and
-                    // report availability/date without a second round-trip per row.
+                    // how many of this order's tests have their own report ready, without a second
+                    // round-trip per row. Each PathologyOrderLine now gets its own independent
+                    // report (see GeneratePathologyReportHandler), so "one report per order" is no
+                    // longer a valid assumption here -- count lines with a ReportId instead of
+                    // picking an arbitrary single report.
                     TestCount = _context.PathologyOrderLine.Count(l => l.OrderId == o.OrderId),
-                    ReportNo = _context.PathologyReport
-                        .Where(r => r.OrderId == o.OrderId)
-                        .Select(r => r.ReportNo)
-                        .FirstOrDefault(),
-                    ReportGeneratedAt = _context.PathologyReport
-                        .Where(r => r.OrderId == o.OrderId)
-                        .Select(r => r.GeneratedAt)
-                        .FirstOrDefault(),
-                    ReportPdfBlobPath = _context.PathologyReport
-                        .Where(r => r.OrderId == o.OrderId)
-                        .Select(r => r.PdfBlobPath)
-                        .FirstOrDefault()
+                    ReportsReadyCount = _context.PathologyOrderLine.Count(l => l.OrderId == o.OrderId && l.ReportId != null)
                 })
                 .ToListAsync(cancellationToken);
 
@@ -117,22 +110,6 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .Select(h => h.Name)
                 .FirstOrDefaultAsync(cancellationToken);
 
-            var report = await _context.PathologyReport
-                .Where(r => r.HospitalId == request.HospitalId && r.OrderId == request.OrderId)
-                .FirstOrDefaultAsync(cancellationToken);
-            if (report != null)
-            {
-                order.Report = new PathologyReportDto
-                {
-                    ReportId = report.ReportId,
-                    ReportNo = report.ReportNo,
-                    Status = report.Status,
-                    GeneratedAt = report.GeneratedAt,
-                    PdfBlobPath = report.PdfBlobPath,
-                    PdfSha256 = report.PdfSha256,
-                };
-            }
-
             var lines = await _context.PathologyOrderLine
                 .Where(l => l.HospitalId == request.HospitalId && l.OrderId == request.OrderId)
                 .ToListAsync(cancellationToken);
@@ -142,10 +119,32 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 var test = await _context.PathologyTestMaster
                     .Where(t => t.TestId == line.TestId)
                     .FirstOrDefaultAsync(cancellationToken);
-                    
+
                 var result = await _context.PathologyResult
                     .Where(r => r.OrderLineId == line.OrderLineId)
                     .FirstOrDefaultAsync(cancellationToken);
+
+                // Each line now owns its own report (see GeneratePathologyReportHandler) rather than
+                // sharing one report for the whole order -- resolved per line via line.ReportId.
+                PathologyReportDto? lineReport = null;
+                if (line.ReportId.HasValue)
+                {
+                    var report = await _context.PathologyReport
+                        .Where(r => r.ReportId == line.ReportId.Value)
+                        .FirstOrDefaultAsync(cancellationToken);
+                    if (report != null)
+                    {
+                        lineReport = new PathologyReportDto
+                        {
+                            ReportId = report.ReportId,
+                            ReportNo = report.ReportNo,
+                            Status = report.Status,
+                            GeneratedAt = report.GeneratedAt,
+                            PdfBlobPath = report.PdfBlobPath,
+                            PdfSha256 = report.PdfSha256,
+                        };
+                    }
+                }
 
                 order.Lines.Add(new PathologyOrderLineDto
                 {
@@ -162,7 +161,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         ResultId = result.ResultId,
                         ResultValuesJson = result.ResultValuesJson,
                         Interpretation = result.Interpretation
-                    }
+                    },
+                    Report = lineReport
                 });
             }
 
@@ -188,13 +188,17 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             // the result.
             var since = DateTime.UtcNow.AddDays(-30);
 
-            // Newest first -- a patient can have multiple reports in the window, and the frontend
-            // indexes this list by patientId keeping only the first one seen per patient (same
-            // "ordered desc, first-seen wins" convention as referralsByPatient in DocBoard.tsx), so
-            // the ordering here is what actually decides which report wins.
+            // Newest first -- a patient can now genuinely have multiple *different* reports in the
+            // window (one report per test line rather than one per order), so the frontend must keep
+            // all of them rather than assuming one-per-patient. TestName (via the line each report
+            // belongs to) lets the UI tell them apart.
             return await (
                 from report in _context.PathologyReport
                 join order in _context.PathologyOrder on report.OrderId equals order.OrderId
+                join line in _context.PathologyOrderLine on report.ReportId equals line.ReportId into lineJoin
+                from line in lineJoin.DefaultIfEmpty()
+                join test in _context.PathologyTestMaster on line.TestId equals test.TestId into testJoin
+                from test in testJoin.DefaultIfEmpty()
                 where report.HospitalId == request.HospitalId
                     && report.GeneratedAt >= since
                 orderby report.GeneratedAt descending
@@ -206,6 +210,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     OrderNo = order.OrderNo,
                     GeneratedAt = report.GeneratedAt,
                     PdfBlobPath = report.PdfBlobPath,
+                    TestName = test != null ? test.TestName : null,
                 }
             ).ToListAsync(cancellationToken);
         }

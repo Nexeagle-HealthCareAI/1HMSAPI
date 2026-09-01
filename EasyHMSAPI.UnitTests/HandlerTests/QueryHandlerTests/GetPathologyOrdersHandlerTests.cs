@@ -11,10 +11,11 @@ using NUnit.Framework;
 
 namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
 {
-    // Covers the dashboard-list-only fields (TestCount, ReportNo, ReportGeneratedAt,
-    // ReportPdfBlobPath) added for the Pathology Lab dashboard table -- these are correlated
-    // subqueries in the handler's projection, worth a real test rather than assuming EF Core
-    // translates them as expected.
+    // Covers the dashboard-list-only fields (TestCount, ReportsReadyCount) added for the Pathology
+    // Lab dashboard table -- these are correlated subqueries in the handler's projection, worth a
+    // real test rather than assuming EF Core translates them as expected. ReportsReadyCount counts
+    // lines with a ReportId rather than picking a single report, since each PathologyOrderLine now
+    // gets its own independent report (see GeneratePathologyReportHandler).
     [TestFixture]
     public class GetPathologyOrdersHandlerTests
     {
@@ -36,7 +37,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         }
 
         [Test]
-        public async Task Handle_OrderWithNoReportYet_ReportFieldsAreNullAndTestCountReflectsLines()
+        public async Task Handle_OrderWithNoReportsYet_ReportsReadyCountIsZeroAndTestCountReflectsLines()
         {
             var hospitalId = Guid.NewGuid();
             var orderId = Guid.NewGuid();
@@ -70,44 +71,57 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
 
             var dto = result.Single(o => o.OrderId == orderId);
             Assert.That(dto.TestCount, Is.EqualTo(2));
-            Assert.That(dto.ReportNo, Is.Null);
-            Assert.That(dto.ReportGeneratedAt, Is.Null);
-            Assert.That(dto.ReportPdfBlobPath, Is.Null);
+            Assert.That(dto.ReportsReadyCount, Is.EqualTo(0));
         }
 
         [Test]
-        public async Task Handle_OrderWithGeneratedReport_ExposesReportSummaryFields()
+        public async Task Handle_OrderWithOneOfTwoLinesReported_ReportsReadyCountReflectsOnlyThatLine()
         {
             var hospitalId = Guid.NewGuid();
             var orderId = Guid.NewGuid();
-            var generatedAt = DateTime.UtcNow;
+            var reportId = Guid.NewGuid();
             _context.PathologyOrder.Add(new PathologyOrder
             {
                 OrderId = orderId,
                 HospitalId = hospitalId,
                 PatientId = "PTID00000001",
                 OrderNo = "ORD-2",
-                Status = "COMPLETED",
+                Status = "IN_PROGRESS",
             });
             _context.PathologyReport.Add(new PathologyReport
             {
-                ReportId = Guid.NewGuid(),
+                ReportId = reportId,
                 HospitalId = hospitalId,
                 OrderId = orderId,
                 ReportNo = "LR-1",
                 Status = "GENERATED",
-                GeneratedAt = generatedAt,
+                GeneratedAt = DateTime.UtcNow,
                 PdfBlobPath = "https://blob.example/report.pdf",
+            });
+            _context.PathologyOrderLine.Add(new PathologyOrderLine
+            {
+                OrderLineId = Guid.NewGuid(),
+                HospitalId = hospitalId,
+                OrderId = orderId,
+                TestId = Guid.NewGuid(),
+                Status = "RESULT_ENTERED",
+                ReportId = reportId,
+            });
+            _context.PathologyOrderLine.Add(new PathologyOrderLine
+            {
+                OrderLineId = Guid.NewGuid(),
+                HospitalId = hospitalId,
+                OrderId = orderId,
+                TestId = Guid.NewGuid(),
+                Status = "PENDING",
             });
             _context.SaveChanges();
 
             var result = await _handler.Handle(new GetPathologyOrdersQuery { HospitalId = hospitalId }, CancellationToken.None);
 
             var dto = result.Single(o => o.OrderId == orderId);
-            Assert.That(dto.TestCount, Is.EqualTo(0));
-            Assert.That(dto.ReportNo, Is.EqualTo("LR-1"));
-            Assert.That(dto.ReportGeneratedAt, Is.EqualTo(generatedAt));
-            Assert.That(dto.ReportPdfBlobPath, Is.EqualTo("https://blob.example/report.pdf"));
+            Assert.That(dto.TestCount, Is.EqualTo(2));
+            Assert.That(dto.ReportsReadyCount, Is.EqualTo(1));
         }
     }
 }
