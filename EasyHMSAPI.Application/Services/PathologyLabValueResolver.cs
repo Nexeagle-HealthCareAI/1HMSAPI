@@ -45,7 +45,7 @@ namespace EasyHMSAPI.Application.Services
             if (latestReport == null) return (values, null);
 
             var results = await context.PathologyResult
-                .Where(r => r.ReportId == latestReport.ReportId)
+                .Where(r => r.ReportId == latestReport.ReportId && r.HospitalId == hospitalId)
                 .Select(r => r.ResultValuesJson)
                 .ToListAsync(cancellationToken);
 

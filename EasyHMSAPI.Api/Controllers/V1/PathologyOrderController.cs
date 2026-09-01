@@ -142,8 +142,8 @@ namespace EasyHMSAPI.Api.Controllers.V1
             }
         }
 
-        [HttpPost("{hospitalId}/{orderId}/notes")]
-        public async Task<IActionResult> UpdateNotes(Guid hospitalId, Guid orderId, [FromBody] UpdatePathologyOrderNotesCommand request)
+        [HttpPut("{hospitalId}/{orderId}")]
+        public async Task<IActionResult> UpdateOrder(Guid hospitalId, Guid orderId, [FromBody] UpdatePathologyOrderCommand request)
         {
             request.HospitalId = hospitalId;
             request.OrderId = orderId;
@@ -152,13 +152,13 @@ namespace EasyHMSAPI.Api.Controllers.V1
 
             try
             {
-                var success = await _mediator.Send(request);
-                if (!success) return BadRequest(new { success = false, message = "Order not found." });
-                return Ok(new { success = true });
+                var response = await _mediator.Send(request);
+                if (!response.Success) return BadRequest(response);
+                return Ok(response);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error updating notes for pathology order {OrderId}", orderId);
+                _logger.LogError(ex, "Error updating pathology order {OrderId}", orderId);
                 return StatusCode(500, new { Message = "An error occurred while saving the order." });
             }
         }

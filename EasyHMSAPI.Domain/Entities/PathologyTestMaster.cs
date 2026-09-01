@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Domain.Entities
@@ -9,13 +10,20 @@ namespace EasyHMSAPI.Domain.Entities
         [Key]
         public Guid TestId { get; set; }
         public Guid HospitalId { get; set; }
-        
+
         public string TestCode { get; set; } = null!;
         public string TestName { get; set; } = null!;
         public string? Category { get; set; }
-        
+
         // Link to Billing
-        public Guid? ChargeId { get; set; } 
+        public Guid? ChargeId { get; set; }
+
+        // Not a column -- the linked ChargeMaster's DefaultRate, populated in-memory by
+        // GetPathologyTestsQueryHandler after the main query (same batched-lookup pattern
+        // GetPathologyOrdersHandler uses for TestNames/PatientAgeYears) so the Test Catalog's list
+        // view can show a price without a separate round-trip per row.
+        [NotMapped]
+        public decimal? Price { get; set; }
         
         public string? SampleType { get; set; }
         public string? ContainerType { get; set; }

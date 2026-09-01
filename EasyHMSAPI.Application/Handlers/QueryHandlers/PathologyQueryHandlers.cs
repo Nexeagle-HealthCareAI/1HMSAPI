@@ -122,6 +122,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     TokenNumber = o.TokenNumber,
                     Notes = o.Notes,
                     EncounterId = o.EncounterId,
+                    AdmissionId = o.AdmissionId,
                     ReportFieldValuesJson = o.ReportFieldValuesJson,
                     PatientName = _context.PatientRegistrations
                         .Where(p => p.PatientId == o.PatientId)
@@ -154,11 +155,11 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             foreach (var line in lines)
             {
                 var test = await _context.PathologyTestMaster
-                    .Where(t => t.TestId == line.TestId)
+                    .Where(t => t.TestId == line.TestId && t.HospitalId == request.HospitalId)
                     .FirstOrDefaultAsync(cancellationToken);
 
                 var result = await _context.PathologyResult
-                    .Where(r => r.OrderLineId == line.OrderLineId)
+                    .Where(r => r.OrderLineId == line.OrderLineId && r.HospitalId == request.HospitalId)
                     .FirstOrDefaultAsync(cancellationToken);
 
                 // Each line now owns its own report (see GeneratePathologyReportHandler) rather than
@@ -167,7 +168,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 if (line.ReportId.HasValue)
                 {
                     var report = await _context.PathologyReport
-                        .Where(r => r.ReportId == line.ReportId.Value)
+                        .Where(r => r.ReportId == line.ReportId.Value && r.HospitalId == request.HospitalId)
                         .FirstOrDefaultAsync(cancellationToken);
                     if (report != null)
                     {

@@ -71,7 +71,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 request.HospitalId, request.OrderId, line.TestId, request.ResultValuesJson, cancellationToken);
 
             var result = await _context.PathologyResult
-                .Where(r => r.OrderLineId == line.OrderLineId)
+                .Where(r => r.OrderLineId == line.OrderLineId && r.HospitalId == request.HospitalId)
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (result == null)
@@ -110,11 +110,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
             // Check if all lines are completed to update order status
             var allLines = await _context.PathologyOrderLine
-                .Where(l => l.OrderId == request.OrderId)
+                .Where(l => l.OrderId == request.OrderId && l.HospitalId == request.HospitalId)
                 .ToListAsync(cancellationToken);
-                
+
             var order = await _context.PathologyOrder
-                .Where(o => o.OrderId == request.OrderId)
+                .Where(o => o.OrderId == request.OrderId && o.HospitalId == request.HospitalId)
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (order != null)
@@ -197,7 +197,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             if (patientId != null)
             {
                 var patient = await _context.PatientRegistrations
-                    .Where(p => p.PatientId == patientId)
+                    .Where(p => p.PatientId == patientId && p.HospitalId == hospitalId)
                     .Select(p => new { p.DateOfBirth, p.Sex })
                     .FirstOrDefaultAsync(cancellationToken);
                 dob = patient?.DateOfBirth;

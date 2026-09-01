@@ -55,6 +55,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             _context.PatientRegistrations.Add(new PatientRegistration
             {
                 PatientId = patientId,
+                HospitalId = hospitalId,
                 FullName = "Test Patient",
                 DateOfBirth = dob,
                 Sex = sex,

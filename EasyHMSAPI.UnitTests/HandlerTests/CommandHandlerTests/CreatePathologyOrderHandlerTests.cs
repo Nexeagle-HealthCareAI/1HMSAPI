@@ -284,6 +284,28 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task Handle_TestIdBelongsToAnotherHospital_RejectsOrderAndDoesNotCreateLines()
+        {
+            var (hospitalId, _, _) = SeedAutoBillCatalog();
+            var (otherHospitalId, otherTestId, _) = SeedAutoBillCatalog();
+
+            var response = await _handler.Handle(new CreatePathologyOrderRequestModel
+            {
+                HospitalId = hospitalId,
+                PatientId = "PTID00000001",
+                EncounterId = Guid.NewGuid(),
+                TestIds = new() { otherTestId },
+                LoggedInUserName = "tester",
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Does.Contain("not in this hospital's catalog"));
+            Assert.That(_context.PathologyOrder.Any(o => o.HospitalId == hospitalId), Is.False);
+            Assert.That(_context.PathologyOrderLine.Any(l => l.TestId == otherTestId && l.HospitalId == hospitalId), Is.False);
+            Assert.That(otherHospitalId, Is.Not.EqualTo(hospitalId));
+        }
+
+        [Test]
         public async Task Handle_TwoOrdersDifferentHospitals_TokenNumbersEachStartAtOne()
         {
             var (hospitalOne, testOne, _) = SeedAutoBillCatalog();

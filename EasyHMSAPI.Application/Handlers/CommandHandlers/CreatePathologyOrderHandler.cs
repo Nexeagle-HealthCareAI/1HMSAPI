@@ -30,6 +30,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         {
             try
             {
+                // A TestId not belonging to this hospital must never be accepted onto an order --
+                // GetPathologyOrderByIdHandler resolves a line's test purely by TestId (now scoped by
+                // HospitalId too, but this is the write-side half of that same fix), so letting a
+                // foreign TestId through here would let this hospital read another hospital's private
+                // catalog metadata back through their own order.
+                var ownedTestCount = await _context.PathologyTestMaster
+                    .CountAsync(t => request.TestIds.Contains(t.TestId) && t.HospitalId == request.HospitalId, cancellationToken);
+                if (ownedTestCount != request.TestIds.Distinct().Count())
+                {
+                    return new CreatePathologyOrderResponseModel { Success = false, Message = "One or more selected tests are not in this hospital's catalog." };
+                }
+
                 var billingPolicy = await _context.BillingPolicy.FirstOrDefaultAsync(c => c.HospitalId == request.HospitalId, cancellationToken);
                 bool autoBill = billingPolicy?.LabPathTrigger == "ON_ORDER";
 

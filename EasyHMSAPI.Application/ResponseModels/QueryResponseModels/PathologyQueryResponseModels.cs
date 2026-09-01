@@ -28,6 +28,9 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         // (CreatePathologyOrderHandler / ClinicalOrderCommandHandlers) -- lets the Pathology
         // Workspace show which invoice this order's charges landed on, null when it never had one.
         public Guid? EncounterId { get; set; }
+        // Set for an IPD order instead of EncounterId -- lets the order-edit flow re-select the same
+        // admission by default rather than losing track of which one an IPD order was placed under.
+        public Guid? AdmissionId { get; set; }
         // Values for the hospital's configured report-level fields -- {key: value}, parsed
         // client-side against LabConfiguration.ReportFieldLayoutJson's "reportFields" list.
         public string? ReportFieldValuesJson { get; set; }
