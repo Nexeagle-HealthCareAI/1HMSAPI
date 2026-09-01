@@ -56,6 +56,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     }
                 }
 
+                var tokenNumber = await PathologyTokenHelper.AllocateTokenWithLockingAsync(_context, request.HospitalId, now, cancellationToken);
+
                 var order = new PathologyOrder
                 {
                     HospitalId = request.HospitalId,
@@ -69,6 +71,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     Status = "PLACED",
                     SourceType = string.IsNullOrWhiteSpace(request.SourceType) ? "OPD" : request.SourceType,
                     IsStat = request.IsStat,
+                    TokenNumber = tokenNumber,
                     CreatedBy = request.LoggedInUserName
                 };
 

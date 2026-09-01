@@ -42,11 +42,16 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     PatientId = o.PatientId,
                     SourceType = o.SourceType,
                     IsStat = o.IsStat,
+                    TokenNumber = o.TokenNumber,
                     // Get patient name if possible, assuming PatientRegistration is joined
                     PatientName = _context.PatientRegistrations
                         .Where(p => p.PatientId == o.PatientId)
                         .Select(p => p.FullName)
                         .FirstOrDefault() ?? "Unknown",
+                    PatientMobile = _context.PatientRegistrations
+                        .Where(p => p.PatientId == o.PatientId)
+                        .Select(p => p.Mobile)
+                        .FirstOrDefault(),
                     // Dashboard-list-only fields -- lets the Pathology Lab table show test count and
                     // how many of this order's tests have their own report ready, without a second
                     // round-trip per row. Each PathologyOrderLine now gets its own independent
@@ -57,6 +62,35 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     ReportsReadyCount = _context.PathologyOrderLine.Count(l => l.OrderId == o.OrderId && l.ReportId != null)
                 })
                 .ToListAsync(cancellationToken);
+
+            if (orders.Count == 0) return orders;
+
+            // Test names and precise patient age are resolved in separate batched queries rather
+            // than nested inside the projection above -- keeps the main query a simple, proven
+            // scalar-subquery shape (same as TestCount/ReportsReadyCount) instead of relying on EF
+            // translating a collection-valued subquery, and reuses PathologyAgeCalculator the same
+            // way GetPathologyOrderByIdHandler already does for the single-order view.
+            var orderIds = orders.Select(o => o.OrderId).ToList();
+            var testNamesByOrder = await _context.PathologyOrderLine
+                .Where(l => orderIds.Contains(l.OrderId))
+                .Join(_context.PathologyTestMaster, l => l.TestId, t => t.TestId, (l, t) => new { l.OrderId, t.TestName })
+                .ToListAsync(cancellationToken);
+            var testNamesLookup = testNamesByOrder
+                .GroupBy(x => x.OrderId)
+                .ToDictionary(g => g.Key, g => g.Select(x => x.TestName).ToList());
+
+            var patientIds = orders.Select(o => o.PatientId).Distinct().ToList();
+            var dobByPatient = await _context.PatientRegistrations
+                .Where(p => p.PatientId != null && patientIds.Contains(p.PatientId))
+                .Select(p => new { p.PatientId, p.DateOfBirth })
+                .ToListAsync(cancellationToken);
+            var dobLookup = dobByPatient.ToDictionary(p => p.PatientId!, p => p.DateOfBirth);
+
+            foreach (var order in orders)
+            {
+                if (testNamesLookup.TryGetValue(order.OrderId, out var names)) order.TestNames = names;
+                if (dobLookup.TryGetValue(order.PatientId, out var dob)) order.PatientAgeYears = PathologyAgeCalculator.CalculateAgeYears(dob);
+            }
 
             return orders;
         }
@@ -84,6 +118,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     PatientId = o.PatientId,
                     SourceType = o.SourceType,
                     IsStat = o.IsStat,
+                    TokenNumber = o.TokenNumber,
                     EncounterId = o.EncounterId,
                     ReportFieldValuesJson = o.ReportFieldValuesJson,
                     PatientName = _context.PatientRegistrations

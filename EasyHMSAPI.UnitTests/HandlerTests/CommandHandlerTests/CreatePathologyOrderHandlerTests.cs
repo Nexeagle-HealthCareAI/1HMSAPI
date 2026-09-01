@@ -254,5 +254,60 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(saved.SourceType, Is.EqualTo("EMERGENCY"));
             Assert.That(saved.IsStat, Is.True);
         }
+
+        [Test]
+        public async Task Handle_TwoOrdersSameHospitalSameDay_TokenNumbersAreSequential()
+        {
+            var (hospitalId, testId, _) = SeedAutoBillCatalog();
+
+            var first = await _handler.Handle(new CreatePathologyOrderRequestModel
+            {
+                HospitalId = hospitalId,
+                PatientId = "PTID00000001",
+                EncounterId = Guid.NewGuid(),
+                TestIds = new() { testId },
+                LoggedInUserName = "tester",
+            }, CancellationToken.None);
+            var second = await _handler.Handle(new CreatePathologyOrderRequestModel
+            {
+                HospitalId = hospitalId,
+                PatientId = "PTID00000002",
+                EncounterId = Guid.NewGuid(),
+                TestIds = new() { testId },
+                LoggedInUserName = "tester",
+            }, CancellationToken.None);
+
+            var firstOrder = _context.PathologyOrder.Single(o => o.OrderId == first.OrderId);
+            var secondOrder = _context.PathologyOrder.Single(o => o.OrderId == second.OrderId);
+            Assert.That(firstOrder.TokenNumber, Is.EqualTo(1));
+            Assert.That(secondOrder.TokenNumber, Is.EqualTo(2));
+        }
+
+        [Test]
+        public async Task Handle_TwoOrdersDifferentHospitals_TokenNumbersEachStartAtOne()
+        {
+            var (hospitalOne, testOne, _) = SeedAutoBillCatalog();
+            var (hospitalTwo, testTwo, _) = SeedAutoBillCatalog();
+
+            var orderOne = await _handler.Handle(new CreatePathologyOrderRequestModel
+            {
+                HospitalId = hospitalOne,
+                PatientId = "PTID00000001",
+                EncounterId = Guid.NewGuid(),
+                TestIds = new() { testOne },
+                LoggedInUserName = "tester",
+            }, CancellationToken.None);
+            var orderTwo = await _handler.Handle(new CreatePathologyOrderRequestModel
+            {
+                HospitalId = hospitalTwo,
+                PatientId = "PTID00000001",
+                EncounterId = Guid.NewGuid(),
+                TestIds = new() { testTwo },
+                LoggedInUserName = "tester",
+            }, CancellationToken.None);
+
+            Assert.That(_context.PathologyOrder.Single(o => o.OrderId == orderOne.OrderId).TokenNumber, Is.EqualTo(1));
+            Assert.That(_context.PathologyOrder.Single(o => o.OrderId == orderTwo.OrderId).TokenNumber, Is.EqualTo(1));
+        }
     }
 }

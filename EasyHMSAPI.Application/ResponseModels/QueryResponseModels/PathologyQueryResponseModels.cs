@@ -14,11 +14,15 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string Status { get; set; } = null!;
         public string PatientId { get; set; } = null!;
         public string PatientName { get; set; } = null!;
+        public string? PatientMobile { get; set; }
         public int? PatientAgeYears { get; set; }
         public string? PatientGender { get; set; }
         public string? HospitalName { get; set; }
         public string? SourceType { get; set; }
         public bool IsStat { get; set; }
+        // Daily, per-hospital token (resets every day) for the thermal-printed receipt -- separate
+        // from OrderNo. Null for orders created before this feature shipped.
+        public int? TokenNumber { get; set; }
         // Set when this order was attached to the patient's OPD/IPD billing visit at order time
         // (CreatePathologyOrderHandler / ClinicalOrderCommandHandlers) -- lets the Pathology
         // Workspace show which invoice this order's charges landed on, null when it never had one.
@@ -34,6 +38,9 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         // round-trip per row.
         public int TestCount { get; set; }
         public int ReportsReadyCount { get; set; }
+        // Test names on this order (e.g. "CBC", "LFT") -- dashboard-list-only, resolved in a
+        // second batched query rather than a nested EF projection.
+        public List<string> TestNames { get; set; } = new();
 
         public List<PathologyOrderLineDto> Lines { get; set; } = new();
     }

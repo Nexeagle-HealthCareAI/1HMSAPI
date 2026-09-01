@@ -31,6 +31,12 @@ namespace EasyHMSAPI.Domain.Entities
         // STAT/urgent order -- sorts to the top of the worklist and highlights in the UI.
         public bool IsStat { get; set; }
 
+        // Daily, per-hospital sequential token (resets every day) assigned at order creation and
+        // printed on a thermal receipt for the patient -- separate from OrderNo, which keeps its
+        // existing lab-accession format. Allocated via PathologyTokenHelper. Null for orders
+        // created before this feature shipped.
+        public int? TokenNumber { get; set; }
+
         // Values for the hospital's configured report-level fields (LabConfiguration.
         // ReportFieldLayoutJson's "reportFields" list) -- {key: value}, e.g. Clinical History,
         // Specimen Type. Lives on the order rather than PathologyReport so it's fillable/editable

@@ -123,5 +123,58 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             Assert.That(dto.TestCount, Is.EqualTo(2));
             Assert.That(dto.ReportsReadyCount, Is.EqualTo(1));
         }
+
+        [Test]
+        public async Task Handle_OrderWithTokenAndTests_ExposesTokenNumberTestNamesAndPatientInfo()
+        {
+            var hospitalId = Guid.NewGuid();
+            var orderId = Guid.NewGuid();
+            var testOneId = Guid.NewGuid();
+            var testTwoId = Guid.NewGuid();
+
+            _context.PatientRegistrations.Add(new PatientRegistration
+            {
+                RegistrationId = Guid.NewGuid(),
+                HospitalId = hospitalId,
+                PatientId = "PTID00000001",
+                FullName = "Rajesh Kumar",
+                Mobile = "9876543210",
+                DateOfBirth = DateTime.UtcNow.AddYears(-40),
+            });
+            _context.PathologyOrder.Add(new PathologyOrder
+            {
+                OrderId = orderId,
+                HospitalId = hospitalId,
+                PatientId = "PTID00000001",
+                OrderNo = "ORD-3",
+                Status = "IN_PROGRESS",
+                TokenNumber = 7,
+            });
+            _context.PathologyTestMaster.Add(new PathologyTestMaster
+            {
+                TestId = testOneId, HospitalId = hospitalId, TestCode = "HEM-CBC", TestName = "CBC", IsActive = true,
+            });
+            _context.PathologyTestMaster.Add(new PathologyTestMaster
+            {
+                TestId = testTwoId, HospitalId = hospitalId, TestCode = "BIO-LFT", TestName = "LFT", IsActive = true,
+            });
+            _context.PathologyOrderLine.Add(new PathologyOrderLine
+            {
+                OrderLineId = Guid.NewGuid(), HospitalId = hospitalId, OrderId = orderId, TestId = testOneId, Status = "PENDING",
+            });
+            _context.PathologyOrderLine.Add(new PathologyOrderLine
+            {
+                OrderLineId = Guid.NewGuid(), HospitalId = hospitalId, OrderId = orderId, TestId = testTwoId, Status = "PENDING",
+            });
+            _context.SaveChanges();
+
+            var result = await _handler.Handle(new GetPathologyOrdersQuery { HospitalId = hospitalId }, CancellationToken.None);
+
+            var dto = result.Single(o => o.OrderId == orderId);
+            Assert.That(dto.TokenNumber, Is.EqualTo(7));
+            Assert.That(dto.PatientMobile, Is.EqualTo("9876543210"));
+            Assert.That(dto.PatientAgeYears, Is.EqualTo(40));
+            Assert.That(dto.TestNames, Is.EquivalentTo(new[] { "CBC", "LFT" }));
+        }
     }
 }

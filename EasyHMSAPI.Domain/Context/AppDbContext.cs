@@ -235,6 +235,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<PathologyOrderLine> PathologyOrderLine { get; set; }
         public DbSet<PathologyResult> PathologyResult { get; set; }
         public DbSet<PathologyReport> PathologyReport { get; set; }
+        public DbSet<PathologyTokenQueue> PathologyTokenQueue { get; set; }
         public DbSet<LabConfiguration> LabConfiguration { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -658,6 +659,10 @@ namespace EasyHMSAPI.Domain.Context
             // Configure DoctorQueue composite key
             modelBuilder.Entity<DoctorQueue>().ToTable("DoctorQueues");
             modelBuilder.Entity<DoctorQueue>().HasKey(dq => new { dq.HospitalId, dq.DoctorId, dq.TokenDate });
+
+            // Configure PathologyTokenQueue composite key
+            modelBuilder.Entity<PathologyTokenQueue>().ToTable("PathologyTokenQueue");
+            modelBuilder.Entity<PathologyTokenQueue>().HasKey(q => new { q.HospitalId, q.TokenDate });
 
             // DoctorPreferredMedicine
             modelBuilder.Entity<DoctorPreferredMedicine>().ToTable("DoctorPreferredMedicine");
