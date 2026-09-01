@@ -23,6 +23,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         // Daily, per-hospital token (resets every day) for the thermal-printed receipt -- separate
         // from OrderNo. Null for orders created before this feature shipped.
         public int? TokenNumber { get; set; }
+        public string? Notes { get; set; }
         // Set when this order was attached to the patient's OPD/IPD billing visit at order time
         // (CreatePathologyOrderHandler / ClinicalOrderCommandHandlers) -- lets the Pathology
         // Workspace show which invoice this order's charges landed on, null when it never had one.

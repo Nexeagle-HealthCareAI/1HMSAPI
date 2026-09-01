@@ -43,6 +43,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     SourceType = o.SourceType,
                     IsStat = o.IsStat,
                     TokenNumber = o.TokenNumber,
+                    Notes = o.Notes,
                     // Get patient name if possible, assuming PatientRegistration is joined
                     PatientName = _context.PatientRegistrations
                         .Where(p => p.PatientId == o.PatientId)
@@ -119,6 +120,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     SourceType = o.SourceType,
                     IsStat = o.IsStat,
                     TokenNumber = o.TokenNumber,
+                    Notes = o.Notes,
                     EncounterId = o.EncounterId,
                     ReportFieldValuesJson = o.ReportFieldValuesJson,
                     PatientName = _context.PatientRegistrations
