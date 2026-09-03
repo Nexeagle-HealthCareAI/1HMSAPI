@@ -103,6 +103,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         EncounterId = encounter.EncounterId,
                         PatientId = request.PatientId,
                         SourceModule = BillingConstants.SourceModule.PharmacyCounter,
+                        PrescriberRef = request.PrescriberRef,
                         LoggedInUserId = request.LoggedInUserId,
                         LoggedInUserName = request.LoggedInUserName
                     }, cancellationToken);

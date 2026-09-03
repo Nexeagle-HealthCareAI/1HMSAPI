@@ -20,6 +20,10 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? WalkInName { get; set; }
         public string? WalkInContact { get; set; }
         public Guid? PrescribingDoctorId { get; set; }
+        // Required by RecordInventoryMovementRequestModel's regulated-drug guard whenever the cart
+        // contains an item with InventoryItem.ScheduleClass set (H/H1/X) — a doctor name/reg
+        // number/free text, not a structured prescription reference.
+        public string? PrescriberRef { get; set; }
 
         [Required]
         public List<PharmacyCartItem> Items { get; set; } = new();
