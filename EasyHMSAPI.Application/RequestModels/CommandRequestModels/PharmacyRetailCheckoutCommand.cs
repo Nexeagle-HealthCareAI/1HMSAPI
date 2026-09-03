@@ -29,8 +29,22 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public decimal PaidAmount { get; set; } // Allows partial/credit payments
         public string? PaymentMode { get; set; }
 
+        // DirectCash (default): finalize a BillingInvoice + optional payment, as today.
+        // PostToAdmissionDayBill: post charge events against the admission's Encounter and skip
+        // invoice/payment creation — the next CloseAdmissionDay call snapshots them into the
+        // day bill, same as any other ward charge. Requires PatientId to resolve to an
+        // admitted encounter.
+        public string SettlementMode { get; set; } = PharmacySettlementMode.DirectCash;
+
         public string? LoggedInUserName { get; set; }
         public Guid? LoggedInUserId { get; set; }
+    }
+
+    [ExcludeFromCodeCoverage]
+    public static class PharmacySettlementMode
+    {
+        public const string DirectCash = "DIRECT_CASH";
+        public const string PostToAdmissionDayBill = "POST_TO_ADMISSION_DAY_BILL";
     }
 
     [ExcludeFromCodeCoverage]
@@ -52,5 +66,17 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public Guid ChargeEventId { get; set; }
         public Guid InvoiceId { get; set; }
         public string? InvoiceNo { get; set; }
+        public List<AllocatedBatchLine> AllocatedBatches { get; set; } = new();
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class AllocatedBatchLine
+    {
+        public Guid InventoryItemId { get; set; }
+        public Guid BatchId { get; set; }
+        public string? BatchNumber { get; set; }
+        public DateTime? ExpiryDate { get; set; }
+        public decimal? Mrp { get; set; }
+        public decimal AllocatedQty { get; set; }
     }
 }

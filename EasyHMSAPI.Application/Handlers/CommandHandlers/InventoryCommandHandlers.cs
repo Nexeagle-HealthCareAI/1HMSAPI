@@ -253,6 +253,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 var now = DateTime.UtcNow;
                 var movementIds = new List<Guid>();
                 var batchIds = new List<Guid>();
+                var allocatedBatchDetails = new List<AllocatedBatchDetail>();
 
                 foreach (var alloc in allocations)
                 {
@@ -303,7 +304,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     _context.InventoryMovement.Add(movement);
                     movementIds.Add(movement.InventoryMovementId);
                     
-                    if (batch != null) 
+                    if (batch != null)
                     {
                         batchIds.Add(batch.BatchId);
                         batch.RemainingQty += allocDelta;
@@ -311,6 +312,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         batch.UpdatedBy = request.LoggedInUserName;
                         if (batch.RemainingQty == 0 && batch.Status == "ACTIVE")
                             batch.Status = "EXHAUSTED";
+
+                        if (!isInbound)
+                        {
+                            allocatedBatchDetails.Add(new AllocatedBatchDetail
+                            {
+                                BatchId = batch.BatchId,
+                                BatchNumber = batch.BatchNumber,
+                                ExpiryDate = batch.ExpiryDate,
+                                Mrp = batch.Mrp,
+                                AllocatedQty = allocQty
+                            });
+                        }
                     }
 
                     if (storeId.HasValue && storeId != Guid.Empty)
@@ -381,7 +394,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     InventoryMovementIds = movementIds,
                     NewCurrentStock = item.CurrentStock,
                     BatchId = batchIds.FirstOrDefault(),
-                    BatchIds = batchIds
+                    BatchIds = batchIds,
+                    AllocatedBatchDetails = allocatedBatchDetails
                 };
             }
             catch (Exception ex)

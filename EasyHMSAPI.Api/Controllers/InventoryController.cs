@@ -194,6 +194,30 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        [HttpGet("batches/by-barcode")]
+        public async Task<ActionResult<GetBatchByBarcodeResponseModel>> GetBatchByBarcode(
+            [FromQuery] Guid hospitalId, [FromQuery] string barcodeValue, [FromQuery] Guid? storeId)
+        {
+            if (hospitalId == Guid.Empty || string.IsNullOrWhiteSpace(barcodeValue))
+                return BadRequest(new { Message = "hospitalId and barcodeValue are required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetBatchByBarcodeRequestModel
+                {
+                    HospitalId = hospitalId,
+                    StoreId = storeId,
+                    BarcodeValue = barcodeValue,
+                });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetBatchByBarcode for barcode: {BarcodeValue}", barcodeValue);
+                return StatusCode(500, new { Message = "An error occurred while looking up the barcode." });
+            }
+        }
+
         [HttpPost("batches")]
         public async Task<ActionResult<CreateBatchResponseModel>> CreateBatch([FromBody] CreateBatchRequestModel request)
         {

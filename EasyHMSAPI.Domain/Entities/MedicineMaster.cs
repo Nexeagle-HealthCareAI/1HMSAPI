@@ -8,6 +8,7 @@ namespace EasyHMSAPI.Domain.Entities
     {
         [Key]
         public int MedicineId { get; set; }
+        public Guid? InventoryItemId { get; set; }
         public string? MedicineName { get; set; }
         public string? GenericName { get; set; }
         public string? BrandName { get; set; }

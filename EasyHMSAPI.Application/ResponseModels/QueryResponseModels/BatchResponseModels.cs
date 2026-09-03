@@ -18,8 +18,19 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public DateTime? ManufactureDate { get; set; }
         public DateTime? ExpiryDate { get; set; }
         public decimal? UnitCost { get; set; }
+        public decimal? Mrp { get; set; }
+        public string? BarcodeValue { get; set; }
         public decimal ReceivedQty { get; set; }
         public decimal RemainingQty { get; set; }
         public string Status { get; set; } = null!;
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class GetBatchByBarcodeResponseModel
+    {
+        public bool Found { get; set; }
+        public Guid InventoryItemId { get; set; }
+        public string? ItemName { get; set; }
+        public BatchDataModel? Batch { get; set; }
     }
 }
