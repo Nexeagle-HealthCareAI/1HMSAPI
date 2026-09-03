@@ -135,6 +135,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     CreatedAt = now,
                 };
                 _context.VendorReturnNote.Add(vendorReturn);
+                // Saved before the lines: VendorReturnLine.VendorReturnId is a plain FK column, not
+                // an EF navigation property, so nothing tells SaveChangesAsync to insert the parent
+                // first — without this, real SQL Server intermittently inserts a line before its
+                // note and trips FK_RTVL_Return (same class of bug as the GRN/Batch ordering fix).
+                await _context.SaveChangesAsync(cancellationToken);
+
                 foreach (var rl in returnLines)
                 {
                     rl.VendorReturnId = vendorReturn.VendorReturnId;

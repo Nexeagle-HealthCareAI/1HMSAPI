@@ -157,6 +157,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     CreatedAt = now,
                 };
                 _context.PharmacyReturn.Add(pharmacyReturn);
+                // Saved before the lines: PharmacyReturnLine.ReturnId is a plain FK column, not an
+                // EF navigation property, so nothing tells SaveChangesAsync to insert the parent
+                // first — without this, real SQL Server intermittently inserts a line before its
+                // return and trips FK_PHRETL_Return (same class of bug as the GRN/Batch ordering fix).
+                await _context.SaveChangesAsync(cancellationToken);
+
                 foreach (var rl in returnLines)
                 {
                     rl.ReturnId = pharmacyReturn.ReturnId;
