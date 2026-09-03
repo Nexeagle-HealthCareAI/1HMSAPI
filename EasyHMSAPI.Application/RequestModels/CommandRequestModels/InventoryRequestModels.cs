@@ -87,6 +87,13 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         // public API — the generic movement endpoint alone can never dispense a narcotic.
         [JsonIgnore]
         public bool IsNarcoticDispenseContext { get; set; }
+
+        // Internal-only: set solely by CreateVendorReturnHandler's nested send. Return-to-vendor is
+        // the one legitimate reason to ADJUST_OUT from an expired/inactive batch — that's exactly the
+        // stock being sent back — so this narrowly lifts the expired/inactive guard below for that
+        // one caller, never for the public movement endpoint.
+        [JsonIgnore]
+        public bool IsVendorReturnContext { get; set; }
     }
 
     // Board-level "use stock, bill the patient" quick action (ICU board today; OT board's patient

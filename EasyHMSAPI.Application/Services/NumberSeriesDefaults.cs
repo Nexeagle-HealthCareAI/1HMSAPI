@@ -30,6 +30,10 @@ namespace EasyHMSAPI.Application.Services
                 return ("PO", "YYYY", "-", 6);
             if (string.Equals(seriesCode, BillingConstants.NumberSeriesCode.Grn, StringComparison.OrdinalIgnoreCase))
                 return ("GRN", "YYYY", "-", 6);
+            if (string.Equals(seriesCode, BillingConstants.NumberSeriesCode.PharmacyReturn, StringComparison.OrdinalIgnoreCase))
+                return ("PHRET", "YYYY", "-", 6);
+            if (string.Equals(seriesCode, BillingConstants.NumberSeriesCode.VendorReturn, StringComparison.OrdinalIgnoreCase))
+                return ("RTV", "YYYY", "-", 6);
             return ("INV", "YYYY", "-", 6);
         }
 

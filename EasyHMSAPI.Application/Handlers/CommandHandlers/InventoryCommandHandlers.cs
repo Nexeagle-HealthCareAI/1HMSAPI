@@ -188,7 +188,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     await _context.Database.ExecuteSqlRawAsync(
                         "SELECT 1 FROM Batch WITH (UPDLOCK) WHERE BatchId = {0}", singleBatch.BatchId);
 
-                    if (!isInbound && (singleBatch.Status != "ACTIVE" || (singleBatch.ExpiryDate.HasValue && singleBatch.ExpiryDate.Value.Date < today)))
+                    if (!isInbound && !request.IsVendorReturnContext && (singleBatch.Status != "ACTIVE" || (singleBatch.ExpiryDate.HasValue && singleBatch.ExpiryDate.Value.Date < today)))
                         return new RecordInventoryMovementResponseModel { Success = false, Message = $"Cannot dispense from batch {singleBatch.BatchNumber} — it is expired or no longer active." };
 
                     if (isInbound && request.StoreId.HasValue && request.StoreId.Value != Guid.Empty && singleBatch.StoreId != request.StoreId.Value)
