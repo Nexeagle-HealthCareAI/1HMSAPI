@@ -127,6 +127,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 Rate = line.Rate,
                             };
                             _context.GoodsReceiptNoteLine.Add(grnLine);
+                            // Batch.GrnLineId is a plain FK column with no EF navigation linking it to
+                            // GoodsReceiptNoteLine, so EF has no dependency graph telling it grnLine
+                            // must be inserted first — without this separate save, both rows land in
+                            // one batch and can be ordered either way, violating FK_BATCH_GrnLine
+                            // against real SQL Server (silently fine against the in-memory test
+                            // provider, which doesn't enforce FK constraints at all).
+                            await _context.SaveChangesAsync(cancellationToken);
 
                             var batch = new Batch
                             {
