@@ -23,6 +23,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
         public async Task<CreateBulkBatchResponseModel> Handle(CreateBulkBatchRequestModel request, CancellationToken cancellationToken)
         {
+            // A plain _context.Database.BeginTransactionAsync() here throws at runtime against a
+            // real SQL Server connection ("SqlServerRetryingExecutionStrategy does not support
+            // user-initiated transactions") — the retrying execution strategy must own the
+            // transaction, same pattern PharmacyRetailCheckoutCommandHandler already uses. Never
+            // caught by the in-memory-provider unit tests since InMemory has no execution strategy.
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(() => TryHandleAsync(request, cancellationToken));
+        }
+
+        private async Task<CreateBulkBatchResponseModel> TryHandleAsync(CreateBulkBatchRequestModel request, CancellationToken cancellationToken)
+        {
             var response = new CreateBulkBatchResponseModel { Success = true, TotalProcessed = request.Rows.Count };
 
             if (request.HospitalId == Guid.Empty)
