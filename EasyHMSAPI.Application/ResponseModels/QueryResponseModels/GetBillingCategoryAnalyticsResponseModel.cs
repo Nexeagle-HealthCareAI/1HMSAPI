@@ -18,6 +18,10 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public decimal NetAmount { get; set; }
         public List<CategoryBreakdownItem> RevenueByCategory { get; set; } = new();
         public List<CategoryBreakdownItem> ExpenseByCategory { get; set; } = new();
+        // Same revenue as RevenueByCategory, rolled up into the four buckets hospital finance
+        // reports against (OPD/IPD/LAB/PHARMACY, plus OTHER for anything unclassifiable) --
+        // see BillingDepartmentClassifier for how a charge lands in one of these.
+        public List<CategoryBreakdownItem> RevenueByDepartment { get; set; } = new();
         public List<DailyTrendPoint> DailyTrend { get; set; } = new();
     }
 

@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
@@ -34,7 +35,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     .Where(c => c.HospitalId == request.HospitalId && c.StatusCode == BillingConstants.ChargeEventStatus.Posted)
                     .Where(c => startInclusive == null || c.ServiceDate >= startInclusive)
                     .Where(c => endExclusive == null || c.ServiceDate < endExclusive)
-                    .Select(c => new { c.CategoryCode, c.ServiceDate, c.NetAmount })
+                    .Select(c => new { c.CategoryCode, c.ServiceDate, c.NetAmount, c.SourceModule, c.EncounterId })
                     .ToListAsync(cancellationToken);
 
                 var expenses = await _context.Expenses
@@ -46,6 +47,19 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
                 var revenueByCategory = charges
                     .GroupBy(c => string.IsNullOrWhiteSpace(c.CategoryCode) ? "OTHER" : c.CategoryCode!)
+                    .Select(g => new CategoryBreakdownItem { CategoryCode = g.Key, Amount = g.Sum(c => c.NetAmount), Count = g.Count() })
+                    .OrderByDescending(c => c.Amount)
+                    .ToList();
+
+                var encounterIds = charges.Select(c => c.EncounterId).Distinct().ToList();
+                var encounterTypeById = await _context.Encounter
+                    .Where(e => encounterIds.Contains(e.EncounterId))
+                    .Select(e => new { e.EncounterId, e.EncounterTypeCode })
+                    .ToDictionaryAsync(e => e.EncounterId, e => e.EncounterTypeCode, cancellationToken);
+
+                var revenueByDepartment = charges
+                    .GroupBy(c => BillingDepartmentClassifier.Classify(
+                        c.CategoryCode, c.SourceModule, encounterTypeById.GetValueOrDefault(c.EncounterId)))
                     .Select(g => new CategoryBreakdownItem { CategoryCode = g.Key, Amount = g.Sum(c => c.NetAmount), Count = g.Count() })
                     .OrderByDescending(c => c.Amount)
                     .ToList();
@@ -80,6 +94,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         NetAmount = totalRevenue - totalExpense,
                         RevenueByCategory = revenueByCategory,
                         ExpenseByCategory = expenseByCategory,
+                        RevenueByDepartment = revenueByDepartment,
                         DailyTrend = dailyTrend
                     }
                 };
