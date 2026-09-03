@@ -97,6 +97,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         ManufactureDate = row.ManufactureDate,
                         ExpiryDate = row.ExpiryDate,
                         UnitCost = row.UnitCost,
+                        Mrp = row.Mrp,
+                        BarcodeValue = string.IsNullOrWhiteSpace(row.BarcodeValue) ? null : row.BarcodeValue.Trim(),
                         ReceivedQty = row.ReceivedQty,
                         RemainingQty = row.ReceivedQty,
                         Status = "ACTIVE",
@@ -129,6 +131,39 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         stockLevel.QtyOnHand += batch.ReceivedQty;
                         stockLevel.UpdatedAt = now;
                     }
+
+                    // Bulk import bypassed both InventoryItem.CurrentStock and the InventoryMovement
+                    // audit trail until now — CurrentStock drove low-stock alerts and InventoryMovement
+                    // feeds the reorder-threshold suggestion engine, so a bulk-imported batch was
+                    // invisible to both. Kept as plain field/row writes (not routed through
+                    // RecordInventoryMovementRequestModel) since this handler already holds its own
+                    // transaction and item/store locks aren't needed for a straight RECEIVE.
+                    var item = await _context.InventoryItem.FirstOrDefaultAsync(
+                        it => it.InventoryItemId == inventoryItemId && it.HospitalId == request.HospitalId, cancellationToken);
+                    if (item != null)
+                    {
+                        item.CurrentStock += batch.ReceivedQty;
+                        item.UpdatedAt = now;
+                        item.UpdatedBy = request.LoggedInUserName;
+                    }
+
+                    _context.InventoryMovement.Add(new InventoryMovement
+                    {
+                        InventoryMovementId = Guid.NewGuid(),
+                        HospitalId = request.HospitalId,
+                        InventoryItemId = inventoryItemId,
+                        MovementType = "RECEIVE",
+                        Qty = batch.ReceivedQty,
+                        UnitCost = batch.UnitCost,
+                        BatchId = batch.BatchId,
+                        BatchNumber = batch.BatchNumber,
+                        ExpiryDate = batch.ExpiryDate,
+                        ToStoreId = storeId,
+                        SourceModule = "BULK_IMPORT",
+                        MovedAt = now,
+                        MovedBy = request.LoggedInUserName,
+                        CreatedAt = now,
+                    });
 
                     response.SuccessCount++;
                 }

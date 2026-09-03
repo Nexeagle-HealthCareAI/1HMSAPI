@@ -64,6 +64,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     existingItem.ItemName = request.ItemName.Trim();
                     existingItem.GenericName = string.IsNullOrWhiteSpace(request.GenericName) ? null : request.GenericName.Trim();
                     existingItem.Manufacturer = string.IsNullOrWhiteSpace(request.Manufacturer) ? null : request.Manufacturer.Trim();
+                    existingItem.SaltCompositionId = request.SaltCompositionId;
                     existingItem.Category = category;
                     existingItem.Unit = string.IsNullOrWhiteSpace(request.Unit) ? "PCS" : request.Unit.Trim();
                     existingItem.DefaultRate = request.DefaultRate;
@@ -100,6 +101,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     ItemName = request.ItemName.Trim(),
                     GenericName = string.IsNullOrWhiteSpace(request.GenericName) ? null : request.GenericName.Trim(),
                     Manufacturer = string.IsNullOrWhiteSpace(request.Manufacturer) ? null : request.Manufacturer.Trim(),
+                    SaltCompositionId = request.SaltCompositionId,
                     Category = category,
                     Unit = string.IsNullOrWhiteSpace(request.Unit) ? "PCS" : request.Unit.Trim(),
                     DefaultRate = request.DefaultRate,

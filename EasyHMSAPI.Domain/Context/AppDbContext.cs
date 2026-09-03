@@ -183,6 +183,9 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<NarcoticRegisterEntry> NarcoticRegisterEntry { get; set; }
         public DbSet<DrugScheduleRegisterEntry> DrugScheduleRegisterEntry { get; set; }
         public DbSet<PharmacyPrintSettings> PharmacyPrintSettings { get; set; }
+        public DbSet<Molecule> Molecule { get; set; }
+        public DbSet<SaltComposition> SaltComposition { get; set; }
+        public DbSet<SaltCompositionComponent> SaltCompositionComponent { get; set; }
         public DbSet<ColdChainTempLog> ColdChainTempLog { get; set; }
         public DbSet<InventoryItem> InventoryItem { get; set; }
         public DbSet<InventoryMovement> InventoryMovement { get; set; }

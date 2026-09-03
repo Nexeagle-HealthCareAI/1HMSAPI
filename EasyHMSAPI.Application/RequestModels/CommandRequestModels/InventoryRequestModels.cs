@@ -18,6 +18,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string ItemName { get; set; } = null!;
         public string? GenericName { get; set; }
         public string? Manufacturer { get; set; }
+        public Guid? SaltCompositionId { get; set; }
         public string Category { get; set; } = null!;
         public string? Unit { get; set; }
         public decimal? DefaultRate { get; set; }

@@ -239,6 +239,29 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Pharmacy Phase 3c — parses+validates a distributor .csv/.xlsx without writing anything;
+        // frontend shows the grid for correction, then posts the fixed rows to batches/bulk below.
+        [HttpPost("batches/bulk-import/preview")]
+        [RequestSizeLimit(10 * 1024 * 1024)]
+        public async Task<ActionResult<PreviewBulkImportResponseModel>> PreviewBulkImport([FromForm] PreviewBulkImportRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PreviewBulkImport for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred while previewing the import file." });
+            }
+        }
+
         [HttpPost("batches/bulk")]
         public async Task<ActionResult<CreateBulkBatchResponseModel>> CreateBulkBatch([FromBody] CreateBulkBatchRequestModel request)
         {
@@ -326,6 +349,51 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 _logger.LogError(ex, "Error in GetDrugScheduleRegister for hospitalId: {HospitalId}", hospitalId);
                 return StatusCode(500, new { Message = "An error occurred while fetching the drug schedule register." });
+            }
+        }
+
+        // Pharmacy Phase 3c — weekly/monthly auto-threshold suggestions from trailing consumption.
+        [HttpGet("reorder-threshold-suggestions")]
+        public async Task<ActionResult<GetReorderThresholdSuggestionsResponseModel>> GetReorderThresholdSuggestions(
+            [FromQuery] Guid hospitalId, [FromQuery] Guid? storeId, [FromQuery] decimal bufferMultiplier = 1.5m)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetReorderThresholdSuggestionsRequestModel
+                {
+                    HospitalId = hospitalId,
+                    StoreId = storeId,
+                    BufferMultiplier = bufferMultiplier,
+                });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetReorderThresholdSuggestions for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while computing reorder threshold suggestions." });
+            }
+        }
+
+        [HttpPost("reorder-threshold-suggestions/accept")]
+        public async Task<ActionResult<AcceptThresholdSuggestionResponseModel>> AcceptThresholdSuggestion([FromBody] AcceptThresholdSuggestionRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.InventoryItemId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and inventoryItemId are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success) return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in AcceptThresholdSuggestion for inventoryItemId: {InventoryItemId}", request.InventoryItemId);
+                return StatusCode(500, new { Message = "An error occurred while accepting the threshold suggestion." });
             }
         }
 

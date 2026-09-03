@@ -107,6 +107,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                         foreach (var line in request.Lines)
                         {
+                            var freeQty = line.FreeQty > 0 ? line.FreeQty : 0m;
+                            var totalReceivedQty = line.Qty + freeQty;
+                            // Landing cost spread over every physical unit received, billed or free —
+                            // "100 billed + 10 free @ Rs.10" lands at Rs.9.09/unit, not Rs.10.
+                            var effectiveUnitCost = totalReceivedQty > 0 ? Math.Round((line.Qty * line.Rate) / totalReceivedQty, 4) : line.Rate;
+
                             var grnLine = new GoodsReceiptNoteLine
                             {
                                 GrnLineId = Guid.NewGuid(),
@@ -117,6 +123,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 ManufactureDate = line.ManufactureDate,
                                 ExpiryDate = line.ExpiryDate,
                                 Qty = line.Qty,
+                                FreeQty = freeQty,
                                 Rate = line.Rate,
                             };
                             _context.GoodsReceiptNoteLine.Add(grnLine);
@@ -130,8 +137,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 BatchNumber = line.BatchNumber.Trim(),
                                 ManufactureDate = line.ManufactureDate,
                                 ExpiryDate = line.ExpiryDate,
-                                UnitCost = line.Rate,
-                                ReceivedQty = line.Qty,
+                                UnitCost = effectiveUnitCost,
+                                ReceivedQty = totalReceivedQty,
                                 RemainingQty = 0,
                                 VendorId = po.VendorId,
                                 GrnLineId = grnLine.GrnLineId,
@@ -151,8 +158,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 HospitalId = request.HospitalId,
                                 InventoryItemId = line.InventoryItemId,
                                 MovementType = IpdConstants.InventoryMovementType.Receive,
-                                Qty = line.Qty,
-                                UnitCost = line.Rate,
+                                Qty = totalReceivedQty,
+                                UnitCost = effectiveUnitCost,
                                 BatchId = batch.BatchId,
                                 StoreId = request.ReceivedStoreId,
                                 SourceModule = "PROCUREMENT",
