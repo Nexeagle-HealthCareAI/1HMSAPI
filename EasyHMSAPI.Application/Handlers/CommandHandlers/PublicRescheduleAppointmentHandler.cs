@@ -99,6 +99,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     appt.DoctorId = request.ToDoctorId.Value;
                 }
 
+                // Re-decide New/Old-Fee/Old-No-Fee and ValidUptoDate against the (possibly changed)
+                // date/doctor -- both go stale otherwise, since neither was recomputed on reschedule
+                // before this. If the visit was chargeable and is now free, void its already-posted
+                // consult charge (unless it's already been paid, which needs a human refund instead).
+                var previousAppointmentType = appt.AppointmentType;
+                var typeResult = await AppointmentTypeResolver.ResolveAsync(
+                    _context, appt.HospitalId, appt.PatientId, appt.PatientId, null,
+                    appt.DoctorId, appt.ApptDate, appt.ApptId, cancellationToken);
+                appt.AppointmentType = typeResult.AppointmentType;
+                appt.ValidUptoDate = typeResult.ValidUptoDate;
+                await AppointmentTypeResolver.VoidConsultChargeIfNowFreeAsync(
+                    _context, appt.ApptId, previousAppointmentType, typeResult, "SYSTEM", cancellationToken);
+
                 appt.CurrentStatusCode = AppConstants.AppointmentStatus_Future;
                 appt.LastStatusCodeAt = DateTime.UtcNow;
 

@@ -132,5 +132,63 @@ namespace EasyHMSAPI.Application.Services
         {
             return freeFollowUpDays > 0 ? anchorDate.AddDays(freeFollowUpDays) : (DateTime?)null;
         }
+
+        /// <summary>
+        /// Reschedule side-effect: if an appointment WAS chargeable and, after recomputing against
+        /// its new date/doctor, is now Old/No-Fee, void its already-posted CONSULT charge -- matching
+        /// CancelAppointmentHandler's own void pattern. Never touches the reverse direction (was free,
+        /// now chargeable): there's no charge yet to reconcile there, and the corrected
+        /// Appointment.AppointmentType alone is enough for the next normal billing action on this
+        /// appointment to charge correctly. Also never voids a charge that already has a payment
+        /// against it -- that needs a human-handled refund, not a silent auto-void of collected money.
+        /// Returns true if a charge was voided.
+        /// </summary>
+        public static async Task<bool> VoidConsultChargeIfNowFreeAsync(
+            AppDbContext context,
+            Guid apptId,
+            string? previousAppointmentType,
+            Result newResult,
+            string actor,
+            CancellationToken cancellationToken)
+        {
+            var wasChargeable = !string.Equals(previousAppointmentType, AppConstants.AppointmentType_OldNoFee, StringComparison.OrdinalIgnoreCase);
+            if (!wasChargeable || newResult.FeeApplies)
+            {
+                return false;
+            }
+
+            var encounter = await context.Encounter
+                .FirstOrDefaultAsync(e => e.SourceType == "Appointments" && e.SourceId == apptId, cancellationToken);
+            if (encounter == null)
+            {
+                return false;
+            }
+
+            var charge = await context.BillingChargeEvent
+                .FirstOrDefaultAsync(c => c.EncounterId == encounter.EncounterId
+                    && c.CategoryCode == "CONSULT"
+                    && c.StatusCode != BillingConstants.ChargeEventStatus.Void, cancellationToken);
+            if (charge == null)
+            {
+                return false;
+            }
+
+            var paidTotal = await context.BillingPayment
+                .Where(p => p.EncounterId == encounter.EncounterId && p.PaymentType == "PAYMENT")
+                .SumAsync(p => (decimal?)p.Amount, cancellationToken) ?? 0m;
+            if (paidTotal > 0)
+            {
+                return false;
+            }
+
+            var now = DateTime.UtcNow;
+            charge.StatusCode = BillingConstants.ChargeEventStatus.Void;
+            charge.VoidedAt = now;
+            charge.VoidedBy = actor;
+            charge.VoidReason = "Appointment rescheduled into the free follow-up window";
+            charge.UpdatedAt = now;
+            charge.UpdatedBy = actor;
+            return true;
+        }
     }
 }
