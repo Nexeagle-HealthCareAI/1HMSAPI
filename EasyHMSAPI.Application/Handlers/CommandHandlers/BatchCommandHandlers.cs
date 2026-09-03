@@ -48,6 +48,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     ManufactureDate = request.ManufactureDate,
                     ExpiryDate = request.ExpiryDate,
                     UnitCost = request.UnitCost,
+                    Mrp = request.Mrp,
+                    BarcodeValue = string.IsNullOrWhiteSpace(request.BarcodeValue) ? null : request.BarcodeValue.Trim(),
                     ReceivedQty = request.ReceivedQty,
                     RemainingQty = 0,
                     VendorId = request.VendorId,
