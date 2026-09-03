@@ -378,6 +378,28 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             RecordedAt = now,
                         });
                     }
+
+                    // Schedule H1 register — Drugs & Cosmetics Rules: date/patient/prescriber/qty
+                    // for every dispense, no witness required (unlike narcotics above).
+                    if (item.ScheduleClass == IpdConstants.DrugScheduleClass.H1 && !isInbound && batch != null && storeId.HasValue)
+                    {
+                        _context.DrugScheduleRegisterEntry.Add(new DrugScheduleRegisterEntry
+                        {
+                            RegisterEntryId = Guid.NewGuid(),
+                            HospitalId = request.HospitalId,
+                            InventoryItemId = item.InventoryItemId,
+                            BatchId = batch.BatchId,
+                            StoreId = storeId.Value,
+                            ScheduleClass = item.ScheduleClass,
+                            Qty = allocQty,
+                            PatientId = request.PatientId,
+                            EncounterId = request.EncounterId,
+                            PrescriberRef = request.PrescriberRef,
+                            DispensedBy = request.LoggedInUserName,
+                            DispensedByUserId = request.LoggedInUserId,
+                            RecordedAt = now,
+                        });
+                    }
                 }
 
                 item.CurrentStock += totalDelta;

@@ -277,6 +277,58 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Pharmacy Phase 3b — store/supplier-filterable near-expiry report (Green >180d / Yellow
+        // 90-180d / Orange 30-90d / Red <30d, matching FEFO's own lockout cutoff).
+        [HttpGet("expiry/near-expiry-report")]
+        public async Task<ActionResult<GetNearExpiryReportResponseModel>> GetNearExpiryReport(
+            [FromQuery] Guid hospitalId, [FromQuery] Guid? storeId, [FromQuery] Guid? vendorId, [FromQuery] string? bucket)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetNearExpiryReportRequestModel
+                {
+                    HospitalId = hospitalId,
+                    StoreId = storeId,
+                    VendorId = vendorId,
+                    Bucket = bucket,
+                });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetNearExpiryReport for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching the near-expiry report." });
+            }
+        }
+
+        // Pharmacy Phase 3b — Schedule H1 statutory register (Drugs & Cosmetics Rules).
+        [HttpGet("schedule-register")]
+        public async Task<ActionResult<GetDrugScheduleRegisterResponseModel>> GetDrugScheduleRegister(
+            [FromQuery] Guid hospitalId, [FromQuery] Guid? inventoryItemId, [FromQuery] string? scheduleClass)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetDrugScheduleRegisterRequestModel
+                {
+                    HospitalId = hospitalId,
+                    InventoryItemId = inventoryItemId,
+                    ScheduleClass = scheduleClass,
+                });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetDrugScheduleRegister for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching the drug schedule register." });
+            }
+        }
+
         // Unified "everything, every store" view — InventoryItem/StockLevel, BloodBag, and
         // InstrumentSet combined (INV-10). Read-only; each module's own screen/API is unchanged.
         [HttpGet("unified-stock")]

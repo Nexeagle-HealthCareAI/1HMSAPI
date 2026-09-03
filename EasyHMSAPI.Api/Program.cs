@@ -177,6 +177,8 @@ builder.Services.AddScoped<IVoiceRxService, VoiceRxService>();
 builder.Services.AddScoped<IDoctorValidationHelper, DoctorValidationHelper>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IWhatsAppQueueNotifier, EasyHMSAPI.Application.Services.WhatsAppQueueNotifier>();
 builder.Services.AddScoped<ISubscriptionLimitHelper, SubscriptionLimitHelper>();
+// Pharmacy Phase 3b: daily 90/60/30-day batch-expiry digest — the only scheduled job in the API.
+builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.ExpiryAlertBackgroundService>();
 // ABDM M1: ABHA creation (Aadhaar-OTP) + existing-ABHA login (Mobile/Aadhaar-OTP).
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmEncryptionService, EasyHMSAPI.Application.Services.Implementations.AbdmEncryptionService>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmGatewayService, EasyHMSAPI.Application.Services.Implementations.AbdmGatewayService>();

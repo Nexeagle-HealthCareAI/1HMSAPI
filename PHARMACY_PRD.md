@@ -42,11 +42,11 @@
 - IPD `SettlementMode` — wire pharmacy checkout to `AdmissionDayBill`
 - Barcode input handling in POS (keyboard-wedge scan → batch lookup by `BarcodeValue`)
 
-### Phase 3b — Compliance-critical
-- Expiry watchdog: bucket computation + near-expiry report (Store Manager view, filterable by store/supplier)
-- Notifications: 90/60/30-day expiry digest (reuse existing SMS/WhatsApp alert infra per `PLAN.md` Phase 4 alert engine — do not build a second notification pipe)
-- Schedule H1 register: auto-log date/patient/prescriber/qty for items flagged `ScheduleClass = H1` (field already exists on `InventoryItem`) on every dispense
-- Pharmacy-specific print template: DL numbers (20B/21B), GSTIN, FSSAI, registered pharmacist reg no., configurable return-policy footer — extends `InvoicePrintSettings` or adds a pharmacy-scoped variant
+### Phase 3b — Compliance-critical — 🟢 done
+- Expiry watchdog: `ExpiryBucketCalculator` (Green >180d / Yellow 90-180d / Orange 30-90d / Red <30d) + `GetNearExpiryReportHandler`, filterable by store/supplier — `GET inventory/expiry/near-expiry-report`
+- Notifications: `EvaluateExpiryAlertsHandler` raises `Alert` rows + one digest SMS at the 90/60/30-day thresholds (dedup per batch+code, mirrors the existing admission-alert evaluator); a new daily `ExpiryAlertBackgroundService` fires it automatically — the only scheduled job in the API, since none existed to reuse
+- Schedule H1 register: new `DrugScheduleRegisterEntry` table, auto-logged inside `InventoryCommandHandlers`' movement handler on every H1 dispense (mirrors `NarcoticRegisterEntry` without the witness requirement) — `GET inventory/schedule-register`
+- Pharmacy print settings: new `PharmacyPrintSettings` table (DL 20B/21B, FSSAI, pharmacist name/reg no, return-policy text) at `pharmacy-settings/print`, plus an 80mm thermal receipt template (`pharmacyReceiptThermal80.ts`) that auto-prints on direct-cash checkout with per-line batch/expiry/HSN
 
 ### Phase 3c — Efficiency features
 - Bulk Excel/CSV stock intake with fuzzy header matching + pre-commit validation grid

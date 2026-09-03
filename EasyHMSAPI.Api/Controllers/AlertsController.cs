@@ -187,6 +187,26 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        [HttpPost("evaluate-expiry")]
+        public async Task<ActionResult<EvaluateExpiryAlertsResponseModel>> EvaluateExpiryAlerts([FromBody] EvaluateExpiryAlertsRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                request.LoggedInUserId = UserContextHelper.GetUserId(User);
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in EvaluateExpiryAlerts for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred while evaluating expiry alerts." });
+            }
+        }
+
         private async Task PopulateActor(RaiseAlertRequestModel request)
         {
             request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
