@@ -54,10 +54,10 @@
 - 1-click generic/salt substitution: requires a `Molecule`/`SaltComposition` lookup table + cross-`InventoryItem` matching by molecule+strength+form
 - Weekly/monthly min/max auto-threshold suggestion engine
 
-### Phase 3d — Back-office
-- Patient return/restock workflow (bill-scan → line selection → qty validation → stock reversal → refund slip)
-- RTV: supplier-grouped near-expiry batch compile → debit note PDF → stock deduction
-- Pharmacy analytics dashboard (sales trend, ABC analysis, GST liability by HSN slab, expiry-loss-prevented)
+### Phase 3d — Back-office — 🟡 backend done, frontend pending
+- Patient return/restock workflow (bill-scan → line selection → qty validation → stock reversal → refund slip) — backend live-verified end-to-end (`pharmacy-returns/invoice-lines`, `pharmacy-returns`); dedicated `PharmacyReturn`/`PharmacyReturnLine` ledger, `BillingInvoice`/`BillingChargeEvent` are never touched. Refund slip UI/print not yet built.
+- RTV: supplier-grouped near-expiry batch compile → debit note → stock deduction — backend live-verified (`pharmacy-returns/rtv/eligible-batches`, `pharmacy-returns/rtv`); stock deducted via the shared movement handler with a narrow `IsVendorReturnContext` bypass on the expired-batch guard. Debit note PDF not yet built.
+- Pharmacy analytics (sales trend, ABC analysis, GST liability by HSN/rate, expiry-loss-prevented) — backend live-verified (`pharmacy-returns/analytics/*`), pure aggregations over existing `BillingChargeEvent`/`Batch` data. Dashboard UI not yet built.
 
 ## 4. Explicitly deferred / cut from the original PRD
 - Camera-based 2D DataMatrix scanning (tablet/mobile) — keyboard-wedge scanners cover the counter use case; revisit if field feedback demands it.
