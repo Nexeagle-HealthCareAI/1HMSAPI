@@ -133,6 +133,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         chargeDetails.Add(new ChargeDetail
                         {
                             ChargeId = invItem.ChargeId,
+                            DisplayName = invItem.ItemName,
                             Qty = item.Qty,
                             Rate = item.Rate,
                             DiscountPercent = item.DiscountPercent,

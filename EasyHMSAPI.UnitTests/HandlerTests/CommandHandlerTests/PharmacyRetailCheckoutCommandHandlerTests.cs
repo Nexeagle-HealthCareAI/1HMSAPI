@@ -92,7 +92,12 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                     AllocatedBatchDetails = allocations ?? new List<AllocatedBatchDetail>()
                 });
 
-            _mediatorMock.Setup(m => m.Send(It.Is<AddChargeEventRequestModel>(r => r.Charges!.Count == 1 && r.Charges[0].ChargeId == chargeId), It.IsAny<CancellationToken>()))
+            // DisplayName isn't nullable on the real BillingChargeEvent table — matching only on
+            // ChargeId let a prior bug (DisplayName never set) through undetected, since a real DB
+            // insert would reject it but the mock happily returned success either way.
+            _mediatorMock.Setup(m => m.Send(It.Is<AddChargeEventRequestModel>(r => r.Charges!.Count == 1
+                    && r.Charges[0].ChargeId == chargeId
+                    && !string.IsNullOrWhiteSpace(r.Charges[0].DisplayName)), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new AddChargeEventResponseModel
                 {
                     Success = true,
