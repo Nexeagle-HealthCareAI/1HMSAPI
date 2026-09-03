@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using EasyHMSAPI.Application.Services.Interfaces;
 
 namespace EasyHMSAPI.Application.Services.Implementations
@@ -15,22 +16,44 @@ namespace EasyHMSAPI.Application.Services.Implementations
         private readonly HttpClient _httpClient;
         private readonly string _apiKey;
         private readonly string _model;
+        private readonly ILogger<GroqTranslationService> _logger;
 
-        public GroqTranslationService(HttpClient httpClient, IConfiguration configuration)
+        public GroqTranslationService(HttpClient httpClient, IConfiguration configuration, ILogger<GroqTranslationService> logger)
         {
             _httpClient = httpClient;
             // Fallback to empty to avoid crashing if not set, handled in method
             _apiKey = configuration["Groq:ApiKey"] ?? "gsk_dummy";
             _model = configuration["Groq:Model"] ?? "llama-3.3-70b-versatile";
-            
+            _logger = logger;
+
             _httpClient.BaseAddress = new Uri("https://api.groq.com/openai/v1/");
             _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
         }
 
+        private bool IsKeyUnset => string.IsNullOrWhiteSpace(_apiKey) || _apiKey == "gsk_dummy" || _apiKey.StartsWith("<", StringComparison.Ordinal);
+
         public async Task<string> TranslateTextAsync(string text, string targetLanguage)
         {
             if (string.IsNullOrWhiteSpace(text)) return text;
-            if (_apiKey == "gsk_dummy") return $"(Mock translation to {targetLanguage}) {text}";
+            if (IsKeyUnset)
+            {
+                _logger.LogWarning("Groq:ApiKey is not configured (translation) — returning mock translation");
+                return $"(Mock translation to {targetLanguage}) {text}";
+            }
+
+            try
+            {
+                return await TranslateTextViaGroqAsync(text, targetLanguage);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Groq translation call failed for target language {TargetLanguage} — returning original text", targetLanguage);
+                return text;
+            }
+        }
+
+        private async Task<string> TranslateTextViaGroqAsync(string text, string targetLanguage)
+        {
 
             var prompt = $"Translate the following medical text to {targetLanguage}. Only output the translated text and nothing else. Do not add any introductory or concluding remarks.\n\nText: {text}";
 
@@ -64,8 +87,9 @@ namespace EasyHMSAPI.Application.Services.Implementations
         public async Task<Dictionary<string, string>> TranslateMultipleAsync(Dictionary<string, string> texts, string targetLanguage)
         {
             if (texts == null || texts.Count == 0) return new Dictionary<string, string>();
-            if (_apiKey == "gsk_dummy") 
+            if (IsKeyUnset)
             {
+                _logger.LogWarning("Groq:ApiKey is not configured (bulk translation) — returning mock translations");
                 var dict = new Dictionary<string, string>();
                 foreach (var kvp in texts)
                 {
@@ -74,6 +98,21 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 return dict;
             }
 
+            try
+            {
+                return await TranslateMultipleViaGroqAsync(texts, targetLanguage);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Groq bulk translation call failed for target language {TargetLanguage} — returning original text for all keys", targetLanguage);
+                var fallback = new Dictionary<string, string>();
+                foreach (var kvp in texts) fallback[kvp.Key] = kvp.Value;
+                return fallback;
+            }
+        }
+
+        private async Task<Dictionary<string, string>> TranslateMultipleViaGroqAsync(Dictionary<string, string> texts, string targetLanguage)
+        {
             var result = new Dictionary<string, string>();
             var combinedTextBuilder = new StringBuilder();
             
@@ -155,7 +194,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Failed to parse JSON from Groq: {ex.Message}. Response was: {translatedJsonStr}");
+                    _logger.LogWarning(ex, "Failed to parse JSON from Groq bulk translation. Response was: {Response}", translatedJsonStr);
                 }
             }
 

@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using EasyHMSAPI.Application.Services.Interfaces;
 
 namespace EasyHMSAPI.Application.Services.Implementations
@@ -11,21 +12,29 @@ namespace EasyHMSAPI.Application.Services.Implementations
         private readonly HttpClient _httpClient;
         private readonly string _apiKey;
         private readonly string _model;
+        private readonly ILogger<GroqPatientVolumeInsightService> _logger;
 
-        public GroqPatientVolumeInsightService(HttpClient httpClient, IConfiguration configuration)
+        public GroqPatientVolumeInsightService(HttpClient httpClient, IConfiguration configuration, ILogger<GroqPatientVolumeInsightService> logger)
         {
             _httpClient = httpClient;
             _apiKey = configuration["Groq:ApiKey"] ?? "gsk_dummy";
             _model = configuration["Groq:Model"] ?? "llama-3.3-70b-versatile";
+            _logger = logger;
 
             _httpClient.BaseAddress = new Uri("https://api.groq.com/openai/v1/");
             _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
         }
 
+        private bool IsKeyUnset => string.IsNullOrWhiteSpace(_apiKey) || _apiKey == "gsk_dummy" || _apiKey.StartsWith("<", StringComparison.Ordinal);
+
         public async Task<PatientVolumeInsightNarrative> GenerateInsightsAsync(PatientVolumeInsightContext context)
         {
             var t = context.Trend;
-            if (_apiKey == "gsk_dummy") return FallbackNarrative(context);
+            if (IsKeyUnset)
+            {
+                _logger.LogWarning("Groq:ApiKey is not configured (patient-volume insights) — returning fallback narrative");
+                return FallbackNarrative(context);
+            }
 
             var surging = t.SpecialtyTrends.Where(s => s.IsSurging).ToList();
             var busiestDay = t.ProjectedNext30Days.OrderByDescending(d => d.TotalAppointments).FirstOrDefault();
@@ -70,7 +79,12 @@ namespace EasyHMSAPI.Application.Services.Implementations
             {
                 var content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
                 var response = await _httpClient.PostAsync("chat/completions", content);
-                response.EnsureSuccessStatusCode();
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorBody = await response.Content.ReadAsStringAsync();
+                    _logger.LogWarning("Groq patient-volume-insights call failed with {StatusCode}: {Body}", (int)response.StatusCode, errorBody);
+                    return FallbackNarrative(context);
+                }
 
                 var responseString = await response.Content.ReadAsStringAsync();
                 using var jsonDocument = JsonDocument.Parse(responseString);
@@ -83,10 +97,11 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
                 return new PatientVolumeInsightNarrative(parsed.Outlook, parsed.Insights ?? new List<string>());
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 // Never let a Groq/network hiccup break the dashboard -- fall back to a
                 // deterministic, code-generated narrative built from the same trend numbers.
+                _logger.LogWarning(ex, "Groq patient-volume-insights call threw — returning fallback narrative");
                 return FallbackNarrative(context);
             }
         }
