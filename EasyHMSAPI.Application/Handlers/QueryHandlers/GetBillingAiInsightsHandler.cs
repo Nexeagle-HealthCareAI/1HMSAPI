@@ -65,6 +65,12 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     Message = "AI insights generated.",
                     Data = new BillingAiInsightsData
                     {
+                        PredictedTomorrowRevenue = trend.PredictedTomorrowRevenue,
+                        PredictedTomorrowExpense = trend.PredictedTomorrowExpense,
+                        PredictedTomorrowNet = trend.PredictedTomorrowRevenue - trend.PredictedTomorrowExpense,
+                        PredictedNext7DayRevenue = trend.PredictedNext7DayRevenue,
+                        PredictedNext7DayExpense = trend.PredictedNext7DayExpense,
+                        PredictedNext7DayNet = trend.PredictedNext7DayRevenue - trend.PredictedNext7DayExpense,
                         PredictedNext30DayRevenue = trend.PredictedNext30DayRevenue,
                         PredictedNext30DayExpense = trend.PredictedNext30DayExpense,
                         PredictedNext30DayNet = trend.PredictedNext30DayRevenue - trend.PredictedNext30DayExpense,

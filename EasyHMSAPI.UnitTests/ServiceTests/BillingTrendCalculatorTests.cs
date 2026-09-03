@@ -96,7 +96,11 @@ namespace EasyHMSAPI.UnitTests.ServiceTests
 
             Assert.That(summary.Avg7DayRevenue, Is.EqualTo(1000m));
             Assert.That(summary.Avg30DayRevenue, Is.EqualTo(1000m));
-            // Flat history -> trend multiplier is 1 -> predicted 30-day total is exactly 30x the daily average.
+            // Flat history -> trend multiplier is 1 -> predicted totals are exactly Nx the daily average.
+            Assert.That(summary.PredictedTomorrowRevenue, Is.EqualTo(1000m));
+            Assert.That(summary.PredictedTomorrowExpense, Is.EqualTo(200m));
+            Assert.That(summary.PredictedNext7DayRevenue, Is.EqualTo(7000m));
+            Assert.That(summary.PredictedNext7DayExpense, Is.EqualTo(1400m));
             Assert.That(summary.PredictedNext30DayRevenue, Is.EqualTo(30000m));
             Assert.That(summary.PredictedNext30DayExpense, Is.EqualTo(6000m));
             Assert.That(summary.ProjectedNext30Days, Has.Count.EqualTo(30));

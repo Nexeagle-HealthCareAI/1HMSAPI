@@ -48,6 +48,8 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 $"30-day average daily expense: {t.Avg30DayExpense}\n" +
                 $"Month-over-month revenue change: {t.MonthOverMonthRevenueChangePercent}%\n" +
                 $"Month-over-month expense change: {t.MonthOverMonthExpenseChangePercent}%\n" +
+                $"Predicted tomorrow's revenue: {t.PredictedTomorrowRevenue}\n" +
+                $"Predicted next-7-day revenue: {t.PredictedNext7DayRevenue}\n" +
                 $"Predicted next-30-day revenue: {t.PredictedNext30DayRevenue}\n" +
                 $"Predicted next-30-day expense: {t.PredictedNext30DayExpense}\n" +
                 $"Category trends (month-over-month % change): {string.Join(", ", t.RevenueCategoryTrends.Select(c => $"{c.CategoryCode}: {c.ChangePercent}%"))}\n" +
@@ -118,7 +120,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
             if (topGrowth != null)
                 insights.Add($"{topGrowth.CategoryCode} is your fastest-growing category, up {topGrowth.ChangePercent}% month-over-month.");
 
-            var outlook = $"Based on the last 90 days, daily revenue is trending {direction} and is projected at roughly {t.PredictedNext30DayRevenue:0} for the next 30 days if current patterns hold.";
+            var outlook = $"Based on the last 90 days, daily revenue is trending {direction} -- projected at roughly {t.PredictedTomorrowRevenue:0} tomorrow, {t.PredictedNext7DayRevenue:0} over the next 7 days, and {t.PredictedNext30DayRevenue:0} over the next 30 days if current patterns hold.";
             return new BillingInsightNarrative(outlook, insights);
         }
 
