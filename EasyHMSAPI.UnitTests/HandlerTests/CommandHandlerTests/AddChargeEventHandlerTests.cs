@@ -9,6 +9,7 @@ using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using EasyHMSAPI.UnitTests.TestUtils;
+using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
 
 namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
@@ -25,7 +26,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public void SetUp()
         {
             _context = InMemoryDbContextFactory.CreateContext();
-            _handler = new AddChargeEventHandler(_context);
+            _handler = new AddChargeEventHandler(_context, NullLogger<AddChargeEventHandler>.Instance);
             _hospitalId = Guid.NewGuid();
             _encounterId = Guid.NewGuid();
 
