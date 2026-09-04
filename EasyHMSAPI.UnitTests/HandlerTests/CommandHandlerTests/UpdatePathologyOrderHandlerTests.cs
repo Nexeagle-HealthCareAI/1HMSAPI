@@ -34,6 +34,9 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             _mediatorMock
                 .Setup(m => m.Send(It.IsAny<AddChargeEventRequestModel>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new AddChargeEventResponseModel { Success = true });
+            _mediatorMock
+                .Setup(m => m.Send(It.IsAny<CreateDraftInvoiceRequestModel>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new CreateDraftInvoiceResponseModel { Success = true });
             _handler = new UpdatePathologyOrderHandler(_context, _mediatorMock.Object);
         }
 
@@ -150,6 +153,27 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(lines.Single(l => l.TestId == newTestId).Status, Is.EqualTo("PENDING"));
             _mediatorMock.Verify(m => m.Send(
                 It.Is<AddChargeEventRequestModel>(r => r.Charges.Count == 1 && r.Charges.Single().ChargeId == newChargeId),
+                It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Test]
+        public async Task Handle_AddTestToInProgressOrder_AlsoCreatesDraftInvoice()
+        {
+            var (hospitalId, orderId, testId, _) = SeedOrderWithOneTest();
+            var order = _context.PathologyOrder.Single(o => o.OrderId == orderId);
+
+            var newChargeId = Guid.NewGuid();
+            var newTestId = Guid.NewGuid();
+            _context.ChargeMaster.Add(new ChargeMaster { ChargeId = newChargeId, HospitalId = hospitalId, DisplayName = "LFT", DefaultRate = 400m, IsActive = true });
+            _context.PathologyTestMaster.Add(new PathologyTestMaster { TestId = newTestId, HospitalId = hospitalId, TestCode = "BIO-LFT", TestName = "LFT", ChargeId = newChargeId, IsActive = true });
+            _context.SaveChanges();
+
+            var response = await _handler.Handle(BaseCommand(hospitalId, orderId, "PTID00000001", order.EncounterId!.Value, testId, newTestId), CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.BillingWarning, Is.Null);
+            _mediatorMock.Verify(m => m.Send(
+                It.Is<CreateDraftInvoiceRequestModel>(r => r.EncounterId == order.EncounterId!.Value),
                 It.IsAny<CancellationToken>()), Times.Once);
         }
 

@@ -123,22 +123,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                         if (charges.Any())
                         {
-                            var chargeRequest = new AddChargeEventRequestModel
-                            {
-                                HospitalId = request.HospitalId,
-                                PatientId = request.PatientId,
-                                EncounterId = billingEncounterId.Value,
-                                Charges = charges,
-                                LoggedInUserId = request.LoggedInUserId,
-                                LoggedInUserName = request.LoggedInUserName
-                            };
-
-                            var chargeResponse = await _mediator.Send(chargeRequest, cancellationToken);
-                            if (chargeResponse.Success != true)
-                            {
-                                billingWarning = $"Order placed, but auto-billing failed: {chargeResponse.Message} " +
-                                    "Add the charge manually from the Billing tab.";
-                            }
+                            billingWarning = await PathologyAutoBillingHelper.PostChargesAndInvoiceAsync(
+                                _mediator, request.HospitalId, request.PatientId, billingEncounterId.Value, charges,
+                                request.LoggedInUserId, request.LoggedInUserName, "placed", cancellationToken);
                         }
                     }
                     else

@@ -199,20 +199,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 _context, request.HospitalId, testIdsToBill, order.OrderId.ToString(), order.OrderedByDoctorId, cancellationToken);
                             if (charges.Any())
                             {
-                                var chargeResponse = await _mediator.Send(new AddChargeEventRequestModel
-                                {
-                                    HospitalId = request.HospitalId,
-                                    PatientId = order.PatientId,
-                                    EncounterId = billingEncounterId.Value,
-                                    Charges = charges,
-                                    LoggedInUserId = request.LoggedInUserId,
-                                    LoggedInUserName = actor
-                                }, cancellationToken);
-                                if (chargeResponse.Success != true)
-                                {
-                                    billingWarning = $"Order updated, but auto-billing failed: {chargeResponse.Message} " +
-                                        "Add the charge manually from the Billing tab.";
-                                }
+                                billingWarning = await PathologyAutoBillingHelper.PostChargesAndInvoiceAsync(
+                                    _mediator, request.HospitalId, order.PatientId, billingEncounterId.Value, charges,
+                                    request.LoggedInUserId, actor, "updated", cancellationToken);
                             }
                         }
                     }

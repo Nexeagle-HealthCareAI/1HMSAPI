@@ -36,6 +36,9 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             _mediatorMock
                 .Setup(m => m.Send(It.IsAny<AddChargeEventRequestModel>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new AddChargeEventResponseModel { Success = true });
+            _mediatorMock
+                .Setup(m => m.Send(It.IsAny<CreateDraftInvoiceRequestModel>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new CreateDraftInvoiceResponseModel { Success = true });
             _handler = new CreatePathologyOrderHandler(_context, _mediatorMock.Object);
         }
 
@@ -211,6 +214,49 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                     r.Charges.Count == 1 &&
                     r.Charges.Single().ChargeId == chargeId),
                 It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Test]
+        public async Task Handle_AutoBillOnOrder_AlsoCreatesDraftInvoiceForTheEncounter()
+        {
+            var (hospitalId, testId, _) = SeedAutoBillCatalog();
+            var encounterId = Guid.NewGuid();
+
+            var response = await _handler.Handle(new CreatePathologyOrderRequestModel
+            {
+                HospitalId = hospitalId,
+                PatientId = "PTID00000001",
+                EncounterId = encounterId,
+                TestIds = new() { testId },
+                LoggedInUserName = "tester",
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.BillingWarning, Is.Null);
+            _mediatorMock.Verify(m => m.Send(
+                It.Is<CreateDraftInvoiceRequestModel>(r => r.EncounterId == encounterId && r.PatientId == "PTID00000001"),
+                It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Test]
+        public async Task Handle_ChargePostedButDraftInvoiceCreationFails_OrderStillSucceedsButBillingWarningIsSet()
+        {
+            var (hospitalId, testId, _) = SeedAutoBillCatalog();
+            _mediatorMock
+                .Setup(m => m.Send(It.IsAny<CreateDraftInvoiceRequestModel>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new CreateDraftInvoiceResponseModel { Success = false, Message = "No posted charges available to invoice for this encounter." });
+
+            var response = await _handler.Handle(new CreatePathologyOrderRequestModel
+            {
+                HospitalId = hospitalId,
+                PatientId = "PTID00000001",
+                EncounterId = Guid.NewGuid(),
+                TestIds = new() { testId },
+                LoggedInUserName = "tester",
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.BillingWarning, Does.Contain("invoice could not be created automatically"));
         }
 
         [Test]
