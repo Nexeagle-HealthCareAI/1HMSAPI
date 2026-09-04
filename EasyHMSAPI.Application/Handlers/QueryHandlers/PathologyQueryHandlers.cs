@@ -152,6 +152,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .Where(l => l.HospitalId == request.HospitalId && l.OrderId == request.OrderId)
                 .ToListAsync(cancellationToken);
 
+            var externalLabIds = lines.Where(l => l.ExternalLabId.HasValue).Select(l => l.ExternalLabId!.Value).Distinct().ToList();
+            var externalLabNamesById = externalLabIds.Count == 0
+                ? new Dictionary<Guid, string>()
+                : await _context.PathologyExternalLab
+                    .Where(x => x.HospitalId == request.HospitalId && externalLabIds.Contains(x.ExternalLabId))
+                    .ToDictionaryAsync(x => x.ExternalLabId, x => x.LabName, cancellationToken);
+
             foreach (var line in lines)
             {
                 var test = await _context.PathologyTestMaster
@@ -194,6 +201,14 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     ParameterSchemaJson = test?.ParameterSchemaJson,
                     SampleBarcode = line.SampleBarcode,
                     SampleCollectedAt = line.SampleCollectedAt,
+                    IsOutsourced = test?.IsOutsourced ?? false,
+                    DefaultExternalLabId = test?.DefaultExternalLabId,
+                    ExternalLabId = line.ExternalLabId,
+                    ExternalLabName = line.ExternalLabId.HasValue && externalLabNamesById.TryGetValue(line.ExternalLabId.Value, out var labName) ? labName : null,
+                    SentToExternalLabAt = line.SentToExternalLabAt,
+                    ExternalLabRefNo = line.ExternalLabRefNo,
+                    ExternalLabReceivedAt = line.ExternalLabReceivedAt,
+                    ExternalLabCost = line.ExternalLabCost,
                     Result = result == null ? null : new PathologyResultDto
                     {
                         ResultId = result.ResultId,

@@ -206,6 +206,50 @@ namespace EasyHMSAPI.Api.Controllers.V1
             }
         }
 
+        [HttpPost("{hospitalId}/{orderId}/lines/{orderLineId}/send-to-external-lab")]
+        public async Task<IActionResult> SendToExternalLab(Guid hospitalId, Guid orderId, Guid orderLineId, [FromBody] SendPathologyLineToExternalLabCommand request)
+        {
+            request.HospitalId = hospitalId;
+            request.OrderId = orderId;
+            request.OrderLineId = orderLineId;
+            request.LoggedInUserId = UserContextHelper.GetUserId(User) ?? Guid.Empty;
+            request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+
+            try
+            {
+                var success = await _mediator.Send(request);
+                if (!success) return BadRequest(new { success = false, message = "Could not send this line to an external lab -- the sample may not be collected yet, the test isn't marked outsourced, or no external lab is set." });
+                return Ok(new { success = true });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error sending pathology order line {OrderLineId} to external lab", orderLineId);
+                return StatusCode(500, new { Message = "An error occurred while sending to the external lab." });
+            }
+        }
+
+        [HttpPost("{hospitalId}/{orderId}/lines/{orderLineId}/receive-external-result")]
+        public async Task<IActionResult> ReceiveExternalLabResult(Guid hospitalId, Guid orderId, Guid orderLineId, [FromBody] ReceivePathologyExternalLabResultCommand request)
+        {
+            request.HospitalId = hospitalId;
+            request.OrderId = orderId;
+            request.OrderLineId = orderLineId;
+            request.LoggedInUserId = UserContextHelper.GetUserId(User) ?? Guid.Empty;
+            request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+
+            try
+            {
+                var success = await _mediator.Send(request);
+                if (!success) return BadRequest(new { success = false, message = "Could not mark the external result received -- this line may not be in Sent-to-Lab status." });
+                return Ok(new { success = true });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error marking external lab result received for pathology order line {OrderLineId}", orderLineId);
+                return StatusCode(500, new { Message = "An error occurred while recording the external lab result." });
+            }
+        }
+
         [HttpPost("{hospitalId}/{orderId}/lines/{orderLineId}/report")]
         public async Task<IActionResult> GenerateReport(Guid hospitalId, Guid orderId, Guid orderLineId, [FromBody] GeneratePathologyReportCommand request)
         {

@@ -32,7 +32,15 @@ namespace EasyHMSAPI.Domain.Entities
         public string? ParameterSchemaJson { get; set; } 
         
         public Guid? DefaultTemplateId { get; set; }
-        
+
+        // Outsourcing -- when true, this test is processed by a third-party lab rather than
+        // in-house. DefaultExternalLabId is a soft link (no FK, same convention as ChargeId) to the
+        // routing default; CostPrice is the hospital's own cost, purely for margin visibility --
+        // patient billing always uses ChargeMaster.DefaultRate regardless of this flag.
+        public bool IsOutsourced { get; set; }
+        public Guid? DefaultExternalLabId { get; set; }
+        public decimal? CostPrice { get; set; }
+
         public bool IsActive { get; set; }
         public int SortOrder { get; set; }
         

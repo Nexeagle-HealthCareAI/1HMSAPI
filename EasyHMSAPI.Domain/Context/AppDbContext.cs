@@ -246,6 +246,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<PathologyReport> PathologyReport { get; set; }
         public DbSet<PathologyTokenQueue> PathologyTokenQueue { get; set; }
         public DbSet<LabConfiguration> LabConfiguration { get; set; }
+        public DbSet<PathologyExternalLab> PathologyExternalLab { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

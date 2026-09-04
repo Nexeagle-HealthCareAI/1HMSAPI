@@ -72,6 +72,17 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? SampleBarcode { get; set; }
         public DateTime? SampleCollectedAt { get; set; }
 
+        // Outsourcing -- IsOutsourced/DefaultExternalLabId come from this line's test master, the
+        // rest are this line's own send/receive tracking (see PathologyOrderLine entity).
+        public bool IsOutsourced { get; set; }
+        public Guid? DefaultExternalLabId { get; set; }
+        public Guid? ExternalLabId { get; set; }
+        public string? ExternalLabName { get; set; }
+        public DateTime? SentToExternalLabAt { get; set; }
+        public string? ExternalLabRefNo { get; set; }
+        public DateTime? ExternalLabReceivedAt { get; set; }
+        public decimal? ExternalLabCost { get; set; }
+
         public PathologyResultDto? Result { get; set; }
         // This line's own report -- each PathologyOrderLine (test) now gets its own independent
         // report rather than sharing one report for the whole order (see

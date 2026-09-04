@@ -43,6 +43,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             test.ContainerType = request.ContainerType;
             test.ParameterSchemaJson = request.ParameterSchemaJson;
             test.DefaultTemplateId = request.DefaultTemplateId;
+            test.IsOutsourced = request.IsOutsourced;
+            test.DefaultExternalLabId = request.IsOutsourced ? request.DefaultExternalLabId : null;
+            test.CostPrice = request.IsOutsourced ? request.CostPrice : null;
             test.IsActive = request.IsActive;
             test.SortOrder = request.SortOrder;
             test.UpdatedAt = DateTime.UtcNow;

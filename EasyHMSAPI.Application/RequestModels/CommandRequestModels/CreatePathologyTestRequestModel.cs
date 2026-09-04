@@ -28,6 +28,10 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
 
         public Guid? DefaultTemplateId { get; set; }
 
+        public bool IsOutsourced { get; set; }
+        public Guid? DefaultExternalLabId { get; set; }
+        public decimal? CostPrice { get; set; }
+
         public bool IsActive { get; set; } = true;
         public int SortOrder { get; set; }
 
