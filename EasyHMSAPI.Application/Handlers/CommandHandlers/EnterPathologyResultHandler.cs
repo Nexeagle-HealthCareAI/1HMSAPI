@@ -67,6 +67,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 return false;
             }
 
+            // A cancelled order's lines must stay frozen -- otherwise this handler goes on to flip
+            // order.Status back to COMPLETED once all lines are done, silently erasing the
+            // cancellation from the record.
+            var cancelledCheck = await _context.PathologyOrder
+                .Where(o => o.OrderId == request.OrderId && o.HospitalId == request.HospitalId)
+                .Select(o => o.Status)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (cancelledCheck == null || cancelledCheck == "CANCELLED")
+            {
+                return false;
+            }
+
             var (enrichedJson, hasCritical) = await ComputeFlaggedResultValuesAsync(
                 request.HospitalId, request.OrderId, line.TestId, request.ResultValuesJson, cancellationToken);
 

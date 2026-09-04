@@ -35,6 +35,16 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 return false;
             }
 
+            var order = await _context.PathologyOrder
+                .FirstOrDefaultAsync(o => o.OrderId == request.OrderId && o.HospitalId == request.HospitalId, cancellationToken);
+            // A cancelled order's lines must stay frozen -- nothing downstream (result entry, report
+            // generation) re-checks this, so this is the one place that can still stop a cancelled
+            // order from quietly resuming processing (and re-billing) after cancellation.
+            if (order == null || order.Status == "CANCELLED")
+            {
+                return false;
+            }
+
             var now = DateTime.UtcNow;
             line.Status = "SAMPLE_COLLECTED";
             line.SampleCollectedAt = now;
@@ -46,9 +56,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             line.UpdatedBy = request.LoggedInUserName ?? request.LoggedInUserId.ToString();
             _context.PathologyOrderLine.Update(line);
 
-            var order = await _context.PathologyOrder
-                .FirstOrDefaultAsync(o => o.OrderId == request.OrderId && o.HospitalId == request.HospitalId, cancellationToken);
-            if (order != null && order.Status == "PLACED")
+            if (order.Status == "PLACED")
             {
                 order.Status = "IN_PROGRESS";
                 order.UpdatedAt = now;

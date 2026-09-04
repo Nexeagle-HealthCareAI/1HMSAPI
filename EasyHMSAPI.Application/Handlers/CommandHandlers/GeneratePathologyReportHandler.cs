@@ -46,6 +46,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 {
                     return new GeneratePathologyReportResponseModel { Success = false, Message = "Order not found." };
                 }
+                // A cancelled order must stay frozen -- otherwise step 5 below flips it back to
+                // COMPLETED once every line has a report, silently erasing the cancellation.
+                if (order.Status == "CANCELLED")
+                {
+                    return new GeneratePathologyReportResponseModel { Success = false, Message = "This order was cancelled; reports can no longer be generated for it." };
+                }
 
                 // 2. Validate the target line exists on this order and has a result -- only this one
                 // line's readiness gates generation now, not its siblings'.
