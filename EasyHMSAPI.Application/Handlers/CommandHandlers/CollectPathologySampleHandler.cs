@@ -64,7 +64,28 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 _context.PathologyOrder.Update(order);
             }
 
-            await _context.SaveChangesAsync(cancellationToken);
+            try
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // The only row that can conflict here is the shared PathologyOrder: two lines on
+                // the same order being collected at once both read Status=="PLACED" and both try to
+                // write "IN_PROGRESS", so the second SaveChangesAsync's RowVersion check fails even
+                // though that line's own write is perfectly valid. Reload the order and only
+                // re-apply the transition if it's still needed, instead of surfacing a false
+                // failure for a legitimate concurrent collection on a different line.
+                var orderEntry = _context.Entry(order);
+                await orderEntry.ReloadAsync(cancellationToken);
+                if (order.Status == "PLACED")
+                {
+                    order.Status = "IN_PROGRESS";
+                    order.UpdatedAt = now;
+                    order.UpdatedBy = request.LoggedInUserName ?? request.LoggedInUserId.ToString();
+                }
+                await _context.SaveChangesAsync(cancellationToken);
+            }
 
             var billingPolicy = await _context.BillingPolicy
                 .FirstOrDefaultAsync(p => p.HospitalId == request.HospitalId, cancellationToken);
