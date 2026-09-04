@@ -129,5 +129,91 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var response = await _handler.Handle(ValidRequest(_hospitalId, new List<BulkBatchRowModel>()), CancellationToken.None);
             Assert.That(response.Success, Is.False);
         }
+
+        [Test]
+        public async Task Handle_SameBatchAndExpiry_MergesIntoExistingBatchInsteadOfDuplicating()
+        {
+            var store = _context.Store.Single();
+            var item = _context.InventoryItem.Single();
+            var expiry = new DateTime(2027, 6, 30);
+            var existingBatch = new Batch
+            {
+                BatchId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                InventoryItemId = item.InventoryItemId,
+                StoreId = store.StoreId,
+                BatchNumber = "B-001",
+                ExpiryDate = expiry,
+                ReceivedQty = 20,
+                RemainingQty = 15,
+                Status = "ACTIVE",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            _context.Batch.Add(existingBatch);
+            _context.StockLevel.Add(new StockLevel
+            {
+                StockLevelId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                InventoryItemId = item.InventoryItemId,
+                StoreId = store.StoreId,
+                QtyOnHand = 15,
+                UpdatedAt = DateTime.UtcNow,
+            });
+            await _context.SaveChangesAsync();
+
+            var request = ValidRequest(_hospitalId, new List<BulkBatchRowModel>
+            {
+                new() { StoreCode = "MAIN", ItemCode = "PARA", BatchNumber = "B-001", ExpiryDate = expiry, ReceivedQty = 10 }
+            });
+
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.SuccessCount, Is.EqualTo(1));
+            Assert.That(_context.Batch.Count(), Is.EqualTo(1), "must not create a second Batch row for the same item+store+batch+expiry");
+            var mergedBatch = _context.Batch.Single();
+            Assert.That(mergedBatch.BatchId, Is.EqualTo(existingBatch.BatchId));
+            Assert.That(mergedBatch.ReceivedQty, Is.EqualTo(30));
+            Assert.That(mergedBatch.RemainingQty, Is.EqualTo(25));
+            Assert.That(_context.StockLevel.Single().QtyOnHand, Is.EqualTo(25), "stock level must only increase by this row's qty, not the batch's new running total");
+            var movement = _context.InventoryMovement.Single();
+            Assert.That(movement.Qty, Is.EqualTo(10));
+            Assert.That(movement.BatchId, Is.EqualTo(existingBatch.BatchId));
+        }
+
+        [Test]
+        public async Task Handle_SameBatchNumberDifferentExpiry_CreatesSeparateBatch()
+        {
+            var store = _context.Store.Single();
+            var item = _context.InventoryItem.Single();
+            _context.Batch.Add(new Batch
+            {
+                BatchId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                InventoryItemId = item.InventoryItemId,
+                StoreId = store.StoreId,
+                BatchNumber = "B-001",
+                ExpiryDate = new DateTime(2027, 6, 30),
+                ReceivedQty = 20,
+                RemainingQty = 20,
+                Status = "ACTIVE",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            });
+            await _context.SaveChangesAsync();
+
+            var request = ValidRequest(_hospitalId, new List<BulkBatchRowModel>
+            {
+                // Same batch number, different expiry — likely a distinct lot (or a typo), must
+                // stay a separate batch rather than silently merging mismatched expiries.
+                new() { StoreCode = "MAIN", ItemCode = "PARA", BatchNumber = "B-001", ExpiryDate = new DateTime(2027, 12, 31), ReceivedQty = 10 }
+            });
+
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(_context.Batch.Count(), Is.EqualTo(2));
+        }
     }
 }

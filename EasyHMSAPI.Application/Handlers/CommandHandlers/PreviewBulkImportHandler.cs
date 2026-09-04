@@ -59,6 +59,23 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 .ToListAsync(cancellationToken);
             var itemCodesUpper = itemCodes.Select(i => i.ToUpperInvariant()).ToHashSet();
 
+            // Store code -> Guid and item code -> Guid, so an existing-batch lookup below can be
+            // keyed the same way BulkBatchCommandHandlers keys a row's identity (item+store+batch
+            // number), without re-querying per row.
+            var storesByCode = await _context.Store
+                .Where(s => s.HospitalId == request.HospitalId)
+                .ToDictionaryAsync(s => s.StoreCode.ToUpperInvariant(), s => s.StoreId, cancellationToken);
+            var itemsByCode = await _context.InventoryItem
+                .Where(i => i.HospitalId == request.HospitalId)
+                .ToDictionaryAsync(i => i.ItemCode.ToUpperInvariant(), i => i.InventoryItemId, cancellationToken);
+            var existingBatches = await _context.Batch
+                .Where(b => b.HospitalId == request.HospitalId && b.Status == "ACTIVE")
+                .Select(b => new { b.InventoryItemId, b.StoreId, b.BatchNumber, b.ExpiryDate, b.RemainingQty })
+                .ToListAsync(cancellationToken);
+            var existingBatchesByItemStoreNumber = existingBatches
+                .GroupBy(b => (b.InventoryItemId, b.StoreId, BatchNumber: b.BatchNumber.ToUpperInvariant()))
+                .ToDictionary(g => g.Key, g => g.ToList());
+
             var result = new PreviewBulkImportResponseModel { Success = true, UnrecognizedColumns = unrecognized };
 
             for (int i = 0; i < rawRows.Count; i++)
@@ -93,6 +110,21 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 row.UnitCost = TryParseDecimal(raw.GetValueOrDefault("UNITCOST"));
                 row.Mrp = TryParseDecimal(raw.GetValueOrDefault("MRP"));
+
+                // Non-blocking: this only informs, it never adds to `errors`. Only meaningful once
+                // store/item/batch-number are all individually valid — a row that's already broken
+                // for another reason doesn't need a second, unrelated note.
+                if (!string.IsNullOrWhiteSpace(row.StoreCode) && !string.IsNullOrWhiteSpace(row.ItemCode) && !string.IsNullOrWhiteSpace(row.BatchNumber)
+                    && storesByCode.TryGetValue(row.StoreCode.ToUpperInvariant(), out var storeId)
+                    && itemsByCode.TryGetValue(row.ItemCode.ToUpperInvariant(), out var inventoryItemId)
+                    && existingBatchesByItemStoreNumber.TryGetValue((inventoryItemId, storeId, row.BatchNumber.ToUpperInvariant()), out var matches))
+                {
+                    var sameExpiry = matches.FirstOrDefault(b => b.ExpiryDate == row.ExpiryDate);
+                    if (sameExpiry != null)
+                        row.ExistingBatchWarning = $"Batch '{row.BatchNumber}' already exists — {sameExpiry.RemainingQty} units on hand. This will add to it.";
+                    else
+                        row.ExistingBatchWarning = $"Batch '{row.BatchNumber}' already exists with a DIFFERENT expiry ({matches[0].ExpiryDate:dd-MMM-yyyy}) — check for a typo before importing.";
+                }
 
                 row.IsValid = errors.Count == 0;
                 row.ErrorMessage = errors.Count > 0 ? string.Join(" ", errors) : null;

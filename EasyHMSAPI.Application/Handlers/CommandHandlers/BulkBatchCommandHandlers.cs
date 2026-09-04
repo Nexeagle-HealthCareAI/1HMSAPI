@@ -62,6 +62,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 .Where(i => i.HospitalId == request.HospitalId && itemCodes.Contains(i.ItemCode.ToUpper()))
                 .ToDictionaryAsync(i => i.ItemCode.ToUpperInvariant(), i => i.InventoryItemId, cancellationToken);
 
+            // Existing ACTIVE batches for the items this import touches, keyed the same way a row's
+            // identity is (item+store+batch number+expiry) — receiving more of an already-tracked
+            // batch must top up that row, not fork a duplicate with the same batch number, which
+            // would fragment FEFO ordering, near-expiry reporting, and the H1 register.
+            var itemIdsInScope = items.Values.ToList();
+            var existingBatches = await _context.Batch
+                .Where(b => b.HospitalId == request.HospitalId && b.Status == "ACTIVE" && itemIdsInScope.Contains(b.InventoryItemId))
+                .ToListAsync(cancellationToken);
+            var existingBatchByKey = existingBatches.ToDictionary(
+                b => (b.InventoryItemId, b.StoreId, BatchNumber: b.BatchNumber.ToUpperInvariant(), b.ExpiryDate));
+
             var now = DateTime.UtcNow;
 
             using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
@@ -98,32 +109,52 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         continue;
                     }
 
-                    var batch = new Batch
+                    var trimmedBatchNumber = row.BatchNumber.Trim();
+                    var mergeKey = (inventoryItemId, storeId, BatchNumber: trimmedBatchNumber.ToUpperInvariant(), row.ExpiryDate);
+                    Batch batch;
+                    if (existingBatchByKey.TryGetValue(mergeKey, out var matchedBatch))
                     {
-                        BatchId = Guid.NewGuid(),
-                        HospitalId = request.HospitalId,
-                        InventoryItemId = inventoryItemId,
-                        StoreId = storeId,
-                        BatchNumber = row.BatchNumber.Trim(),
-                        ManufactureDate = row.ManufactureDate,
-                        ExpiryDate = row.ExpiryDate,
-                        UnitCost = row.UnitCost,
-                        Mrp = row.Mrp,
-                        BarcodeValue = string.IsNullOrWhiteSpace(row.BarcodeValue) ? null : row.BarcodeValue.Trim(),
-                        ReceivedQty = row.ReceivedQty,
-                        RemainingQty = row.ReceivedQty,
-                        Status = "ACTIVE",
-                        CreatedAt = now,
-                        CreatedBy = request.LoggedInUserName,
-                        UpdatedAt = now,
-                        UpdatedBy = request.LoggedInUserName
-                    };
-
-                    _context.Batch.Add(batch);
+                        matchedBatch.ReceivedQty += row.ReceivedQty;
+                        matchedBatch.RemainingQty += row.ReceivedQty;
+                        matchedBatch.UpdatedAt = now;
+                        matchedBatch.UpdatedBy = request.LoggedInUserName;
+                        batch = matchedBatch;
+                    }
+                    else
+                    {
+                        batch = new Batch
+                        {
+                            BatchId = Guid.NewGuid(),
+                            HospitalId = request.HospitalId,
+                            InventoryItemId = inventoryItemId,
+                            StoreId = storeId,
+                            BatchNumber = trimmedBatchNumber,
+                            ManufactureDate = row.ManufactureDate,
+                            ExpiryDate = row.ExpiryDate,
+                            UnitCost = row.UnitCost,
+                            Mrp = row.Mrp,
+                            BarcodeValue = string.IsNullOrWhiteSpace(row.BarcodeValue) ? null : row.BarcodeValue.Trim(),
+                            ReceivedQty = row.ReceivedQty,
+                            RemainingQty = row.ReceivedQty,
+                            Status = "ACTIVE",
+                            CreatedAt = now,
+                            CreatedBy = request.LoggedInUserName,
+                            UpdatedAt = now,
+                            UpdatedBy = request.LoggedInUserName
+                        };
+                        _context.Batch.Add(batch);
+                        // Two rows in the same file for the same batch (e.g. a split-scheme
+                        // line) must also merge into each other, not just against what was
+                        // already in the DB before this import started.
+                        existingBatchByKey[mergeKey] = batch;
+                    }
 
                     var stockLevel = await _context.StockLevel.FirstOrDefaultAsync(
                         sl => sl.InventoryItemId == inventoryItemId && sl.StoreId == storeId && sl.HospitalId == request.HospitalId, cancellationToken);
 
+                    // batch.ReceivedQty is the batch's cumulative total (possibly just bumped by a
+                    // merge above) — every increment below must use row.ReceivedQty, this row's own
+                    // contribution, not the batch's running total.
                     if (stockLevel == null)
                     {
                         stockLevel = new StockLevel
@@ -132,14 +163,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             HospitalId = request.HospitalId,
                             InventoryItemId = inventoryItemId,
                             StoreId = storeId,
-                            QtyOnHand = batch.ReceivedQty,
+                            QtyOnHand = row.ReceivedQty,
                             UpdatedAt = now
                         };
                         _context.StockLevel.Add(stockLevel);
                     }
                     else
                     {
-                        stockLevel.QtyOnHand += batch.ReceivedQty;
+                        stockLevel.QtyOnHand += row.ReceivedQty;
                         stockLevel.UpdatedAt = now;
                     }
 
@@ -153,7 +184,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         it => it.InventoryItemId == inventoryItemId && it.HospitalId == request.HospitalId, cancellationToken);
                     if (item != null)
                     {
-                        item.CurrentStock += batch.ReceivedQty;
+                        item.CurrentStock += row.ReceivedQty;
                         item.UpdatedAt = now;
                         item.UpdatedBy = request.LoggedInUserName;
                     }
@@ -164,8 +195,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         HospitalId = request.HospitalId,
                         InventoryItemId = inventoryItemId,
                         MovementType = "RECEIVE",
-                        Qty = batch.ReceivedQty,
-                        UnitCost = batch.UnitCost,
+                        Qty = row.ReceivedQty,
+                        UnitCost = row.UnitCost,
                         BatchId = batch.BatchId,
                         BatchNumber = batch.BatchNumber,
                         ExpiryDate = batch.ExpiryDate,

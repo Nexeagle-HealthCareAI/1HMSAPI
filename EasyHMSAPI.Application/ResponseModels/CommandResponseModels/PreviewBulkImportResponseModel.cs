@@ -17,6 +17,10 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public int RowIndex { get; set; }
         public bool IsValid { get; set; }
         public string? ErrorMessage { get; set; }
+        // Non-blocking — row can still be IsValid=true. Set when this row's batch number already
+        // exists for the item+store, so the pharmacist can see it will top up an existing batch
+        // (same expiry) or double-check for a typo (different expiry) before importing.
+        public string? ExistingBatchWarning { get; set; }
 
         public string? StoreCode { get; set; }
         public string? ItemCode { get; set; }

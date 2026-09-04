@@ -218,6 +218,34 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Pharmacy Stock/Batches tab — flat, hospital-wide "everything currently in stock" view for
+        // browsing/verifying what's already there, unlike GetBatches (one item) or the near-expiry
+        // report (90-day expiry window only).
+        [HttpGet("batches")]
+        public async Task<ActionResult<GetAllBatchesResponseModel>> GetAllBatches(
+            [FromQuery] Guid hospitalId, [FromQuery] Guid? storeId, [FromQuery] string? search, [FromQuery] bool activeOnly = true)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetAllBatchesRequestModel
+                {
+                    HospitalId = hospitalId,
+                    StoreId = storeId,
+                    Search = search,
+                    ActiveOnly = activeOnly,
+                });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetAllBatches for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching batches." });
+            }
+        }
+
         [HttpPost("batches")]
         public async Task<ActionResult<CreateBatchResponseModel>> CreateBatch([FromBody] CreateBatchRequestModel request)
         {

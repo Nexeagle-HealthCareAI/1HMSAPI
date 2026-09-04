@@ -37,6 +37,23 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (!storeExists)
                     return new CreateBatchResponseModel { Success = false, Message = "Store not found." };
 
+                var trimmedBatchNumber = request.BatchNumber.Trim();
+
+                // Receiving more of an already-tracked batch (same item+store+batch number+expiry)
+                // must top up that batch, not fork a second row with the same number — that would
+                // fragment FEFO ordering, near-expiry reporting, and the H1 register. RemainingQty
+                // stays untouched here either way; the caller's own RECEIVE movement (see this
+                // model's own doc comment) is what brings it up, keyed purely on BatchId, so
+                // returning the existing id is enough for a correct merge.
+                var existingBatch = await _context.Batch.FirstOrDefaultAsync(
+                    b => b.HospitalId == request.HospitalId && b.InventoryItemId == request.InventoryItemId
+                      && b.StoreId == request.StoreId && b.Status == "ACTIVE"
+                      && b.BatchNumber.ToUpper() == trimmedBatchNumber.ToUpper()
+                      && b.ExpiryDate == request.ExpiryDate,
+                    cancellationToken);
+                if (existingBatch != null)
+                    return new CreateBatchResponseModel { Success = true, Message = "Matched an existing batch — quantity will be added to it.", BatchId = existingBatch.BatchId };
+
                 var now = DateTime.UtcNow;
                 var batch = new Batch
                 {

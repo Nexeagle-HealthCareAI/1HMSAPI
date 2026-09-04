@@ -24,4 +24,15 @@ namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
         public Guid? StoreId { get; set; }
         public string BarcodeValue { get; set; } = null!;
     }
+
+    // Hospital-wide, non-expiry-filtered batch list — the "view/verify all current stock" screen,
+    // backing the Batches tab. Search matches item name, item code, or batch number.
+    [ExcludeFromCodeCoverage]
+    public class GetAllBatchesRequestModel : IRequest<GetAllBatchesResponseModel>
+    {
+        public Guid HospitalId { get; set; }
+        public Guid? StoreId { get; set; }
+        public string? Search { get; set; }
+        public bool ActiveOnly { get; set; } = true;
+    }
 }
