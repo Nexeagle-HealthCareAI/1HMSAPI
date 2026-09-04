@@ -163,6 +163,80 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task Handle_LabOrderWithBillableEncounter_AlsoCreatesDraftInvoiceForTheEncounter()
+        {
+            var admission = SeedAdmission();
+            admission.EncounterId = Guid.NewGuid();
+            _context.SaveChanges();
+            var chargeId = Guid.NewGuid();
+            SeedPathologyTest(admission.HospitalId, chargeId);
+
+            _mediatorMock
+                .Setup(m => m.Send(It.IsAny<AddChargeEventRequestModel>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new AddChargeEventResponseModel
+                {
+                    Success = true,
+                    Data = new AddChargesData
+                    {
+                        ChargeEvents = new() { new ChargeEventDetail { ChargeEventId = Guid.NewGuid() } },
+                    },
+                });
+            _mediatorMock
+                .Setup(m => m.Send(It.IsAny<CreateDraftInvoiceRequestModel>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new CreateDraftInvoiceResponseModel { Success = true });
+
+            var response = await _handler.Handle(new PlaceClinicalOrderRequestModel
+            {
+                HospitalId = admission.HospitalId,
+                AdmissionId = admission.AdmissionId,
+                OrderType = "LAB",
+                Lines = new() { new ClinicalOrderLineInput { ItemName = "CBC", ChargeId = chargeId } },
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True, response.Message);
+            _mediatorMock.Verify(m => m.Send(
+                It.Is<CreateDraftInvoiceRequestModel>(r => r.EncounterId == admission.EncounterId!.Value && r.PatientId == admission.PatientId),
+                It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Test]
+        public async Task Handle_DraftInvoiceCreationThrows_OrderStillSucceeds()
+        {
+            var admission = SeedAdmission();
+            admission.EncounterId = Guid.NewGuid();
+            _context.SaveChanges();
+            var chargeId = Guid.NewGuid();
+            SeedPathologyTest(admission.HospitalId, chargeId);
+
+            _mediatorMock
+                .Setup(m => m.Send(It.IsAny<AddChargeEventRequestModel>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new AddChargeEventResponseModel
+                {
+                    Success = true,
+                    Data = new AddChargesData
+                    {
+                        ChargeEvents = new() { new ChargeEventDetail { ChargeEventId = Guid.NewGuid() } },
+                    },
+                });
+            _mediatorMock
+                .Setup(m => m.Send(It.IsAny<CreateDraftInvoiceRequestModel>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new InvalidOperationException("boom"));
+
+            var response = await _handler.Handle(new PlaceClinicalOrderRequestModel
+            {
+                HospitalId = admission.HospitalId,
+                AdmissionId = admission.AdmissionId,
+                OrderType = "LAB",
+                Lines = new() { new ClinicalOrderLineInput { ItemName = "CBC", ChargeId = chargeId } },
+            }, CancellationToken.None);
+
+            // The clinical order and its charge already committed -- a downstream invoicing hiccup
+            // must not turn a successfully-placed order into a reported failure.
+            Assert.That(response.Success, Is.True, response.Message);
+            Assert.That(_context.ClinicalOrder.Any(o => o.OrderId == response.OrderId), Is.True);
+        }
+
+        [Test]
         public async Task Handle_LabOrderWithBillableEncounter_TagsChargeAsLabPathSourceModule()
         {
             var admission = SeedAdmission();

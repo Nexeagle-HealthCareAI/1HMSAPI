@@ -117,6 +117,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         // Daily-recurring lines (oxygen, continuous monitoring) are excluded here —
                         // they accrue once per IST day via the nightly PostDailyRecurringCharges job
                         // instead of being charged once at order time.
+                        // anyChargesPosted drives a best-effort draft-invoice creation after commit
+                        // below — AddChargeEventHandler alone never creates a BillingInvoice, and
+                        // without one the charge is real but invisible on both the Billing Dashboard
+                        // and Pathology's own Billing tab until someone separately invoices the
+                        // encounter (same gap already fixed for the Pathology module's own order
+                        // path — see PathologyAutoBillingHelper.PostChargesAndInvoiceAsync).
+                        bool anyChargesPosted = false;
                         if (admission.EncounterId.HasValue)
                         {
                             var chargeableIndices = Enumerable.Range(0, lines.Count).Where(i => lines[i].ChargeId.HasValue && !lines[i].IsDailyRecurringCharge).ToList();
@@ -172,6 +179,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                                 for (int k = 0; k < chargeableIndices.Count; k++)
                                     lines[chargeableIndices[k]].ChargeEventId = chargeResponse.Data.ChargeEvents[k].ChargeEventId;
+
+                                anyChargesPosted = true;
                             }
                         }
 
@@ -265,6 +274,34 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                         await _context.SaveChangesAsync(cancellationToken);
                         await tx.CommitAsync(cancellationToken);
+
+                        // Best-effort, run only after the order's own transaction has committed —
+                        // CreateDraftInvoiceHandler manages its own execution-strategy/transaction,
+                        // which can't nest inside the one just committed above. The order itself must
+                        // not be undone by an invoicing hiccup (same "commit first, bill best-effort
+                        // after" shape CollectPathologySampleHandler already uses for ON_SAMPLE_
+                        // COLLECTION billing), so failures here are swallowed, not surfaced as a
+                        // order-placement failure.
+                        if (anyChargesPosted && admission.EncounterId.HasValue)
+                        {
+                            try
+                            {
+                                await _mediator.Send(new CreateDraftInvoiceRequestModel
+                                {
+                                    HospitalId = request.HospitalId,
+                                    PatientId = admission.PatientId,
+                                    EncounterId = admission.EncounterId.Value,
+                                    LoggedInUserId = request.LoggedInUserId,
+                                    LoggedInUserName = request.LoggedInUserName,
+                                }, cancellationToken);
+                            }
+                            catch
+                            {
+                                // Swallow -- the clinical order and its charges already committed
+                                // successfully; the encounter can still be invoiced manually from
+                                // the Billing tab if this best-effort call didn't get there.
+                            }
+                        }
 
                         return new PlaceClinicalOrderResponseModel
                         {
