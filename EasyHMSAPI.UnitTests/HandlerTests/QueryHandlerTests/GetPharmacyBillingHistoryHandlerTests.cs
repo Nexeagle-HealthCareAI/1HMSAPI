@@ -1,0 +1,174 @@
+using System;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using EasyHMSAPI.Application.Handlers.QueryHandlers;
+using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
+using EasyHMSAPI.Data.Constants;
+using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Domain.Entities;
+using EasyHMSAPI.UnitTests.TestUtils;
+using NUnit.Framework;
+
+namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
+{
+    [TestFixture]
+    public class GetPharmacyBillingHistoryHandlerTests
+    {
+        private AppDbContext _context = null!;
+        private GetPharmacyBillingHistoryHandler _handler = null!;
+        private Guid _hospitalId;
+        private DateTime _today;
+
+        [SetUp]
+        public async Task SetUp()
+        {
+            _context = InMemoryDbContextFactory.CreateContext();
+            _handler = new GetPharmacyBillingHistoryHandler(_context);
+            _hospitalId = Guid.NewGuid();
+            _today = DateTime.UtcNow.Date;
+
+            await SeedPharmacyInvoice("INV-BH-0001", "PARA-CE", _today, "PHARMACY_COUNTER", "CASH", "cashier1", "PTID001", "Amir Yadav", 120m, 3m);
+            await SeedPharmacyInvoice("INV-BH-0002", "AMOX-CE", _today.AddDays(-5), "PHARMACY_IPD", "UPI", "cashier2", "PTID002", "Asif Anwar", 60m, 2m);
+            // Non-pharmacy invoice — must never appear.
+            await SeedPharmacyInvoice("INV-BH-0003", "CONSULT-CE", _today, "OPD", "CASH", "cashier1", "PTID003", "Someone Else", 500m, 1m);
+
+            await _context.SaveChangesAsync();
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            _context.Database.EnsureDeleted();
+            _context.Dispose();
+        }
+
+        private async Task SeedPharmacyInvoice(
+            string invoiceNo, string tag, DateTime serviceDate, string sourceModule,
+            string paymentMode, string createdBy, string patientId, string patientName,
+            decimal netAmount, decimal qty)
+        {
+            var invoiceId = Guid.NewGuid();
+            var encounterId = Guid.NewGuid();
+            var chargeEventId = Guid.NewGuid();
+
+            _context.PatientRegistrations.Add(new PatientRegistration
+            {
+                RegistrationId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                PatientId = patientId,
+                FullName = patientName,
+            });
+
+            _context.BillingInvoice.Add(new BillingInvoice
+            {
+                InvoiceId = invoiceId,
+                HospitalId = _hospitalId,
+                EncounterId = encounterId,
+                PatientId = patientId,
+                InvoiceNo = invoiceNo,
+                InvoiceDate = serviceDate,
+                NetAmount = netAmount,
+                StatusCode = BillingConstants.InvoiceStatus.Finalized,
+                CreatedAt = serviceDate,
+                CreatedBy = createdBy,
+                UpdatedAt = serviceDate,
+                UpdatedBy = createdBy,
+            });
+
+            _context.BillingChargeEvent.Add(new BillingChargeEvent
+            {
+                ChargeEventId = chargeEventId,
+                HospitalId = _hospitalId,
+                EncounterId = encounterId,
+                DisplayName = tag,
+                SourceModule = sourceModule,
+                Qty = qty,
+                UnitPrice = netAmount / qty,
+                NetAmount = netAmount,
+                StatusCode = BillingConstants.ChargeEventStatus.Posted,
+                ServiceDate = serviceDate,
+                CreatedAt = serviceDate,
+                UpdatedAt = serviceDate,
+            });
+
+            _context.BillingInvoiceChargeEvent.Add(new BillingInvoiceChargeEvent
+            {
+                InvoiceId = invoiceId,
+                ChargeEventId = chargeEventId,
+            });
+
+            _context.BillingPayment.Add(new BillingPayment
+            {
+                PaymentId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                EncounterId = encounterId,
+                PatientId = patientId,
+                PaymentType = BillingConstants.PaymentType.Payment,
+                PaymentMode = paymentMode,
+                Amount = netAmount,
+                PaidAt = serviceDate,
+                CreatedAt = serviceDate,
+                UpdatedAt = serviceDate,
+            });
+        }
+
+        [Test]
+        public async Task Handle_NoDateFilter_ReturnsAllPharmacyBillsOnly()
+        {
+            var response = await _handler.Handle(new GetPharmacyBillingHistoryRequestModel { HospitalId = _hospitalId }, CancellationToken.None);
+
+            Assert.That(response.TotalBills, Is.EqualTo(2));
+            Assert.That(response.Bills.Select(b => b.InvoiceNo), Does.Contain("INV-BH-0001"));
+            Assert.That(response.Bills.Select(b => b.InvoiceNo), Does.Contain("INV-BH-0002"));
+            Assert.That(response.Bills.Select(b => b.InvoiceNo), Does.Not.Contain("INV-BH-0003"));
+        }
+
+        [Test]
+        public async Task Handle_FromDateOnly_ExcludesOlderBills()
+        {
+            var response = await _handler.Handle(new GetPharmacyBillingHistoryRequestModel
+            {
+                HospitalId = _hospitalId,
+                FromDate = _today,
+            }, CancellationToken.None);
+
+            Assert.That(response.TotalBills, Is.EqualTo(1));
+            Assert.That(response.Bills.Single().InvoiceNo, Is.EqualTo("INV-BH-0001"));
+        }
+
+        [Test]
+        public async Task Handle_ReturnsRowFieldsCorrectly()
+        {
+            var response = await _handler.Handle(new GetPharmacyBillingHistoryRequestModel
+            {
+                HospitalId = _hospitalId,
+                FromDate = _today,
+                ToDate = _today,
+            }, CancellationToken.None);
+
+            var row = response.Bills.Single();
+            Assert.That(row.PatientName, Is.EqualTo("Amir Yadav"));
+            Assert.That(row.SourceModule, Is.EqualTo("PHARMACY_COUNTER"));
+            Assert.That(row.PaymentMode, Is.EqualTo("CASH"));
+            Assert.That(row.ProcessedBy, Is.EqualTo("cashier1"));
+            Assert.That(row.ItemCount, Is.EqualTo(1));
+            Assert.That(row.TotalQty, Is.EqualTo(3));
+            Assert.That(row.NetAmount, Is.EqualTo(120));
+            Assert.That(response.TotalAmount, Is.EqualTo(120));
+        }
+
+        [Test]
+        public async Task Handle_NoMatchingBills_ReturnsEmpty()
+        {
+            var response = await _handler.Handle(new GetPharmacyBillingHistoryRequestModel
+            {
+                HospitalId = Guid.NewGuid(),
+            }, CancellationToken.None);
+
+            Assert.That(response.Bills, Is.Empty);
+            Assert.That(response.TotalBills, Is.EqualTo(0));
+            Assert.That(response.TotalAmount, Is.EqualTo(0));
+        }
+    }
+}
