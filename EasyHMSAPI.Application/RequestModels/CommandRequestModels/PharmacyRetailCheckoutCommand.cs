@@ -16,9 +16,10 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         [Required]
         public Guid StoreId { get; set; }
 
-        public string? PatientId { get; set; } // If null, it's an anonymous walk-in
-        public string? WalkInName { get; set; }
-        public string? WalkInContact { get; set; }
+        // Required for every settlement mode — see PharmacyRetailCheckoutCommandHandler's guard.
+        // Must resolve to a real PatientRegistration (searched or freshly quick-registered via
+        // POST /patient/register), so every dispense — regulated drugs included — is traceable.
+        public string? PatientId { get; set; }
         public Guid? PrescribingDoctorId { get; set; }
         // Required by RecordInventoryMovementRequestModel's regulated-drug guard whenever the cart
         // contains an item with InventoryItem.ScheduleClass set (H/H1/X) — a doctor name/reg

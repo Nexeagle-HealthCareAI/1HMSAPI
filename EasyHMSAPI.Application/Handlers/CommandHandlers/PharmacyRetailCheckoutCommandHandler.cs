@@ -42,15 +42,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 var now = DateTime.UtcNow;
                 var postToAdmissionDayBill = request.SettlementMode == PharmacySettlementMode.PostToAdmissionDayBill;
 
+                // Every dispense — cash sale or admission-billed — must be tied to a real,
+                // searched-or-registered PatientRegistration. Previously only enforced for the
+                // admission path; a plain cash sale could go out with no patient at all, leaving
+                // regulated (Schedule H/H1/X) drugs with no traceable recipient.
+                if (string.IsNullOrWhiteSpace(request.PatientId))
+                {
+                    await tx.RollbackAsync(cancellationToken);
+                    return new PharmacyRetailCheckoutResponseModel { Success = false, Message = "A patient is required to dispense medicine." };
+                }
+
                 Encounter encounter;
                 if (postToAdmissionDayBill)
                 {
-                    if (string.IsNullOrWhiteSpace(request.PatientId))
-                    {
-                        await tx.RollbackAsync(cancellationToken);
-                        return new PharmacyRetailCheckoutResponseModel { Success = false, Message = "A patient is required to post charges to an admission day bill." };
-                    }
-
                     var admission = await _context.Admission
                         .Where(a => a.HospitalId == request.HospitalId && a.PatientId == request.PatientId && a.StatusCode == IpdConstants.AdmissionStatus.Admitted && a.EncounterId != null)
                         .OrderByDescending(a => a.CreatedAt)

@@ -73,6 +73,9 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         {
             HospitalId = _hospitalId,
             StoreId = _storeId,
+            // Every checkout requires a real, searched-or-registered patient now — see
+            // Handle_DirectCash_NoPatientId_ReturnsError for the guard itself.
+            PatientId = "PT-100",
             Items = new List<PharmacyCartItem>
             {
                 new() { InventoryItemId = inventoryItemId, Qty = 10, Rate = 2, DiscountPercent = 0 }
@@ -196,6 +199,25 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(response.Success, Is.False);
             Assert.That(response.Message, Does.Contain("Insufficient stock"));
             _mediatorMock.Verify(m => m.Send(It.IsAny<AddChargeEventRequestModel>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Test]
+        public async Task Handle_DirectCash_NoPatientId_ReturnsError()
+        {
+            // A plain cash sale used to be allowed to go out with no patient at all -- the
+            // unconditional guard closes that gap so a regulated (H/H1/X) dispense can never be
+            // untraceable, not just the admission-billed path.
+            var item = SeedDrugItem(Guid.NewGuid());
+            await _context.SaveChangesAsync();
+
+            var request = ValidRequest(item.InventoryItemId);
+            request.PatientId = null;
+
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Does.Contain("patient is required"));
+            _mediatorMock.Verify(m => m.Send(It.IsAny<RecordInventoryMovementRequestModel>(), It.IsAny<CancellationToken>()), Times.Never);
         }
 
         [Test]
