@@ -55,9 +55,28 @@ namespace EasyHMSAPI.Application.Services
                     .Where(c => c.HospitalId == hospitalId && chargeIds.Contains(c.ChargeId))
                     .ToDictionaryAsync(c => c.ChargeId, cancellationToken);
 
+            // Guards against double-billing the same test on this order: the three call sites
+            // (order creation, sample collection, report generation) each independently read
+            // BillingPolicy.LabPathTrigger at their own point in the lifecycle, so if that policy
+            // value changes while an order is mid-flight (or a caller is invoked twice for any
+            // other reason), a test already charged here would otherwise be charged again with no
+            // check anywhere for "was this order+test already billed." Skips any test that already
+            // has a non-voided charge under its "{sourceRefId}:{testId}" SourceRefId.
+            var candidateRefIds = tests.Select(t => $"{sourceRefId}:{t.TestId}").ToList();
+            var alreadyChargedRefIds = candidateRefIds.Count == 0
+                ? new HashSet<string>()
+                : (await context.BillingChargeEvent
+                    .Where(c => c.HospitalId == hospitalId && c.VoidedAt == null && c.SourceRefId != null && candidateRefIds.Contains(c.SourceRefId))
+                    .Select(c => c.SourceRefId!)
+                    .ToListAsync(cancellationToken))
+                  .ToHashSet();
+
             var charges = new List<ChargeDetail>();
             foreach (var test in tests)
             {
+                if (alreadyChargedRefIds.Contains($"{sourceRefId}:{test.TestId}"))
+                    continue;
+
                 if (test.ChargeId.HasValue && chargeMasters.TryGetValue(test.ChargeId.Value, out var master))
                 {
                     charges.Add(new ChargeDetail
