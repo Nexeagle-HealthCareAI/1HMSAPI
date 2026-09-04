@@ -35,6 +35,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 return new QuickReceiveStockResponseModel { Success = false, Message = "Qty must be greater than zero." };
             }
 
+            // A plain _context.Database.BeginTransactionAsync() here throws at runtime against a
+            // real SQL Server connection ("SqlServerRetryingExecutionStrategy does not support
+            // user-initiated transactions") — the retrying execution strategy must own the
+            // transaction, same pattern BulkBatchCommandHandlers/PharmacyRetailCheckoutCommandHandler
+            // already use. Never caught by the in-memory-provider unit tests since InMemory has no
+            // execution strategy — only surfaced testing this live against the real dev database.
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(() => TryHandleAsync(request, cancellationToken));
+        }
+
+        private async Task<QuickReceiveStockResponseModel> TryHandleAsync(QuickReceiveStockRequestModel request, CancellationToken cancellationToken)
+        {
             using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
             try
             {

@@ -58,6 +58,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return new TransferStockResponseModel { Success = false, Message = "No active batch has enough remaining stock in the source store to cover this transfer quantity." };
             }
 
+            // A plain _context.Database.BeginTransactionAsync() here throws at runtime against a
+            // real SQL Server connection ("SqlServerRetryingExecutionStrategy does not support
+            // user-initiated transactions") — the retrying execution strategy must own the
+            // transaction, same pattern BulkBatchCommandHandlers/PharmacyRetailCheckoutCommandHandler
+            // already use. Never caught by the in-memory-provider unit tests since InMemory has no
+            // execution strategy — only surfaced testing this live against the real dev database.
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(() => TryHandleAsync(request, allocations, cancellationToken));
+        }
+
+        private async Task<TransferStockResponseModel> TryHandleAsync(TransferStockRequestModel request, List<BatchAllocation> allocations, CancellationToken cancellationToken)
+        {
             using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
             try
             {
