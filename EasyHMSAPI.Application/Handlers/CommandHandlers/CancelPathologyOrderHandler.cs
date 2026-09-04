@@ -53,10 +53,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             _context.PathologyOrder.Update(order);
 
             // Void only this order's own charges (matched by SourceRefId) -- not the whole
-            // encounter, which may carry unrelated charges (other tests, medications, etc.).
+            // encounter, which may carry unrelated charges (other tests, medications, etc.). Matches
+            // both the legacy bare-order-id format and the current per-line "{orderId}:{testId}"
+            // format (see PathologyAutoBillingHelper.BuildChargeDetailsAsync) since this voids
+            // everything for the order regardless of which test each charge belongs to.
+            var orderIdStr = order.OrderId.ToString();
+            var orderIdPrefix = orderIdStr + ":";
             var charges = await _context.BillingChargeEvent
                 .Where(c => c.SourceModule == BillingConstants.SourceModule.LabPath
-                    && c.SourceRefId == order.OrderId.ToString()
+                    && (c.SourceRefId == orderIdStr || (c.SourceRefId != null && c.SourceRefId.StartsWith(orderIdPrefix)))
                     && c.StatusCode != BillingConstants.ChargeEventStatus.Void)
                 .ToListAsync(cancellationToken);
             foreach (var charge in charges)

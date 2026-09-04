@@ -324,6 +324,65 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task Handle_RemovingOneTest_DoesNotVoidSiblingTestChargeSharingSameChargeId()
+        {
+            // Two different tests can be mapped to the same ChargeMaster row (nothing in the catalog
+            // prevents it) -- removing one must not void the other's still-owed charge just because
+            // they share a ChargeId. Regression test for the cross-void bug found in the pathology
+            // billing audit: void logic used to key only on ChargeId, not on the specific test/line.
+            var hospitalId = Guid.NewGuid();
+            var orderId = Guid.NewGuid();
+            var sharedChargeId = Guid.NewGuid();
+            var keptTestId = Guid.NewGuid();
+            var removedTestId = Guid.NewGuid();
+            var encounterId = Guid.NewGuid();
+
+            _context.BillingPolicy.Add(new BillingPolicy { HospitalId = hospitalId, LabPathTrigger = "ON_ORDER" });
+            _context.ChargeMaster.Add(new ChargeMaster { ChargeId = sharedChargeId, HospitalId = hospitalId, DisplayName = "Blood Draw", DefaultRate = 100m, IsActive = true });
+            _context.PathologyTestMaster.Add(new PathologyTestMaster { TestId = keptTestId, HospitalId = hospitalId, TestCode = "T-KEEP", TestName = "Kept Test", ChargeId = sharedChargeId, IsActive = true });
+            _context.PathologyTestMaster.Add(new PathologyTestMaster { TestId = removedTestId, HospitalId = hospitalId, TestCode = "T-REMOVE", TestName = "Removed Test", ChargeId = sharedChargeId, IsActive = true });
+            _context.PathologyOrder.Add(new PathologyOrder
+            {
+                OrderId = orderId,
+                HospitalId = hospitalId,
+                PatientId = "PTID00000001",
+                EncounterId = encounterId,
+                OrderNo = "ORD-2",
+                Status = "PLACED",
+                SourceType = "OPD",
+            });
+            _context.PathologyOrderLine.Add(new PathologyOrderLine { OrderLineId = Guid.NewGuid(), HospitalId = hospitalId, OrderId = orderId, TestId = keptTestId, Status = "PENDING" });
+            _context.PathologyOrderLine.Add(new PathologyOrderLine { OrderLineId = Guid.NewGuid(), HospitalId = hospitalId, OrderId = orderId, TestId = removedTestId, Status = "PENDING" });
+
+            var keptChargeEventId = Guid.NewGuid();
+            var removedChargeEventId = Guid.NewGuid();
+            _context.BillingChargeEvent.Add(new BillingChargeEvent
+            {
+                ChargeEventId = keptChargeEventId, HospitalId = hospitalId, EncounterId = encounterId,
+                SourceModule = BillingConstants.SourceModule.LabPath, SourceRefId = $"{orderId}:{keptTestId}",
+                ChargeId = sharedChargeId, StatusCode = BillingConstants.ChargeEventStatus.Posted,
+                NetAmount = 100m, Qty = 1, UnitPrice = 100m,
+            });
+            _context.BillingChargeEvent.Add(new BillingChargeEvent
+            {
+                ChargeEventId = removedChargeEventId, HospitalId = hospitalId, EncounterId = encounterId,
+                SourceModule = BillingConstants.SourceModule.LabPath, SourceRefId = $"{orderId}:{removedTestId}",
+                ChargeId = sharedChargeId, StatusCode = BillingConstants.ChargeEventStatus.Posted,
+                NetAmount = 100m, Qty = 1, UnitPrice = 100m,
+            });
+            _context.SaveChanges();
+
+            // Edit the order to keep only keptTestId -- removes removedTestId.
+            var response = await _handler.Handle(BaseCommand(hospitalId, orderId, "PTID00000001", encounterId, keptTestId), CancellationToken.None);
+
+            Assert.That(response.Success, Is.True, response.Message);
+            var keptCharge = _context.BillingChargeEvent.Single(c => c.ChargeEventId == keptChargeEventId);
+            var removedCharge = _context.BillingChargeEvent.Single(c => c.ChargeEventId == removedChargeEventId);
+            Assert.That(keptCharge.StatusCode, Is.EqualTo(BillingConstants.ChargeEventStatus.Posted), "sibling test's charge must survive");
+            Assert.That(removedCharge.StatusCode, Is.EqualTo(BillingConstants.ChargeEventStatus.Void));
+        }
+
+        [Test]
         public async Task Handle_UpdatesNotesAndStatFlagUnconditionally()
         {
             var (hospitalId, orderId, testId, _) = SeedOrderWithOneTest();

@@ -100,11 +100,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                     if (chargeIdByTest.TryGetValue(line.TestId, out var removedChargeId) && removedChargeId.HasValue)
                     {
+                        // Keyed by this line's own "{orderId}:{testId}" SourceRefId, not by ChargeId
+                        // alone -- two tests can share the same ChargeId (nothing in the catalog
+                        // prevents that), and voiding by ChargeId would also void a still-active
+                        // sibling test's charge on this same order. The bare-ChargeId fallback only
+                        // covers charges posted before this fix shipped (legacy bare-order-id
+                        // SourceRefId, no per-line key to match on).
+                        var lineSourceRefId = PathologyAutoBillingHelper.LineSourceRefId(order.OrderId, line.TestId);
+                        var legacyOrderIdStr = order.OrderId.ToString();
                         var chargesToVoid = await _context.BillingChargeEvent
                             .Where(c => c.SourceModule == BillingConstants.SourceModule.LabPath
-                                && c.SourceRefId == order.OrderId.ToString()
-                                && c.ChargeId == removedChargeId.Value
-                                && c.StatusCode != BillingConstants.ChargeEventStatus.Void)
+                                && c.StatusCode != BillingConstants.ChargeEventStatus.Void
+                                && (c.SourceRefId == lineSourceRefId
+                                    || (c.SourceRefId == legacyOrderIdStr && c.ChargeId == removedChargeId.Value)))
                             .ToListAsync(cancellationToken);
                         foreach (var charge in chargesToVoid)
                         {
@@ -143,9 +151,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 // context instead.
                 if (billingContextChanged)
                 {
+                    // Voids everything for the order regardless of which test each charge belongs
+                    // to, so it matches both the legacy bare-order-id SourceRefId and the current
+                    // per-line "{orderId}:{testId}" format.
+                    var contextOrderIdStr = order.OrderId.ToString();
+                    var contextOrderIdPrefix = contextOrderIdStr + ":";
                     var chargesToVoid = await _context.BillingChargeEvent
                         .Where(c => c.SourceModule == BillingConstants.SourceModule.LabPath
-                            && c.SourceRefId == order.OrderId.ToString()
+                            && (c.SourceRefId == contextOrderIdStr || (c.SourceRefId != null && c.SourceRefId.StartsWith(contextOrderIdPrefix)))
                             && c.StatusCode != BillingConstants.ChargeEventStatus.Void)
                         .ToListAsync(cancellationToken);
                     foreach (var charge in chargesToVoid)

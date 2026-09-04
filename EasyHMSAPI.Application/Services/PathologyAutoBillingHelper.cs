@@ -34,6 +34,12 @@ namespace EasyHMSAPI.Application.Services
             return admission?.EncounterId;
         }
 
+        // sourceRefId is the order's own id (as a string). Each posted charge gets a
+        // "{orderId}:{testId}" SourceRefId rather than the bare order id, so a later void-by-line
+        // (UpdatePathologyOrderHandler removing one test) can target exactly that test's charge --
+        // without this, two tests sharing the same ChargeId (nothing prevents that in the catalog)
+        // would have their charges indistinguishable from each other, and removing one test could
+        // silently void the other's still-owed charge too.
         public static async Task<List<ChargeDetail>> BuildChargeDetailsAsync(
             AppDbContext context, Guid hospitalId, IEnumerable<Guid> testIds,
             string sourceRefId, Guid? attributedDoctorId, CancellationToken cancellationToken)
@@ -68,7 +74,7 @@ namespace EasyHMSAPI.Application.Services
                         Rate = master.DefaultRate,
                         CategoryCode = "LAB_PATH",
                         SourceModule = BillingConstants.SourceModule.LabPath,
-                        SourceRefId = sourceRefId,
+                        SourceRefId = $"{sourceRefId}:{test.TestId}",
                         AttributedDoctorId = attributedDoctorId
                     });
                 }
@@ -120,5 +126,11 @@ namespace EasyHMSAPI.Application.Services
 
             return null;
         }
+
+        // The exact SourceRefId a charge for this order+test was posted under (see the comment on
+        // BuildChargeDetailsAsync above). NOT usable inside an EF LINQ Where() -- EF can't translate
+        // a call to this method to SQL, so callers building an EF query must inline the same
+        // "{orderId}:{testId}" string themselves (see UpdatePathologyOrderHandler).
+        public static string LineSourceRefId(Guid orderId, Guid testId) => $"{orderId}:{testId}";
     }
 }
