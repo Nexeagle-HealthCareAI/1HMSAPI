@@ -3,7 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Domain.Entities
 {
-    /// <summary>Department stock request. Status: DRAFT/SUBMITTED/APPROVED/REJECTED/CONVERTED_TO_PO/CANCELLED.</summary>
+    /// <summary>Department stock request. Status: DRAFT/SUBMITTED/APPROVED/REJECTED/CONVERTED_TO_PO/PARTIALLY_ISSUED/ISSUED/CANCELLED.</summary>
     [ExcludeFromCodeCoverage]
     public class Indent
     {

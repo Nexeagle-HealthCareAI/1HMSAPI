@@ -247,15 +247,32 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
         public async Task<IssueIndentResponseModel> Handle(IssueIndentRequestModel request, CancellationToken cancellationToken)
         {
+            if (request.HospitalId == Guid.Empty || request.IndentId == Guid.Empty)
+                return new IssueIndentResponseModel { Success = false, Message = "HospitalId and IndentId are required." };
+            if (request.Lines.Count == 0)
+                return new IssueIndentResponseModel { Success = false, Message = "At least one line is required to issue." };
+            if (request.Lines.Any(l => l.Qty <= 0))
+                return new IssueIndentResponseModel { Success = false, Message = "Issue quantities must be positive." };
+
+            // The per-line stock transfers and the Indent/IndentLine status update must commit or
+            // roll back together - previously each line's transfer committed in its OWN transaction
+            // (via _mediator.Send(TransferStockRequestModel), which opens its own) independently of
+            // this method's final SaveChangesAsync, so a failure AFTER a successful transfer (e.g.
+            // the since-fixed CK_IND_Status constraint) left stock silently moved while the indent
+            // still showed unfulfilled - confirmed live, and reproducible again by re-issuing a line
+            // whose IssuedQty never got persisted. Fixed by doing the whole operation in one
+            // transaction, calling TransferStockExecutionService directly instead of going back
+            // through TransferStockCommandHandler.Handle() (which would try to open a second,
+            // unsupported nested transaction on this same context).
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(() => TryHandleAsync(request, cancellationToken));
+        }
+
+        private async Task<IssueIndentResponseModel> TryHandleAsync(IssueIndentRequestModel request, CancellationToken cancellationToken)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
             try
             {
-                if (request.HospitalId == Guid.Empty || request.IndentId == Guid.Empty)
-                    return new IssueIndentResponseModel { Success = false, Message = "HospitalId and IndentId are required." };
-                if (request.Lines.Count == 0)
-                    return new IssueIndentResponseModel { Success = false, Message = "At least one line is required to issue." };
-                if (request.Lines.Any(l => l.Qty <= 0))
-                    return new IssueIndentResponseModel { Success = false, Message = "Issue quantities must be positive." };
-
                 var indent = await _context.Indent.FirstOrDefaultAsync(
                     i => i.IndentId == request.IndentId && i.HospitalId == request.HospitalId, cancellationToken);
                 if (indent == null)
@@ -267,37 +284,38 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 var indentLines = await _context.IndentLine.Where(l => l.IndentId == indent.IndentId).ToListAsync(cancellationToken);
                 var indentLinesById = indentLines.ToDictionary(l => l.IndentLineId);
-                
+
                 if (request.Lines.Any(l => !indentLinesById.ContainsKey(l.IndentLineId)))
                     return new IssueIndentResponseModel { Success = false, Message = "One or more lines do not belong to this indent." };
 
-                // Execute transfer for each line
                 foreach (var issueLine in request.Lines)
                 {
                     var indentLine = indentLinesById[issueLine.IndentLineId];
                     if (issueLine.Qty > indentLine.Qty - indentLine.IssuedQty)
+                    {
+                        await transaction.RollbackAsync(cancellationToken);
                         return new IssueIndentResponseModel { Success = false, Message = $"Cannot issue more than the remaining quantity for item {indentLine.InventoryItemId}." };
-                    
-                    
-                    var transferResponse = await _mediator.Send(new TransferStockRequestModel
-                    {
-                        HospitalId = request.HospitalId,
-                        FromStoreId = indent.TargetStoreId.Value,
-                        ToStoreId = indent.RequestingStoreId,
-                        InventoryItemId = indentLine.InventoryItemId,
-                        BatchId = issueLine.BatchId,
-                        Qty = issueLine.Qty,
-                        Notes = $"Issued against Indent {indent.IndentNumber}",
-                        LoggedInUserName = request.LoggedInUserName,
-                        LoggedInUserId = request.LoggedInUserId
-                    }, cancellationToken);
-
-                    if (!transferResponse.Success)
-                    {
-                        // Stop processing further lines
-                        return new IssueIndentResponseModel { Success = false, Message = transferResponse.Message ?? "Failed to issue stock." };
                     }
-                    
+
+                    var batch = await _context.Batch.FirstOrDefaultAsync(
+                        b => b.BatchId == issueLine.BatchId && b.HospitalId == request.HospitalId && b.InventoryItemId == indentLine.InventoryItemId, cancellationToken);
+                    if (batch == null)
+                    {
+                        await transaction.RollbackAsync(cancellationToken);
+                        return new IssueIndentResponseModel { Success = false, Message = $"Requested batch not found for item {indentLine.InventoryItemId}." };
+                    }
+
+                    var (success, message) = await TransferStockExecutionService.ExecuteAsync(
+                        _mediator, request.HospitalId, indentLine.InventoryItemId, indent.TargetStoreId.Value, indent.RequestingStoreId,
+                        new List<BatchAllocation> { new BatchAllocation { Batch = batch, AllocatedQty = issueLine.Qty } },
+                        $"Issued against Indent {indent.IndentNumber}", request.LoggedInUserName, request.LoggedInUserId, cancellationToken);
+
+                    if (!success)
+                    {
+                        await transaction.RollbackAsync(cancellationToken);
+                        return new IssueIndentResponseModel { Success = false, Message = message ?? "Failed to issue stock." };
+                    }
+
                     indentLine.IssuedQty += issueLine.Qty;
                 }
 
@@ -306,16 +324,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     indent.Status = IpdConstants.IndentStatus.Issued;
                 else
                     indent.Status = IpdConstants.IndentStatus.PartiallyIssued;
-                    
+
                 indent.UpdatedAt = DateTime.UtcNow;
                 indent.UpdatedBy = request.LoggedInUserName;
 
                 await _context.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
 
                 return new IssueIndentResponseModel { Success = true, Message = "Stock issued successfully." };
             }
             catch (Exception ex)
             {
+                await transaction.RollbackAsync(cancellationToken);
                 return new IssueIndentResponseModel { Success = false, Message = $"Error processing issue: {ex.Message}" };
             }
         }
