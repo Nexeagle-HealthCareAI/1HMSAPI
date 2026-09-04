@@ -214,6 +214,64 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task Handle_AutoBillPostFails_OrderStillSucceedsButBillingWarningIsSet()
+        {
+            var (hospitalId, testId, _) = SeedAutoBillCatalog();
+            _mediatorMock
+                .Setup(m => m.Send(It.IsAny<AddChargeEventRequestModel>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new AddChargeEventResponseModel { Success = false, Message = "Encounter is not open (current status: FINALIZED)." });
+
+            var response = await _handler.Handle(new CreatePathologyOrderRequestModel
+            {
+                HospitalId = hospitalId,
+                PatientId = "PTID00000001",
+                EncounterId = Guid.NewGuid(),
+                TestIds = new() { testId },
+                LoggedInUserName = "tester",
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.BillingWarning, Does.Contain("Encounter is not open"));
+        }
+
+        [Test]
+        public async Task Handle_IpdOrderWithNoEncounterId_SetsBillingWarning()
+        {
+            var (hospitalId, testId, _) = SeedAutoBillCatalog();
+
+            var response = await _handler.Handle(new CreatePathologyOrderRequestModel
+            {
+                HospitalId = hospitalId,
+                PatientId = "PTID00000001",
+                AdmissionId = Guid.NewGuid(),
+                EncounterId = null,
+                TestIds = new() { testId },
+                LoggedInUserName = "tester",
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.BillingWarning, Does.Contain("skipped"));
+        }
+
+        [Test]
+        public async Task Handle_AutoBillPostSucceeds_BillingWarningIsNull()
+        {
+            var (hospitalId, testId, _) = SeedAutoBillCatalog();
+
+            var response = await _handler.Handle(new CreatePathologyOrderRequestModel
+            {
+                HospitalId = hospitalId,
+                PatientId = "PTID00000001",
+                EncounterId = Guid.NewGuid(),
+                TestIds = new() { testId },
+                LoggedInUserName = "tester",
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.BillingWarning, Is.Null);
+        }
+
+        [Test]
         public async Task Handle_NoSourceTypeGiven_DefaultsToOpd()
         {
             var (hospitalId, testId, _) = SeedAutoBillCatalog();

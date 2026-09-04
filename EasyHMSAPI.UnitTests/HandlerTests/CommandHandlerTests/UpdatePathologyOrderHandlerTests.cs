@@ -154,6 +154,28 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task Handle_AddTestButBillingPostFails_UpdateStillSucceedsButBillingWarningIsSet()
+        {
+            var (hospitalId, orderId, testId, _) = SeedOrderWithOneTest();
+            var order = _context.PathologyOrder.Single(o => o.OrderId == orderId);
+
+            var newChargeId = Guid.NewGuid();
+            var newTestId = Guid.NewGuid();
+            _context.ChargeMaster.Add(new ChargeMaster { ChargeId = newChargeId, HospitalId = hospitalId, DisplayName = "LFT", DefaultRate = 400m, IsActive = true });
+            _context.PathologyTestMaster.Add(new PathologyTestMaster { TestId = newTestId, HospitalId = hospitalId, TestCode = "BIO-LFT", TestName = "LFT", ChargeId = newChargeId, IsActive = true });
+            _context.SaveChanges();
+
+            _mediatorMock
+                .Setup(m => m.Send(It.IsAny<AddChargeEventRequestModel>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new AddChargeEventResponseModel { Success = false, Message = "Encounter is not open (current status: FINALIZED)." });
+
+            var response = await _handler.Handle(BaseCommand(hospitalId, orderId, "PTID00000001", order.EncounterId!.Value, testId, newTestId), CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(response.BillingWarning, Does.Contain("Encounter is not open"));
+        }
+
+        [Test]
         public async Task Handle_RemovePendingLineWithNoCharge_DeletesLineWithoutVoiding()
         {
             var (hospitalId, orderId, testId, _) = SeedOrderWithOneTest(labPathTrigger: "ON_REPORT_APPROVAL");

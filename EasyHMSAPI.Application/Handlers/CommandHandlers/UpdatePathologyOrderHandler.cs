@@ -177,6 +177,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 await _context.SaveChangesAsync(cancellationToken);
 
+                string? billingWarning = null;
                 if (autoBillOnOrder)
                 {
                     var billingEncounterId = await PathologyAutoBillingHelper.ResolveBillingEncounterIdAsync(
@@ -198,7 +199,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 _context, request.HospitalId, testIdsToBill, order.OrderId.ToString(), order.OrderedByDoctorId, cancellationToken);
                             if (charges.Any())
                             {
-                                await _mediator.Send(new AddChargeEventRequestModel
+                                var chargeResponse = await _mediator.Send(new AddChargeEventRequestModel
                                 {
                                     HospitalId = request.HospitalId,
                                     PatientId = order.PatientId,
@@ -207,12 +208,22 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                     LoggedInUserId = request.LoggedInUserId,
                                     LoggedInUserName = actor
                                 }, cancellationToken);
+                                if (chargeResponse.Success != true)
+                                {
+                                    billingWarning = $"Order updated, but auto-billing failed: {chargeResponse.Message} " +
+                                        "Add the charge manually from the Billing tab.";
+                                }
                             }
                         }
                     }
+                    else if (addedTestIds.Count > 0 || billingContextChanged)
+                    {
+                        billingWarning = "Order updated, but auto-billing was skipped: no open visit/encounter to bill against. " +
+                            "Add the charge manually from the Billing tab.";
+                    }
                 }
 
-                return new UpdatePathologyOrderResponseModel { Success = true };
+                return new UpdatePathologyOrderResponseModel { Success = true, BillingWarning = billingWarning };
             }
             catch (Exception ex)
             {

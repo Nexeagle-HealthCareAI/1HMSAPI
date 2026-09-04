@@ -107,6 +107,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 await _context.SaveChangesAsync(cancellationToken);
 
                 // 2. Billing Integration
+                string? billingWarning = null;
                 if (autoBill)
                 {
                     // IPD orders carry AdmissionId instead of EncounterId -- resolve the admission's
@@ -132,8 +133,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 LoggedInUserName = request.LoggedInUserName
                             };
 
-                            await _mediator.Send(chargeRequest, cancellationToken);
+                            var chargeResponse = await _mediator.Send(chargeRequest, cancellationToken);
+                            if (chargeResponse.Success != true)
+                            {
+                                billingWarning = $"Order placed, but auto-billing failed: {chargeResponse.Message} " +
+                                    "Add the charge manually from the Billing tab.";
+                            }
                         }
+                    }
+                    else
+                    {
+                        billingWarning = "Order placed, but auto-billing was skipped: no open visit/encounter to bill against. " +
+                            "Add the charge manually from the Billing tab.";
                     }
                 }
 
@@ -141,7 +152,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 {
                     Success = true,
                     OrderId = order.OrderId,
-                    OrderNo = orderNo
+                    OrderNo = orderNo,
+                    BillingWarning = billingWarning
                 };
             }
             catch (Exception ex)
