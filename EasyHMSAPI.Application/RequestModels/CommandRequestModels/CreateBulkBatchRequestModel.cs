@@ -10,6 +10,10 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     {
         public string StoreCode { get; set; } = string.Empty;
         public string ItemCode { get; set; } = string.Empty;
+        // Only used when ItemCode doesn't resolve to an existing InventoryItem -- the handler then
+        // auto-creates a new catalogue entry (Category=DRUG) from this name instead of rejecting
+        // the row, so a brand-new medicine can be added and stocked in one upload.
+        public string? ItemName { get; set; }
         public string BatchNumber { get; set; } = string.Empty;
         public DateTime? ManufactureDate { get; set; }
         public DateTime? ExpiryDate { get; set; }

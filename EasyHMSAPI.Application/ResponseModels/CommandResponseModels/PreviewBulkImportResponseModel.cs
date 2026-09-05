@@ -24,6 +24,10 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
 
         public string? StoreCode { get; set; }
         public string? ItemCode { get; set; }
+        public string? ItemName { get; set; }
+        // True when ItemCode doesn't exist in the catalogue yet but an ItemName was supplied --
+        // BulkBatchCommandHandlers will create the medicine automatically as part of the commit.
+        public bool WillCreateItem { get; set; }
         public string? BatchNumber { get; set; }
         public DateTime? ManufactureDate { get; set; }
         public DateTime? ExpiryDate { get; set; }

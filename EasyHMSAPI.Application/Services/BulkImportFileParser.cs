@@ -16,6 +16,10 @@ namespace EasyHMSAPI.Application.Services
         {
             ["STORECODE"] = new[] { "STORE", "STORECODE", "STORE CODE", "LOCATION" },
             ["ITEMCODE"] = new[] { "ITEM", "ITEMCODE", "ITEM CODE", "CODE", "PRODUCT CODE", "SKU" },
+            // Optional -- only needed when ITEMCODE doesn't already exist in the catalogue, in which
+            // case the commit step auto-creates a new medicine from this name instead of rejecting
+            // the row (see BulkBatchCommandHandlers). One-step "add medicine + stock it" workflow.
+            ["ITEMNAME"] = new[] { "ITEM NAME", "ITEMNAME", "NAME", "DRUG NAME", "MEDICINE NAME", "PRODUCT NAME" },
             ["BATCHNUMBER"] = new[] { "BATCH", "BATCHNO", "BATCH NO", "BATCH NUMBER", "BATCHNUMBER", "LOT", "LOT NO" },
             ["MANUFACTUREDATE"] = new[] { "MFG DATE", "MFG", "MANUFACTURE DATE", "MANUFACTUREDATE", "MFD" },
             ["EXPIRYDATE"] = new[] { "EXP DATE", "EXPIRY", "EXPIRY DATE", "EXPIRYDATE", "VAL DATE", "VALIDITY", "EXP" },

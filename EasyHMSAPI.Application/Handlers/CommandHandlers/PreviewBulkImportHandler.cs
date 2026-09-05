@@ -14,7 +14,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
         private static readonly string[] KnownFields =
         {
-            "STORECODE", "ITEMCODE", "BATCHNUMBER", "MANUFACTUREDATE", "EXPIRYDATE",
+            "STORECODE", "ITEMCODE", "ITEMNAME", "BATCHNUMBER", "MANUFACTUREDATE", "EXPIRYDATE",
             "RECEIVEDQTY", "UNITCOST", "MRP", "BARCODEVALUE",
         };
 
@@ -86,14 +86,25 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 row.StoreCode = raw.GetValueOrDefault("STORECODE")?.Trim();
                 row.ItemCode = raw.GetValueOrDefault("ITEMCODE")?.Trim();
+                row.ItemName = raw.GetValueOrDefault("ITEMNAME")?.Trim();
                 row.BatchNumber = raw.GetValueOrDefault("BATCHNUMBER")?.Trim();
                 row.BarcodeValue = raw.GetValueOrDefault("BARCODEVALUE")?.Trim();
 
                 if (string.IsNullOrWhiteSpace(row.StoreCode)) errors.Add("Store code is missing.");
                 else if (!storeCodesUpper.Contains(row.StoreCode.ToUpperInvariant())) errors.Add($"Store code '{row.StoreCode}' not found.");
 
+                var itemCodeKnown = !string.IsNullOrWhiteSpace(row.ItemCode) && itemCodesUpper.Contains(row.ItemCode.ToUpperInvariant());
                 if (string.IsNullOrWhiteSpace(row.ItemCode)) errors.Add("Item code is missing.");
-                else if (!itemCodesUpper.Contains(row.ItemCode.ToUpperInvariant())) errors.Add($"Item code '{row.ItemCode}' not found.");
+                else if (!itemCodeKnown)
+                {
+                    // Not in the catalogue yet -- not a hard error as long as an Item Name was also
+                    // supplied, since the commit step will auto-create the medicine from it (one-step
+                    // "add medicine + stock it" instead of requiring the catalogue to be pre-populated).
+                    if (string.IsNullOrWhiteSpace(row.ItemName))
+                        errors.Add($"Item code '{row.ItemCode}' not found. Add an 'Item Name' column value to create it automatically.");
+                    else
+                        row.WillCreateItem = true;
+                }
 
                 if (string.IsNullOrWhiteSpace(row.BatchNumber)) errors.Add("Batch number is missing.");
 

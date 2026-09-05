@@ -75,6 +75,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
             var now = DateTime.UtcNow;
 
+            // Items auto-created by this same import run -- kept in-memory alongside `items` (which
+            // only reflects what was already in the DB before this request) so a later row for the
+            // same new code resolves to it, and so per-item CurrentStock updates below never need to
+            // re-query a not-yet-saved row.
+            var newlyCreatedItems = new Dictionary<string, InventoryItem>();
+
             using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
             try
             {
@@ -103,9 +109,46 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         continue;
                     }
 
-                    if (!items.TryGetValue(itemCode, out var inventoryItemId))
+                    Guid inventoryItemId;
+                    if (items.TryGetValue(itemCode, out var existingItemId))
                     {
-                        response.Errors.Add(new BulkBatchRowError { RowIndex = i, ErrorMessage = $"Item Code '{itemCode}' not found." });
+                        inventoryItemId = existingItemId;
+                    }
+                    else if (newlyCreatedItems.TryGetValue(itemCode, out var alreadyCreated))
+                    {
+                        inventoryItemId = alreadyCreated.InventoryItemId;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(row.ItemName))
+                    {
+                        // One-step "add medicine + stock it" -- the catalogue entry doesn't need to
+                        // pre-exist as long as the row supplies a name. Created with sane pharmacy
+                        // defaults; the pharmacist can fill in generic name/manufacturer/schedule/
+                        // reorder levels afterwards from the Medicine Catalog like any other item.
+                        var newItem = new InventoryItem
+                        {
+                            InventoryItemId = Guid.NewGuid(),
+                            HospitalId = request.HospitalId,
+                            ItemCode = row.ItemCode.Trim(),
+                            ItemName = row.ItemName.Trim(),
+                            Category = "DRUG",
+                            Unit = "PCS",
+                            DefaultRate = row.Mrp,
+                            CurrentStock = 0,
+                            MinStockLevel = 0,
+                            ReorderQty = 0,
+                            IsActive = true,
+                            CreatedAt = now,
+                            CreatedBy = request.LoggedInUserName,
+                            UpdatedAt = now,
+                            UpdatedBy = request.LoggedInUserName,
+                        };
+                        _context.InventoryItem.Add(newItem);
+                        newlyCreatedItems[itemCode] = newItem;
+                        inventoryItemId = newItem.InventoryItemId;
+                    }
+                    else
+                    {
+                        response.Errors.Add(new BulkBatchRowError { RowIndex = i, ErrorMessage = $"Item Code '{itemCode}' not found. Include an Item Name to create it automatically." });
                         continue;
                     }
 
@@ -180,8 +223,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     // invisible to both. Kept as plain field/row writes (not routed through
                     // RecordInventoryMovementRequestModel) since this handler already holds its own
                     // transaction and item/store locks aren't needed for a straight RECEIVE.
-                    var item = await _context.InventoryItem.FirstOrDefaultAsync(
-                        it => it.InventoryItemId == inventoryItemId && it.HospitalId == request.HospitalId, cancellationToken);
+                    var item = newlyCreatedItems.TryGetValue(itemCode, out var justCreated)
+                        ? justCreated
+                        : await _context.InventoryItem.FirstOrDefaultAsync(
+                            it => it.InventoryItemId == inventoryItemId && it.HospitalId == request.HospitalId, cancellationToken);
                     if (item != null)
                     {
                         item.CurrentStock += row.ReceivedQty;
@@ -210,6 +255,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     response.SuccessCount++;
                 }
 
+                response.CreatedItemCount = newlyCreatedItems.Count;
                 await _context.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
             }
@@ -226,7 +272,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
             else
             {
-                response.Message = $"Successfully processed all {response.SuccessCount} rows.";
+                response.Message = response.CreatedItemCount > 0
+                    ? $"Successfully processed all {response.SuccessCount} rows ({response.CreatedItemCount} new medicine(s) added to the catalogue)."
+                    : $"Successfully processed all {response.SuccessCount} rows.";
             }
 
             return response;

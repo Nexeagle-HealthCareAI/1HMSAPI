@@ -183,6 +183,59 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task Handle_UnknownItemCodeWithItemName_AutoCreatesMedicineAndBatch()
+        {
+            var request = ValidRequest(_hospitalId, new List<BulkBatchRowModel>
+            {
+                new() { StoreCode = "MAIN", ItemCode = "NEWMED", ItemName = "Brand New Tablet", BatchNumber = "B-500", ReceivedQty = 40, Mrp = 15m }
+            });
+
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True, response.Message);
+            Assert.That(response.SuccessCount, Is.EqualTo(1));
+            Assert.That(response.CreatedItemCount, Is.EqualTo(1));
+            var created = _context.InventoryItem.Single(i => i.ItemCode == "NEWMED");
+            Assert.That(created.ItemName, Is.EqualTo("Brand New Tablet"));
+            Assert.That(created.Category, Is.EqualTo("DRUG"));
+            Assert.That(created.CurrentStock, Is.EqualTo(40));
+            Assert.That(_context.Batch.Any(b => b.InventoryItemId == created.InventoryItemId && b.BatchNumber == "B-500"), Is.True);
+        }
+
+        [Test]
+        public async Task Handle_TwoRowsSameNewItemCode_CreatesOnlyOneMedicine()
+        {
+            var request = ValidRequest(_hospitalId, new List<BulkBatchRowModel>
+            {
+                new() { StoreCode = "MAIN", ItemCode = "NEWMED", ItemName = "Brand New Tablet", BatchNumber = "B-500", ReceivedQty = 40 },
+                new() { StoreCode = "MAIN", ItemCode = "NEWMED", ItemName = "Brand New Tablet", BatchNumber = "B-501", ReceivedQty = 10 },
+            });
+
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True, response.Message);
+            Assert.That(response.SuccessCount, Is.EqualTo(2));
+            Assert.That(response.CreatedItemCount, Is.EqualTo(1));
+            Assert.That(_context.InventoryItem.Count(i => i.ItemCode == "NEWMED"), Is.EqualTo(1));
+            var created = _context.InventoryItem.Single(i => i.ItemCode == "NEWMED");
+            Assert.That(created.CurrentStock, Is.EqualTo(50));
+        }
+
+        [Test]
+        public async Task Handle_UnknownItemCodeWithoutItemName_StillReportsRowError()
+        {
+            var request = ValidRequest(_hospitalId, new List<BulkBatchRowModel>
+            {
+                new() { StoreCode = "MAIN", ItemCode = "GHOST", BatchNumber = "B-001", ReceivedQty = 10 }
+            });
+
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Errors[0].ErrorMessage, Does.Contain("Item Name"));
+        }
+
+        [Test]
         public async Task Handle_SameBatchNumberDifferentExpiry_CreatesSeparateBatch()
         {
             var store = _context.Store.Single();
