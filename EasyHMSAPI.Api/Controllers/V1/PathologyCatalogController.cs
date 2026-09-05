@@ -113,5 +113,23 @@ namespace EasyHMSAPI.Api.Controllers.V1
                 return BadRequest(new { result.Message });
             return Ok(result);
         }
+
+        [HttpGet("{hospitalId}/report-keywords")]
+        public async Task<IActionResult> GetReportKeywords(Guid hospitalId, [FromQuery] Guid? testId, [FromQuery] bool includeInactive = false)
+        {
+            var result = await _mediator.Send(new GetPathologyReportKeywordsRequestModel { HospitalId = hospitalId, TestId = testId, IncludeInactive = includeInactive });
+            return Ok(result);
+        }
+
+        [HttpPost("{hospitalId}/report-keywords")]
+        public async Task<IActionResult> UpsertReportKeyword(Guid hospitalId, [FromBody] UpsertPathologyReportKeywordRequestModel request)
+        {
+            request.HospitalId = hospitalId;
+            request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+            var result = await _mediator.Send(request);
+            if (!result.Success)
+                return BadRequest(new { result.Message });
+            return Ok(result);
+        }
     }
 }
