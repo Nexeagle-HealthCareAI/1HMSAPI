@@ -51,6 +51,16 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     LabRegistrationNumber = request.LabRegistrationNumber,
                     TechnicianName = request.TechnicianName,
                     PathologistName = request.PathologistName,
+                    IsPubliclyListed = request.IsPubliclyListed,
+                    PublicDescription = request.PublicDescription,
+                    PublicContactPhone = request.PublicContactPhone,
+                    PublicContactEmail = request.PublicContactEmail,
+                    LabCity = request.LabCity,
+                    LabState = request.LabState,
+                    LabPincode = request.LabPincode,
+                    Latitude = request.Latitude,
+                    Longitude = request.Longitude,
+                    TestCategoriesJson = request.TestCategoriesJson,
                     CreatedAt = DateTime.UtcNow,
                     CreatedBy = request.LoggedInUserName ?? "System",
                     UpdatedAt = DateTime.UtcNow,
@@ -70,6 +80,16 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 config.LabRegistrationNumber = request.LabRegistrationNumber;
                 config.TechnicianName = request.TechnicianName;
                 config.PathologistName = request.PathologistName;
+                config.IsPubliclyListed = request.IsPubliclyListed;
+                config.PublicDescription = request.PublicDescription;
+                config.PublicContactPhone = request.PublicContactPhone;
+                config.PublicContactEmail = request.PublicContactEmail;
+                config.LabCity = request.LabCity;
+                config.LabState = request.LabState;
+                config.LabPincode = request.LabPincode;
+                config.Latitude = request.Latitude;
+                config.Longitude = request.Longitude;
+                config.TestCategoriesJson = request.TestCategoriesJson;
                 config.UpdatedAt = DateTime.UtcNow;
                 config.UpdatedBy = request.LoggedInUserName ?? "System";
                 _context.LabConfiguration.Update(config);

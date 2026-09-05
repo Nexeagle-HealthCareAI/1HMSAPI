@@ -24,6 +24,17 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? TechnicianName { get; set; }
         public string? PathologistName { get; set; }
 
+        public bool IsPubliclyListed { get; set; }
+        public string? PublicDescription { get; set; }
+        public string? PublicContactPhone { get; set; }
+        public string? PublicContactEmail { get; set; }
+        public string? LabCity { get; set; }
+        public string? LabState { get; set; }
+        public string? LabPincode { get; set; }
+        public decimal? Latitude { get; set; }
+        public decimal? Longitude { get; set; }
+        public string? TestCategoriesJson { get; set; }
+
         [JsonIgnore]
         public string? LoggedInUserName { get; set; }
     }

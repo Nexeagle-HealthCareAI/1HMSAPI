@@ -41,6 +41,30 @@ namespace EasyHMSAPI.Domain.Entities
         public string? TechnicianName { get; set; }
         public string? PathologistName { get; set; }
 
+        // Doctor Dekho public listing -- an INDEPENDENT opt-in, unlike Doctor's listing which also
+        // requires Hospital.IsPubliclyListed. A lab shows up on the public directory purely on its
+        // own toggle; the hospital that owns it doesn't need to be separately listed for doctor
+        // consultations. See GetPublicLabsHandler.cs.
+        public bool IsPubliclyListed { get; set; }
+        public string? PublicDescription { get; set; }
+        public string? PublicContactPhone { get; set; }
+        public string? PublicContactEmail { get; set; }
+
+        // Structured location fields for the public directory's city/state search -- distinct from
+        // the freetext LabAddress above, the same way Hospital keeps both a freetext Location AND
+        // separate City/State/Pincode columns (IX_Hospitals_City_State mirrors this exact split).
+        public string? LabCity { get; set; }
+        public string? LabState { get; set; }
+        public string? LabPincode { get; set; }
+        public decimal? Latitude { get; set; }
+        public decimal? Longitude { get; set; }
+
+        // JSON array of free-text category strings (e.g. ["Hematology","Biochemistry"]) -- same
+        // "JSON array in a column" treatment as Doctor.LanguagesJson, deliberately not a managed
+        // reference taxonomy table (see MedicalSpeciality) since lab test categories don't need
+        // controlled-vocabulary cross-lab search yet.
+        public string? TestCategoriesJson { get; set; }
+
         // When true, the report renderer leaves the configured top/bottom margin band blank
         // (physical pre-printed stationery already has the hospital's header/footer on it) instead
         // of drawing the digital letterhead there. Superseded by LetterheadMode below -- left as-is,

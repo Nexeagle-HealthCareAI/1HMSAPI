@@ -147,6 +147,37 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Platform-wide pathology-lab directory -- an INDEPENDENT opt-in (LabConfiguration.
+        // IsPubliclyListed alone), unlike GetDoctors below which also requires Hospital.
+        // IsPubliclyListed. labId reuses this same paginated query with pageSize=1 for the
+        // single-lab detail fetch, same trick GetDoctors/doctorId uses (no separate detail route).
+        [HttpGet("labs")]
+        public async Task<ActionResult<GetPublicLabsResponseModel>> GetLabs(
+            [FromQuery] int page = 1, [FromQuery] int pageSize = 24,
+            [FromQuery] string? city = null, [FromQuery] string? state = null,
+            [FromQuery] string? search = null, [FromQuery] Guid? labId = null)
+        {
+            try
+            {
+                var request = new GetPublicLabsRequestModel
+                {
+                    Page = page < 1 ? 1 : page,
+                    PageSize = pageSize < 1 ? 24 : pageSize,
+                    City = city,
+                    State = state,
+                    Search = search,
+                    LabId = labId,
+                };
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetLabs");
+                return StatusCode(500, new { Message = "An error occurred while fetching labs." });
+            }
+        }
+
         [HttpGet("doctors")]
         public async Task<ActionResult<GetPublicDoctorsResponseModel>> GetDoctors(
             [FromQuery] int page = 1, [FromQuery] int pageSize = 24,
