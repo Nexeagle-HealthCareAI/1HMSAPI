@@ -28,7 +28,8 @@ namespace EasyHMSAPI.Api.Controllers
 
         [HttpGet("history")]
         public async Task<ActionResult<GetPharmacyBillingHistoryResponseModel>> GetHistory(
-            [FromQuery] Guid hospitalId, [FromQuery] DateTime? fromDate, [FromQuery] DateTime? toDate)
+            [FromQuery] Guid hospitalId, [FromQuery] DateTime? fromDate, [FromQuery] DateTime? toDate,
+            [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 50)
         {
             if (hospitalId == Guid.Empty)
                 return BadRequest(new { Message = "hospitalId is required." });
@@ -40,6 +41,8 @@ namespace EasyHMSAPI.Api.Controllers
                     HospitalId = hospitalId,
                     FromDate = fromDate,
                     ToDate = toDate,
+                    PageNumber = pageNumber,
+                    PageSize = pageSize,
                 });
                 return Ok(response);
             }

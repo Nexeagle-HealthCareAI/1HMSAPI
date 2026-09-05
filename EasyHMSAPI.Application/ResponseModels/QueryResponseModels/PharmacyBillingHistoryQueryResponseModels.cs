@@ -13,7 +13,12 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         // TotalAmount - TotalReturnedAmount -- what the pharmacist/manager actually cares about
         // when reconciling "how much did we really sell today."
         public decimal NetSalesAmount { get; set; }
+        // Every total above (TotalAmount/TotalReturnedAmount/NetSalesAmount/TotalBills) reflects
+        // the FULL filtered date range, not just the current page in `Bills` -- only the row list
+        // itself is paginated.
         public int TotalBills { get; set; }
+        public int PageNumber { get; set; }
+        public int PageSize { get; set; }
     }
 
     [ExcludeFromCodeCoverage]

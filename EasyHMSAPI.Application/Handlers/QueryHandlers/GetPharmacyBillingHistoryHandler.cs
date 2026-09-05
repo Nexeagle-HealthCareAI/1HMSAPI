@@ -114,15 +114,22 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .OrderByDescending(b => b.InvoiceDate)
                 .ToList();
 
+            // Totals reflect the full filtered set; only the returned row list is paginated.
             var totalAmount = grouped.Sum(b => b.NetAmount);
             var totalReturnedAmount = grouped.Sum(b => b.ReturnedAmount);
+            var pageNumber = request.PageNumber > 0 ? request.PageNumber : 1;
+            var pageSize = request.PageSize > 0 ? Math.Min(request.PageSize, 200) : 50;
+            var page = grouped.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
+
             return new GetPharmacyBillingHistoryResponseModel
             {
-                Bills = grouped,
+                Bills = page,
                 TotalAmount = totalAmount,
                 TotalReturnedAmount = totalReturnedAmount,
                 NetSalesAmount = totalAmount - totalReturnedAmount,
                 TotalBills = grouped.Count,
+                PageNumber = pageNumber,
+                PageSize = pageSize,
             };
         }
     }

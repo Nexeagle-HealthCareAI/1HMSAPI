@@ -13,5 +13,11 @@ namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
         public Guid HospitalId { get; set; }
         public DateTime? FromDate { get; set; }
         public DateTime? ToDate { get; set; }
+
+        // Optional -- omit both for the pre-pagination behavior (first 50 returned, same default).
+        // Without any cap, the "All Time" filter mode pulled the hospital's entire pharmacy sales
+        // history into memory and over the wire on every load.
+        public int PageNumber { get; set; } = 1;
+        public int PageSize { get; set; } = 50;
     }
 }

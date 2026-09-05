@@ -229,6 +229,56 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         }
 
         [Test]
+        public async Task Handle_Pagination_TotalsReflectFullSetButBillsAreOnlyThePage()
+        {
+            // 3 extra invoices today, on top of INV-BH-0001 already seeded in SetUp -- 4 total for
+            // "today" across this test.
+            for (int i = 0; i < 3; i++)
+            {
+                await SeedPharmacyInvoice($"INV-BH-PAGE-{i}", $"TAG-{i}", _today, "PHARMACY_COUNTER", "CASH", "cashier1", $"PTIDPAGE{i}", $"Patient {i}", 50m, 1m);
+            }
+            await _context.SaveChangesAsync();
+
+            var page1 = await _handler.Handle(new GetPharmacyBillingHistoryRequestModel
+            {
+                HospitalId = _hospitalId,
+                FromDate = _today,
+                ToDate = _today,
+                PageNumber = 1,
+                PageSize = 2,
+            }, CancellationToken.None);
+
+            Assert.That(page1.Bills, Has.Count.EqualTo(2), "only the page size, not every matching bill");
+            Assert.That(page1.TotalBills, Is.EqualTo(4), "totals still reflect the full filtered set");
+            Assert.That(page1.PageNumber, Is.EqualTo(1));
+            Assert.That(page1.PageSize, Is.EqualTo(2));
+
+            var page2 = await _handler.Handle(new GetPharmacyBillingHistoryRequestModel
+            {
+                HospitalId = _hospitalId,
+                FromDate = _today,
+                ToDate = _today,
+                PageNumber = 2,
+                PageSize = 2,
+            }, CancellationToken.None);
+
+            Assert.That(page2.Bills, Has.Count.EqualTo(2));
+            Assert.That(page1.Bills.Select(b => b.InvoiceNo), Is.Not.EquivalentTo(page2.Bills.Select(b => b.InvoiceNo)), "pages must not overlap");
+        }
+
+        [Test]
+        public async Task Handle_PageSizeOverCap_IsClampedTo200()
+        {
+            var response = await _handler.Handle(new GetPharmacyBillingHistoryRequestModel
+            {
+                HospitalId = _hospitalId,
+                PageSize = 10000,
+            }, CancellationToken.None);
+
+            Assert.That(response.PageSize, Is.EqualTo(200));
+        }
+
+        [Test]
         public async Task Handle_NoMatchingBills_ReturnsEmpty()
         {
             var response = await _handler.Handle(new GetPharmacyBillingHistoryRequestModel
