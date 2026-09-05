@@ -46,6 +46,42 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        [HttpGet("inventory")]
+        public async Task<ActionResult<GetBloodBankInventoryResponseModel>> GetInventory([FromQuery] Guid hospitalId, [FromQuery] string? status)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetBloodBankInventoryRequestModel { HospitalId = hospitalId, Status = status });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetInventory for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching blood bank inventory." });
+            }
+        }
+
+        [HttpGet("ledger")]
+        public async Task<ActionResult<GetBloodBankLedgerResponseModel>> GetLedger([FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetBloodBankLedgerRequestModel { HospitalId = hospitalId });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetLedger for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching the transfusion ledger." });
+            }
+        }
+
         [HttpGet("admission/{admissionId:guid}/history")]
         public async Task<ActionResult<GetAdmissionTransfusionHistoryResponseModel>> GetHistory([FromQuery] Guid hospitalId, Guid admissionId)
         {
