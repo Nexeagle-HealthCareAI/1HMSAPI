@@ -29,5 +29,12 @@ namespace EasyHMSAPI.Application.Services.Interfaces
         /// Requires a "lab_report_sent" template approved in Meta Business Manager; returns false
         /// (no-op) until that template exists.</summary>
         Task<bool> SendLabReportAsync(string mobileNumber, string documentLink, string fileName, string hospitalName, string patientName);
+
+        /// <summary>Notifies a doctor of a new online (Doctor Dekho) appointment request — patient
+        /// name, address, and a masked contact number (never the full number, over WhatsApp), plus
+        /// a link to log into 1HMS to view it. Requires a "doctor_new_online_appointment" template
+        /// approved in Meta Business Manager; returns false (no-op, matches SendLoginDetailsAsync's
+        /// behavior today) until that template exists.</summary>
+        Task<bool> SendDoctorNewOnlineAppointmentAlertAsync(string mobileNumber, string doctorName, string patientName, string maskedPatientMobile, string patientAddress, string loginUrl);
     }
 }

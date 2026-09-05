@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -8,9 +9,11 @@ using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
+using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.UnitTests.TestUtils;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
 using Moq;
 using NUnit.Framework;
 
@@ -22,6 +25,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         private AppDbContext _context = null!;
         private Mock<ISmsService> _smsServiceMock = null!;
         private Mock<IWhatsAppMessagingService> _whatsAppMessagingServiceMock = null!;
+        private Mock<IEmailService> _emailServiceMock = null!;
         private PublicBookAppointmentHandler _handler = null!;
         private Guid _hospitalId;
         private Doctor _doctor = null!;
@@ -36,7 +40,11 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                 .Setup(w => w.SendAppointmentConfirmationAsync(
                     It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
                 .ReturnsAsync(true);
-            _handler = new PublicBookAppointmentHandler(_context, _smsServiceMock.Object, _whatsAppMessagingServiceMock.Object, new MemoryCache(new MemoryCacheOptions()));
+            _emailServiceMock = new Mock<IEmailService>();
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?> { ["WebApp:BaseUrl"] = "https://1hms-test.example.com" })
+                .Build();
+            _handler = new PublicBookAppointmentHandler(_context, _smsServiceMock.Object, _whatsAppMessagingServiceMock.Object, _emailServiceMock.Object, new MemoryCache(new MemoryCacheOptions()), configuration);
 
             var user = TestDataFactory.SeedUser(_context);
             var hospital = TestDataFactory.SeedHospital(_context, user.UserID, isPubliclyListed: true);
@@ -261,6 +269,75 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var patient = await _context.PatientRegistrations.FirstAsync(p => p.Mobile == "9998887775");
             Assert.That(patient.MarketingConsent, Is.True, "A later booking that doesn't ask about consent must not revoke it.");
             Assert.That(patient.MarketingConsentAt, Is.EqualTo(consentedAt), "Timestamp of the original consent must be preserved, not overwritten.");
+        }
+
+        [Test]
+        public async Task Handle_NewBooking_NotifiesDoctorViaWhatsAppEmailAndInAppAlert()
+        {
+            var request = new PublicBookAppointmentRequestModel
+            {
+                DoctorId = _doctor.DoctorID,
+                PreferredDate = DateTime.Today.AddDays(1),
+                Patient = new Patient { FullName = "Alert Visitor", Mobile = "9998887780", AddressLine1 = "12 MG Road" },
+            };
+
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+
+            // Doctor's WhatsApp/email come from the seeded User (test@example.com / 1234567890),
+            // never from the patient's own contact details.
+            _whatsAppMessagingServiceMock.Verify(w => w.SendDoctorNewOnlineAppointmentAlertAsync(
+                "1234567890",
+                It.IsAny<string>(),
+                "Alert Visitor",
+                It.Is<string>(masked => masked.EndsWith("7780") && !masked.Contains("9998887780")),
+                "12 MG Road",
+                It.Is<string>(url => url.StartsWith("https://1hms-test.example.com"))), Times.Once);
+
+            _emailServiceMock.Verify(e => e.SendInvitationEmailAsync(
+                "test@example.com", "New online appointment request", It.IsAny<string>()), Times.Once);
+
+            var alert = await _context.Alert.FirstOrDefaultAsync(a => a.SourceRefId == response.AppointmentId.ToString() && a.AudienceUserId != null);
+            Assert.That(alert, Is.Not.Null);
+            Assert.That(alert!.AudienceUserId, Is.EqualTo(_doctor.UserID));
+            Assert.That(alert.DispatchInApp, Is.True);
+            Assert.That(alert.Body, Does.Not.Contain("9998887780"), "Full patient mobile must never appear in the doctor-facing alert body.");
+        }
+
+        [Test]
+        public async Task Handle_NewBooking_AlsoNotifiesHospitalAdminsButNotUnrelatedStaff()
+        {
+            var adminUser = TestDataFactory.SeedUser(_context, email: "admin@example.com", phone: "7770001111");
+            var nonAdminUser = TestDataFactory.SeedUser(_context, email: "nurse@example.com", phone: "7770002222");
+            _context.HospitalUsers.Add(new HospitalUser { HospitalUserID = Guid.NewGuid(), HospitalID = _hospitalId, UserID = adminUser.UserID });
+            _context.HospitalUsers.Add(new HospitalUser { HospitalUserID = Guid.NewGuid(), HospitalID = _hospitalId, UserID = nonAdminUser.UserID });
+            var adminRole = new Role { RoleID = Guid.NewGuid(), HospitalID = _hospitalId, RoleName = "AdminDoctor" };
+            var nurseRole = new Role { RoleID = Guid.NewGuid(), HospitalID = _hospitalId, RoleName = "Nurse" };
+            _context.Roles.AddRange(adminRole, nurseRole);
+            _context.UserRoles.Add(new UserRole { UserID = adminUser.UserID, RoleID = adminRole.RoleID });
+            _context.UserRoles.Add(new UserRole { UserID = nonAdminUser.UserID, RoleID = nurseRole.RoleID });
+            await _context.SaveChangesAsync();
+
+            var request = new PublicBookAppointmentRequestModel
+            {
+                DoctorId = _doctor.DoctorID,
+                PreferredDate = DateTime.Today.AddDays(1),
+                Patient = new Patient { FullName = "Admin Notify Visitor", Mobile = "9998887781" },
+            };
+
+            await _handler.Handle(request, CancellationToken.None);
+
+            _whatsAppMessagingServiceMock.Verify(w => w.SendDoctorNewOnlineAppointmentAlertAsync(
+                "7770001111", It.IsAny<string>(), "Admin Notify Visitor", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Once);
+            _emailServiceMock.Verify(e => e.SendInvitationEmailAsync("admin@example.com", "New online appointment request", It.IsAny<string>()), Times.Once);
+
+            _whatsAppMessagingServiceMock.Verify(w => w.SendDoctorNewOnlineAppointmentAlertAsync(
+                "7770002222", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+            _emailServiceMock.Verify(e => e.SendInvitationEmailAsync("nurse@example.com", It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+
+            var roleAlert = await _context.Alert.FirstOrDefaultAsync(a => a.AudienceRoles == "Admin,AdminDoctor");
+            Assert.That(roleAlert, Is.Not.Null);
         }
     }
 }

@@ -8,6 +8,8 @@ using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
+using System.Net;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
@@ -22,20 +24,27 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     /// HospitalId is resolved from DoctorId via PublicDirectoryHelpers (gated on both
     /// Hospital.IsPubliclyListed and Doctor.IsPubliclyListed) — never client-supplied, same
     /// reasoning GetPublicDoctorAvailabilityHandler uses.
+    /// Also fires NotifyDoctorAsync (WhatsApp + email + in-app Alert) at the moment the request
+    /// lands, so the doctor knows the instant an online request comes in rather than only when
+    /// front-desk later confirms it.
     /// </summary>
     public class PublicBookAppointmentHandler : IRequestHandler<PublicBookAppointmentRequestModel, PublicBookAppointmentResponseModel>
     {
         private readonly AppDbContext _context;
         private readonly ISmsService _smsService;
         private readonly IWhatsAppMessagingService _whatsAppMessagingService;
+        private readonly IEmailService _emailService;
         private readonly IMemoryCache _cache;
+        private readonly IConfiguration _configuration;
 
-        public PublicBookAppointmentHandler(AppDbContext context, ISmsService smsService, IWhatsAppMessagingService whatsAppMessagingService, IMemoryCache cache)
+        public PublicBookAppointmentHandler(AppDbContext context, ISmsService smsService, IWhatsAppMessagingService whatsAppMessagingService, IEmailService emailService, IMemoryCache cache, IConfiguration configuration)
         {
             _context = context;
             _smsService = smsService;
             _whatsAppMessagingService = whatsAppMessagingService;
+            _emailService = emailService;
             _cache = cache;
+            _configuration = configuration;
         }
 
         public async Task<PublicBookAppointmentResponseModel> Handle(PublicBookAppointmentRequestModel request, CancellationToken cancellationToken)
@@ -142,6 +151,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
             }
 
+            await NotifyDoctorAsync(appointment, hospitalId, request.DoctorId, patient, cancellationToken);
+
             return new PublicBookAppointmentResponseModel
             {
                 Success = true,
@@ -150,6 +161,204 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 PatientId = patient.PatientId,
                 IsReminderSent = isReminderSent,
             };
+        }
+
+        // Alerts the treating doctor AND every Admin/AdminDoctor at the hospital across all three
+        // channels the instant an online (Doctor Dekho) request lands — WhatsApp/email never expose
+        // the patient's full number (only the hospital's own staff, confirming the appointment, need
+        // that), and the in-app Alert reuses the same bell/notification-center pipeline every other
+        // module already dispatches through. Every channel here is best-effort: none of them can
+        // fail the booking that already succeeded.
+        private async Task NotifyDoctorAsync(Appointment appointment, Guid hospitalId, Guid doctorId, PatientRegistration patient, CancellationToken cancellationToken)
+        {
+            var doctorInfo = await _context.Doctors
+                .Where(d => d.DoctorID == doctorId)
+                .Select(d => new
+                {
+                    d.User.UserID,
+                    d.User.MobileNumber,
+                    d.User.Email,
+                    DoctorName = d.User.UserProfiles.FirstOrDefault()!.FullName,
+                })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (doctorInfo == null)
+                return;
+
+            var hospitalName = await _context.Hospitals
+                .Where(h => h.HospitalID == hospitalId)
+                .Select(h => h.Name)
+                .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
+
+            var patientName = patient.FullName ?? "A patient";
+            var patientAddress = string.IsNullOrWhiteSpace(patient.AddressLine) ? "Not provided" : patient.AddressLine;
+            var maskedMobile = MaskMobile(patient.Mobile);
+            var webAppBaseUrl = (_configuration["WebApp:BaseUrl"] ?? "https://1hms.nexeagle.com").TrimEnd('/');
+            var loginUrl = $"{webAppBaseUrl}/appointment-dashboard";
+            var treatingDoctorName = doctorInfo.DoctorName ?? "Doctor";
+
+            // Admin/AdminDoctor users at this hospital — same role names + case-insensitive match
+            // CallerGuards.IsAdminAsync uses. Excludes the treating doctor themselves (they're
+            // notified above regardless of whether they also hold an Admin/AdminDoctor role) so
+            // nobody gets the same alert twice.
+            var adminRoleNames = new[] { "admin", "admindoctor" };
+            var admins = await (from hu in _context.HospitalUsers.AsNoTracking()
+                                 join u in _context.Users.AsNoTracking() on hu.UserID equals u.UserID
+                                 join ur in _context.UserRoles.AsNoTracking() on u.UserID equals ur.UserID
+                                 join r in _context.Roles.AsNoTracking() on ur.RoleID equals r.RoleID
+                                 where hu.HospitalID == hospitalId
+                                       && (r.HospitalID == hospitalId || r.IsSystemDefined)
+                                       && u.UserID != doctorInfo.UserID
+                                 select new { u.UserID, u.MobileNumber, u.Email, RoleName = r.RoleName }
+                                ).ToListAsync(cancellationToken);
+
+            var adminUsers = admins
+                .Where(a => !string.IsNullOrWhiteSpace(a.RoleName) && adminRoleNames.Contains(a.RoleName.Trim().ToLowerInvariant()))
+                .GroupBy(a => a.UserID)
+                .Select(g => g.First())
+                .ToList();
+
+            await SendAppointmentAlertAsync(doctorInfo.MobileNumber, doctorInfo.Email, treatingDoctorName, isTreatingDoctor: true, treatingDoctorName, patientName, maskedMobile, patientAddress, hospitalName, loginUrl);
+            foreach (var admin in adminUsers)
+            {
+                await SendAppointmentAlertAsync(admin.MobileNumber, admin.Email, "there", isTreatingDoctor: false, treatingDoctorName, patientName, maskedMobile, patientAddress, hospitalName, loginUrl);
+            }
+
+            try
+            {
+                var now = DateTime.UtcNow;
+                var body = $"{patientName} ({maskedMobile}) requested an appointment with Dr. {treatingDoctorName} via Doctor Dekho.";
+                _context.Alert.Add(new Alert
+                {
+                    AlertId = Guid.NewGuid(),
+                    HospitalId = hospitalId,
+                    AlertCode = "ONLINE_APPOINTMENT_REQUEST",
+                    Severity = "INFO",
+                    Title = "New online appointment request",
+                    Body = body,
+                    PatientId = patient.PatientId,
+                    AudienceUserId = doctorInfo.UserID,
+                    Status = "ACTIVE",
+                    RaisedAt = now,
+                    SourceModule = "PublicBookAppointment",
+                    SourceRefId = appointment.ApptId.ToString(),
+                    DispatchInApp = true,
+                    CreatedAt = now,
+                });
+                // Separate role-targeted row (rather than one row per admin) — same AudienceRoles
+                // convention every other alert-raising handler uses for a group audience.
+                _context.Alert.Add(new Alert
+                {
+                    AlertId = Guid.NewGuid(),
+                    HospitalId = hospitalId,
+                    AlertCode = "ONLINE_APPOINTMENT_REQUEST",
+                    Severity = "INFO",
+                    Title = "New online appointment request",
+                    Body = body,
+                    PatientId = patient.PatientId,
+                    AudienceRoles = "Admin,AdminDoctor",
+                    Status = "ACTIVE",
+                    RaisedAt = now,
+                    SourceModule = "PublicBookAppointment",
+                    SourceRefId = appointment.ApptId.ToString(),
+                    DispatchInApp = true,
+                    CreatedAt = now,
+                });
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+            catch
+            {
+                // Best-effort — never fail the booking because the in-app alert insert threw.
+            }
+        }
+
+        // One recipient's WhatsApp + email send, shared by the treating doctor and every hospital
+        // admin — the only difference is the greeting ("Dr. {name}" vs a plain "there") and whether
+        // the WhatsApp template's doctor_name slot describes the recipient themselves or just gives
+        // an admin recipient context on which doctor the request is for.
+        private async Task SendAppointmentAlertAsync(string? mobileNumber, string? email, string greetingName, bool isTreatingDoctor, string treatingDoctorName, string patientName, string maskedMobile, string patientAddress, string hospitalName, string loginUrl)
+        {
+            if (!string.IsNullOrWhiteSpace(mobileNumber))
+            {
+                try
+                {
+                    await _whatsAppMessagingService.SendDoctorNewOnlineAppointmentAlertAsync(
+                        mobileNumber,
+                        treatingDoctorName,
+                        patientName,
+                        maskedMobile,
+                        patientAddress,
+                        loginUrl);
+                }
+                catch
+                {
+                    // Best-effort — never fail the booking because WhatsApp delivery threw.
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(email))
+            {
+                try
+                {
+                    var html = BuildDoctorEmailBody(greetingName, isTreatingDoctor, treatingDoctorName, patientName, maskedMobile, patientAddress, hospitalName, loginUrl);
+                    await _emailService.SendInvitationEmailAsync(email, "New online appointment request", html);
+                }
+                catch
+                {
+                    // Best-effort — never fail the booking because the SMTP provider is down.
+                }
+            }
+        }
+
+        // Keeps only the last 4 digits visible — same convention WhatsAppMessagingService.MaskMobile
+        // uses for logs, applied here to the actual notification content per the "hide contact"
+        // requirement (doctors get enough to recognize a repeat caller, not the dialable number).
+        private static string MaskMobile(string? mobile)
+        {
+            if (string.IsNullOrEmpty(mobile) || mobile.Length <= 4)
+                return "****";
+            return new string('*', mobile.Length - 4) + mobile[^4..];
+        }
+
+        private static string BuildDoctorEmailBody(string greetingName, bool isTreatingDoctor, string treatingDoctorName, string patientName, string maskedMobile, string patientAddress, string hospitalName, string loginUrl)
+        {
+            var hospitalLine = string.IsNullOrWhiteSpace(hospitalName)
+                ? string.Empty
+                : $"<p style='font-size:14px;color:#555;margin:0 0 16px;'>Hospital: <strong>{WebUtility.HtmlEncode(hospitalName)}</strong></p>";
+
+            var greeting = isTreatingDoctor ? $"Hi Dr. {WebUtility.HtmlEncode(greetingName)}," : $"Hi {WebUtility.HtmlEncode(greetingName)},";
+            var intro = isTreatingDoctor
+                ? "A patient just requested an appointment with you via Doctor Dekho."
+                : $"A patient just requested an appointment with Dr. {WebUtility.HtmlEncode(treatingDoctorName)} via Doctor Dekho.";
+
+            return $@"
+                <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;'>
+                    <div style='background-color: #f8f9fa; padding: 24px; border-radius: 8px;'>
+                        <h2 style='color: #4f46e5; margin: 0 0 16px;'>New Online Appointment Request</h2>
+                        <p style='font-size: 15px; color: #333; margin: 0 0 8px;'>{greeting}</p>
+                        <p style='font-size: 15px; color: #333; margin: 0 0 16px;'>{intro}</p>
+                        {hospitalLine}
+                        <table style='border-collapse: collapse; margin: 8px 0 20px; width: 100%;'>
+                            <tr>
+                                <td style='padding:8px 16px; background:#eef2ff; color:#3730a3; font-weight:bold; border-radius:6px 0 0 0;'>Patient</td>
+                                <td style='padding:8px 16px; background:#ffffff; color:#111; border:1px solid #eef2ff;'>{WebUtility.HtmlEncode(patientName)}</td>
+                            </tr>
+                            <tr>
+                                <td style='padding:8px 16px; background:#eef2ff; color:#3730a3; font-weight:bold;'>Contact</td>
+                                <td style='padding:8px 16px; background:#ffffff; color:#111; border:1px solid #eef2ff;'>{WebUtility.HtmlEncode(maskedMobile)} (full number visible to hospital staff)</td>
+                            </tr>
+                            <tr>
+                                <td style='padding:8px 16px; background:#eef2ff; color:#3730a3; font-weight:bold; border-radius:0 0 0 6px;'>Address</td>
+                                <td style='padding:8px 16px; background:#ffffff; color:#111; border:1px solid #eef2ff;'>{WebUtility.HtmlEncode(patientAddress)}</td>
+                            </tr>
+                        </table>
+                        <p style='margin:0 0 20px;'>
+                            <a href='{WebUtility.HtmlEncode(loginUrl)}' style='background:#4f46e5;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold;'>Log in to view appointment</a>
+                        </p>
+                        <hr style='border: none; border-top: 1px solid #ddd; margin: 20px 0;'>
+                        <p style='font-size: 12px; color: #999; margin: 0;'>This is an automated message. Please do not reply to this email.</p>
+                    </div>
+                </div>";
         }
     }
 }
