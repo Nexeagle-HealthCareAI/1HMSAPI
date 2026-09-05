@@ -13,7 +13,15 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public decimal MinStockLevel { get; set; }
         public decimal MaxStockLevel { get; set; }
 
+        // Optional -- when supplied, also raises a real system-generated Indent (internal stock
+        // request) for this store, requesting enough to bring CurrentStock up to MaxStockLevel.
+        // Without this, "Accept" only ever adjusted the threshold numbers themselves and never
+        // actually requested any stock -- a dead-end suggestion that looked actionable but wasn't.
+        public Guid? RequestingStoreId { get; set; }
+
         [JsonIgnore]
         public string? LoggedInUserName { get; set; }
+        [JsonIgnore]
+        public Guid? LoggedInUserId { get; set; }
     }
 }

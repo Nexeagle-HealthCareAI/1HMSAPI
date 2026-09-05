@@ -159,6 +159,76 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         }
 
         [Test]
+        public async Task Handle_InvoiceWithProcessedReturn_SubtractsRefundFromNetSales()
+        {
+            // Regression test for a real audit finding: returns never adjusted the original
+            // BillingChargeEvent/BillingInvoice, so a returned sale used to still show its full
+            // original amount here with no sign of the refund -- net sales overstated.
+            var invoiceId = Guid.NewGuid();
+            var encounterId = Guid.NewGuid();
+            var chargeEventId = Guid.NewGuid();
+
+            _context.BillingInvoice.Add(new BillingInvoice
+            {
+                InvoiceId = invoiceId,
+                HospitalId = _hospitalId,
+                EncounterId = encounterId,
+                PatientId = "PTID999",
+                InvoiceNo = "INV-BH-RETURN",
+                InvoiceDate = _today,
+                NetAmount = 100m,
+                StatusCode = BillingConstants.InvoiceStatus.Finalized,
+                CreatedAt = _today,
+                CreatedBy = "cashier1",
+                UpdatedAt = _today,
+                UpdatedBy = "cashier1",
+            });
+            _context.BillingChargeEvent.Add(new BillingChargeEvent
+            {
+                ChargeEventId = chargeEventId,
+                HospitalId = _hospitalId,
+                EncounterId = encounterId,
+                DisplayName = "RETURNED-ITEM",
+                SourceModule = "PHARMACY_COUNTER",
+                Qty = 10,
+                UnitPrice = 10,
+                NetAmount = 100m,
+                StatusCode = BillingConstants.ChargeEventStatus.Posted,
+                ServiceDate = _today,
+                CreatedAt = _today,
+                UpdatedAt = _today,
+            });
+            _context.BillingInvoiceChargeEvent.Add(new BillingInvoiceChargeEvent { InvoiceId = invoiceId, ChargeEventId = chargeEventId });
+            _context.PharmacyReturn.Add(new PharmacyReturn
+            {
+                ReturnId = Guid.NewGuid(),
+                HospitalId = _hospitalId,
+                InvoiceId = invoiceId,
+                InvoiceNo = "INV-BH-RETURN",
+                PatientId = "PTID999",
+                EncounterId = encounterId,
+                ReturnNo = "PHRET-0001",
+                TotalRefundAmount = 40m,
+                ReturnedAt = _today,
+                CreatedAt = _today,
+            });
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetPharmacyBillingHistoryRequestModel
+            {
+                HospitalId = _hospitalId,
+                FromDate = _today,
+                ToDate = _today,
+            }, CancellationToken.None);
+
+            var row = response.Bills.Single(b => b.InvoiceNo == "INV-BH-RETURN");
+            Assert.That(row.NetAmount, Is.EqualTo(100m), "original charged amount is untouched");
+            Assert.That(row.ReturnedAmount, Is.EqualTo(40m));
+            Assert.That(response.TotalReturnedAmount, Is.EqualTo(40m));
+            Assert.That(response.NetSalesAmount, Is.EqualTo(response.TotalAmount - 40m));
+        }
+
+        [Test]
         public async Task Handle_NoMatchingBills_ReturnsEmpty()
         {
             var response = await _handler.Handle(new GetPharmacyBillingHistoryRequestModel
