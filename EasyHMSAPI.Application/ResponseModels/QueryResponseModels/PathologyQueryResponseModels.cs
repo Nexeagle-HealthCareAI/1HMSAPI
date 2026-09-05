@@ -17,6 +17,14 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? PatientMobile { get; set; }
         public int? PatientAgeYears { get; set; }
         public string? PatientGender { get; set; }
+        // Composed "AddressLine, City, State - Pincode" from PatientRegistration, skipping blank
+        // parts -- feeds the pathology report PDF's patient info block. Null when the patient has
+        // no address on file.
+        public string? PatientAddress { get; set; }
+        // Resolved from PathologyOrder.OrderedByDoctorId when the order originated from an OPD
+        // prescription or IPD clinical order -- null for walk-in/self orders, which have no
+        // referring doctor. Feeds the report PDF's "Referred By" line.
+        public string? OrderedByDoctorName { get; set; }
         public string? HospitalName { get; set; }
         public string? SourceType { get; set; }
         public bool IsStat { get; set; }

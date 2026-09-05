@@ -143,6 +143,34 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .FirstOrDefaultAsync(cancellationToken);
             order.PatientAgeYears = PathologyAgeCalculator.CalculateAgeYears(patientDob);
 
+            var patientAddressParts = await _context.PatientRegistrations
+                .Where(p => p.PatientId == order.PatientId)
+                .Select(p => new { p.AddressLine, p.City, p.State, p.Pincode })
+                .FirstOrDefaultAsync(cancellationToken);
+            if (patientAddressParts != null)
+            {
+                var line = patientAddressParts.AddressLine?.Trim();
+                var cityState = string.Join(", ", new[] { patientAddressParts.City, patientAddressParts.State }
+                    .Where(s => !string.IsNullOrWhiteSpace(s)));
+                var tail = string.IsNullOrWhiteSpace(patientAddressParts.Pincode)
+                    ? cityState
+                    : string.IsNullOrWhiteSpace(cityState) ? patientAddressParts.Pincode : $"{cityState} - {patientAddressParts.Pincode}";
+                order.PatientAddress = string.Join(", ", new[] { line, tail }.Where(s => !string.IsNullOrWhiteSpace(s)));
+                if (string.IsNullOrWhiteSpace(order.PatientAddress)) order.PatientAddress = null;
+            }
+
+            var orderedByDoctorId = await _context.PathologyOrder
+                .Where(o => o.HospitalId == request.HospitalId && o.OrderId == request.OrderId)
+                .Select(o => o.OrderedByDoctorId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (orderedByDoctorId.HasValue)
+            {
+                order.OrderedByDoctorName = await _context.Doctors
+                    .Where(d => d.DoctorID == orderedByDoctorId.Value)
+                    .Select(d => d.User.UserProfiles.FirstOrDefault()!.FullName)
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
+
             order.HospitalName = await _context.Hospitals
                 .Where(h => h.HospitalID == request.HospitalId)
                 .Select(h => h.Name)
