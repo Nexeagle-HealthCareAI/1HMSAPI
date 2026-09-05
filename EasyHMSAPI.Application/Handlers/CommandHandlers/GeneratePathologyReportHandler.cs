@@ -34,10 +34,39 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             _mediator = mediator;
         }
 
+        // The DbContext is configured with EnableRetryOnFailure, so any user-initiated transaction
+        // must run inside an execution strategy (as a retriable unit) -- same pattern as
+        // CreateDraftInvoiceHandler/CreatePathologyOrderHandler. A numbering conflict (two reports
+        // racing for the same LabReport NumberSeries row) is handled at this outer level: clear the
+        // change tracker and retry the WHOLE operation in a fresh transaction, rather than nesting
+        // a second retry loop inside an already-open transaction.
+        private const int MaxConcurrencyRetries = 3;
+
         public async Task<GeneratePathologyReportResponseModel> Handle(GeneratePathologyReportCommand request, CancellationToken cancellationToken)
         {
-            try
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            for (var attempt = 0; attempt < MaxConcurrencyRetries; attempt++)
             {
+                try
+                {
+                    return await strategy.ExecuteAsync(() => TryHandleAsync(request, cancellationToken));
+                }
+                catch (DbUpdateException) when (attempt < MaxConcurrencyRetries - 1)
+                {
+                    _context.ChangeTracker.Clear();
+                }
+                catch (Exception ex)
+                {
+                    return new GeneratePathologyReportResponseModel { Success = false, Message = ex.Message };
+                }
+            }
+
+            return new GeneratePathologyReportResponseModel { Success = false, Message = "Report numbering contention. Please retry." };
+        }
+
+        private async Task<GeneratePathologyReportResponseModel> TryHandleAsync(GeneratePathologyReportCommand request, CancellationToken cancellationToken)
+        {
                 // 1. Validate the order exists and belongs to this hospital
                 var order = await _context.PathologyOrder
                     .FirstOrDefaultAsync(o => o.OrderId == request.OrderId && o.HospitalId == request.HospitalId, cancellationToken);
@@ -84,28 +113,23 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     : null;
                 var isNewReport = report == null;
 
+                // Report numbering and the report/result/line/order updates below must commit or
+                // roll back together -- previously the number series had its own SaveChangesAsync
+                // (inside the retry loop this replaces) separate from the final save at the bottom,
+                // so a crash/disconnect in between left a permanently burned report number with no
+                // report ever created. A gap, never a collision (NumberSeries carries a real
+                // RowVersion concurrency token), but still worth closing.
+                await using var tx = await _context.Database.BeginTransactionAsync(cancellationToken);
+
                 if (report == null)
                 {
-                    string reportNo = string.Empty;
-                    for (int attempt = 0; attempt < 5; attempt++)
-                    {
-                        try
-                        {
-                            var numberSeries = await NumberSeriesDefaults.GetOrCreateAsync(
-                                _context, request.HospitalId, BillingConstants.NumberSeriesCode.LabReport, request.LoggedInUserName, cancellationToken);
-                            numberSeries.CurrentValue++;
-                            reportNo = NumberSeriesFormatter.Format(
-                                numberSeries.Prefix, numberSeries.YearFormat, numberSeries.Separator, numberSeries.PadLength, numberSeries.CurrentValue);
-                            numberSeries.UpdatedAt = now;
-                            numberSeries.UpdatedBy = request.LoggedInUserName;
-                            break;
-                        }
-                        catch (DbUpdateException)
-                        {
-                            _context.ChangeTracker.Clear();
-                            if (attempt == 4) throw;
-                        }
-                    }
+                    var numberSeries = await NumberSeriesDefaults.GetOrCreateAsync(
+                        _context, request.HospitalId, BillingConstants.NumberSeriesCode.LabReport, request.LoggedInUserName, cancellationToken);
+                    numberSeries.CurrentValue++;
+                    var reportNo = NumberSeriesFormatter.Format(
+                        numberSeries.Prefix, numberSeries.YearFormat, numberSeries.Separator, numberSeries.PadLength, numberSeries.CurrentValue);
+                    numberSeries.UpdatedAt = now;
+                    numberSeries.UpdatedBy = request.LoggedInUserName;
 
                     Guid? newTemplateId = request.TemplateId;
                     if (!newTemplateId.HasValue)
@@ -167,7 +191,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
 
                 await _context.SaveChangesAsync(cancellationToken);
+                await tx.CommitAsync(cancellationToken);
 
+                // Billing is deliberately OUTSIDE the transaction above -- a billing failure must
+                // not undo an already-committed report (same soft-fail philosophy as
+                // CollectPathologySampleHandler's billing dispatch).
                 // 6. Auto-bill the first time a report is generated for THIS test, if the hospital's
                 // billing policy is configured for it. Deliberately NOT re-dispatched on a
                 // regenerate (isNewReport guard) -- AddChargeEventHandler has no dedup for this
@@ -189,11 +217,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     ReportId = report.ReportId,
                     ReportNo = report.ReportNo
                 };
-            }
-            catch (Exception ex)
-            {
-                return new GeneratePathologyReportResponseModel { Success = false, Message = ex.Message };
-            }
         }
 
         private async Task DispatchReportGenerationBillingAsync(
