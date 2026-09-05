@@ -23,6 +23,24 @@ namespace EasyHMSAPI.Domain.Entities
         public string? Iso15189Number { get; set; }
         public string? IcmrRegistrationId { get; set; }
 
+        // The lab's own identity for its report letterhead -- distinct from the hospital's generic
+        // Name/Location-City-State-Pincode/RegistrationNumber (Hospital.cs), which a multi-service
+        // facility's pathology lab may not want to reuse verbatim. Null/empty falls back to the
+        // corresponding Hospital field at render time (see resolvePathologyBranding.ts) rather than
+        // requiring every lab to re-type data the hospital profile already has.
+        public string? LabName { get; set; }
+        public string? LabAddress { get; set; }
+        public string? LabRegistrationNumber { get; set; }
+
+        // Printed as a static manual sign-off line at the bottom of every generated report -- not a
+        // per-report workflow (see the dead Technician*/Pathologist*/ApprovedAt columns on
+        // PathologyReport.cs, left from a removed sign-off pipeline this does NOT resurrect).
+        // TechnicianName has no fallback anywhere in the system, so it's the one field the Pathology
+        // workspace gates new-order creation on; PathologistName stays optional since many labs have
+        // no in-house pathologist.
+        public string? TechnicianName { get; set; }
+        public string? PathologistName { get; set; }
+
         // When true, the report renderer leaves the configured top/bottom margin band blank
         // (physical pre-printed stationery already has the hospital's header/footer on it) instead
         // of drawing the digital letterhead there. Superseded by LetterheadMode below -- left as-is,

@@ -18,6 +18,12 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? LetterheadMode { get; set; }
         public string? ReportFieldLayoutJson { get; set; }
 
+        public string? LabName { get; set; }
+        public string? LabAddress { get; set; }
+        public string? LabRegistrationNumber { get; set; }
+        public string? TechnicianName { get; set; }
+        public string? PathologistName { get; set; }
+
         [JsonIgnore]
         public string? LoggedInUserName { get; set; }
     }
