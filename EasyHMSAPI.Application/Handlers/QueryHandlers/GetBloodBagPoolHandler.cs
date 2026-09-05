@@ -18,7 +18,15 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
         public async Task<GetBloodBagPoolResponseModel> Handle(GetBloodBagPoolRequestModel request, CancellationToken cancellationToken)
         {
-            var query = _context.BloodBag.Where(b => b.HospitalId == request.HospitalId && b.Status == IpdConstants.BloodBagStatus.Available);
+            // Excludes expired bags even though their Status may still read Available -- nothing
+            // sweeps expiry proactively, so a bag only actually flips to Discarded the next time
+            // someone tries to reserve/transfuse it (see BloodBankCommandHandlers). Filtering here
+            // too means an expired bag never even shows up as a reservable search result in the
+            // meantime.
+            var now = DateTime.UtcNow;
+            var query = _context.BloodBag.Where(b => b.HospitalId == request.HospitalId
+                && b.Status == IpdConstants.BloodBagStatus.Available
+                && b.ExpiresAt > now);
 
             if (!string.IsNullOrWhiteSpace(request.Component))
                 query = query.Where(b => b.Component == request.Component.Trim().ToUpperInvariant());

@@ -97,6 +97,22 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (set.CurrentStatus == IpdConstants.InstrumentSetStatus.Retired)
                     return new RecordInstrumentSetMovementResponseModel { Success = false, Message = "This set has been retired." };
 
+                // ISSUE_TO_OT is the only movement with a genuine patient-safety gate: a set must
+                // have completed the full loop back to AVAILABLE (sterilized, biological indicator
+                // passed, and formally received off the autoclave) before it can go to a case.
+                // Without this, the only block was CurrentStatus == Retired, so a set still
+                // STERILIZING (biological indicator result pending) or QUARANTINED (indicator
+                // failed) could be issued to OT with nothing stopping it.
+                if (movementType == IpdConstants.InstrumentSetMovementType.IssueToOt
+                    && set.CurrentStatus != IpdConstants.InstrumentSetStatus.Available)
+                {
+                    return new RecordInstrumentSetMovementResponseModel
+                    {
+                        Success = false,
+                        Message = $"Cannot issue to OT -- set is {set.CurrentStatus.Replace('_', ' ').ToLowerInvariant()}, not Available. It must complete sterilization and be received back on the shelf first."
+                    };
+                }
+
                 var now = DateTime.UtcNow;
                 var movement = new InstrumentSetMovement
                 {
