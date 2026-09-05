@@ -223,6 +223,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                     _context.BillingInvoice.Add(invoice);
                     invoiceIdResult = invoice.InvoiceId;
+                    // Saved before the link rows: BillingInvoiceChargeEvent.InvoiceId is a plain FK
+                    // column, not an EF navigation property, so nothing tells SaveChangesAsync to
+                    // insert the invoice first — without this, real SQL Server can insert a link row
+                    // before its invoice and trip FK_BICE_Invoice (same class of bug as the
+                    // PharmacyReturn/VendorReturn ordering fix, missed here since this is the one
+                    // pharmacy handler that builds both in a single SaveChanges call).
+                    await _context.SaveChangesAsync(cancellationToken);
 
                     foreach (var ce in chargeEvents)
                     {

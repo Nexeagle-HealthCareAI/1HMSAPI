@@ -170,8 +170,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         return new RecordInventoryMovementResponseModel { Success = false, Message = "Narcotic items must be dispensed via the narcotics dispense endpoint, not a plain movement." };
                     if (string.IsNullOrWhiteSpace(request.PrescriberRef))
                         return new RecordInventoryMovementResponseModel { Success = false, Message = "A prescriber reference is required to dispense a scheduled drug." };
-                    if (item.ScheduleClass == IpdConstants.DrugScheduleClass.Narcotic && string.IsNullOrWhiteSpace(request.WitnessBy))
-                        return new RecordInventoryMovementResponseModel { Success = false, Message = "A witness is required to dispense a narcotic." };
+                    if (item.ScheduleClass == IpdConstants.DrugScheduleClass.Narcotic)
+                    {
+                        if (string.IsNullOrWhiteSpace(request.WitnessBy) || !request.WitnessByUserId.HasValue)
+                            return new RecordInventoryMovementResponseModel { Success = false, Message = "A witness is required to dispense a narcotic." };
+                        // Without this, the dispensing pharmacist could type their own name (or the
+                        // caller could pass their own user id) as the "witness", defeating the entire
+                        // point of NDPS dual-control -- confirmed live-reachable since nothing
+                        // previously compared WitnessByUserId against the dispensing user.
+                        if (request.LoggedInUserId.HasValue && request.WitnessByUserId.Value == request.LoggedInUserId.Value)
+                            return new RecordInventoryMovementResponseModel { Success = false, Message = "The witness must be a different person from the dispensing user." };
+                    }
                 }
 
                 var allocations = new List<BatchAllocation>();
