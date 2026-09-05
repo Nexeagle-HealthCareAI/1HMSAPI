@@ -143,6 +143,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             UpdatedBy = request.LoggedInUserName,
                         };
                         _context.InventoryItem.Add(newItem);
+                        // Flush immediately -- Batch.InventoryItemId is a plain scalar FK copy with
+                        // no EF navigation property linking the two entities, so EF's dependency
+                        // graph has no way to know this row's about-to-be-added Batch must be
+                        // inserted after this InventoryItem. Without this, SaveChangesAsync at the
+                        // end of the loop can order the Batch insert first and violate FK_BATCH_Item
+                        // (confirmed live: real 500 on a real dev import before this fix).
+                        await _context.SaveChangesAsync(cancellationToken);
                         newlyCreatedItems[itemCode] = newItem;
                         inventoryItemId = newItem.InventoryItemId;
                     }
