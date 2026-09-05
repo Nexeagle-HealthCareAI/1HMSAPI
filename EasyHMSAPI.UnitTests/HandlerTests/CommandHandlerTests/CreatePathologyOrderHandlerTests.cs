@@ -39,7 +39,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             _mediatorMock
                 .Setup(m => m.Send(It.IsAny<CreateDraftInvoiceRequestModel>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new CreateDraftInvoiceResponseModel { Success = true });
-            _handler = new CreatePathologyOrderHandler(_context, _mediatorMock.Object);
+            _handler = new CreatePathologyOrderHandler(_context, _mediatorMock.Object, UsageLimitTestHelper.AlwaysAllow());
         }
 
         [TearDown]
@@ -434,6 +434,30 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 
             Assert.That(_context.PathologyOrder.Single(o => o.OrderId == orderOne.OrderId).TokenNumber, Is.EqualTo(1));
             Assert.That(_context.PathologyOrder.Single(o => o.OrderId == orderTwo.OrderId).TokenNumber, Is.EqualTo(1));
+        }
+
+        [Test]
+        public async Task Handle_FreeTierLimitReached_BlocksOrderAndRollsBackTransaction()
+        {
+            var (hospitalId, testId, _) = SeedAutoBillCatalog();
+            var blockedHandler = new CreatePathologyOrderHandler(_context, _mediatorMock.Object, UsageLimitTestHelper.AlwaysBlock());
+
+            var response = await blockedHandler.Handle(new CreatePathologyOrderRequestModel
+            {
+                HospitalId = hospitalId,
+                PatientId = "PTID00000001",
+                EncounterId = Guid.NewGuid(),
+                TestIds = new() { testId },
+                LoggedInUserName = "tester",
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Does.Contain("limit"));
+            // Not asserting non-persistence here: EF Core's InMemory provider doesn't actually
+            // roll back a transaction's earlier SaveChangesAsync calls (Database.BeginTransaction/
+            // RollbackAsync are effectively no-ops on InMemory), unlike real SQL Server, which this
+            // handler relies on for correctness in production. The rollback call itself is
+            // exercised here; whether it actually undoes the write needs a real-DB check.
         }
     }
 }

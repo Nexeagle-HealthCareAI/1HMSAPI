@@ -9,7 +9,6 @@ using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
-using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.UnitTests.TestUtils;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;

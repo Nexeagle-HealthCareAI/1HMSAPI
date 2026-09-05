@@ -171,6 +171,7 @@ builder.Services.AddScoped<IBlobStorageService, S3StorageService>();
 builder.Services.AddScoped<ISmsService, SmsService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IWhatsAppMessagingService, WhatsAppMessagingService>();
+builder.Services.AddScoped<IUsageLimitService, UsageLimitService>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IPatientTokenValidator, EasyHMSAPI.Application.Services.Implementations.PatientTokenValidator>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IGeoIpLookupService, EasyHMSAPI.Application.Services.Implementations.IpApiGeoLookupService>();
 builder.Services.AddScoped<IVoiceRxService, VoiceRxService>();

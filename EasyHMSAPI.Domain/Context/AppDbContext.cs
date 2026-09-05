@@ -168,6 +168,9 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<RestraintOrder> RestraintOrder { get; set; }
         public DbSet<HospitalSubscription> HospitalSubscriptions { get; set; }
         public DbSet<HospitalSubscriptionPayment> HospitalSubscriptionPayments { get; set; }
+        public DbSet<PlatformSetting> PlatformSetting { get; set; }
+        public DbSet<HospitalFreeTierLimit> HospitalFreeTierLimit { get; set; }
+        public DbSet<HospitalMonthlyUsage> HospitalMonthlyUsage { get; set; }
         public DbSet<Store> Store { get; set; }
         public DbSet<Batch> Batch { get; set; }
         public DbSet<StockLevel> StockLevel { get; set; }
@@ -435,6 +438,10 @@ namespace EasyHMSAPI.Domain.Context
             modelBuilder.Entity<Role>().HasKey(e => e.RoleID);
             modelBuilder.Entity<RolePermission>().HasKey(e => new { e.RoleID, e.PermissionKey });
             modelBuilder.Entity<UserRole>().HasKey(e => new { e.UserID, e.RoleID });
+
+            modelBuilder.Entity<PlatformSetting>().HasKey(e => e.SettingKey);
+            modelBuilder.Entity<HospitalFreeTierLimit>().HasKey(e => e.HospitalId);
+            modelBuilder.Entity<HospitalMonthlyUsage>().HasKey(e => new { e.HospitalId, e.YearMonth });
 
             modelBuilder.Entity<Hospital>().HasKey(e => e.HospitalID);
             modelBuilder.Entity<HospitalUser>().HasKey(e => e.HospitalUserID);

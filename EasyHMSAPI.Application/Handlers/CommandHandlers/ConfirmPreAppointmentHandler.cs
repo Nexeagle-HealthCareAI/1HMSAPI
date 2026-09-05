@@ -26,12 +26,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         private readonly AppDbContext _context;
         private readonly IWhatsAppMessagingService _whatsAppMessagingService;
         private readonly IMemoryCache _cache;
+        private readonly IUsageLimitService _usageLimitService;
 
-        public ConfirmPreAppointmentHandler(AppDbContext context, IWhatsAppMessagingService whatsAppMessagingService, IMemoryCache cache)
+        public ConfirmPreAppointmentHandler(AppDbContext context, IWhatsAppMessagingService whatsAppMessagingService, IMemoryCache cache, IUsageLimitService usageLimitService)
         {
             _context = context;
             _whatsAppMessagingService = whatsAppMessagingService;
             _cache = cache;
+            _usageLimitService = usageLimitService;
         }
 
         public async Task<ConfirmPreAppointmentResponseModel> Handle(ConfirmPreAppointmentRequestModel request, CancellationToken cancellationToken)
@@ -92,6 +94,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 cancellationToken);
             appointment.AppointmentType = typeResult.AppointmentType;
             appointment.ValidUptoDate = typeResult.ValidUptoDate;
+
+            // This is the genuine "OPD appointment" unit for the online (Doctor Dekho) channel --
+            // the initial public request (PublicBookAppointmentHandler) never counts or blocks,
+            // only the moment front-desk actually confirms it into a real, actionable appointment.
+            // Checked last, immediately before the save, so nothing above here has persisted yet
+            // if this blocks.
+            var usage = await _usageLimitService.TryConsumeAsync(request.HospitalId, cancellationToken);
+            if (!usage.Allowed)
+            {
+                return new ConfirmPreAppointmentResponseModel { Success = false, Message = usage.Message };
+            }
 
             await _context.SaveChangesAsync(cancellationToken);
 

@@ -12,6 +12,7 @@ using EasyHMSAPI.Domain.Entities;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Data.Services;
 using EasyHMSAPI.Application.Services;
+using EasyHMSAPI.Application.Services.Interfaces;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
@@ -19,11 +20,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     {
         private readonly AppDbContext _context;
         private readonly IMediator _mediator;
+        private readonly IUsageLimitService _usageLimitService;
 
-        public CreatePathologyOrderHandler(AppDbContext context, IMediator mediator)
+        public CreatePathologyOrderHandler(AppDbContext context, IMediator mediator, IUsageLimitService usageLimitService)
         {
             _context = context;
             _mediator = mediator;
+            _usageLimitService = usageLimitService;
         }
 
         // The DbContext is configured with EnableRetryOnFailure, so any user-initiated transaction
@@ -129,6 +132,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
             _context.PathologyOrderLine.AddRange(orderLines);
             await _context.SaveChangesAsync(cancellationToken);
+
+            // Last gate before commit -- a free-tier hospital's monthly quota, atomically checked
+            // and consumed together with this order inside the same transaction, so a limit
+            // breach here rolls the whole order back too (including the number series bump).
+            var usage = await _usageLimitService.TryConsumeAsync(request.HospitalId, cancellationToken);
+            if (!usage.Allowed)
+            {
+                await tx.RollbackAsync(cancellationToken);
+                return new CreatePathologyOrderResponseModel { Success = false, Message = usage.Message };
+            }
+
             await tx.CommitAsync(cancellationToken);
 
             // Billing is deliberately OUTSIDE the transaction above -- a billing failure must not

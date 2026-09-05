@@ -21,14 +21,16 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         private readonly IWhatsAppMessagingService _whatsAppMessagingService;
         private readonly IMediator _mediator;
         private readonly IMemoryCache _cache;
+        private readonly IUsageLimitService _usageLimitService;
 
-        public RegisterAppointmentHandler(AppDbContext context, ISmsService smsService, IWhatsAppMessagingService whatsAppMessagingService, IMediator mediator, IMemoryCache cache)
+        public RegisterAppointmentHandler(AppDbContext context, ISmsService smsService, IWhatsAppMessagingService whatsAppMessagingService, IMediator mediator, IMemoryCache cache, IUsageLimitService usageLimitService)
         {
             _context = context;
             _smsService = smsService;
             _whatsAppMessagingService = whatsAppMessagingService;
             _mediator = mediator;
             _cache = cache;
+            _usageLimitService = usageLimitService;
         }
 
         public async Task<RegisterAppointmentResponseModel> Handle(RegisterAppointmentRequestModel request, CancellationToken cancellationToken)
@@ -92,6 +94,24 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 else
                 {
                     throw new Exception("Patient not found for setting appointment type.");
+                }
+
+                // Walk-in OPD appointment creation counts toward the free-tier monthly quota --
+                // only for a genuinely NEW appointment, never an edit/reschedule of an existing one.
+                // No ambient transaction wraps this handler, so this is checked as late as
+                // practical (immediately before the save) to minimize a unit being wasted on an
+                // otherwise-successful booking that fails for an unrelated reason afterward.
+                if (isNewAppointment)
+                {
+                    var usage = await _usageLimitService.TryConsumeAsync(request.HospitalId, cancellationToken);
+                    if (!usage.Allowed)
+                    {
+                        // This handler has no Success flag on its response model -- every other
+                        // failure path here throws (see the doctor-not-active check above and the
+                        // catch blocks below), so a blocked booking must too, or the caller would
+                        // read this as a successful (if messageless-to-them) appointment.
+                        throw new EasyHMSAPI.Application.Exceptions.UsageLimitExceededException(usage.Message ?? "Free monthly limit reached.");
+                    }
                 }
 
                 // Save appointment first to ensure ApptId exists in DB
@@ -208,6 +228,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     RefundAmount = refundResult.billRefunded ? refundResult.refundAmount : null,
                     RefundReceiptNo = refundResult.refundReceiptNo
                 };
+            }
+            catch (EasyHMSAPI.Application.Exceptions.UsageLimitExceededException)
+            {
+                // Pass through unchanged -- a clean, user-facing message, not the diagnostic dump
+                // the catch-alls below build for genuine failures.
+                throw;
             }
             catch (DbUpdateException dbEx)
             {

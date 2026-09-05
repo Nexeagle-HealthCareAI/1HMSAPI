@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.CommandHandlers;
@@ -32,7 +33,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             _whatsAppServiceMock = new Mock<IWhatsAppMessagingService>();
             _mediatorMock = new Mock<IMediator>();
 
-            _handler = new RegisterAppointmentHandler(_context, _smsServiceMock.Object, _whatsAppServiceMock.Object, _mediatorMock.Object, new MemoryCache(new MemoryCacheOptions()));
+            _handler = new RegisterAppointmentHandler(_context, _smsServiceMock.Object, _whatsAppServiceMock.Object, _mediatorMock.Object, new MemoryCache(new MemoryCacheOptions()), UsageLimitTestHelper.AlwaysAllow());
         }
 
         [TearDown]
@@ -144,6 +145,31 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(appointment!.ApptDate.Date, Is.EqualTo(newDate.Date));
             Assert.That(appointment.StartAt.Date, Is.EqualTo(newDate.Date));
             Assert.That(appointment.EndAt.Date, Is.EqualTo(newDate.Date));
+        }
+
+        [Test]
+        public async Task Handle_FreeTierLimitReached_ThrowsAndNeverPersistsAppointment()
+        {
+            var user = TestDataFactory.SeedUser(_context);
+            var doctor = TestDataFactory.SeedDoctor(_context, user);
+            var hospitalId = Guid.NewGuid();
+            _context.Hospitals.Add(new Hospital { HospitalID = hospitalId, Name = "Hosp", Email = "e@m.com", Type = "General", RegistrationNumber = "REG001", Contact = "1234567890", Location = "Test Location", City = "Test City", State = "Test State", Country = "Test Country", Pincode = "123456", CreatedByUserID = Guid.NewGuid() });
+            await _context.SaveChangesAsync();
+
+            var blockedHandler = new RegisterAppointmentHandler(_context, _smsServiceMock.Object, _whatsAppServiceMock.Object, _mediatorMock.Object, new MemoryCache(new MemoryCacheOptions()), UsageLimitTestHelper.AlwaysBlock());
+            var request = new RegisterAppointmentRequestModel
+            {
+                UserId = user.UserID,
+                DoctorId = doctor.DoctorID,
+                HospitalId = hospitalId,
+                ApptDate = DateTime.Today.AddDays(1),
+                StartAt = DateTime.Today.AddDays(1).AddHours(10),
+                Patient = new Patient { FullName = "Blocked Patient", Mobile = "9998887766", Age = 30, Sex = "Male" },
+            };
+
+            var ex = Assert.ThrowsAsync<EasyHMSAPI.Application.Exceptions.UsageLimitExceededException>(() => blockedHandler.Handle(request, CancellationToken.None));
+            Assert.That(ex.Message, Does.Contain("limit"));
+            Assert.That(_context.Appointments.Any(a => a.HospitalId == hospitalId), Is.False, "A blocked booking must never be committed.");
         }
     }
 }

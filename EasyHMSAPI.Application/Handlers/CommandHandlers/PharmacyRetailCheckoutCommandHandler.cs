@@ -12,6 +12,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using EasyHMSAPI.Application.Services;
+using EasyHMSAPI.Application.Services.Interfaces;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
@@ -20,12 +21,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         private readonly AppDbContext _context;
         private readonly IMediator _mediator;
         private readonly ILogger<PharmacyRetailCheckoutCommandHandler> _logger;
+        private readonly IUsageLimitService _usageLimitService;
 
-        public PharmacyRetailCheckoutCommandHandler(AppDbContext context, IMediator mediator, ILogger<PharmacyRetailCheckoutCommandHandler> logger)
+        public PharmacyRetailCheckoutCommandHandler(AppDbContext context, IMediator mediator, ILogger<PharmacyRetailCheckoutCommandHandler> logger, IUsageLimitService usageLimitService)
         {
             _context = context;
             _mediator = mediator;
             _logger = logger;
+            _usageLimitService = usageLimitService;
         }
 
         public async Task<PharmacyRetailCheckoutResponseModel> Handle(PharmacyRetailCheckoutCommand request, CancellationToken cancellationToken)
@@ -273,6 +276,16 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     encounter.StatusCode = BillingConstants.EncounterStatus.Finalized;
                     _context.Encounter.Update(encounter);
                     await _context.SaveChangesAsync(cancellationToken);
+                }
+
+                // Last gate before commit -- a free-tier hospital's monthly quota, atomically
+                // checked and consumed together with this checkout inside the same transaction,
+                // so a limit breach here rolls the whole checkout back too.
+                var usage = await _usageLimitService.TryConsumeAsync(request.HospitalId, cancellationToken);
+                if (!usage.Allowed)
+                {
+                    await tx.RollbackAsync(cancellationToken);
+                    return new PharmacyRetailCheckoutResponseModel { Success = false, Message = usage.Message };
                 }
 
                 await tx.CommitAsync(cancellationToken);

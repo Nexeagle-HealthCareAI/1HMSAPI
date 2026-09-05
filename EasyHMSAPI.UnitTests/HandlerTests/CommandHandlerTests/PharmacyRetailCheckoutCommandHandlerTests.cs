@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.CommandHandlers;
@@ -30,7 +31,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         {
             _context = InMemoryDbContextFactory.CreateContext();
             _mediatorMock = new Mock<IMediator>();
-            _handler = new PharmacyRetailCheckoutCommandHandler(_context, _mediatorMock.Object, NullLogger<PharmacyRetailCheckoutCommandHandler>.Instance);
+            _handler = new PharmacyRetailCheckoutCommandHandler(_context, _mediatorMock.Object, NullLogger<PharmacyRetailCheckoutCommandHandler>.Instance, UsageLimitTestHelper.AlwaysAllow());
             _hospitalId = Guid.NewGuid();
             _storeId = Guid.NewGuid();
         }
@@ -315,6 +316,40 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 
             var encounterAfter = await _context.Encounter.FindAsync(admissionEncounterId);
             Assert.That(encounterAfter!.StatusCode, Is.EqualTo(BillingConstants.EncounterStatus.Open), "Admission's Encounter must stay open — IPD workflow manages its lifecycle, not the pharmacy checkout.");
+        }
+
+        [Test]
+        public async Task Handle_FreeTierLimitReached_BlocksCheckoutAndRollsBackTransaction()
+        {
+            var chargeId = Guid.NewGuid();
+            var chargeEventId = Guid.NewGuid();
+            var item = SeedDrugItem(chargeId);
+            await _context.SaveChangesAsync();
+            MockSuccessfulMovementAndCharge(chargeId, chargeEventId);
+            _mediatorMock.Setup(m => m.Send(It.IsAny<AddChargeEventRequestModel>(), It.IsAny<CancellationToken>()))
+                .Returns<AddChargeEventRequestModel, CancellationToken>((req, _) =>
+                {
+                    SeedChargeEvent(chargeEventId, req.EncounterId);
+                    _context.SaveChanges();
+                    return Task.FromResult(new AddChargeEventResponseModel
+                    {
+                        Success = true,
+                        Data = new AddChargesData { ChargeEvents = new() { new ChargeEventDetail { ChargeEventId = chargeEventId } } },
+                    });
+                });
+            _mediatorMock.Setup(m => m.Send(It.IsAny<AddPaymentEventRequestModel>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new AddPaymentEventResponseModel { Success = true });
+
+            var blockedHandler = new PharmacyRetailCheckoutCommandHandler(_context, _mediatorMock.Object, NullLogger<PharmacyRetailCheckoutCommandHandler>.Instance, UsageLimitTestHelper.AlwaysBlock());
+            var response = await blockedHandler.Handle(ValidRequest(item.InventoryItemId), CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Does.Contain("limit"));
+            // Not asserting non-persistence here: EF Core's InMemory provider doesn't actually
+            // roll back a transaction's earlier SaveChangesAsync calls (Database.BeginTransaction/
+            // RollbackAsync are effectively no-ops on InMemory), unlike real SQL Server, which this
+            // handler relies on for correctness in production. The rollback call itself is
+            // exercised here; whether it actually undoes the write needs a real-DB check.
         }
     }
 }
