@@ -44,13 +44,15 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     IsStat = o.IsStat,
                     TokenNumber = o.TokenNumber,
                     Notes = o.Notes,
-                    // Get patient name if possible, assuming PatientRegistration is joined
+                    // HospitalId included in both joins below even though PatientId alone is already
+                    // globally unique -- defense-in-depth against any future patient-numbering
+                    // scheme where that stops being true (see the pathology module audit).
                     PatientName = _context.PatientRegistrations
-                        .Where(p => p.PatientId == o.PatientId)
+                        .Where(p => p.PatientId == o.PatientId && p.HospitalId == o.HospitalId)
                         .Select(p => p.FullName)
                         .FirstOrDefault() ?? "Unknown",
                     PatientMobile = _context.PatientRegistrations
-                        .Where(p => p.PatientId == o.PatientId)
+                        .Where(p => p.PatientId == o.PatientId && p.HospitalId == o.HospitalId)
                         .Select(p => p.Mobile)
                         .FirstOrDefault(),
                     // Dashboard-list-only fields -- lets the Pathology Lab table show test count and
@@ -82,7 +84,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
             var patientIds = orders.Select(o => o.PatientId).Distinct().ToList();
             var dobByPatient = await _context.PatientRegistrations
-                .Where(p => p.PatientId != null && patientIds.Contains(p.PatientId))
+                .Where(p => p.PatientId != null && patientIds.Contains(p.PatientId) && p.HospitalId == request.HospitalId)
                 .Select(p => new { p.PatientId, p.DateOfBirth })
                 .ToListAsync(cancellationToken);
             var dobLookup = dobByPatient.ToDictionary(p => p.PatientId!, p => p.DateOfBirth);
@@ -124,12 +126,15 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     EncounterId = o.EncounterId,
                     AdmissionId = o.AdmissionId,
                     ReportFieldValuesJson = o.ReportFieldValuesJson,
+                    // HospitalId included in every join below even though PatientId alone is already
+                    // globally unique -- defense-in-depth against any future patient-numbering
+                    // scheme where that stops being true (see the pathology module audit).
                     PatientName = _context.PatientRegistrations
-                        .Where(p => p.PatientId == o.PatientId)
+                        .Where(p => p.PatientId == o.PatientId && p.HospitalId == o.HospitalId)
                         .Select(p => p.FullName)
                         .FirstOrDefault() ?? "Unknown",
                     PatientGender = _context.PatientRegistrations
-                        .Where(p => p.PatientId == o.PatientId)
+                        .Where(p => p.PatientId == o.PatientId && p.HospitalId == o.HospitalId)
                         .Select(p => p.Sex)
                         .FirstOrDefault(),
                 })
@@ -138,13 +143,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             if (order == null) return new PathologyOrderDto();
 
             var patientDob = await _context.PatientRegistrations
-                .Where(p => p.PatientId == order.PatientId)
+                .Where(p => p.PatientId == order.PatientId && p.HospitalId == request.HospitalId)
                 .Select(p => p.DateOfBirth)
                 .FirstOrDefaultAsync(cancellationToken);
             order.PatientAgeYears = PathologyAgeCalculator.CalculateAgeYears(patientDob);
 
             var patientAddressParts = await _context.PatientRegistrations
-                .Where(p => p.PatientId == order.PatientId)
+                .Where(p => p.PatientId == order.PatientId && p.HospitalId == request.HospitalId)
                 .Select(p => new { p.AddressLine, p.City, p.State, p.Pincode })
                 .FirstOrDefaultAsync(cancellationToken);
             if (patientAddressParts != null)

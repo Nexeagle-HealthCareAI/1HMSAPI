@@ -63,6 +63,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return new UpdatePathologyOrderResponseModel { Success = false, Message = "One or more selected tests are not in this hospital's catalog." };
                 }
 
+                // Same ownership gate as TestIds above -- PatientId is a globally-unique identifier,
+                // not a per-hospital secret, so without this check this endpoint could reassign an
+                // order onto another hospital's patient and leak that patient's PII back through
+                // GetPathologyOrderByIdHandler. Checked unconditionally (not just when the patient
+                // is actually changing) so this endpoint is safe even if a caller never validated it.
+                var patientBelongsToHospital = await _context.PatientRegistrations
+                    .AnyAsync(p => p.PatientId == request.PatientId && p.HospitalId == request.HospitalId, cancellationToken);
+                if (!patientBelongsToHospital)
+                {
+                    return new UpdatePathologyOrderResponseModel { Success = false, Message = "Patient not found in this hospital." };
+                }
+
                 var existingLines = await _context.PathologyOrderLine
                     .Where(l => l.OrderId == order.OrderId && l.HospitalId == request.HospitalId)
                     .ToListAsync(cancellationToken);

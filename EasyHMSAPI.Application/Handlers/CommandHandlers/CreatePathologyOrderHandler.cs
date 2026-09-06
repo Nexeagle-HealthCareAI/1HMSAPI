@@ -74,6 +74,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 return new CreatePathologyOrderResponseModel { Success = false, Message = "One or more selected tests are not in this hospital's catalog." };
             }
 
+            // PatientId is a globally-unique identifier (not a per-hospital secret -- it routinely
+            // appears on printed documents that leave the originating hospital), so without this
+            // check a hospital could place an order against another hospital's patient and read
+            // that patient's name/DOB/address/mobile back through GetPathologyOrderByIdHandler.
+            // Same ownership-gate shape as the TestIds check above.
+            var patientBelongsToHospital = await _context.PatientRegistrations
+                .AnyAsync(p => p.PatientId == request.PatientId && p.HospitalId == request.HospitalId, cancellationToken);
+            if (!patientBelongsToHospital)
+            {
+                return new CreatePathologyOrderResponseModel { Success = false, Message = "Patient not found in this hospital." };
+            }
+
             var billingPolicy = await _context.BillingPolicy.FirstOrDefaultAsync(c => c.HospitalId == request.HospitalId, cancellationToken);
             bool autoBill = billingPolicy?.LabPathTrigger == "ON_ORDER";
 
