@@ -73,6 +73,11 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                 ChargeId = chargeId,
                 IsActive = true,
             });
+            // Every test in this file books against one of these two literal patient ids -- the
+            // handler's cross-tenant ownership check (PatientId must belong to HospitalId) needs a
+            // real PatientRegistration row to match against, not just the bare string.
+            _context.PatientRegistrations.Add(new PatientRegistration { RegistrationId = Guid.NewGuid(), HospitalId = hospitalId, PatientId = "PTID00000001", FullName = "Test Patient", RegisteredAt = DateTime.UtcNow });
+            _context.PatientRegistrations.Add(new PatientRegistration { RegistrationId = Guid.NewGuid(), HospitalId = hospitalId, PatientId = "PTID00000002", FullName = "Test Patient 2", RegisteredAt = DateTime.UtcNow });
             _context.SaveChanges();
 
             return (hospitalId, testId, chargeId);
@@ -125,6 +130,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                 ChargeId = null,
                 IsActive = true,
             });
+            _context.PatientRegistrations.Add(new PatientRegistration { RegistrationId = Guid.NewGuid(), HospitalId = hospitalId, PatientId = "PTID00000001", FullName = "Test Patient", RegisteredAt = DateTime.UtcNow });
             _context.SaveChanges();
 
             var response = await _handler.Handle(new CreatePathologyOrderRequestModel

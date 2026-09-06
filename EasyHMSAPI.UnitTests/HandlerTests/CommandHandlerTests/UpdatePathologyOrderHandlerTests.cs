@@ -76,6 +76,12 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                 TestId = testId,
                 Status = "PENDING",
             });
+            // The handler's cross-tenant ownership check (PatientId must belong to HospitalId)
+            // needs a real PatientRegistration row -- seed both ids this file's tests use
+            // (PTID00000001 is the order's own patient; PTID00000002 is used as a reassignment
+            // target in the patient-switch test) rather than just the bare `patientId` param.
+            _context.PatientRegistrations.Add(new PatientRegistration { RegistrationId = Guid.NewGuid(), HospitalId = hospitalId, PatientId = "PTID00000001", FullName = "Test Patient", RegisteredAt = DateTime.UtcNow });
+            _context.PatientRegistrations.Add(new PatientRegistration { RegistrationId = Guid.NewGuid(), HospitalId = hospitalId, PatientId = "PTID00000002", FullName = "Test Patient 2", RegisteredAt = DateTime.UtcNow });
             _context.SaveChanges();
 
             return (hospitalId, orderId, testId, chargeId);
@@ -353,6 +359,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             });
             _context.PathologyOrderLine.Add(new PathologyOrderLine { OrderLineId = Guid.NewGuid(), HospitalId = hospitalId, OrderId = orderId, TestId = keptTestId, Status = "PENDING" });
             _context.PathologyOrderLine.Add(new PathologyOrderLine { OrderLineId = Guid.NewGuid(), HospitalId = hospitalId, OrderId = orderId, TestId = removedTestId, Status = "PENDING" });
+            _context.PatientRegistrations.Add(new PatientRegistration { RegistrationId = Guid.NewGuid(), HospitalId = hospitalId, PatientId = "PTID00000001", FullName = "Test Patient", RegisteredAt = DateTime.UtcNow });
 
             var keptChargeEventId = Guid.NewGuid();
             var removedChargeEventId = Guid.NewGuid();
