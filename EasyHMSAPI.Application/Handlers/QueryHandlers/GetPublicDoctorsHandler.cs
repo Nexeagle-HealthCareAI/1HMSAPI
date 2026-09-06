@@ -15,10 +15,14 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 {
     /// <summary>
     /// Public (Nexeagle-facing) doctor listing — platform-wide, spans every hospital that has
-    /// opted into the public directory (Hospital.IsPubliclyListed), not scoped to one hospital.
-    /// A doctor only appears when BOTH their hospital and the doctor themself (Doctor.IsPubliclyListed)
-    /// have opted in — hospital-scope resolved via DoctorDepartments, not the single retrofitted
-    /// Doctor.HospitalId field (see GetDoctorFeesHandler for the same convention).
+    /// opted into the public directory (Hospital.IsPubliclyListed) OR that has at least one
+    /// doctor a CMS admin has force-listed directly (Doctor.IsPubliclyListed can now be set from
+    /// CMS independent of the hospital's own choice — see
+    /// DoctorRepository.UpdateDoctorMarketingAsync — precisely so a hospital that never opted in
+    /// doesn't block a CMS-forced listing). A doctor only ever appears when the doctor themself
+    /// (Doctor.IsPubliclyListed &amp;&amp; !IsDelistedByAdmin) has opted in — hospital-scope resolved
+    /// via DoctorDepartments, not the single retrofitted Doctor.HospitalId field (see
+    /// GetDoctorFeesHandler for the same convention).
     /// Deliberately narrower than GetDepartmentDoctorsHandler / GetHospitalDoctorsHandler:
     /// excludes LicenseNumber, MedicalCouncil, RegistrationYear, UserId, and any mobile/email/
     /// queue-internal field, and additionally resolves a fresh presigned photo URL per doctor
@@ -79,16 +83,42 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 // archived hospital still returns nothing either way.
                 hospitalQuery = hospitalQuery.Where(h => h.HospitalID == request.HospitalId.Value);
             }
-            else
-            {
-                hospitalQuery = hospitalQuery.Where(h => h.IsPubliclyListed);
-            }
             if (!string.IsNullOrWhiteSpace(request.City))
                 hospitalQuery = hospitalQuery.Where(h => h.City == request.City);
             if (!string.IsNullOrWhiteSpace(request.State))
                 hospitalQuery = hospitalQuery.Where(h => h.State == request.State);
 
-            var publicHospitalIds = await hospitalQuery.Select(h => h.HospitalID).ToListAsync(cancellationToken);
+            var candidateHospitalIds = await hospitalQuery.Select(h => h.HospitalID).ToListAsync(cancellationToken);
+            if (candidateHospitalIds.Count == 0)
+                return EmptyResult(page, pageSize);
+
+            List<Guid> publicHospitalIds;
+            if (request.HospitalId.HasValue)
+            {
+                // Own-QR-code lookup is already scoped to one hospital above -- no further
+                // eligibility narrowing (a deactivated/archived hospital was already excluded).
+                publicHospitalIds = candidateHospitalIds;
+            }
+            else
+            {
+                // Platform-wide browsing: a hospital is eligible if it opted in itself, OR it has
+                // at least one CMS-force-listed doctor -- only that specific doctor's row(s) will
+                // actually surface below, since the per-doctor IsPubliclyListed filter still
+                // applies regardless of which path made the hospital eligible.
+                var selfListedIds = await _context.Hospitals
+                    .Where(h => candidateHospitalIds.Contains(h.HospitalID) && h.IsPubliclyListed)
+                    .Select(h => h.HospitalID)
+                    .ToListAsync(cancellationToken);
+
+                var forcedListingHospitalIds = await _context.DoctorDepartments
+                    .Where(dd => dd.HospitalId.HasValue && candidateHospitalIds.Contains(dd.HospitalId!.Value))
+                    .Join(_context.Doctors.Where(d => d.IsPubliclyListed && !d.IsDelistedByAdmin),
+                          dd => dd.DoctorID, d => d.DoctorID, (dd, d) => dd.HospitalId!.Value)
+                    .Distinct()
+                    .ToListAsync(cancellationToken);
+
+                publicHospitalIds = selfListedIds.Union(forcedListingHospitalIds).ToList();
+            }
 
             if (publicHospitalIds.Count == 0)
                 return EmptyResult(page, pageSize);

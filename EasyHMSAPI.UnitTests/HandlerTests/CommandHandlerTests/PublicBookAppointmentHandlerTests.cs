@@ -142,8 +142,10 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
-        public async Task Handle_DoctorAtNonPubliclyListedHospital_ReturnsFailure()
+        public async Task Handle_DoctorCmsForceListedAtNonPubliclyListedHospital_Succeeds()
         {
+            // A doctor set publicly listed directly from CMS is bookable even at a hospital that
+            // never opted in itself -- see PublicDirectoryHelpers.ResolvePubliclyListedHospitalIdAsync.
             var otherUser = TestDataFactory.SeedUser(_context, email: "unlisted@example.com", phone: "5555555555");
             var unlistedHospital = TestDataFactory.SeedHospital(_context, otherUser.UserID, isPubliclyListed: false);
             var doctorAtUnlistedHospital = TestDataFactory.SeedDoctor(_context, otherUser, isPubliclyListed: true);
@@ -155,6 +157,28 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                 DoctorId = doctorAtUnlistedHospital.DoctorID,
                 PreferredDate = DateTime.Today.AddDays(1),
                 Patient = new Patient { FullName = "Someone", Mobile = "9998887772" },
+            };
+
+            var response = await _handler.Handle(request, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(_context.Appointments.Count(), Is.EqualTo(1));
+        }
+
+        [Test]
+        public async Task Handle_DoctorNotForceListedAtNonPubliclyListedHospital_ReturnsFailure()
+        {
+            var otherUser = TestDataFactory.SeedUser(_context, email: "neither@example.com", phone: "4444444444");
+            var unlistedHospital = TestDataFactory.SeedHospital(_context, otherUser.UserID, isPubliclyListed: false);
+            var doctor = TestDataFactory.SeedDoctor(_context, otherUser, isPubliclyListed: false);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, unlistedHospital.HospitalID);
+            await _context.SaveChangesAsync();
+
+            var request = new PublicBookAppointmentRequestModel
+            {
+                DoctorId = doctor.DoctorID,
+                PreferredDate = DateTime.Today.AddDays(1),
+                Patient = new Patient { FullName = "Someone", Mobile = "9998887780" },
             };
 
             var response = await _handler.Handle(request, CancellationToken.None);
