@@ -1,6 +1,7 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services;
+using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
@@ -20,10 +21,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     public class AdmitPatientHandler : IRequestHandler<AdmitPatientRequestModel, AdmitPatientResponseModel>
     {
         private readonly AppDbContext _context;
+        private readonly IUsageLimitService _usageLimitService;
 
-        public AdmitPatientHandler(AppDbContext context)
+        public AdmitPatientHandler(AppDbContext context, IUsageLimitService usageLimitService)
         {
             _context = context;
+            _usageLimitService = usageLimitService;
         }
 
         public async Task<AdmitPatientResponseModel> Handle(AdmitPatientRequestModel request, CancellationToken cancellationToken)
@@ -345,6 +348,16 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             // Filtered unique index backstop: another admit won the race for this bed.
                             await tx.RollbackAsync(cancellationToken);
                             return new AdmitPatientResponseModel { Success = false, Message = "That bed is already occupied by another patient." };
+                        }
+
+                        // Last gate before commit -- a free-tier hospital's monthly quota, atomically
+                        // checked and consumed together with this admission inside the same
+                        // transaction, so a limit breach here rolls the whole admission back too.
+                        var usage = await _usageLimitService.TryConsumeAsync(request.HospitalId, cancellationToken);
+                        if (!usage.Allowed)
+                        {
+                            await tx.RollbackAsync(cancellationToken);
+                            return new AdmitPatientResponseModel { Success = false, Message = usage.Message };
                         }
 
                         await tx.CommitAsync(cancellationToken);

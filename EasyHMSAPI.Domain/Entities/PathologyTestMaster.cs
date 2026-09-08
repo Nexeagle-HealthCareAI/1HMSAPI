@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Domain.Entities
@@ -9,13 +10,20 @@ namespace EasyHMSAPI.Domain.Entities
         [Key]
         public Guid TestId { get; set; }
         public Guid HospitalId { get; set; }
-        
+
         public string TestCode { get; set; } = null!;
         public string TestName { get; set; } = null!;
         public string? Category { get; set; }
-        
+
         // Link to Billing
-        public Guid? ChargeId { get; set; } 
+        public Guid? ChargeId { get; set; }
+
+        // Not a column -- the linked ChargeMaster's DefaultRate, populated in-memory by
+        // GetPathologyTestsQueryHandler after the main query (same batched-lookup pattern
+        // GetPathologyOrdersHandler uses for TestNames/PatientAgeYears) so the Test Catalog's list
+        // view can show a price without a separate round-trip per row.
+        [NotMapped]
+        public decimal? Price { get; set; }
         
         public string? SampleType { get; set; }
         public string? ContainerType { get; set; }
@@ -24,7 +32,15 @@ namespace EasyHMSAPI.Domain.Entities
         public string? ParameterSchemaJson { get; set; } 
         
         public Guid? DefaultTemplateId { get; set; }
-        
+
+        // Outsourcing -- when true, this test is processed by a third-party lab rather than
+        // in-house. DefaultExternalLabId is a soft link (no FK, same convention as ChargeId) to the
+        // routing default; CostPrice is the hospital's own cost, purely for margin visibility --
+        // patient billing always uses ChargeMaster.DefaultRate regardless of this flag.
+        public bool IsOutsourced { get; set; }
+        public Guid? DefaultExternalLabId { get; set; }
+        public decimal? CostPrice { get; set; }
+
         public bool IsActive { get; set; }
         public int SortOrder { get; set; }
         

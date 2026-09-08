@@ -36,7 +36,25 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 query = query.Where(x => x.Category == request.Category);
             }
 
-            return await query.OrderBy(x => x.SortOrder).ThenBy(x => x.TestName).ToListAsync(cancellationToken);
+            var tests = await query.OrderBy(x => x.SortOrder).ThenBy(x => x.TestName).ToListAsync(cancellationToken);
+            if (tests.Count == 0) return tests;
+
+            var chargeIds = tests.Where(t => t.ChargeId.HasValue).Select(t => t.ChargeId!.Value).Distinct().ToList();
+            if (chargeIds.Count > 0)
+            {
+                var ratesByChargeId = await _context.ChargeMaster
+                    .Where(c => c.HospitalId == request.HospitalId && chargeIds.Contains(c.ChargeId))
+                    .ToDictionaryAsync(c => c.ChargeId, c => c.DefaultRate, cancellationToken);
+                foreach (var test in tests)
+                {
+                    if (test.ChargeId.HasValue && ratesByChargeId.TryGetValue(test.ChargeId.Value, out var rate))
+                    {
+                        test.Price = rate;
+                    }
+                }
+            }
+
+            return tests;
         }
     }
 }

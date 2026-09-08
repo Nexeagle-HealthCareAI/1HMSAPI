@@ -168,6 +168,9 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<RestraintOrder> RestraintOrder { get; set; }
         public DbSet<HospitalSubscription> HospitalSubscriptions { get; set; }
         public DbSet<HospitalSubscriptionPayment> HospitalSubscriptionPayments { get; set; }
+        public DbSet<PlatformSetting> PlatformSetting { get; set; }
+        public DbSet<HospitalFreeTierLimit> HospitalFreeTierLimit { get; set; }
+        public DbSet<HospitalMonthlyUsage> HospitalMonthlyUsage { get; set; }
         public DbSet<Store> Store { get; set; }
         public DbSet<Batch> Batch { get; set; }
         public DbSet<StockLevel> StockLevel { get; set; }
@@ -181,6 +184,15 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<GoodsReceiptNote> GoodsReceiptNote { get; set; }
         public DbSet<GoodsReceiptNoteLine> GoodsReceiptNoteLine { get; set; }
         public DbSet<NarcoticRegisterEntry> NarcoticRegisterEntry { get; set; }
+        public DbSet<DrugScheduleRegisterEntry> DrugScheduleRegisterEntry { get; set; }
+        public DbSet<PharmacyPrintSettings> PharmacyPrintSettings { get; set; }
+        public DbSet<Molecule> Molecule { get; set; }
+        public DbSet<SaltComposition> SaltComposition { get; set; }
+        public DbSet<SaltCompositionComponent> SaltCompositionComponent { get; set; }
+        public DbSet<PharmacyReturn> PharmacyReturn { get; set; }
+        public DbSet<PharmacyReturnLine> PharmacyReturnLine { get; set; }
+        public DbSet<VendorReturnNote> VendorReturnNote { get; set; }
+        public DbSet<VendorReturnLine> VendorReturnLine { get; set; }
         public DbSet<ColdChainTempLog> ColdChainTempLog { get; set; }
         public DbSet<InventoryItem> InventoryItem { get; set; }
         public DbSet<InventoryMovement> InventoryMovement { get; set; }
@@ -213,6 +225,21 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<ConsultantIncentiveLedger> ConsultantIncentiveLedger { get; set; }
         public DbSet<PublicApiClient> PublicApiClient { get; set; }
 
+        // ─── 1HR Suite — Hospital Workforce Management ────────────────────────
+        public DbSet<HrEmployee> HrEmployee { get; set; }
+        public DbSet<HrEmployeeCredential> HrEmployeeCredential { get; set; }
+        public DbSet<HrVaccinationRecord> HrVaccinationRecord { get; set; }
+        public DbSet<HrNeedleStickLog> HrNeedleStickLog { get; set; }
+        public DbSet<HrHospitalShift> HrHospitalShift { get; set; }
+        public DbSet<HrDutyRoster> HrDutyRoster { get; set; }
+        public DbSet<HrAttendanceLog> HrAttendanceLog { get; set; }
+        public DbSet<HrLeaveBalance> HrLeaveBalance { get; set; }
+        public DbSet<HrLeaveRequest> HrLeaveRequest { get; set; }
+        public DbSet<HrSalaryStructure> HrSalaryStructure { get; set; }
+        public DbSet<HrConsultantFeeConfig> HrConsultantFeeConfig { get; set; }
+        public DbSet<HrPayrollRun> HrPayrollRun { get; set; }
+        public DbSet<HrPayslip> HrPayslip { get; set; }
+
         // Pathology
         public DbSet<PathologyTestMaster> PathologyTestMaster { get; set; }
         public DbSet<PathologyReportTemplate> PathologyReportTemplate { get; set; }
@@ -220,7 +247,10 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<PathologyOrderLine> PathologyOrderLine { get; set; }
         public DbSet<PathologyResult> PathologyResult { get; set; }
         public DbSet<PathologyReport> PathologyReport { get; set; }
+        public DbSet<PathologyTokenQueue> PathologyTokenQueue { get; set; }
         public DbSet<LabConfiguration> LabConfiguration { get; set; }
+        public DbSet<PathologyExternalLab> PathologyExternalLab { get; set; }
+        public DbSet<PathologyReportKeyword> PathologyReportKeyword { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -408,6 +438,10 @@ namespace EasyHMSAPI.Domain.Context
             modelBuilder.Entity<Role>().HasKey(e => e.RoleID);
             modelBuilder.Entity<RolePermission>().HasKey(e => new { e.RoleID, e.PermissionKey });
             modelBuilder.Entity<UserRole>().HasKey(e => new { e.UserID, e.RoleID });
+
+            modelBuilder.Entity<PlatformSetting>().HasKey(e => e.SettingKey);
+            modelBuilder.Entity<HospitalFreeTierLimit>().HasKey(e => e.HospitalId);
+            modelBuilder.Entity<HospitalMonthlyUsage>().HasKey(e => new { e.HospitalId, e.YearMonth });
 
             modelBuilder.Entity<Hospital>().HasKey(e => e.HospitalID);
             modelBuilder.Entity<HospitalUser>().HasKey(e => e.HospitalUserID);
@@ -643,6 +677,10 @@ namespace EasyHMSAPI.Domain.Context
             // Configure DoctorQueue composite key
             modelBuilder.Entity<DoctorQueue>().ToTable("DoctorQueues");
             modelBuilder.Entity<DoctorQueue>().HasKey(dq => new { dq.HospitalId, dq.DoctorId, dq.TokenDate });
+
+            // Configure PathologyTokenQueue composite key
+            modelBuilder.Entity<PathologyTokenQueue>().ToTable("PathologyTokenQueue");
+            modelBuilder.Entity<PathologyTokenQueue>().HasKey(q => new { q.HospitalId, q.TokenDate });
 
             // DoctorPreferredMedicine
             modelBuilder.Entity<DoctorPreferredMedicine>().ToTable("DoctorPreferredMedicine");
@@ -900,6 +938,45 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(l => l.ScheduledAt).HasColumnType("datetime2(3)");
                 entity.Property(l => l.CreatedAt).HasColumnType("datetime2(3)");
                 entity.Property(l => l.UpdatedAt).HasColumnType("datetime2(3)");
+            });
+
+            // RowVersion is a SQL Server `rowversion` column (DB-generated, cannot be inserted
+            // explicitly) on all 7 Pathology tables -- without IsRowVersion(), EF sends an explicit
+            // NULL for it on insert and every save fails. Never caught before now because no
+            // controller exposed this pipeline over HTTP until the 1Lab Suite work.
+            modelBuilder.Entity<LabConfiguration>(entity =>
+            {
+                entity.Property(c => c.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<PathologyTestMaster>(entity =>
+            {
+                entity.Property(t => t.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<PathologyReportTemplate>(entity =>
+            {
+                entity.Property(t => t.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<PathologyOrder>(entity =>
+            {
+                entity.Property(o => o.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<PathologyOrderLine>(entity =>
+            {
+                entity.Property(l => l.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<PathologyResult>(entity =>
+            {
+                entity.Property(r => r.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<PathologyReport>(entity =>
+            {
+                entity.Property(r => r.RowVersion).IsRowVersion();
             });
 
             modelBuilder.Entity<MedicationAdministration>(entity =>

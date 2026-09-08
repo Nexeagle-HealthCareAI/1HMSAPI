@@ -228,8 +228,13 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         }
 
         [Test]
-        public async Task Handle_ExcludesDoctorsFromNonPubliclyListedHospitals()
+        public async Task Handle_CmsForceListedDoctor_AppearsEvenAtNonPubliclyListedHospital()
         {
+            // A CMS admin can set Doctor.IsPubliclyListed directly (DoctorRepository.
+            // UpdateDoctorMarketingAsync), independent of whether the hospital itself has ever
+            // opted in -- the whole point of that CMS control is to bypass a hospital that never
+            // enabled its own public directory. So a hospital with at least one such doctor must
+            // become eligible too, not just hospitals that opted in themselves.
             var user1 = TestDataFactory.SeedUser(_context, email: "a@example.com", phone: "1111111111");
             var listedHospital = TestDataFactory.SeedHospital(_context, user1.UserID, isPubliclyListed: true);
             var doctor1 = TestDataFactory.SeedDoctor(_context, user1, isPubliclyListed: true);
@@ -246,8 +251,25 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
 
             var response = await _handler.Handle(new GetPublicDoctorsRequestModel(), CancellationToken.None);
 
-            Assert.That(response.Doctors, Has.Count.EqualTo(1));
-            Assert.That(response.Doctors[0].DoctorId, Is.EqualTo(doctor1.DoctorID));
+            Assert.That(response.Doctors, Has.Count.EqualTo(2));
+            Assert.That(response.Doctors.Select(d => d.DoctorId), Is.EquivalentTo(new[] { doctor1.DoctorID, doctor2.DoctorID }));
+        }
+
+        [Test]
+        public async Task Handle_ExcludesDoctorsFromNonPubliclyListedHospital_WhenDoctorAlsoNotListed()
+        {
+            // The hospital never opting in AND the doctor never being force-listed either --
+            // still fully excluded, unlike the CMS-force-listed case above.
+            var user = TestDataFactory.SeedUser(_context, email: "c@example.com", phone: "3333333333");
+            var unlistedHospital = TestDataFactory.SeedHospital(_context, user.UserID, isPubliclyListed: false);
+            var doctor = TestDataFactory.SeedDoctor(_context, user, isPubliclyListed: false);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, unlistedHospital.HospitalID);
+            SeedProfile(user, "Dr. Neither");
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetPublicDoctorsRequestModel(), CancellationToken.None);
+
+            Assert.That(response.Doctors, Is.Empty);
         }
 
         [Test]

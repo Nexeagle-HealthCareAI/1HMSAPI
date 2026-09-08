@@ -69,11 +69,31 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         }
 
         [Test]
-        public async Task Handle_ExcludesCategory_WhenHospitalNotPubliclyListed()
+        public async Task Handle_IncludesCategory_WhenDoctorCmsForceListed_EvenIfHospitalNotPubliclyListed()
         {
+            // Same CMS-override rule as GetPublicDoctorsHandler: a doctor set publicly listed
+            // directly from CMS makes their hospital eligible too, even if the hospital itself
+            // never opted in.
             var user = TestDataFactory.SeedUser(_context);
             var hospital = TestDataFactory.SeedHospital(_context, user.UserID, isPubliclyListed: false);
             var doctor = TestDataFactory.SeedDoctor(_context, user, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, hospital.HospitalID);
+            var speciality = SeedSpeciality("Cardiologist", "Cardiologist");
+            doctor.PrimaryMedicalSpecialityId = speciality.SpecialityId;
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetPublicSpecialtiesRequestModel(), CancellationToken.None);
+
+            Assert.That(response.Specialties, Has.Count.EqualTo(1));
+            Assert.That(response.Specialties[0].Category, Is.EqualTo("Cardiologist"));
+        }
+
+        [Test]
+        public async Task Handle_ExcludesCategory_WhenHospitalNotPubliclyListed_AndDoctorNotForceListed()
+        {
+            var user = TestDataFactory.SeedUser(_context);
+            var hospital = TestDataFactory.SeedHospital(_context, user.UserID, isPubliclyListed: false);
+            var doctor = TestDataFactory.SeedDoctor(_context, user, isPubliclyListed: false);
             TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, hospital.HospitalID);
             var speciality = SeedSpeciality("Cardiologist", "Cardiologist");
             doctor.PrimaryMedicalSpecialityId = speciality.SpecialityId;

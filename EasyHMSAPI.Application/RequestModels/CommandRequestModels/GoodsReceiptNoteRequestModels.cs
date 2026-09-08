@@ -15,6 +15,9 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public DateTime? ExpiryDate { get; set; }
         public decimal Qty { get; set; }
         public decimal Rate { get; set; }
+        // Trade scheme free units (e.g. "Billed Qty 100 + Free Qty 10" -> 110 received, cost
+        // averaged over all 110). Optional — 0 for a plain receipt with no scheme.
+        public decimal FreeQty { get; set; }
     }
 
     // Per line: creates a Batch (ReceivedQty=Qty, RemainingQty=0), then nested-sends

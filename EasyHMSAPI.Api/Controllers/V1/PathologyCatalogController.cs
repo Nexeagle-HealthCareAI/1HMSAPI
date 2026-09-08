@@ -93,5 +93,43 @@ namespace EasyHMSAPI.Api.Controllers.V1
             var result = await _mediator.Send(request);
             return Ok(result);
         }
+
+        // --- External Labs (referred-out test routing) ---
+
+        [HttpGet("{hospitalId}/external-labs")]
+        public async Task<IActionResult> GetExternalLabs(Guid hospitalId, [FromQuery] bool includeInactive = false)
+        {
+            var result = await _mediator.Send(new GetPathologyExternalLabsRequestModel { HospitalId = hospitalId, IncludeInactive = includeInactive });
+            return Ok(result);
+        }
+
+        [HttpPost("{hospitalId}/external-labs")]
+        public async Task<IActionResult> UpsertExternalLab(Guid hospitalId, [FromBody] UpsertPathologyExternalLabRequestModel request)
+        {
+            request.HospitalId = hospitalId;
+            request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+            var result = await _mediator.Send(request);
+            if (!result.Success)
+                return BadRequest(new { result.Message });
+            return Ok(result);
+        }
+
+        [HttpGet("{hospitalId}/report-keywords")]
+        public async Task<IActionResult> GetReportKeywords(Guid hospitalId, [FromQuery] Guid? testId, [FromQuery] bool includeInactive = false)
+        {
+            var result = await _mediator.Send(new GetPathologyReportKeywordsRequestModel { HospitalId = hospitalId, TestId = testId, IncludeInactive = includeInactive });
+            return Ok(result);
+        }
+
+        [HttpPost("{hospitalId}/report-keywords")]
+        public async Task<IActionResult> UpsertReportKeyword(Guid hospitalId, [FromBody] UpsertPathologyReportKeywordRequestModel request)
+        {
+            request.HospitalId = hospitalId;
+            request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+            var result = await _mediator.Send(request);
+            if (!result.Success)
+                return BadRequest(new { result.Message });
+            return Ok(result);
+        }
     }
 }

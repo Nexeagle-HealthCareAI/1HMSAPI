@@ -64,6 +64,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     existingItem.ItemName = request.ItemName.Trim();
                     existingItem.GenericName = string.IsNullOrWhiteSpace(request.GenericName) ? null : request.GenericName.Trim();
                     existingItem.Manufacturer = string.IsNullOrWhiteSpace(request.Manufacturer) ? null : request.Manufacturer.Trim();
+                    existingItem.SaltCompositionId = request.SaltCompositionId;
                     existingItem.Category = category;
                     existingItem.Unit = string.IsNullOrWhiteSpace(request.Unit) ? "PCS" : request.Unit.Trim();
                     existingItem.DefaultRate = request.DefaultRate;
@@ -100,6 +101,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     ItemName = request.ItemName.Trim(),
                     GenericName = string.IsNullOrWhiteSpace(request.GenericName) ? null : request.GenericName.Trim(),
                     Manufacturer = string.IsNullOrWhiteSpace(request.Manufacturer) ? null : request.Manufacturer.Trim(),
+                    SaltCompositionId = request.SaltCompositionId,
                     Category = category,
                     Unit = string.IsNullOrWhiteSpace(request.Unit) ? "PCS" : request.Unit.Trim(),
                     DefaultRate = request.DefaultRate,
@@ -168,8 +170,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         return new RecordInventoryMovementResponseModel { Success = false, Message = "Narcotic items must be dispensed via the narcotics dispense endpoint, not a plain movement." };
                     if (string.IsNullOrWhiteSpace(request.PrescriberRef))
                         return new RecordInventoryMovementResponseModel { Success = false, Message = "A prescriber reference is required to dispense a scheduled drug." };
-                    if (item.ScheduleClass == IpdConstants.DrugScheduleClass.Narcotic && string.IsNullOrWhiteSpace(request.WitnessBy))
-                        return new RecordInventoryMovementResponseModel { Success = false, Message = "A witness is required to dispense a narcotic." };
+                    if (item.ScheduleClass == IpdConstants.DrugScheduleClass.Narcotic)
+                    {
+                        if (string.IsNullOrWhiteSpace(request.WitnessBy) || !request.WitnessByUserId.HasValue)
+                            return new RecordInventoryMovementResponseModel { Success = false, Message = "A witness is required to dispense a narcotic." };
+                        // Without this, the dispensing pharmacist could type their own name (or the
+                        // caller could pass their own user id) as the "witness", defeating the entire
+                        // point of NDPS dual-control -- confirmed live-reachable since nothing
+                        // previously compared WitnessByUserId against the dispensing user.
+                        if (request.LoggedInUserId.HasValue && request.WitnessByUserId.Value == request.LoggedInUserId.Value)
+                            return new RecordInventoryMovementResponseModel { Success = false, Message = "The witness must be a different person from the dispensing user." };
+                    }
                 }
 
                 var allocations = new List<BatchAllocation>();
@@ -186,7 +197,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     await _context.Database.ExecuteSqlRawAsync(
                         "SELECT 1 FROM Batch WITH (UPDLOCK) WHERE BatchId = {0}", singleBatch.BatchId);
 
-                    if (!isInbound && (singleBatch.Status != "ACTIVE" || (singleBatch.ExpiryDate.HasValue && singleBatch.ExpiryDate.Value.Date < today)))
+                    if (!isInbound && !request.IsVendorReturnContext && (singleBatch.Status != "ACTIVE" || (singleBatch.ExpiryDate.HasValue && singleBatch.ExpiryDate.Value.Date < today)))
                         return new RecordInventoryMovementResponseModel { Success = false, Message = $"Cannot dispense from batch {singleBatch.BatchNumber} — it is expired or no longer active." };
 
                     if (isInbound && request.StoreId.HasValue && request.StoreId.Value != Guid.Empty && singleBatch.StoreId != request.StoreId.Value)
@@ -253,6 +264,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 var now = DateTime.UtcNow;
                 var movementIds = new List<Guid>();
                 var batchIds = new List<Guid>();
+                var allocatedBatchDetails = new List<AllocatedBatchDetail>();
 
                 foreach (var alloc in allocations)
                 {
@@ -303,7 +315,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     _context.InventoryMovement.Add(movement);
                     movementIds.Add(movement.InventoryMovementId);
                     
-                    if (batch != null) 
+                    if (batch != null)
                     {
                         batchIds.Add(batch.BatchId);
                         batch.RemainingQty += allocDelta;
@@ -311,6 +323,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         batch.UpdatedBy = request.LoggedInUserName;
                         if (batch.RemainingQty == 0 && batch.Status == "ACTIVE")
                             batch.Status = "EXHAUSTED";
+
+                        if (!isInbound)
+                        {
+                            allocatedBatchDetails.Add(new AllocatedBatchDetail
+                            {
+                                BatchId = batch.BatchId,
+                                BatchNumber = batch.BatchNumber,
+                                ExpiryDate = batch.ExpiryDate,
+                                Mrp = batch.Mrp,
+                                AllocatedQty = allocQty
+                            });
+                        }
                     }
 
                     if (storeId.HasValue && storeId != Guid.Empty)
@@ -365,6 +389,28 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             RecordedAt = now,
                         });
                     }
+
+                    // Schedule H1 register — Drugs & Cosmetics Rules: date/patient/prescriber/qty
+                    // for every dispense, no witness required (unlike narcotics above).
+                    if (item.ScheduleClass == IpdConstants.DrugScheduleClass.H1 && !isInbound && batch != null && storeId.HasValue)
+                    {
+                        _context.DrugScheduleRegisterEntry.Add(new DrugScheduleRegisterEntry
+                        {
+                            RegisterEntryId = Guid.NewGuid(),
+                            HospitalId = request.HospitalId,
+                            InventoryItemId = item.InventoryItemId,
+                            BatchId = batch.BatchId,
+                            StoreId = storeId.Value,
+                            ScheduleClass = item.ScheduleClass,
+                            Qty = allocQty,
+                            PatientId = request.PatientId,
+                            EncounterId = request.EncounterId,
+                            PrescriberRef = request.PrescriberRef,
+                            DispensedBy = request.LoggedInUserName,
+                            DispensedByUserId = request.LoggedInUserId,
+                            RecordedAt = now,
+                        });
+                    }
                 }
 
                 item.CurrentStock += totalDelta;
@@ -381,7 +427,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     InventoryMovementIds = movementIds,
                     NewCurrentStock = item.CurrentStock,
                     BatchId = batchIds.FirstOrDefault(),
-                    BatchIds = batchIds
+                    BatchIds = batchIds,
+                    AllocatedBatchDetails = allocatedBatchDetails
                 };
             }
             catch (Exception ex)

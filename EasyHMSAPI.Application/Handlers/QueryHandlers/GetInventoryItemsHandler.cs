@@ -43,6 +43,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     ItemName = i.ItemName,
                     GenericName = i.GenericName,
                     Manufacturer = i.Manufacturer,
+                    SaltCompositionId = i.SaltCompositionId,
                     Category = i.Category,
                     Unit = i.Unit,
                     DefaultRate = i.DefaultRate,

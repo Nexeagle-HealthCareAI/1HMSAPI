@@ -22,6 +22,8 @@ namespace EasyHMSAPI.Domain.Entities
         public DateTime? ExpiryDate { get; set; }
 
         public decimal? UnitCost { get; set; }
+        public decimal? Mrp { get; set; }
+        public string? BarcodeValue { get; set; }
         public decimal ReceivedQty { get; set; }
         public decimal RemainingQty { get; set; }
 

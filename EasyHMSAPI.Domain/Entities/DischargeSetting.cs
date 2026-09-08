@@ -35,5 +35,10 @@ namespace EasyHMSAPI.Domain.Entities
         public DateTime UpdatedAt { get; set; }
         [Timestamp]
         public byte[] RowVersion { get; set; } = null!;
+
+        // Mirrors PrescriptionSetting.UseSystemDefaultLetterhead — when true, always render the
+        // system-generated default regardless of URI, a deliberate choice rather than "nothing
+        // uploaded", so switching back to an uploaded template doesn't require re-uploading it.
+        public bool UseSystemDefaultLetterhead { get; set; }
     }
 }

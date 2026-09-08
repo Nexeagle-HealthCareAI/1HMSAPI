@@ -35,6 +35,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public decimal? OpdConsultFee { get; set; }
         public decimal? IpdVisitFee { get; set; }
         public decimal? EmergencyFee { get; set; }
+        // OPD_CONSULT only, same round-trip-unchanged reasoning as above.
+        public int FreeFollowUpDays { get; set; }
         public List<string> Specializations { get; set; } = new();
         public List<string> Languages { get; set; } = new();
         public string? PublicContactEmail { get; set; }

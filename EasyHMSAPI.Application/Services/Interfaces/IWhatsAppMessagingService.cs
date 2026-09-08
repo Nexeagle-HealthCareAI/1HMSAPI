@@ -1,4 +1,4 @@
-﻿namespace EasyHMSAPI.Application.Services.Interfaces
+namespace EasyHMSAPI.Application.Services.Interfaces
 {
     public interface IWhatsAppMessagingService
     {
@@ -19,5 +19,22 @@
         /// "discharge_summary_sent" template approved in Meta Business Manager; returns false
         /// (no-op) until that template exists.</summary>
         Task<bool> SendDischargeSummaryAsync(string mobileNumber, string documentLink, string fileName, string hospitalName, string doctorName);
+
+        /// <summary>Sends a plain text summary of the payslip. Requires a "payslip_generated_eng"
+        /// template approved in Meta Business Manager; returns false until that template exists.</summary>
+        Task<bool> SendPayslipNotificationAsync(string mobileNumber, string employeeName, string monthYear, decimal netSalary, string hospitalName);
+
+        /// <summary>Sends the approved pathology report PDF as a WhatsApp document attachment --
+        /// same document-header template shape as SendPrescriptionAsync/SendDischargeSummaryAsync.
+        /// Requires a "lab_report_sent" template approved in Meta Business Manager; returns false
+        /// (no-op) until that template exists.</summary>
+        Task<bool> SendLabReportAsync(string mobileNumber, string documentLink, string fileName, string hospitalName, string patientName);
+
+        /// <summary>Notifies a doctor of a new online (Doctor Dekho) appointment request — patient
+        /// name, address, and a masked contact number (never the full number, over WhatsApp), plus
+        /// a link to log into 1HMS to view it. Requires a "doctor_new_online_appointment" template
+        /// approved in Meta Business Manager; returns false (no-op, matches SendLoginDetailsAsync's
+        /// behavior today) until that template exists.</summary>
+        Task<bool> SendDoctorNewOnlineAppointmentAlertAsync(string mobileNumber, string doctorName, string patientName, string maskedPatientMobile, string patientAddress, string loginUrl);
     }
 }

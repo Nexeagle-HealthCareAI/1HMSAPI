@@ -15,6 +15,12 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
     {
         // All figures below are computed deterministically from historical billing data (see
         // BillingTrendCalculator) -- Groq narrates them, it never invents the numbers.
+        public decimal PredictedTomorrowRevenue { get; set; }
+        public decimal PredictedTomorrowExpense { get; set; }
+        public decimal PredictedTomorrowNet { get; set; }
+        public decimal PredictedNext7DayRevenue { get; set; }
+        public decimal PredictedNext7DayExpense { get; set; }
+        public decimal PredictedNext7DayNet { get; set; }
         public decimal PredictedNext30DayRevenue { get; set; }
         public decimal PredictedNext30DayExpense { get; set; }
         public decimal PredictedNext30DayNet { get; set; }

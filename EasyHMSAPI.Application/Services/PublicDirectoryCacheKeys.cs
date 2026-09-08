@@ -32,5 +32,11 @@ namespace EasyHMSAPI.Application.Services
         public const string PublicSpecialtiesList = "public:specialties";
 
         public static string DoctorRoster(Guid hospitalId) => $"public:doctor-roster:{hospitalId}";
+
+        // Same one-entry-per-filter-combo shape as PublicDoctorsList, 60s TTL (see CacheTtl in
+        // GetPublicLabsHandler). labId reuses this same list query with PageSize=1 for the
+        // single-lab detail fetch, so it needs to be part of the key too.
+        public static string PublicLabsList(int page, int pageSize, string? city, string? state, string? search, Guid? labId = null) =>
+            $"public:labs:{page}:{pageSize}:{city?.Trim().ToLowerInvariant()}:{state?.Trim().ToLowerInvariant()}:{search?.Trim().ToLowerInvariant()}:{labId}";
     }
 }

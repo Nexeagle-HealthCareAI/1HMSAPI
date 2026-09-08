@@ -8,6 +8,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     {
         public Guid HospitalId { get; set; }
         public Guid OrderId { get; set; }
+        public Guid OrderLineId { get; set; }
         public Guid? TemplateId { get; set; }
 
         [JsonIgnore]

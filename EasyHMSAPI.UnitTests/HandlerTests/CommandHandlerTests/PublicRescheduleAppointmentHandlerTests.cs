@@ -139,5 +139,112 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(response.Success, Is.False);
             Assert.That(response.Message, Does.Contain("cancelled"));
         }
+
+        // ── AppointmentType/ValidUptoDate recompute + consult-charge reconciliation ──────────
+        // Same wiring as RescheduleAppointmentHandlerTests -- this only needs to confirm the
+        // bot-facing handler got the identical fix, not re-prove AppointmentTypeResolver's own logic.
+
+        [Test]
+        public async Task Handle_ChargeableRescheduledIntoFreeWindow_FlipsToFreeAndVoidsUnpaidCharge()
+        {
+            var user = TestDataFactory.SeedUser(_context, email: $"{Guid.NewGuid():N}@test.com", role: "Doctor");
+            var doctor = TestDataFactory.SeedDoctor(_context, user);
+            var hospitalId = Guid.NewGuid();
+            var patientId = $"PAT-{Guid.NewGuid():N}"[..12];
+
+            _context.PatientRegistrations.Add(new PatientRegistration
+            {
+                RegistrationId = Guid.NewGuid(),
+                HospitalId = hospitalId,
+                PatientId = patientId,
+                FullName = "Test Patient",
+                Mobile = "9876543210",
+            });
+            _context.DoctorFees.Add(new DoctorFee
+            {
+                DoctorFeeId = Guid.NewGuid(),
+                HospitalId = hospitalId,
+                DoctorId = doctor.DoctorID,
+                FeeType = "OPD_CONSULT",
+                Amount = 500m,
+                IsActive = true,
+                FreeFollowUpDays = 10,
+            });
+            _context.Appointments.Add(new Appointment
+            {
+                ApptId = Guid.NewGuid(),
+                HospitalId = hospitalId,
+                DoctorId = doctor.DoctorID,
+                PatientId = patientId,
+                ApptDate = DateTime.Today,
+                StartAt = DateTime.Today.AddHours(9),
+                EndAt = DateTime.Today.AddHours(9).AddMinutes(15),
+                CurrentStatusCode = AppConstants.AppointmentStatus_Completed,
+                AppointmentType = AppConstants.AppointmentType_New,
+            });
+
+            var apptId = Guid.NewGuid();
+            _context.Appointments.Add(new Appointment
+            {
+                ApptId = apptId,
+                HospitalId = hospitalId,
+                DoctorId = doctor.DoctorID,
+                PatientId = patientId,
+                ApptDate = DateTime.Today.AddDays(20),
+                StartAt = DateTime.Today.AddDays(20).AddHours(10),
+                EndAt = DateTime.Today.AddDays(20).AddHours(10).AddMinutes(15),
+                CurrentStatusCode = "FUTURE",
+                AppointmentType = AppConstants.AppointmentType_OldFee,
+            });
+            _context.SaveChanges();
+
+            var encounterId = Guid.NewGuid();
+            _context.Encounter.Add(new Encounter
+            {
+                EncounterId = encounterId,
+                HospitalId = hospitalId,
+                PatientId = patientId,
+                EncounterTypeCode = "OPD",
+                SourceType = "Appointments",
+                SourceId = apptId,
+                StatusCode = "OPEN",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            });
+            var chargeEventId = Guid.NewGuid();
+            _context.BillingChargeEvent.Add(new BillingChargeEvent
+            {
+                ChargeEventId = chargeEventId,
+                HospitalId = hospitalId,
+                PatientId = patientId,
+                EncounterId = encounterId,
+                CategoryCode = "CONSULT",
+                DisplayName = "Consultation",
+                Qty = 1,
+                UnitPrice = 500m,
+                NetAmount = 500m,
+                StatusCode = BillingConstants.ChargeEventStatus.Posted,
+                ServiceDate = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            });
+            _context.SaveChanges();
+
+            var newDate = DateTime.Today.AddDays(5); // now inside the 10-day free window
+            var response = await _handler.Handle(new PublicRescheduleAppointmentRequestModel
+            {
+                AppointmentId = apptId,
+                Mobile = "9876543210",
+                ToApptDate = newDate,
+                ToStartAt = newDate.AddHours(11),
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True, response.Message);
+            var updated = _context.Appointments.First(a => a.ApptId == apptId);
+            Assert.That(updated.AppointmentType, Is.EqualTo(AppConstants.AppointmentType_OldNoFee));
+
+            var charge = _context.BillingChargeEvent.First(c => c.ChargeEventId == chargeEventId);
+            Assert.That(charge.StatusCode, Is.EqualTo(BillingConstants.ChargeEventStatus.Void));
+        }
     }
 }

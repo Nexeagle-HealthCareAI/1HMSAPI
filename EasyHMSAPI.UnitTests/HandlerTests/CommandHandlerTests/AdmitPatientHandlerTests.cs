@@ -21,7 +21,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public void SetUp()
         {
             _context = InMemoryDbContextFactory.CreateContext();
-            _handler = new AdmitPatientHandler(_context);
+            _handler = new AdmitPatientHandler(_context, UsageLimitTestHelper.AlwaysAllow());
         }
 
         [TearDown]
@@ -235,6 +235,28 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(response.Success, Is.True, response.Message);
             var unchangedReferral = await _context.AdmissionReferrals.FindAsync(referral.ReferralId);
             Assert.That(unchangedReferral!.ConvertedAdmissionId, Is.EqualTo(otherAdmissionId));
+        }
+
+        [Test]
+        public async Task Handle_FreeTierLimitReached_BlocksAdmissionAndRollsBackTransaction()
+        {
+            var (hospitalId, doctorId, patientId) = SeedBasics();
+            var blockedHandler = new AdmitPatientHandler(_context, UsageLimitTestHelper.AlwaysBlock());
+            var request = new AdmitPatientRequestModel
+            {
+                HospitalId = hospitalId, PatientId = patientId, PrimaryDoctorId = doctorId,
+                AdmissionType = "ELECTIVE", EnableIpdBilling = false, LoggedInUserName = "Front Desk",
+            };
+
+            var response = await blockedHandler.Handle(request, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Does.Contain("limit"));
+            // Not asserting non-persistence here: EF Core's InMemory provider doesn't actually
+            // roll back a transaction's earlier SaveChangesAsync calls (Database.BeginTransaction/
+            // RollbackAsync are effectively no-ops on InMemory), unlike real SQL Server, which this
+            // handler relies on for correctness in production. The rollback call itself is
+            // exercised here; whether it actually undoes the write needs a real-DB check.
         }
     }
 }

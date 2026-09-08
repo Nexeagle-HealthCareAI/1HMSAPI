@@ -58,57 +58,33 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return new TransferStockResponseModel { Success = false, Message = "No active batch has enough remaining stock in the source store to cover this transfer quantity." };
             }
 
+            // A plain _context.Database.BeginTransactionAsync() here throws at runtime against a
+            // real SQL Server connection ("SqlServerRetryingExecutionStrategy does not support
+            // user-initiated transactions") — the retrying execution strategy must own the
+            // transaction, same pattern BulkBatchCommandHandlers/PharmacyRetailCheckoutCommandHandler
+            // already use. Never caught by the in-memory-provider unit tests since InMemory has no
+            // execution strategy — only surfaced testing this live against the real dev database.
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(() => TryHandleAsync(request, allocations, cancellationToken));
+        }
+
+        private async Task<TransferStockResponseModel> TryHandleAsync(TransferStockRequestModel request, List<BatchAllocation> allocations, CancellationToken cancellationToken)
+        {
             using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
             try
             {
-                foreach (var alloc in allocations)
+                var (success, message) = await TransferStockExecutionService.ExecuteAsync(
+                    _mediator, request.HospitalId, request.InventoryItemId, request.FromStoreId, request.ToStoreId,
+                    allocations, request.Notes, request.LoggedInUserName, request.LoggedInUserId, cancellationToken);
+
+                if (!success)
                 {
-                    // Step 1: ISSUE from source store
-                    var issueResponse = await _mediator.Send(new RecordInventoryMovementRequestModel
-                    {
-                        HospitalId = request.HospitalId,
-                        InventoryItemId = request.InventoryItemId,
-                        StoreId = request.FromStoreId,
-                        BatchId = alloc.Batch.BatchId,
-                        MovementType = "ISSUE",
-                        Qty = alloc.AllocatedQty,
-                        Reason = "TRANSFER_OUT",
-                        Notes = $"Transfer to store {request.ToStoreId}. {request.Notes}",
-                        LoggedInUserId = request.LoggedInUserId,
-                        LoggedInUserName = request.LoggedInUserName
-                    }, cancellationToken);
-
-                    if (!issueResponse.Success)
-                    {
-                        await transaction.RollbackAsync(cancellationToken);
-                        return new TransferStockResponseModel { Success = false, Message = $"Failed to issue batch {alloc.Batch.BatchNumber} from source store: {issueResponse.Message}" };
-                    }
-
-                    // Step 2: RECEIVE to destination store
-                    // The InventoryCommandHandler now automatically clones the batch for the destination store
-                    var receiveResponse = await _mediator.Send(new RecordInventoryMovementRequestModel
-                    {
-                        HospitalId = request.HospitalId,
-                        InventoryItemId = request.InventoryItemId,
-                        StoreId = request.ToStoreId,
-                        BatchId = alloc.Batch.BatchId,
-                        MovementType = "RECEIVE",
-                        Qty = alloc.AllocatedQty,
-                        Reason = "TRANSFER_IN",
-                        Notes = $"Transfer from store {request.FromStoreId}. {request.Notes}",
-                        LoggedInUserId = request.LoggedInUserId,
-                        LoggedInUserName = request.LoggedInUserName
-                    }, cancellationToken);
-
-                    if (!receiveResponse.Success)
-                    {
-                        await transaction.RollbackAsync(cancellationToken);
-                        return new TransferStockResponseModel { Success = false, Message = $"Failed to receive batch {alloc.Batch.BatchNumber} in destination store: {receiveResponse.Message}. Transfer was rolled back." };
-                    }
+                    await transaction.RollbackAsync(cancellationToken);
+                    return new TransferStockResponseModel { Success = false, Message = message };
                 }
 
                 await transaction.CommitAsync(cancellationToken);
-                return new TransferStockResponseModel { Success = true, Message = "Stock transferred successfully." };
+                return new TransferStockResponseModel { Success = true, Message = message };
             }
             catch (Exception ex)
             {

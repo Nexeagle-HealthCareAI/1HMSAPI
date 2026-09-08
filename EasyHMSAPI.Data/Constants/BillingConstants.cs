@@ -71,6 +71,8 @@ namespace EasyHMSAPI.Data.Constants
             public const string Indent = "INDENT";
             public const string PurchaseOrder = "PO";
             public const string Grn = "GRN";
+            public const string PharmacyReturn = "PHRET";
+            public const string VendorReturn = "RTV";
         }
 
         public static class BillingActionType

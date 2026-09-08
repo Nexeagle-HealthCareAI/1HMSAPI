@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using EasyHMSAPI.Application.Services.Interfaces;
 
 namespace EasyHMSAPI.Application.Services.Implementations
@@ -11,20 +12,28 @@ namespace EasyHMSAPI.Application.Services.Implementations
         private readonly HttpClient _httpClient;
         private readonly string _apiKey;
         private readonly string _model;
+        private readonly ILogger<GroqBillingInsightService> _logger;
 
-        public GroqBillingInsightService(HttpClient httpClient, IConfiguration configuration)
+        public GroqBillingInsightService(HttpClient httpClient, IConfiguration configuration, ILogger<GroqBillingInsightService> logger)
         {
             _httpClient = httpClient;
             _apiKey = configuration["Groq:ApiKey"] ?? "gsk_dummy";
             _model = configuration["Groq:Model"] ?? "llama-3.3-70b-versatile";
+            _logger = logger;
 
             _httpClient.BaseAddress = new Uri("https://api.groq.com/openai/v1/");
             _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
         }
 
+        private bool IsKeyUnset => string.IsNullOrWhiteSpace(_apiKey) || _apiKey == "gsk_dummy" || _apiKey.StartsWith("<", StringComparison.Ordinal);
+
         public async Task<BillingInsightNarrative> GenerateInsightsAsync(TrendSummary t)
         {
-            if (_apiKey == "gsk_dummy") return FallbackNarrative(t);
+            if (IsKeyUnset)
+            {
+                _logger.LogWarning("Groq:ApiKey is not configured (billing insights) — returning fallback narrative");
+                return FallbackNarrative(t);
+            }
 
             var leaks = t.RevenueCategoryTrends.Where(c => c.IsLeak).ToList();
             var growing = t.RevenueCategoryTrends.Where(c => c.ChangePercent > 0).OrderByDescending(c => c.ChangePercent).ToList();
@@ -39,6 +48,8 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 $"30-day average daily expense: {t.Avg30DayExpense}\n" +
                 $"Month-over-month revenue change: {t.MonthOverMonthRevenueChangePercent}%\n" +
                 $"Month-over-month expense change: {t.MonthOverMonthExpenseChangePercent}%\n" +
+                $"Predicted tomorrow's revenue: {t.PredictedTomorrowRevenue}\n" +
+                $"Predicted next-7-day revenue: {t.PredictedNext7DayRevenue}\n" +
                 $"Predicted next-30-day revenue: {t.PredictedNext30DayRevenue}\n" +
                 $"Predicted next-30-day expense: {t.PredictedNext30DayExpense}\n" +
                 $"Category trends (month-over-month % change): {string.Join(", ", t.RevenueCategoryTrends.Select(c => $"{c.CategoryCode}: {c.ChangePercent}%"))}\n" +
@@ -59,7 +70,12 @@ namespace EasyHMSAPI.Application.Services.Implementations
             {
                 var content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
                 var response = await _httpClient.PostAsync("chat/completions", content);
-                response.EnsureSuccessStatusCode();
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorBody = await response.Content.ReadAsStringAsync();
+                    _logger.LogWarning("Groq billing-insights call failed with {StatusCode}: {Body}", (int)response.StatusCode, errorBody);
+                    return FallbackNarrative(t);
+                }
 
                 var responseString = await response.Content.ReadAsStringAsync();
                 using var jsonDocument = JsonDocument.Parse(responseString);
@@ -72,10 +88,11 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
                 return new BillingInsightNarrative(parsed.Outlook, parsed.Insights ?? new List<string>());
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 // Never let a Groq/network hiccup break the analytics page -- fall back to a
                 // deterministic, code-generated narrative built from the same trend numbers.
+                _logger.LogWarning(ex, "Groq billing-insights call threw — returning fallback narrative");
                 return FallbackNarrative(t);
             }
         }
@@ -103,7 +120,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
             if (topGrowth != null)
                 insights.Add($"{topGrowth.CategoryCode} is your fastest-growing category, up {topGrowth.ChangePercent}% month-over-month.");
 
-            var outlook = $"Based on the last 90 days, daily revenue is trending {direction} and is projected at roughly {t.PredictedNext30DayRevenue:0} for the next 30 days if current patterns hold.";
+            var outlook = $"Based on the last 90 days, daily revenue is trending {direction} -- projected at roughly {t.PredictedTomorrowRevenue:0} tomorrow, {t.PredictedNext7DayRevenue:0} over the next 7 days, and {t.PredictedNext30DayRevenue:0} over the next 30 days if current patterns hold.";
             return new BillingInsightNarrative(outlook, insights);
         }
 

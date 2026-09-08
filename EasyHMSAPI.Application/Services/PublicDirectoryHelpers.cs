@@ -40,16 +40,18 @@ namespace EasyHMSAPI.Application.Services
 
             if (hospitalIds.Count == 0) return null;
 
-            // This runs on every single availability check and every public booking — was one
-            // query PER candidate hospital (rare in practice, but still a per-call round-trip
-            // multiplier at volume). Batched into one query; .Min() picks the same "lowest
-            // HospitalId among the publicly-listed ones" the old ordered-loop did.
-            var publiclyListedIds = await context.Hospitals
-                .Where(h => hospitalIds.Contains(h.HospitalID) && h.IsPubliclyListed && h.IsActive && !h.IsArchived)
+            // The doctor themself already passed the IsPubliclyListed/IsDelistedByAdmin/
+            // active-user gate above -- whether via their own hospital's opt-in or a CMS admin
+            // force-listing them directly (DoctorRepository.UpdateDoctorMarketingAsync) -- so
+            // Hospital.IsPubliclyListed is no longer required here too; only active/non-archived
+            // still matters. This runs on every single availability check and every public
+            // booking; .Min() picks the same "lowest eligible HospitalId" the old ordered-loop did.
+            var eligibleHospitalIds = await context.Hospitals
+                .Where(h => hospitalIds.Contains(h.HospitalID) && h.IsActive && !h.IsArchived)
                 .Select(h => h.HospitalID)
                 .ToListAsync(cancellationToken);
 
-            return publiclyListedIds.Count > 0 ? publiclyListedIds.Min() : (Guid?)null;
+            return eligibleHospitalIds.Count > 0 ? eligibleHospitalIds.Min() : (Guid?)null;
         }
     }
 }

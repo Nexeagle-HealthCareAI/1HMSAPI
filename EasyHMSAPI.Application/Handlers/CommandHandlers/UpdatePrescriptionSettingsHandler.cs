@@ -1,6 +1,7 @@
 using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
@@ -52,6 +53,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return response;
                 }
 
+                if (!string.IsNullOrEmpty(request.TextColour) && !TextColourValidator.IsValid(request.TextColour))
+                {
+                    response.Success = false;
+                    response.Message = "Text colour must be a hex value like #111827 or #111827FF.";
+                    return response;
+                }
+
                 var existingSettings = await _context.PrescriptionSettings
                     .FirstOrDefaultAsync(x => x.HospitalId == request.HospitalId && x.DoctorId == request.DoctorId, cancellationToken);
                 var currentDateTime = DateTime.UtcNow;
@@ -76,7 +84,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         CreatedAt = currentDateTime,
                         UpdatedAt = currentDateTime,
                         CreatedByUserId = request.LoggedInUserId,
-                        ValidDuration = request.ValidUpto is not null ? request.ValidUpto.Value : 0
+                        ValidDuration = request.ValidUpto is not null ? request.ValidUpto.Value : 0,
+                        UseSystemDefaultLetterhead = request.UseSystemDefaultLetterhead ?? false
                     };
                     _context.PrescriptionSettings.Add(newSettings);
 
@@ -106,6 +115,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         existingSettings.TextColour = request.TextColour;
                     if(request.ValidUpto.HasValue)
                         existingSettings.ValidDuration = request.ValidUpto.Value;
+                    if (request.UseSystemDefaultLetterhead.HasValue)
+                        existingSettings.UseSystemDefaultLetterhead = request.UseSystemDefaultLetterhead.Value;
                     existingSettings.UpdatedAt = currentDateTime;
 
                     response.PrescriptionSettingId = existingSettings.PrescriptionSettingId;

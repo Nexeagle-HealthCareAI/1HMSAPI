@@ -42,6 +42,23 @@ namespace EasyHMSAPI.Application.Services
             return flags;
         }
 
+        /// <summary>
+        /// Blended no-show rate across the given window, clamped to [0, maxPlausibleRate] -- a rate
+        /// above that is more likely a data/tracking issue than reality, and capping it keeps a
+        /// broken input from zeroing out an "expected attending" estimate built on top of this.
+        /// Returns 0 (no adjustment) when there's no appointment data, same "insufficient data stays
+        /// quiet" convention as everything else in this class.
+        /// </summary>
+        public static decimal ComputeNoShowRate(List<DailyOperationalStats> days, decimal maxPlausibleRate = 0.5m)
+        {
+            var totalAppointments = days.Sum(d => d.TotalAppointments);
+            if (totalAppointments <= 0) return 0m;
+
+            var totalNoShows = days.Sum(d => d.NoShowCount);
+            var rate = (decimal)totalNoShows / totalAppointments;
+            return Math.Round(Math.Min(rate, maxPlausibleRate), 3);
+        }
+
         private static List<AnomalyFlag> CheckMetric(string metricName, decimal recentValue, List<decimal> baselineValues, decimal zThreshold)
         {
             if (baselineValues.Count < MinBaselineWeeks) return new List<AnomalyFlag>();

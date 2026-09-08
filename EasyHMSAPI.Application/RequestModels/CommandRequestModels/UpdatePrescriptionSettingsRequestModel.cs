@@ -21,6 +21,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? FontWeight { get; set; }
         public string? TextColour { get; set; }
         public int? ValidUpto { get; set; }
+        public bool? UseSystemDefaultLetterhead { get; set; }
         [JsonIgnore]
         [IgnoreDataMember]
         public Guid LoggedInUserId { get; set; }

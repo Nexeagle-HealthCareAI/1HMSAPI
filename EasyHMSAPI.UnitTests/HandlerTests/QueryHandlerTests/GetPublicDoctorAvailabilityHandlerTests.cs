@@ -41,8 +41,10 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         }
 
         [Test]
-        public async Task Handle_DoctorAtNonPubliclyListedHospital_ReturnsFailure()
+        public async Task Handle_DoctorCmsForceListedAtNonPubliclyListedHospital_Succeeds()
         {
+            // A doctor set publicly listed directly from CMS is bookable even at a hospital that
+            // never opted in itself -- see PublicDirectoryHelpers.ResolvePubliclyListedHospitalIdAsync.
             var otherUser = TestDataFactory.SeedUser(_context, email: "unlisted@example.com", phone: "5555555555");
             var unlistedHospital = TestDataFactory.SeedHospital(_context, otherUser.UserID, isPubliclyListed: false);
             var doctorAtUnlistedHospital = TestDataFactory.SeedDoctor(_context, otherUser, isPubliclyListed: true);
@@ -52,6 +54,24 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             var response = await _handler.Handle(new GetPublicDoctorAvailabilityRequestModel
             {
                 DoctorId = doctorAtUnlistedHospital.DoctorID,
+                Date = DateTime.Today,
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+        }
+
+        [Test]
+        public async Task Handle_DoctorNotForceListedAtNonPubliclyListedHospital_ReturnsFailure()
+        {
+            var otherUser = TestDataFactory.SeedUser(_context, email: "neither@example.com", phone: "4444444444");
+            var unlistedHospital = TestDataFactory.SeedHospital(_context, otherUser.UserID, isPubliclyListed: false);
+            var doctor = TestDataFactory.SeedDoctor(_context, otherUser, isPubliclyListed: false);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, unlistedHospital.HospitalID);
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetPublicDoctorAvailabilityRequestModel
+            {
+                DoctorId = doctor.DoctorID,
                 Date = DateTime.Today,
             }, CancellationToken.None);
 

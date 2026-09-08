@@ -15,7 +15,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("inventory/indents")]
     [Authorize]
-    [RequiresPermission("inventory")]
+    [RequiresPermission("inventory", "pharmacy")]
     public class IndentController : ControllerBase
     {
         private readonly IMediator _mediator;

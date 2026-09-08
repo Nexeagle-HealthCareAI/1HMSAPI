@@ -23,6 +23,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
         public async Task<CreateBulkBatchResponseModel> Handle(CreateBulkBatchRequestModel request, CancellationToken cancellationToken)
         {
+            // A plain _context.Database.BeginTransactionAsync() here throws at runtime against a
+            // real SQL Server connection ("SqlServerRetryingExecutionStrategy does not support
+            // user-initiated transactions") — the retrying execution strategy must own the
+            // transaction, same pattern PharmacyRetailCheckoutCommandHandler already uses. Never
+            // caught by the in-memory-provider unit tests since InMemory has no execution strategy.
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(() => TryHandleAsync(request, cancellationToken));
+        }
+
+        private async Task<CreateBulkBatchResponseModel> TryHandleAsync(CreateBulkBatchRequestModel request, CancellationToken cancellationToken)
+        {
             var response = new CreateBulkBatchResponseModel { Success = true, TotalProcessed = request.Rows.Count };
 
             if (request.HospitalId == Guid.Empty)
@@ -51,7 +62,24 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 .Where(i => i.HospitalId == request.HospitalId && itemCodes.Contains(i.ItemCode.ToUpper()))
                 .ToDictionaryAsync(i => i.ItemCode.ToUpperInvariant(), i => i.InventoryItemId, cancellationToken);
 
+            // Existing ACTIVE batches for the items this import touches, keyed the same way a row's
+            // identity is (item+store+batch number+expiry) — receiving more of an already-tracked
+            // batch must top up that row, not fork a duplicate with the same batch number, which
+            // would fragment FEFO ordering, near-expiry reporting, and the H1 register.
+            var itemIdsInScope = items.Values.ToList();
+            var existingBatches = await _context.Batch
+                .Where(b => b.HospitalId == request.HospitalId && b.Status == "ACTIVE" && itemIdsInScope.Contains(b.InventoryItemId))
+                .ToListAsync(cancellationToken);
+            var existingBatchByKey = existingBatches.ToDictionary(
+                b => (b.InventoryItemId, b.StoreId, BatchNumber: b.BatchNumber.ToUpperInvariant(), b.ExpiryDate));
+
             var now = DateTime.UtcNow;
+
+            // Items auto-created by this same import run -- kept in-memory alongside `items` (which
+            // only reflects what was already in the DB before this request) so a later row for the
+            // same new code resolves to it, and so per-item CurrentStock updates below never need to
+            // re-query a not-yet-saved row.
+            var newlyCreatedItems = new Dictionary<string, InventoryItem>();
 
             using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
             try
@@ -81,36 +109,102 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         continue;
                     }
 
-                    if (!items.TryGetValue(itemCode, out var inventoryItemId))
+                    Guid inventoryItemId;
+                    if (items.TryGetValue(itemCode, out var existingItemId))
                     {
-                        response.Errors.Add(new BulkBatchRowError { RowIndex = i, ErrorMessage = $"Item Code '{itemCode}' not found." });
+                        inventoryItemId = existingItemId;
+                    }
+                    else if (newlyCreatedItems.TryGetValue(itemCode, out var alreadyCreated))
+                    {
+                        inventoryItemId = alreadyCreated.InventoryItemId;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(row.ItemName))
+                    {
+                        // One-step "add medicine + stock it" -- the catalogue entry doesn't need to
+                        // pre-exist as long as the row supplies a name. Created with sane pharmacy
+                        // defaults; the pharmacist can fill in generic name/manufacturer/schedule/
+                        // reorder levels afterwards from the Medicine Catalog like any other item.
+                        var newItem = new InventoryItem
+                        {
+                            InventoryItemId = Guid.NewGuid(),
+                            HospitalId = request.HospitalId,
+                            ItemCode = row.ItemCode.Trim(),
+                            ItemName = row.ItemName.Trim(),
+                            Category = "DRUG",
+                            Unit = "PCS",
+                            DefaultRate = row.Mrp,
+                            CurrentStock = 0,
+                            MinStockLevel = 0,
+                            ReorderQty = 0,
+                            IsActive = true,
+                            CreatedAt = now,
+                            CreatedBy = request.LoggedInUserName,
+                            UpdatedAt = now,
+                            UpdatedBy = request.LoggedInUserName,
+                        };
+                        _context.InventoryItem.Add(newItem);
+                        // Flush immediately -- Batch.InventoryItemId is a plain scalar FK copy with
+                        // no EF navigation property linking the two entities, so EF's dependency
+                        // graph has no way to know this row's about-to-be-added Batch must be
+                        // inserted after this InventoryItem. Without this, SaveChangesAsync at the
+                        // end of the loop can order the Batch insert first and violate FK_BATCH_Item
+                        // (confirmed live: real 500 on a real dev import before this fix).
+                        await _context.SaveChangesAsync(cancellationToken);
+                        newlyCreatedItems[itemCode] = newItem;
+                        inventoryItemId = newItem.InventoryItemId;
+                    }
+                    else
+                    {
+                        response.Errors.Add(new BulkBatchRowError { RowIndex = i, ErrorMessage = $"Item Code '{itemCode}' not found. Include an Item Name to create it automatically." });
                         continue;
                     }
 
-                    var batch = new Batch
+                    var trimmedBatchNumber = row.BatchNumber.Trim();
+                    var mergeKey = (inventoryItemId, storeId, BatchNumber: trimmedBatchNumber.ToUpperInvariant(), row.ExpiryDate);
+                    Batch batch;
+                    if (existingBatchByKey.TryGetValue(mergeKey, out var matchedBatch))
                     {
-                        BatchId = Guid.NewGuid(),
-                        HospitalId = request.HospitalId,
-                        InventoryItemId = inventoryItemId,
-                        StoreId = storeId,
-                        BatchNumber = row.BatchNumber.Trim(),
-                        ManufactureDate = row.ManufactureDate,
-                        ExpiryDate = row.ExpiryDate,
-                        UnitCost = row.UnitCost,
-                        ReceivedQty = row.ReceivedQty,
-                        RemainingQty = row.ReceivedQty,
-                        Status = "ACTIVE",
-                        CreatedAt = now,
-                        CreatedBy = request.LoggedInUserName,
-                        UpdatedAt = now,
-                        UpdatedBy = request.LoggedInUserName
-                    };
-
-                    _context.Batch.Add(batch);
+                        matchedBatch.ReceivedQty += row.ReceivedQty;
+                        matchedBatch.RemainingQty += row.ReceivedQty;
+                        matchedBatch.UpdatedAt = now;
+                        matchedBatch.UpdatedBy = request.LoggedInUserName;
+                        batch = matchedBatch;
+                    }
+                    else
+                    {
+                        batch = new Batch
+                        {
+                            BatchId = Guid.NewGuid(),
+                            HospitalId = request.HospitalId,
+                            InventoryItemId = inventoryItemId,
+                            StoreId = storeId,
+                            BatchNumber = trimmedBatchNumber,
+                            ManufactureDate = row.ManufactureDate,
+                            ExpiryDate = row.ExpiryDate,
+                            UnitCost = row.UnitCost,
+                            Mrp = row.Mrp,
+                            BarcodeValue = string.IsNullOrWhiteSpace(row.BarcodeValue) ? null : row.BarcodeValue.Trim(),
+                            ReceivedQty = row.ReceivedQty,
+                            RemainingQty = row.ReceivedQty,
+                            Status = "ACTIVE",
+                            CreatedAt = now,
+                            CreatedBy = request.LoggedInUserName,
+                            UpdatedAt = now,
+                            UpdatedBy = request.LoggedInUserName
+                        };
+                        _context.Batch.Add(batch);
+                        // Two rows in the same file for the same batch (e.g. a split-scheme
+                        // line) must also merge into each other, not just against what was
+                        // already in the DB before this import started.
+                        existingBatchByKey[mergeKey] = batch;
+                    }
 
                     var stockLevel = await _context.StockLevel.FirstOrDefaultAsync(
                         sl => sl.InventoryItemId == inventoryItemId && sl.StoreId == storeId && sl.HospitalId == request.HospitalId, cancellationToken);
 
+                    // batch.ReceivedQty is the batch's cumulative total (possibly just bumped by a
+                    // merge above) — every increment below must use row.ReceivedQty, this row's own
+                    // contribution, not the batch's running total.
                     if (stockLevel == null)
                     {
                         stockLevel = new StockLevel
@@ -119,20 +213,56 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             HospitalId = request.HospitalId,
                             InventoryItemId = inventoryItemId,
                             StoreId = storeId,
-                            QtyOnHand = batch.ReceivedQty,
+                            QtyOnHand = row.ReceivedQty,
                             UpdatedAt = now
                         };
                         _context.StockLevel.Add(stockLevel);
                     }
                     else
                     {
-                        stockLevel.QtyOnHand += batch.ReceivedQty;
+                        stockLevel.QtyOnHand += row.ReceivedQty;
                         stockLevel.UpdatedAt = now;
                     }
+
+                    // Bulk import bypassed both InventoryItem.CurrentStock and the InventoryMovement
+                    // audit trail until now — CurrentStock drove low-stock alerts and InventoryMovement
+                    // feeds the reorder-threshold suggestion engine, so a bulk-imported batch was
+                    // invisible to both. Kept as plain field/row writes (not routed through
+                    // RecordInventoryMovementRequestModel) since this handler already holds its own
+                    // transaction and item/store locks aren't needed for a straight RECEIVE.
+                    var item = newlyCreatedItems.TryGetValue(itemCode, out var justCreated)
+                        ? justCreated
+                        : await _context.InventoryItem.FirstOrDefaultAsync(
+                            it => it.InventoryItemId == inventoryItemId && it.HospitalId == request.HospitalId, cancellationToken);
+                    if (item != null)
+                    {
+                        item.CurrentStock += row.ReceivedQty;
+                        item.UpdatedAt = now;
+                        item.UpdatedBy = request.LoggedInUserName;
+                    }
+
+                    _context.InventoryMovement.Add(new InventoryMovement
+                    {
+                        InventoryMovementId = Guid.NewGuid(),
+                        HospitalId = request.HospitalId,
+                        InventoryItemId = inventoryItemId,
+                        MovementType = "RECEIVE",
+                        Qty = row.ReceivedQty,
+                        UnitCost = row.UnitCost,
+                        BatchId = batch.BatchId,
+                        BatchNumber = batch.BatchNumber,
+                        ExpiryDate = batch.ExpiryDate,
+                        ToStoreId = storeId,
+                        SourceModule = "BULK_IMPORT",
+                        MovedAt = now,
+                        MovedBy = request.LoggedInUserName,
+                        CreatedAt = now,
+                    });
 
                     response.SuccessCount++;
                 }
 
+                response.CreatedItemCount = newlyCreatedItems.Count;
                 await _context.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
             }
@@ -149,7 +279,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
             else
             {
-                response.Message = $"Successfully processed all {response.SuccessCount} rows.";
+                response.Message = response.CreatedItemCount > 0
+                    ? $"Successfully processed all {response.SuccessCount} rows ({response.CreatedItemCount} new medicine(s) added to the catalogue)."
+                    : $"Successfully processed all {response.SuccessCount} rows.";
             }
 
             return response;

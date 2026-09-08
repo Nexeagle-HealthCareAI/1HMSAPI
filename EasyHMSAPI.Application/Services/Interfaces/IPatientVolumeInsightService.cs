@@ -11,7 +11,8 @@ namespace EasyHMSAPI.Application.Services.Interfaces
     public record PatientVolumeInsightContext(
         PatientVolumeTrendSummary Trend,
         List<DoctorLoadForecastEntry> DoctorLoadForecast,
-        List<AnomalyFlag> Anomalies
+        List<AnomalyFlag> Anomalies,
+        decimal NoShowRate
     );
 
     /// <summary>

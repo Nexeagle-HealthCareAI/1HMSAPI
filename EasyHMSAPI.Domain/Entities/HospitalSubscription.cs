@@ -62,13 +62,18 @@ namespace EasyHMSAPI.Domain.Entities
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
-        // Trial/Active are only true while their end date hasn't passed — nothing flips Status to
+        // Trial no longer auto-expires by calendar date -- replaced by IUsageLimitService's
+        // monthly free-tier quota (see UsageLimitService), which HospitalAccessFilter does not
+        // enforce itself (each of the 5 countable-action handlers gates its own write). A Trial
+        // hospital therefore stays "Trial" indefinitely from this method's point of view; only an
+        // explicit admin-set Status (Blocked/Rejected) or a genuinely lapsed PAID subscription
+        // still locks a hospital out here.
+        //
+        // Active is only true while its end date hasn't passed — nothing flips Status to
         // "Expired" in the background, so callers must compute this instead of trusting the raw
         // column. Blocked/PendingApproval/Pending pass through unchanged.
         public string GetEffectiveStatus(DateTime utcNow)
         {
-            if (Status.Equals("Trial", StringComparison.OrdinalIgnoreCase) && TrialEndDate.HasValue && TrialEndDate.Value <= utcNow)
-                return "Expired";
             if (Status.Equals("Active", StringComparison.OrdinalIgnoreCase) && SubscriptionEndDate.HasValue && SubscriptionEndDate.Value <= utcNow)
                 return "Expired";
             return Status;

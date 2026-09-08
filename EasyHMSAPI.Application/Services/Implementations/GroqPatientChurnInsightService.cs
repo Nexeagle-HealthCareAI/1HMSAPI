@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using EasyHMSAPI.Application.Services.Interfaces;
 
 namespace EasyHMSAPI.Application.Services.Implementations
@@ -11,20 +12,28 @@ namespace EasyHMSAPI.Application.Services.Implementations
         private readonly HttpClient _httpClient;
         private readonly string _apiKey;
         private readonly string _model;
+        private readonly ILogger<GroqPatientChurnInsightService> _logger;
 
-        public GroqPatientChurnInsightService(HttpClient httpClient, IConfiguration configuration)
+        public GroqPatientChurnInsightService(HttpClient httpClient, IConfiguration configuration, ILogger<GroqPatientChurnInsightService> logger)
         {
             _httpClient = httpClient;
             _apiKey = configuration["Groq:ApiKey"] ?? "gsk_dummy";
             _model = configuration["Groq:Model"] ?? "llama-3.3-70b-versatile";
+            _logger = logger;
 
             _httpClient.BaseAddress = new Uri("https://api.groq.com/openai/v1/");
             _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
         }
 
+        private bool IsKeyUnset => string.IsNullOrWhiteSpace(_apiKey) || _apiKey == "gsk_dummy" || _apiKey.StartsWith("<", StringComparison.Ordinal);
+
         public async Task<PatientChurnNarrative> GenerateInsightsAsync(PatientChurnSummary summary)
         {
-            if (_apiKey == "gsk_dummy") return FallbackNarrative(summary);
+            if (IsKeyUnset)
+            {
+                _logger.LogWarning("Groq:ApiKey is not configured (patient-churn insights) — returning fallback narrative");
+                return FallbackNarrative(summary);
+            }
             if (summary.LapsedCount == 0) return new PatientChurnNarrative("No patients currently look lapsed -- everyone with a regular visiting pattern has returned within their usual rhythm.", string.Empty);
 
             var prompt =
@@ -50,7 +59,12 @@ namespace EasyHMSAPI.Application.Services.Implementations
             {
                 var content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
                 var response = await _httpClient.PostAsync("chat/completions", content);
-                response.EnsureSuccessStatusCode();
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorBody = await response.Content.ReadAsStringAsync();
+                    _logger.LogWarning("Groq patient-churn-insights call failed with {StatusCode}: {Body}", (int)response.StatusCode, errorBody);
+                    return FallbackNarrative(summary);
+                }
 
                 var responseString = await response.Content.ReadAsStringAsync();
                 using var jsonDocument = JsonDocument.Parse(responseString);
@@ -63,10 +77,11 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
                 return new PatientChurnNarrative(parsed.Outlook, parsed.SuggestedOutreachMessage ?? string.Empty);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 // Never let a Groq/network hiccup break the dashboard -- fall back to a
                 // deterministic, code-generated narrative and template.
+                _logger.LogWarning(ex, "Groq patient-churn-insights call threw — returning fallback narrative");
                 return FallbackNarrative(summary);
             }
         }

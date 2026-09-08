@@ -91,6 +91,28 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Registers a patient with no appointment or admission attached -- for a walk-in with
+        // no doctor/slot/bed to book against (e.g. a Pathology Lab order placed for someone not
+        // already in the system). Matches by mobile+name and updates in place, same as every
+        // other registration path (see AppointmentBookingHelpers.FindOrCreatePatientAsync).
+        [HttpPost("register")]
+        [Authorize]
+        public async Task<ActionResult<RegisterWalkInPatientResponseModel>> Register([FromBody] RegisterWalkInPatientRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+            try
+            {
+                var response = await _mediator.Send(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in Register for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred while registering the patient." });
+            }
+        }
+
         // Admin: merge a duplicate UHID into a canonical one (repoints all linked records).
         [HttpPost("merge")]
         [Authorize]

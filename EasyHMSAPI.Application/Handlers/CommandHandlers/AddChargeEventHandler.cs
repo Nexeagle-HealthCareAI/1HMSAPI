@@ -7,16 +7,19 @@ using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
     public class AddChargeEventHandler : IRequestHandler<AddChargeEventRequestModel, AddChargeEventResponseModel>
     {
         private readonly AppDbContext _context;
+        private readonly ILogger<AddChargeEventHandler> _logger;
 
-        public AddChargeEventHandler(AppDbContext context)
+        public AddChargeEventHandler(AppDbContext context, ILogger<AddChargeEventHandler> logger)
         {
             _context = context;
+            _logger = logger;
         }
 
         public async Task<AddChargeEventResponseModel> Handle(AddChargeEventRequestModel request, CancellationToken cancellationToken)
@@ -342,8 +345,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     }
                 };
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogError(ex, "Error posting charges for hospitalId: {HospitalId}, encounterId: {EncounterId}", request.HospitalId, request.EncounterId);
                 return new AddChargeEventResponseModel { Success = false, Message = "Error posting charges." };
             }
         }

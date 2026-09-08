@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
@@ -116,6 +117,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         // Daily-recurring lines (oxygen, continuous monitoring) are excluded here —
                         // they accrue once per IST day via the nightly PostDailyRecurringCharges job
                         // instead of being charged once at order time.
+                        // anyChargesPosted drives a best-effort draft-invoice creation after commit
+                        // below — AddChargeEventHandler alone never creates a BillingInvoice, and
+                        // without one the charge is real but invisible on both the Billing Dashboard
+                        // and Pathology's own Billing tab until someone separately invoices the
+                        // encounter (same gap already fixed for the Pathology module's own order
+                        // path — see PathologyAutoBillingHelper.PostChargesAndInvoiceAsync).
+                        bool anyChargesPosted = false;
                         if (admission.EncounterId.HasValue)
                         {
                             var chargeableIndices = Enumerable.Range(0, lines.Count).Where(i => lines[i].ChargeId.HasValue && !lines[i].IsDailyRecurringCharge).ToList();
@@ -138,6 +146,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                         Rate = master?.DefaultRate ?? 0,
                                         DiscountPercent = 0,
                                         CategoryCode = master?.CategoryCode ?? DefaultCategoryFor(orderType),
+                                        // Every Lab-type CPOE line bills as pathology-sourced regardless of the
+                                        // ChargeMaster row's own category, so a downstream "which charges came
+                                        // from the lab" filter (Billing Ledger badges, Pathology's own billing
+                                        // strip) can rely on SourceModule alone instead of guessing from CategoryCode.
+                                        SourceModule = orderType == IpdConstants.ClinicalOrderType.Lab
+                                            ? BillingConstants.SourceModule.LabPath
+                                            : null,
                                         AttributedDoctorId = order.OrderedByDoctorId,
                                     };
                                 }).ToList();
@@ -164,11 +179,129 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                                 for (int k = 0; k < chargeableIndices.Count; k++)
                                     lines[chargeableIndices[k]].ChargeEventId = chargeResponse.Data.ChargeEvents[k].ChargeEventId;
+
+                                anyChargesPosted = true;
+                            }
+                        }
+
+                        // ── Lab orders also get a linked PathologyOrder, so they surface in the
+                        // Pathology Lab workspace's structured results/report pipeline instead of
+                        // staying invisible to it. Billing already happened above via the generic
+                        // ChargeMaster charge-on-event path -- this never bills again, it only maps
+                        // chargeable lines onto PathologyTestMaster (matched by ChargeId) to build
+                        // the structured order. Lines with no ChargeId, or a ChargeId that doesn't
+                        // resolve to a catalogued test, are left as plain ClinicalOrderLine entries.
+                        if (orderType == IpdConstants.ClinicalOrderType.Lab)
+                        {
+                            var chargeIds = lines.Where(l => l.ChargeId.HasValue).Select(l => l.ChargeId!.Value).Distinct().ToList();
+                            var matchedTests = chargeIds.Count == 0
+                                ? new List<PathologyTestMaster>()
+                                : await _context.PathologyTestMaster
+                                    .Where(t => t.HospitalId == request.HospitalId && t.IsActive && t.ChargeId.HasValue && chargeIds.Contains(t.ChargeId.Value))
+                                    .ToListAsync(cancellationToken);
+
+                            if (matchedTests.Count > 0)
+                            {
+                                var testByChargeId = matchedTests.ToDictionary(t => t.ChargeId!.Value, t => t);
+                                var pathologyLines = lines.Where(l => l.ChargeId.HasValue && testByChargeId.ContainsKey(l.ChargeId.Value)).ToList();
+
+                                if (pathologyLines.Count > 0)
+                                {
+                                    string pathOrderNo = string.Empty;
+                                    var pathNow = DateTime.UtcNow;
+                                    for (int attempt = 0; attempt < 5; attempt++)
+                                    {
+                                        try
+                                        {
+                                            var numberSeries = await NumberSeriesDefaults.GetOrCreateAsync(
+                                                _context, request.HospitalId, BillingConstants.NumberSeriesCode.LabAccession, request.LoggedInUserName, cancellationToken);
+                                            numberSeries.CurrentValue++;
+                                            pathOrderNo = NumberSeriesFormatter.Format(
+                                                numberSeries.Prefix, numberSeries.YearFormat, numberSeries.Separator, numberSeries.PadLength, numberSeries.CurrentValue);
+                                            numberSeries.UpdatedAt = pathNow;
+                                            numberSeries.UpdatedBy = request.LoggedInUserName;
+                                            break;
+                                        }
+                                        catch (DbUpdateException)
+                                        {
+                                            _context.ChangeTracker.Clear();
+                                            if (attempt == 4) throw;
+                                        }
+                                    }
+
+                                    var pathOrder = new PathologyOrder
+                                    {
+                                        OrderId = Guid.NewGuid(),
+                                        HospitalId = request.HospitalId,
+                                        PatientId = admission.PatientId,
+                                        EncounterId = admission.EncounterId,
+                                        AdmissionId = admission.AdmissionId,
+                                        OrderedByDoctorId = order.OrderedByDoctorId,
+                                        Notes = order.Notes,
+                                        OrderNo = pathOrderNo,
+                                        OrderDate = pathNow,
+                                        Status = "PLACED",
+                                        SourceType = "IPD",
+                                        IsStat = pathologyLines.Any(l => string.Equals(l.Urgency, "STAT", StringComparison.OrdinalIgnoreCase)),
+                                        CreatedAt = pathNow,
+                                        CreatedBy = request.LoggedInUserName,
+                                        UpdatedAt = pathNow,
+                                        UpdatedBy = request.LoggedInUserName,
+                                    };
+                                    _context.PathologyOrder.Add(pathOrder);
+
+                                    foreach (var clinicalLine in pathologyLines)
+                                    {
+                                        var test = testByChargeId[clinicalLine.ChargeId!.Value];
+                                        var pathLine = new PathologyOrderLine
+                                        {
+                                            OrderLineId = Guid.NewGuid(),
+                                            HospitalId = request.HospitalId,
+                                            OrderId = pathOrder.OrderId,
+                                            TestId = test.TestId,
+                                            Status = "PENDING",
+                                            CreatedAt = pathNow,
+                                            CreatedBy = request.LoggedInUserName,
+                                            UpdatedAt = pathNow,
+                                            UpdatedBy = request.LoggedInUserName,
+                                        };
+                                        _context.PathologyOrderLine.Add(pathLine);
+                                        clinicalLine.LinkedPathologyOrderLineId = pathLine.OrderLineId;
+                                    }
+                                }
                             }
                         }
 
                         await _context.SaveChangesAsync(cancellationToken);
                         await tx.CommitAsync(cancellationToken);
+
+                        // Best-effort, run only after the order's own transaction has committed —
+                        // CreateDraftInvoiceHandler manages its own execution-strategy/transaction,
+                        // which can't nest inside the one just committed above. The order itself must
+                        // not be undone by an invoicing hiccup (same "commit first, bill best-effort
+                        // after" shape CollectPathologySampleHandler already uses for ON_SAMPLE_
+                        // COLLECTION billing), so failures here are swallowed, not surfaced as a
+                        // order-placement failure.
+                        if (anyChargesPosted && admission.EncounterId.HasValue)
+                        {
+                            try
+                            {
+                                await _mediator.Send(new CreateDraftInvoiceRequestModel
+                                {
+                                    HospitalId = request.HospitalId,
+                                    PatientId = admission.PatientId,
+                                    EncounterId = admission.EncounterId.Value,
+                                    LoggedInUserId = request.LoggedInUserId,
+                                    LoggedInUserName = request.LoggedInUserName,
+                                }, cancellationToken);
+                            }
+                            catch
+                            {
+                                // Swallow -- the clinical order and its charges already committed
+                                // successfully; the encounter can still be invoiced manually from
+                                // the Billing tab if this best-effort call didn't get there.
+                            }
+                        }
 
                         return new PlaceClinicalOrderResponseModel
                         {

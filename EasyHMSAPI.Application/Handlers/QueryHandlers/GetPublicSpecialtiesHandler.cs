@@ -38,10 +38,31 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
             _context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
 
-            var publicHospitalIds = await _context.Hospitals
-                .Where(h => h.IsPubliclyListed && h.IsActive && !h.IsArchived)
+            var activeHospitalIds = await _context.Hospitals
+                .Where(h => h.IsActive && !h.IsArchived)
                 .Select(h => h.HospitalID)
                 .ToListAsync(cancellationToken);
+
+            if (activeHospitalIds.Count == 0)
+            {
+                return EmptyResult();
+            }
+
+            // Same eligibility rule as GetPublicDoctorsHandler: a hospital counts if it opted in
+            // itself, OR it has at least one CMS-force-listed doctor.
+            var selfListedIds = await _context.Hospitals
+                .Where(h => activeHospitalIds.Contains(h.HospitalID) && h.IsPubliclyListed)
+                .Select(h => h.HospitalID)
+                .ToListAsync(cancellationToken);
+
+            var forcedListingHospitalIds = await _context.DoctorDepartments
+                .Where(dd => dd.HospitalId.HasValue && activeHospitalIds.Contains(dd.HospitalId!.Value))
+                .Join(_context.Doctors.Where(d => d.IsPubliclyListed && !d.IsDelistedByAdmin),
+                      dd => dd.DoctorID, d => d.DoctorID, (dd, d) => dd.HospitalId!.Value)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+            var publicHospitalIds = selfListedIds.Union(forcedListingHospitalIds).ToList();
 
             if (publicHospitalIds.Count == 0)
             {

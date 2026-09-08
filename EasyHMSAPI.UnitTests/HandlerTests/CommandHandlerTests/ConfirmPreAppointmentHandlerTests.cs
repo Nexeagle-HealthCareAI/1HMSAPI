@@ -30,7 +30,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         {
             _context = InMemoryDbContextFactory.CreateContext();
             _whatsAppServiceMock = new Mock<IWhatsAppMessagingService>();
-            _handler = new ConfirmPreAppointmentHandler(_context, _whatsAppServiceMock.Object, new MemoryCache(new MemoryCacheOptions()));
+            _handler = new ConfirmPreAppointmentHandler(_context, _whatsAppServiceMock.Object, new MemoryCache(new MemoryCacheOptions()), UsageLimitTestHelper.AlwaysAllow());
 
             _hospitalId = Guid.NewGuid();
             var user = TestDataFactory.SeedUser(_context);
@@ -187,6 +187,26 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 
             Assert.That(response.Success, Is.False);
             Assert.That(response.Message, Does.Contain("already booked"));
+        }
+
+        [Test]
+        public async Task Handle_FreeTierLimitReached_BlocksConfirmationWithoutPersisting()
+        {
+            var futureDate = DateTime.Today.AddDays(3).AddHours(11);
+            var appointment = SeedPreAppointment(futureDate);
+            var blockedHandler = new ConfirmPreAppointmentHandler(_context, _whatsAppServiceMock.Object, new MemoryCache(new MemoryCacheOptions()), UsageLimitTestHelper.AlwaysBlock());
+
+            var request = new ConfirmPreAppointmentRequestModel
+            {
+                AppointmentId = appointment.ApptId,
+                HospitalId = _hospitalId,
+                StartAt = futureDate,
+            };
+
+            var response = await blockedHandler.Handle(request, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Does.Contain("limit"));
         }
     }
 }

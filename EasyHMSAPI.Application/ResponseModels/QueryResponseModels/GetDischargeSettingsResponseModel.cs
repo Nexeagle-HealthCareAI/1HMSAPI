@@ -26,6 +26,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? FontWeight { get; set; }
         public string? TextColour { get; set; }
         public string? URI { get; set; }
+        public bool UseSystemDefaultLetterhead { get; set; }
         public DateTime CreatedAtUtc { get; set; }
         public DateTime UpdatedAtUtc { get; set; }
     }

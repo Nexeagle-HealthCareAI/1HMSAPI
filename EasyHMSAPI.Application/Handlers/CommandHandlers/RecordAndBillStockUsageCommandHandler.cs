@@ -44,6 +44,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 return new RecordAndBillStockUsageResponseModel { Success = false, Message = "Inventory item not found." };
             }
 
+            // A plain _context.Database.BeginTransactionAsync() here throws at runtime against a
+            // real SQL Server connection ("SqlServerRetryingExecutionStrategy does not support
+            // user-initiated transactions") — the retrying execution strategy must own the
+            // transaction, same pattern TransferStockCommandHandler/QuickReceiveStockCommandHandler
+            // already use. Never caught by the in-memory-provider unit tests since InMemory has no
+            // execution strategy — only surfaced testing this live against the real dev database.
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(() => TryHandleAsync(request, item, cancellationToken));
+        }
+
+        private async Task<RecordAndBillStockUsageResponseModel> TryHandleAsync(RecordAndBillStockUsageRequestModel request, InventoryItem item, CancellationToken cancellationToken)
+        {
             using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
             try
             {

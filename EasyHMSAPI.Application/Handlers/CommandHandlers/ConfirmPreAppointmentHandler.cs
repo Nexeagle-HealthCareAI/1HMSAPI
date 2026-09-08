@@ -26,12 +26,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         private readonly AppDbContext _context;
         private readonly IWhatsAppMessagingService _whatsAppMessagingService;
         private readonly IMemoryCache _cache;
+        private readonly IUsageLimitService _usageLimitService;
 
-        public ConfirmPreAppointmentHandler(AppDbContext context, IWhatsAppMessagingService whatsAppMessagingService, IMemoryCache cache)
+        public ConfirmPreAppointmentHandler(AppDbContext context, IWhatsAppMessagingService whatsAppMessagingService, IMemoryCache cache, IUsageLimitService usageLimitService)
         {
             _context = context;
             _whatsAppMessagingService = whatsAppMessagingService;
             _cache = cache;
+            _usageLimitService = usageLimitService;
         }
 
         public async Task<ConfirmPreAppointmentResponseModel> Handle(ConfirmPreAppointmentRequestModel request, CancellationToken cancellationToken)
@@ -76,6 +78,33 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 : JsonSerializer.Deserialize<List<object>>(appointment.StatusHistoryJson) ?? new List<object>();
             history.Add(new { status = newStatus, timestamp = DateTime.UtcNow });
             appointment.StatusHistoryJson = JsonSerializer.Serialize(history);
+
+            // The pre-appointment's real date is only known now (booking only had a non-binding
+            // "preferred" placeholder), so this is the first point the New/Old-Fee/Old-No-Fee
+            // classification can be resolved — mirrors RegisterAppointmentHandler.SetAppointmentType.
+            var typeResult = await AppointmentTypeResolver.ResolveAsync(
+                _context,
+                request.HospitalId,
+                null,
+                appointment.PatientId,
+                null,
+                appointment.DoctorId,
+                appointment.ApptDate,
+                appointment.ApptId,
+                cancellationToken);
+            appointment.AppointmentType = typeResult.AppointmentType;
+            appointment.ValidUptoDate = typeResult.ValidUptoDate;
+
+            // This is the genuine "OPD appointment" unit for the online (Doctor Dekho) channel --
+            // the initial public request (PublicBookAppointmentHandler) never counts or blocks,
+            // only the moment front-desk actually confirms it into a real, actionable appointment.
+            // Checked last, immediately before the save, so nothing above here has persisted yet
+            // if this blocks.
+            var usage = await _usageLimitService.TryConsumeAsync(request.HospitalId, cancellationToken);
+            if (!usage.Allowed)
+            {
+                return new ConfirmPreAppointmentResponseModel { Success = false, Message = usage.Message };
+            }
 
             await _context.SaveChangesAsync(cancellationToken);
 

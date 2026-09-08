@@ -91,5 +91,35 @@ namespace EasyHMSAPI.UnitTests.ServiceTests
             Assert.That(noShowFlag, Is.Not.Null, "A no-show rate jumping from 10% to 60% must be flagged even though total volume didn't change.");
             Assert.That(noShowFlag!.Direction, Is.EqualTo("UP"));
         }
+
+        [Test]
+        public void ComputeNoShowRate_KnownRatio_ReturnsCorrectRate()
+        {
+            var days = BuildDays(10, i => (10, 2, 0)); // 20% no-show every day
+
+            var rate = KpiAnomalyDetector.ComputeNoShowRate(days);
+
+            Assert.That(rate, Is.EqualTo(0.2m));
+        }
+
+        [Test]
+        public void ComputeNoShowRate_ExtremeRatio_IsCappedAtMaxPlausibleRate()
+        {
+            var days = BuildDays(10, i => (10, 9, 0)); // 90% no-show -- more likely a tracking issue than reality
+
+            var rate = KpiAnomalyDetector.ComputeNoShowRate(days);
+
+            Assert.That(rate, Is.EqualTo(0.5m), "A rate above the plausible cap must be clamped, not trusted as-is.");
+        }
+
+        [Test]
+        public void ComputeNoShowRate_NoAppointments_ReturnsZero()
+        {
+            var days = BuildDays(10, i => (0, 0, 0));
+
+            var rate = KpiAnomalyDetector.ComputeNoShowRate(days);
+
+            Assert.That(rate, Is.EqualTo(0m));
+        }
     }
 }

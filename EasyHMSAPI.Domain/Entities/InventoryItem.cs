@@ -17,6 +17,9 @@ namespace EasyHMSAPI.Domain.Entities
         public string ItemName { get; set; } = null!;
         public string? GenericName { get; set; }
         public string? Manufacturer { get; set; }
+        // Links to the normalized composition for 1-click generic substitution — items sharing a
+        // SaltCompositionId (with live stock) are offered as alternates when this one is unavailable.
+        public Guid? SaltCompositionId { get; set; }
 
         public string Category { get; set; } = null!;   // CONSUMABLE/DRUG/DISPOSABLE/SURGICAL/IMPLANT/OTHER
         public string Unit { get; set; } = null!;

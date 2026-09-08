@@ -1,6 +1,7 @@
 using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
@@ -51,6 +52,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return response;
                 }
 
+                if (!string.IsNullOrEmpty(request.TextColour) && !TextColourValidator.IsValid(request.TextColour))
+                {
+                    response.Success = false;
+                    response.Message = "Text colour must be a hex value like #111827 or #111827FF.";
+                    return response;
+                }
+
                 var existingSettings = await _context.DischargeSettings
                     .FirstOrDefaultAsync(x => x.HospitalId == request.HospitalId && x.DoctorId == request.DoctorId, cancellationToken);
                 var currentDateTime = DateTime.UtcNow;
@@ -75,6 +83,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         CreatedAt = currentDateTime,
                         UpdatedAt = currentDateTime,
                         CreatedByUserId = request.LoggedInUserId,
+                        UseSystemDefaultLetterhead = request.UseSystemDefaultLetterhead ?? false,
                     };
                     _context.DischargeSettings.Add(newSettings);
 
@@ -102,6 +111,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         existingSettings.FontWeight = request.FontWeight;
                     if (!string.IsNullOrEmpty(request.TextColour))
                         existingSettings.TextColour = request.TextColour;
+                    if (request.UseSystemDefaultLetterhead.HasValue)
+                        existingSettings.UseSystemDefaultLetterhead = request.UseSystemDefaultLetterhead.Value;
                     existingSettings.UpdatedAt = currentDateTime;
 
                     response.DischargeSettingId = existingSettings.DischargeSettingId;

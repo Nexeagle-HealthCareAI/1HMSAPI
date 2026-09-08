@@ -81,6 +81,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         CreatedAtUtc = prescriptionSettings.CreatedAt,
                         UpdatedAtUtc = prescriptionSettings.UpdatedAt,
                         ValidUpto = prescriptionSettings.ValidDuration,
+                        UseSystemDefaultLetterhead = prescriptionSettings.UseSystemDefaultLetterhead,
                     };
 
                     // Re-sign the template URL from its object key so it never goes stale

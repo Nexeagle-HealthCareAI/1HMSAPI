@@ -22,6 +22,19 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         // BatchId was supplied, or the FEFO-resolved one when only StoreId was.
         public Guid? BatchId { get; set; } // First batch ID
         public List<Guid>? BatchIds { get; set; }
+        // Per-batch detail (number/expiry/Mrp/qty) for callers that need to display the FEFO
+        // allocation instead of just the IDs — e.g. the pharmacy POS cart.
+        public List<AllocatedBatchDetail> AllocatedBatchDetails { get; set; } = new();
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class AllocatedBatchDetail
+    {
+        public Guid BatchId { get; set; }
+        public string? BatchNumber { get; set; }
+        public DateTime? ExpiryDate { get; set; }
+        public decimal? Mrp { get; set; }
+        public decimal AllocatedQty { get; set; }
     }
 
     [ExcludeFromCodeCoverage]

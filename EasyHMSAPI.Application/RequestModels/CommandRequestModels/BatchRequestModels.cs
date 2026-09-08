@@ -22,6 +22,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public DateTime? ManufactureDate { get; set; }
         public DateTime? ExpiryDate { get; set; }
         public decimal? UnitCost { get; set; }
+        public decimal? Mrp { get; set; }
+        public string? BarcodeValue { get; set; }
         public decimal ReceivedQty { get; set; }
         public Guid? VendorId { get; set; }
         public Guid? GrnLineId { get; set; }

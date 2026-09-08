@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
@@ -46,6 +47,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     result.Success = false;
                     result.Message = "Invalid hospital Id";
 
+                    return result;
+                }
+
+                if (request.File == null || !await FileValidationHelpers.IsPdfAsync(request.File, cancellationToken))
+                {
+                    result.Success = false;
+                    result.Message = "The uploaded file is not a valid PDF.";
                     return result;
                 }
 

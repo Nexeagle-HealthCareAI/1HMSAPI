@@ -19,4 +19,13 @@ namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
         public Guid HospitalId { get; set; }
         public Guid OrderId { get; set; }
     }
+
+    // Powers DocBoard's "Lab Report Ready" badge -- fetched once per hospital (same shape as
+    // AdmissionReferralItem's fetch-once-and-index-by-patientId pattern in DocBoard.tsx), not
+    // per appointment row, to avoid an N+1 request per visible patient.
+    [ExcludeFromCodeCoverage]
+    public class GetRecentlyApprovedPathologyReportsQuery : IRequest<List<PathologyReportReadyDto>>
+    {
+        public Guid HospitalId { get; set; }
+    }
 }

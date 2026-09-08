@@ -48,5 +48,9 @@ namespace EasyHMSAPI.Domain.Entities
         public DateTime? ExpiryDate { get; set; }
         public decimal Qty { get; set; }
         public decimal Rate { get; set; }
+        // Trade scheme (e.g. "10+1") — physical units received free of charge on top of Qty. Batch
+        // ReceivedQty = Qty + FreeQty; the PO's own ReceivedQty tracking stays keyed to the billed
+        // Qty only, since a freebie was never on the order.
+        public decimal FreeQty { get; set; }
     }
 }

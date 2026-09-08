@@ -171,12 +171,15 @@ builder.Services.AddScoped<IBlobStorageService, S3StorageService>();
 builder.Services.AddScoped<ISmsService, SmsService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IWhatsAppMessagingService, WhatsAppMessagingService>();
+builder.Services.AddScoped<IUsageLimitService, UsageLimitService>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IPatientTokenValidator, EasyHMSAPI.Application.Services.Implementations.PatientTokenValidator>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IGeoIpLookupService, EasyHMSAPI.Application.Services.Implementations.IpApiGeoLookupService>();
 builder.Services.AddScoped<IVoiceRxService, VoiceRxService>();
 builder.Services.AddScoped<IDoctorValidationHelper, DoctorValidationHelper>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IWhatsAppQueueNotifier, EasyHMSAPI.Application.Services.WhatsAppQueueNotifier>();
 builder.Services.AddScoped<ISubscriptionLimitHelper, SubscriptionLimitHelper>();
+// Pharmacy Phase 3b: daily 90/60/30-day batch-expiry digest — the only scheduled job in the API.
+builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.ExpiryAlertBackgroundService>();
 // ABDM M1: ABHA creation (Aadhaar-OTP) + existing-ABHA login (Mobile/Aadhaar-OTP).
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmEncryptionService, EasyHMSAPI.Application.Services.Implementations.AbdmEncryptionService>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmGatewayService, EasyHMSAPI.Application.Services.Implementations.AbdmGatewayService>();
@@ -279,6 +282,27 @@ builder.Services.AddRateLimiter(options =>
 // ------------------------------------------------------------
 // --- App Pipeline ---
 var app = builder.Build();
+
+// Safety net for anything that throws OUTSIDE an individual controller action's own try/catch --
+// most notably the globally-registered action filters (HospitalAccessFilter,
+// PermissionAuthorizationFilter), which run before the action method body starts, so an unhandled
+// exception there bypasses every per-controller catch block entirely. Without this, that exception
+// falls through to the framework's own default handling: an unlogged, opaque 500 with no
+// diagnostic trail. Registered first so it wraps the entire pipeline. Never echoes ex.Message to
+// the client -- only the server-side log gets the real exception.
+app.UseExceptionHandler(exceptionApp =>
+{
+    exceptionApp.Run(async context =>
+    {
+        var exceptionFeature = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>();
+        var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+        logger.LogError(exceptionFeature?.Error, "Unhandled exception for {Method} {Path}", context.Request.Method, context.Request.Path);
+
+        context.Response.ContentType = "application/json";
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        await context.Response.WriteAsJsonAsync(new { Message = "An unexpected error occurred. Please try again." });
+    });
+});
 
 // Always enable Swagger, regardless of environment
 app.UseSwagger();

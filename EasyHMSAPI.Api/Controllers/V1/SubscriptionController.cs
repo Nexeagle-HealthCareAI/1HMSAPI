@@ -1,5 +1,6 @@
 using EasyHMSAPI.Api.Common;
 using EasyHMSAPI.Application.Helpers.Interfaces;
+using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -18,14 +19,16 @@ namespace EasyHMSAPI.Api.Controllers.V1
         private readonly IConfiguration _configuration;
         private readonly ILogger<SubscriptionController> _logger;
         private readonly ISubscriptionLimitHelper _subscriptionLimitHelper;
+        private readonly IUsageLimitService _usageLimitService;
 
-        public SubscriptionController(AppDbContext context, IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<SubscriptionController> logger, ISubscriptionLimitHelper subscriptionLimitHelper)
+        public SubscriptionController(AppDbContext context, IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<SubscriptionController> logger, ISubscriptionLimitHelper subscriptionLimitHelper, IUsageLimitService usageLimitService)
         {
             _context = context;
             _httpClientFactory = httpClientFactory;
             _configuration = configuration;
             _logger = logger;
             _subscriptionLimitHelper = subscriptionLimitHelper;
+            _usageLimitService = usageLimitService;
         }
 
         // Server-to-server proxy to CMSAPI's plan catalog: the browser never talks to CMSAPI
@@ -282,12 +285,21 @@ namespace EasyHMSAPI.Api.Controllers.V1
         {
             var usage = await _subscriptionLimitHelper.GetUsageAsync(hospitalId, HttpContext.RequestAborted);
 
+            // Free-tier monthly quota (IPD admission, OPD appointment confirm/walk-in, pathology
+            // order, pharmacy checkout) -- only meaningful for a hospital still on the Trial plan;
+            // GetStatusAsync returns Limit=int.MaxValue for an Active (paid) hospital, which is
+            // surfaced here as null (not gated) rather than a huge, meaningless number.
+            var freeTier = await _usageLimitService.GetStatusAsync(hospitalId, HttpContext.RequestAborted);
+            var freeTierGated = freeTier.Limit != int.MaxValue;
+
             return Ok(new
             {
                 usage.MaxDoctors,
                 usage.CurrentDoctors,
                 usage.MaxBeds,
-                usage.CurrentBeds
+                usage.CurrentBeds,
+                FreeTierLimit = freeTierGated ? freeTier.Limit : (int?)null,
+                FreeTierUsedCount = freeTierGated ? freeTier.UsedCount : (int?)null,
             });
         }
     }

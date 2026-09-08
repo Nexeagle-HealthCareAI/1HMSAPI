@@ -69,7 +69,7 @@ Rough roll-up: **~8% done / ~22% partial / ~70% not started.**
 - GST/tax engine (HSN/SAC, CGST/SGST, GST invoice template)
 - Discount approval workflow (HOD log)
 - Consumable items + inventory deduction at point of use
-- Pharmacy dispensing producer → `BillingChargeEvent`
+- **Pharmacy/POS — see [`PHARMACY_PRD.md`](PHARMACY_PRD.md) for the full phased spec (3a–3d), which supersedes the single "dispensing producer" line below**
 - Blood products workflow + transfusion record
 - Payment receipt format + daily reconciliation
 - Revenue analytics

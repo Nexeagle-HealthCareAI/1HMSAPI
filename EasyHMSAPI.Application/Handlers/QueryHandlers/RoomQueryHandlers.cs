@@ -87,6 +87,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .Select(b => new BedMasterItemResponseModel
                 {
                     BedId = b.BedId,
+                    RoomId = b.RoomId,
                     WardCode = b.WardCode,
                     WardName = b.WardName,
                     WardType = b.WardType,

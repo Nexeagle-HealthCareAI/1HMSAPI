@@ -104,12 +104,27 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (bag.Status != IpdConstants.BloodBagStatus.Available)
                     return new ReserveBloodBagResponseModel { Success = false, Message = $"Bag is {bag.Status.ToLowerInvariant()}, not available to reserve." };
 
+                var now = DateTime.UtcNow;
+                if (bag.ExpiresAt <= now)
+                {
+                    // Auto-transition to Discarded here rather than just rejecting -- otherwise this
+                    // expired-but-never-discarded bag keeps surfacing in every future pool search and
+                    // reserve attempt indefinitely, since nothing else in the system sweeps for expiry.
+                    bag.Status = IpdConstants.BloodBagStatus.Discarded;
+                    bag.DiscardedAt = now;
+                    bag.DiscardedBy = "SYSTEM";
+                    bag.DiscardReason = "Expired before reservation";
+                    bag.UpdatedAt = now;
+                    bag.UpdatedBy = "SYSTEM";
+                    await _context.SaveChangesAsync(cancellationToken);
+                    return new ReserveBloodBagResponseModel { Success = false, Message = "This bag expired and has been discarded. It cannot be reserved." };
+                }
+
                 var admission = await _context.Admission
                     .FirstOrDefaultAsync(a => a.AdmissionId == request.AdmissionId && a.HospitalId == request.HospitalId, cancellationToken);
                 if (admission == null)
                     return new ReserveBloodBagResponseModel { Success = false, Message = "Admission not found." };
 
-                var now = DateTime.UtcNow;
                 bag.Status = IpdConstants.BloodBagStatus.Reserved;
                 bag.ReservedForAdmissionId = admission.AdmissionId;
                 bag.ReservedForEncounterId = admission.EncounterId;
@@ -184,6 +199,20 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return new RecordTransfusionResponseModel { Success = false, Message = "Blood bag not found." };
                 if (bag.Status != IpdConstants.BloodBagStatus.Available && bag.Status != IpdConstants.BloodBagStatus.Reserved)
                     return new RecordTransfusionResponseModel { Success = false, Message = $"Bag is {bag.Status.ToLowerInvariant()}, cannot transfuse." };
+                if (bag.ExpiresAt <= DateTime.UtcNow)
+                {
+                    // Same self-healing auto-discard as ReserveBloodBagRequestModel -- an expired
+                    // Reserved bag would otherwise sit forever, since nothing else sweeps for expiry.
+                    var expiredNow = DateTime.UtcNow;
+                    bag.Status = IpdConstants.BloodBagStatus.Discarded;
+                    bag.DiscardedAt = expiredNow;
+                    bag.DiscardedBy = "SYSTEM";
+                    bag.DiscardReason = "Expired before transfusion";
+                    bag.UpdatedAt = expiredNow;
+                    bag.UpdatedBy = "SYSTEM";
+                    await _context.SaveChangesAsync(cancellationToken);
+                    return new RecordTransfusionResponseModel { Success = false, Message = "This bag expired and has been discarded. It cannot be transfused." };
+                }
 
                 var admission = await _context.Admission
                     .FirstOrDefaultAsync(a => a.AdmissionId == request.AdmissionId && a.HospitalId == request.HospitalId, cancellationToken);

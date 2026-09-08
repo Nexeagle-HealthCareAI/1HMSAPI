@@ -5,6 +5,7 @@ using EasyHMSAPI.Application.Handlers.CommandHandlers;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Domain.Entities;
 using EasyHMSAPI.UnitTests.TestUtils;
 using MediatR;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -43,6 +44,29 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             ToStoreId = Guid.NewGuid(),
             Qty = 5,
         };
+
+        // TransferStockCommandHandler resolves FEFO batch allocations for the source store BEFORE
+        // dispatching any ISSUE/RECEIVE movement (see FefoBatchAllocationService.AllocateAsync) --
+        // with no active batch seeded, every request here would fail at that allocation step with
+        // "No active batch has enough remaining stock..." before the mocked mediator calls this
+        // fixture exercises are ever reached. Seeds one ACTIVE batch with enough RemainingQty to
+        // cover the request's Qty so allocation succeeds and the mediator mocks actually get hit.
+        private void SeedSufficientBatch(TransferStockRequestModel request)
+        {
+            _context.Batch.Add(new Batch
+            {
+                BatchId = Guid.NewGuid(),
+                HospitalId = request.HospitalId,
+                InventoryItemId = request.InventoryItemId,
+                StoreId = request.FromStoreId,
+                BatchNumber = "B-1",
+                ReceivedQty = request.Qty,
+                RemainingQty = request.Qty,
+                Status = "ACTIVE",
+                CreatedAt = DateTime.UtcNow,
+            });
+            _context.SaveChanges();
+        }
 
         [Test]
         public async Task Handle_MissingIds_ReturnsError()
@@ -83,6 +107,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public async Task Handle_BothMovementsSucceed_ReturnsSuccess()
         {
             var request = ValidRequest();
+            SeedSufficientBatch(request);
 
             _mediatorMock.Setup(m => m.Send(It.Is<RecordInventoryMovementRequestModel>(r => r.MovementType == "ISSUE"), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new RecordInventoryMovementResponseModel { Success = true });
@@ -98,6 +123,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public async Task Handle_IssueFails_ReturnsErrorAndNeverAttemptsReceive()
         {
             var request = ValidRequest();
+            SeedSufficientBatch(request);
 
             _mediatorMock.Setup(m => m.Send(It.Is<RecordInventoryMovementRequestModel>(r => r.MovementType == "ISSUE"), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new RecordInventoryMovementResponseModel { Success = false, Message = "Insufficient stock." });
@@ -113,6 +139,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public async Task Handle_ReceiveFails_ReturnsErrorWithoutOldContactAdminWording()
         {
             var request = ValidRequest();
+            SeedSufficientBatch(request);
 
             _mediatorMock.Setup(m => m.Send(It.Is<RecordInventoryMovementRequestModel>(r => r.MovementType == "ISSUE"), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new RecordInventoryMovementResponseModel { Success = true });

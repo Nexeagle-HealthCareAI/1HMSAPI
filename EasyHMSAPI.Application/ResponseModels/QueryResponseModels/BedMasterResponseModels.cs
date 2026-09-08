@@ -15,6 +15,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
     public class BedMasterItemResponseModel
     {
         public Guid BedId { get; set; }
+        public Guid? RoomId { get; set; }
         public string? WardCode { get; set; }
         public string? WardName { get; set; }
         public string? WardType { get; set; }

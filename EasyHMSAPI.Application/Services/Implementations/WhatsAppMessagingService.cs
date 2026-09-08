@@ -310,6 +310,87 @@ namespace EasyHMSAPI.Application.Services.Implementations
             return SendAsync(nameof(SendDischargeSummaryAsync), mobileNumber, payload);
         }
 
+        public Task<bool> SendLabReportAsync(string mobileNumber, string documentLink, string fileName, string hospitalName, string patientName)
+        {
+            if (!IsEnabled)
+            {
+                _logger.LogInformation("WhatsApp is disabled (WhatsApp:IsEnabled); skipping {Method} for {Mobile}", nameof(SendLabReportAsync), MaskMobile(mobileNumber));
+                return Task.FromResult(false);
+            }
+
+            var payload = new
+            {
+                messaging_product = "whatsapp",
+                to = mobileNumber,
+                type = "template",
+                template = new
+                {
+                    name = "lab_report_sent",
+                    language = new { code = "en" },
+                    components = new object[]
+                    {
+                        new
+                        {
+                            type = "header",
+                            parameters = new object[]
+                            {
+                                new { type = "document", document = new { link = documentLink, filename = fileName } }
+                            }
+                        },
+                        new
+                        {
+                            type = "body",
+                            parameters = new object[]
+                            {
+                                new { type = "text", text = patientName, parameter_name = "patient_name" },
+                                new { type = "text", text = hospitalName, parameter_name = "hospital_name" }
+                            }
+                        }
+                    }
+                }
+            };
+
+            return SendAsync(nameof(SendLabReportAsync), mobileNumber, payload);
+        }
+
+        public Task<bool> SendPayslipNotificationAsync(string mobileNumber, string employeeName, string monthYear, decimal netSalary, string hospitalName)
+        {
+            if (!IsEnabled)
+            {
+                _logger.LogInformation("WhatsApp is disabled (WhatsApp:IsEnabled); skipping {Method} for {Mobile}", nameof(SendPayslipNotificationAsync), MaskMobile(mobileNumber));
+                return Task.FromResult(false);
+            }
+
+            var to = NormalizeToE164(mobileNumber);
+            var payload = new
+            {
+                messaging_product = "whatsapp",
+                to,
+                type = "template",
+                template = new
+                {
+                    name = "payslip_generated_eng",
+                    language = new { code = "en" },
+                    components = new object[]
+                    {
+                        new
+                        {
+                            type = "body",
+                            parameters = new object[]
+                            {
+                                new { type = "text", text = employeeName },
+                                new { type = "text", text = monthYear },
+                                new { type = "text", text = netSalary.ToString("C") },
+                                new { type = "text", text = hospitalName }
+                            }
+                        }
+                    }
+                }
+            };
+
+            return SendAsync(nameof(SendPayslipNotificationAsync), mobileNumber, payload);
+        }
+
         public Task<bool> SendDischargeNotificationAsync(string mobileNumber, string patientName, string hospitalName, string dischargeDate)
         {
             if (!IsEnabled)
@@ -344,6 +425,45 @@ namespace EasyHMSAPI.Application.Services.Implementations
             };
 
             return SendAsync(nameof(SendDischargeNotificationAsync), mobileNumber, payload);
+        }
+
+        public Task<bool> SendDoctorNewOnlineAppointmentAlertAsync(string mobileNumber, string doctorName, string patientName, string maskedPatientMobile, string patientAddress, string loginUrl)
+        {
+            if (!IsEnabled)
+            {
+                _logger.LogInformation("WhatsApp is disabled (WhatsApp:IsEnabled); skipping {Method} for {Mobile}", nameof(SendDoctorNewOnlineAppointmentAlertAsync), MaskMobile(mobileNumber));
+                return Task.FromResult(false);
+            }
+
+            var to = NormalizeToE164(mobileNumber);
+            var payload = new
+            {
+                messaging_product = "whatsapp",
+                to,
+                type = "template",
+                template = new
+                {
+                    name = "doctor_new_online_appointment",
+                    language = new { code = "en" },
+                    components = new object[]
+                    {
+                        new
+                        {
+                            type = "body",
+                            parameters = new object[]
+                            {
+                                new { type = "text", text = FormatDoctorName(doctorName), parameter_name = "doctor_name" },
+                                new { type = "text", text = patientName, parameter_name = "patient_name" },
+                                new { type = "text", text = maskedPatientMobile, parameter_name = "patient_mobile" },
+                                new { type = "text", text = patientAddress, parameter_name = "patient_address" },
+                                new { type = "text", text = loginUrl, parameter_name = "login_url" }
+                            }
+                        }
+                    }
+                }
+            };
+
+            return SendAsync(nameof(SendDoctorNewOnlineAppointmentAlertAsync), to, payload);
         }
 
         // Normalizes a mobile number to E.164 style (no leading '+') as required by the Meta

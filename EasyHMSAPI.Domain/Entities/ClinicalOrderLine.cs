@@ -51,6 +51,11 @@ namespace EasyHMSAPI.Domain.Entities
 
         public Guid? ChargeEventId { get; set; }
 
+        // Set for OrderType LAB when this line's ChargeId resolves to a catalogued
+        // PathologyTestMaster row -- links to the PathologyOrderLine created alongside it so the
+        // Pathology Lab workspace's results/report pipeline picks up IPD lab orders too.
+        public Guid? LinkedPathologyOrderLineId { get; set; }
+
         public DateTime CreatedAt { get; set; }
         public string? CreatedBy { get; set; }
         public DateTime UpdatedAt { get; set; }

@@ -58,4 +58,50 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string WitnessName { get; set; } = null!;
         public Guid? ChargeEventId { get; set; }
     }
+
+    [ExcludeFromCodeCoverage]
+    public class GetBloodBankInventoryResponseModel
+    {
+        public List<BloodBankInventoryRow> Bags { get; set; } = new();
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class BloodBankInventoryRow
+    {
+        public Guid BloodBagId { get; set; }
+        public string BagNumber { get; set; } = null!;
+        public string Component { get; set; } = null!;
+        public string BloodGroup { get; set; } = null!;
+        public decimal VolumeMl { get; set; }
+        public DateTime CollectedAt { get; set; }
+        public DateTime ExpiresAt { get; set; }
+        public string? StorageLocation { get; set; }
+        public string Status { get; set; } = null!;
+        public string? ReservedForPatientId { get; set; }
+        public string? ReservedForPatientName { get; set; }
+        public string? DiscardReason { get; set; }
+        public DateTime? DiscardedAt { get; set; }
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class GetBloodBankLedgerResponseModel
+    {
+        public List<BloodBankLedgerRow> Transfusions { get; set; } = new();
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class BloodBankLedgerRow
+    {
+        public Guid TransfusionEventId { get; set; }
+        public string BagNumber { get; set; } = null!;
+        public string Component { get; set; } = null!;
+        public string BloodGroup { get; set; } = null!;
+        public string? PatientId { get; set; }
+        public string? PatientName { get; set; }
+        public DateTime StartedAt { get; set; }
+        public decimal VolumeGivenMl { get; set; }
+        public string Reaction { get; set; } = null!;
+        public string AdministeredBy { get; set; } = null!;
+        public string WitnessName { get; set; } = null!;
+    }
 }

@@ -16,6 +16,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string ItemName { get; set; } = null!;
         public string? GenericName { get; set; }
         public string? Manufacturer { get; set; }
+        public Guid? SaltCompositionId { get; set; }
         public string Category { get; set; } = null!;
         public string Unit { get; set; } = null!;
         public decimal? DefaultRate { get; set; }
