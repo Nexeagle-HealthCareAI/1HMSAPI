@@ -259,10 +259,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         departmentIdForSpecializations = departmentId;
                         updatedFields.Add("Department");
                         
-                        if(request.HospitalDepartmentMappingId != Guid.Empty)
+                        if(request.HospitalDepartmentMappingId.HasValue && request.HospitalDepartmentMappingId.Value != Guid.Empty)
                         {
                             var existingMapping = await _context.HospitalDepartmentMappings
-                                .Where(x => x.MappingID == request.HospitalDepartmentMappingId).FirstOrDefaultAsync(cancellationToken);
+                                .Where(x => x.MappingID == request.HospitalDepartmentMappingId.Value).FirstOrDefaultAsync(cancellationToken);
                             if(existingMapping is not null)
                             {
                                 if (departmentId != Guid.Empty)

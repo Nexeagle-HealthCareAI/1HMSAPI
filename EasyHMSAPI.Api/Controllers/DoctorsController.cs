@@ -89,11 +89,6 @@ namespace EasyHMSAPI.Api.Controllers
                     return BadRequest(new { Message = "User ID is required and cannot be empty." });
                 }
 
-                if (request.HospitalDepartmentMappingId == Guid.Empty)
-                {
-                    return BadRequest(new { Message = "Hospital Department Mapping ID is required and cannot be empty." });
-                }
-
                 var response = await _mediator.Send(request);
                 _logger.LogInformation("UpdateDoctorProfile ended for userId: {UserId}", request.UserId);
 

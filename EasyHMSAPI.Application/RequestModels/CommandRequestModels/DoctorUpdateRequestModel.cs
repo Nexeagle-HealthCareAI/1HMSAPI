@@ -1,5 +1,7 @@
+using EasyHMSAPI.Application.Common;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json.Serialization;
 
 namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
 {
@@ -7,7 +9,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     public class DoctorUpdateRequestModel : MediatR.IRequest<DoctorUpdateResponseModel>
     {
         public Guid UserId { get; set; }
-        public Guid HospitalDepartmentMappingId { get; set; }
+        [JsonConverter(typeof(NullableGuidJsonConverter))]
+        public Guid? HospitalDepartmentMappingId { get; set; }
         public string? LicenseNumber { get; set; }
         public List<string>? Qualification { get; set; }
         public int? ExperienceYears { get; set; }
