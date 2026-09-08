@@ -34,7 +34,8 @@ namespace EasyHMSAPI.Application.Services.Implementations
             // separate read-then-write round trip is needed.
             var updated = await _context.Database.ExecuteSqlRawAsync(
                 "UPDATE dbo.HospitalMonthlyUsage WITH (UPDLOCK, HOLDLOCK) SET UsedCount = UsedCount + 1, UpdatedAt = SYSUTCDATETIME() WHERE HospitalId = {0} AND YearMonth = {1} AND UsedCount < {2}",
-                cancellationToken, hospitalId, yearMonth, limit);
+                new object[] { hospitalId, yearMonth, limit },
+                cancellationToken);
 
             if (updated == 0)
             {
@@ -45,7 +46,8 @@ namespace EasyHMSAPI.Application.Services.Implementations
                     "INSERT INTO dbo.HospitalMonthlyUsage (HospitalId, YearMonth, UsedCount, UpdatedAt) " +
                     "SELECT {0}, {1}, 1, SYSUTCDATETIME() " +
                     "WHERE NOT EXISTS (SELECT 1 FROM dbo.HospitalMonthlyUsage WITH (UPDLOCK, HOLDLOCK) WHERE HospitalId = {0} AND YearMonth = {1}) AND {2} > 0",
-                    cancellationToken, hospitalId, yearMonth, limit);
+                    new object[] { hospitalId, yearMonth, limit },
+                    cancellationToken);
 
                 if (inserted == 0)
                 {

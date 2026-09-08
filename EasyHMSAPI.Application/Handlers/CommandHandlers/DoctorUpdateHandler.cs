@@ -258,8 +258,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         _context.DoctorDepartments.Add(doctorDepartment);
                         departmentIdForSpecializations = departmentId;
                         updatedFields.Add("Department");
-                        
-                        if(request.HospitalDepartmentMappingId.HasValue && request.HospitalDepartmentMappingId.Value != Guid.Empty)
+
+                        if (request.HospitalDepartmentMappingId.HasValue && request.HospitalDepartmentMappingId.Value != Guid.Empty)
                         {
                             var existingMapping = await _context.HospitalDepartmentMappings
                                 .Where(x => x.MappingID == request.HospitalDepartmentMappingId.Value).FirstOrDefaultAsync(cancellationToken);
@@ -269,6 +269,29 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 {
                                     existingMapping.DepartmentID = departmentId;
                                 }
+                            }
+                        }
+                        else if (userWithHospital.HospitalId.HasValue && userWithHospital.HospitalId.Value != Guid.Empty)
+                        {
+                            // A doctor whose Doctor row was pre-created during staff onboarding (not via
+                            // DoctorCreateHandler) goes through this update path the first time they fill
+                            // in their own profile. DoctorCreateHandler auto-creates the hospital<->department
+                            // catalog mapping (HospitalDepartmentMappings) when it's missing; this path must
+                            // do the same, otherwise the department never appears in the appointment board's
+                            // department dropdown (GetAppointmentDepartmentsHandler reads only that table),
+                            // even though PrimaryDepartmentID/DoctorDepartments are set correctly.
+                            var mappingExists = await _context.HospitalDepartmentMappings
+                                .AnyAsync(m => m.HospitalID == userWithHospital.HospitalId.Value && m.DepartmentID == departmentId, cancellationToken);
+                            if (!mappingExists)
+                            {
+                                _context.HospitalDepartmentMappings.Add(new HospitalDepartmentMapping
+                                {
+                                    MappingID = Guid.NewGuid(),
+                                    HospitalID = userWithHospital.HospitalId.Value,
+                                    DepartmentID = departmentId,
+                                    IsActive = true,
+                                    MappedAt = updateTime
+                                });
                             }
                         }
                     }
