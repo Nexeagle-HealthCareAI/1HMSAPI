@@ -315,7 +315,14 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Read-only lookup — same PublicDoctorsListPolicy as GetDoctors above, not the
+        // controller-level PublicBookingPolicy. A booking flow typically checks availability for
+        // several doctors in a row (after a GetDoctors search), so this call site was tripping the
+        // same shared 20/min-per-IP bucket independently of the listing endpoint — confirmed live:
+        // 503 bursts on this endpoint for two different doctorIds, same per-IP pattern as the
+        // original GetDoctors report, not scoped to any one doctor's data.
         [HttpGet("doctors/{doctorId:guid}/availability")]
+        [EnableRateLimiting("PublicDoctorsListPolicy")]
         public async Task<ActionResult<GetPublicDoctorAvailabilityResponseModel>> GetDoctorAvailability(Guid doctorId, [FromQuery] DateTime date)
         {
             try
