@@ -178,7 +178,12 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Read-only listing — own policy, not the controller-level PublicBookingPolicy (see
+        // PublicDoctorsListPolicy in Program.cs for why: that shared 20/min-per-IP bucket was
+        // causing live 503 bursts for the WhatsApp booking bot, which pools all its traffic
+        // behind one IP).
         [HttpGet("doctors")]
+        [EnableRateLimiting("PublicDoctorsListPolicy")]
         public async Task<ActionResult<GetPublicDoctorsResponseModel>> GetDoctors(
             [FromQuery] int page = 1, [FromQuery] int pageSize = 24,
             [FromQuery] string? city = null, [FromQuery] string? state = null,
