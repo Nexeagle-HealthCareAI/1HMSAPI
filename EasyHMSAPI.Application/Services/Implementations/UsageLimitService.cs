@@ -85,19 +85,15 @@ namespace EasyHMSAPI.Application.Services.Implementations
             };
         }
 
-        // Only a hospital still on the free ("Trial") tier is subject to the cap at all -- a paid
-        // (Active) plan, or a hospital with no subscription row at all yet (defaults to "Trial" the
-        // same way HospitalAccessFilter does), is gated; anything else (Blocked/Rejected are
-        // already fully locked out by HospitalAccessFilter regardless of this check) is not.
-        private async Task<bool> IsGatedAsync(Guid hospitalId, CancellationToken cancellationToken)
+        // Free-tier monthly action limit is disabled platform-wide -- no hospital is gated
+        // regardless of subscription status. Was: a hospital still on the free ("Trial") tier (or
+        // with no subscription row at all yet, which defaults to "Trial" the same way
+        // HospitalAccessFilter does) was capped at ResolveLimitAsync's monthly quota; a paid
+        // (Active) plan was already exempt. To re-enable, restore the status check this replaced
+        // (see this file's git history).
+        private Task<bool> IsGatedAsync(Guid hospitalId, CancellationToken cancellationToken)
         {
-            var status = await _context.HospitalSubscriptions
-                .AsNoTracking()
-                .Where(s => s.HospitalId == hospitalId)
-                .Select(s => s.Status)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            return string.IsNullOrWhiteSpace(status) || string.Equals(status, "Trial", StringComparison.OrdinalIgnoreCase);
+            return Task.FromResult(false);
         }
 
         private async Task<int> ResolveLimitAsync(Guid hospitalId, CancellationToken cancellationToken)
