@@ -27,6 +27,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     Name = h.Name,
                     City = h.City,
                     State = h.State,
+                    Latitude = h.Latitude,
+                    Longitude = h.Longitude,
                 })
                 .ToListAsync(cancellationToken);
 
