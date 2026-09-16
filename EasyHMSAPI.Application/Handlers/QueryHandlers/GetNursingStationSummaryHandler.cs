@@ -82,16 +82,32 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 }
                 var directAdmissionIds = (await directAssignmentQuery.Select(p => p.AdmissionId).Distinct().ToListAsync(cancellationToken));
 
-                if (roster.Count == 0 && directAdmissionIds.Count == 0)
-                {
-                    return new GetNursingStationSummaryResponseModel { Success = true, NurseName = nurseName, HasAssignments = false };
-                }
+                // Fallback: the resolved NurseUserId (explicit, or defaulted to the caller by the
+                // controller) has no roster and no direct assignments -- overwhelmingly an
+                // Admin/AdminDoctor/Doctor account opening the ward board, since NurseShiftAssignment
+                // rows only ever get created for role "Nurse" (see GetHospitalNursesHandler). Without
+                // this, such a caller silently gets an all-empty board (0 meds overdue, no vitals on
+                // any bed) with no indication anything is filtered. Fall back to every active
+                // admission on the requested ward (or hospital-wide if no ward is specified) --
+                // the same unfiltered scope the bed grid this overlays already uses.
+                var isRosterFallback = roster.Count == 0 && directAdmissionIds.Count == 0;
 
-                // Step 3: the beds that live on rostered wards.
-                var wardBeds = wardCodes.Count == 0 ? new List<BedMaster>() : await _context.BedMaster.AsNoTracking()
-                    .Where(b => b.HospitalId == request.HospitalId && b.WardCode != null && wardCodes.Contains(b.WardCode!))
-                    .ToListAsync(cancellationToken);
-                var wardBedIds = wardBeds.Select(b => b.BedId).ToList();
+                List<Guid> wardBedIds;
+                if (isRosterFallback)
+                {
+                    var fallbackBedsQuery = _context.BedMaster.AsNoTracking()
+                        .Where(b => b.HospitalId == request.HospitalId && b.WardCode != null);
+                    if (!string.IsNullOrWhiteSpace(request.WardCode))
+                        fallbackBedsQuery = fallbackBedsQuery.Where(b => b.WardCode == request.WardCode);
+                    wardBedIds = await fallbackBedsQuery.Select(b => b.BedId).ToListAsync(cancellationToken);
+                }
+                else
+                {
+                    // Step 3: the beds that live on rostered wards.
+                    wardBedIds = wardCodes.Count == 0 ? new List<Guid>() : await _context.BedMaster.AsNoTracking()
+                        .Where(b => b.HospitalId == request.HospitalId && b.WardCode != null && wardCodes.Contains(b.WardCode!))
+                        .Select(b => b.BedId).ToListAsync(cancellationToken);
+                }
 
                 // Step 4: who currently occupies those beds, OR any bed belonging to a directly-
                 // assigned admission (which may sit on a ward this nurse isn't rostered to at all).
