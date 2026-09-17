@@ -380,5 +380,47 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
 
             Assert.That(response.Doctors, Is.Empty);
         }
+
+        // Regression test: GetPublicSpecialtiesHandler falls back to a doctor's Department name
+        // as their "category" when PrimaryMedicalSpecialityId isn't set. That fallback is only
+        // useful if filtering /public/doctors?specialtyCategory=<that same name> actually returns
+        // the doctor -- otherwise the bot gets a category from one endpoint that yields zero
+        // results on the other.
+        [Test]
+        public async Task Handle_SpecialtyCategoryFilter_MatchesDepartmentName_WhenPrimarySpecialityMissing()
+        {
+            var user = TestDataFactory.SeedUser(_context);
+            var hospital = TestDataFactory.SeedHospital(_context, user.UserID, isPubliclyListed: true);
+            var doctor = TestDataFactory.SeedDoctor(_context, user, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, hospital.HospitalID);
+            var department = new Department { DepartmentID = Guid.NewGuid(), Name = "Urology", IsActive = true };
+            _context.Departments.Add(department);
+            doctor.PrimaryDepartmentID = department.DepartmentID;
+            SeedProfile(user, "Dr. Urologist");
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetPublicDoctorsRequestModel { SpecialtyCategory = "Urology" }, CancellationToken.None);
+
+            Assert.That(response.Doctors, Has.Count.EqualTo(1));
+            Assert.That(response.Doctors[0].DoctorId, Is.EqualTo(doctor.DoctorID));
+        }
+
+        [Test]
+        public async Task Handle_SpecialtyCategoryFilter_ExcludesDoctor_WhenNeitherSpecialityNorDepartmentMatches()
+        {
+            var user = TestDataFactory.SeedUser(_context);
+            var hospital = TestDataFactory.SeedHospital(_context, user.UserID, isPubliclyListed: true);
+            var doctor = TestDataFactory.SeedDoctor(_context, user, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, hospital.HospitalID);
+            var department = new Department { DepartmentID = Guid.NewGuid(), Name = "Urology", IsActive = true };
+            _context.Departments.Add(department);
+            doctor.PrimaryDepartmentID = department.DepartmentID;
+            SeedProfile(user, "Dr. Urologist");
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetPublicDoctorsRequestModel { SpecialtyCategory = "Gynaecologist" }, CancellationToken.None);
+
+            Assert.That(response.Doctors, Is.Empty);
+        }
     }
 }

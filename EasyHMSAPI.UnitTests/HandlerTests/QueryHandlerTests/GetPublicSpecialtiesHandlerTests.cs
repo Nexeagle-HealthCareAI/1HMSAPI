@@ -144,7 +144,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         }
 
         [Test]
-        public async Task Handle_ExcludesDoctor_WithNoPrimarySpeciality()
+        public async Task Handle_ExcludesDoctor_WithNoPrimarySpecialityAndNoDepartment()
         {
             var user = TestDataFactory.SeedUser(_context);
             var hospital = TestDataFactory.SeedHospital(_context, user.UserID, isPubliclyListed: true);
@@ -155,6 +155,51 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             var response = await _handler.Handle(new GetPublicSpecialtiesRequestModel(), CancellationToken.None);
 
             Assert.That(response.Specialties, Is.Empty);
+        }
+
+        // Regression test for the prod bug: /public/specialties returned only 2 of ~11 real
+        // categories because most doctors had a Department set but never got the separate,
+        // optional PrimaryMedicalSpecialityId link filled in. A doctor in that state must now
+        // fall back to their Department name rather than vanishing from the list.
+        [Test]
+        public async Task Handle_FallsBackToDepartmentName_WhenPrimarySpecialityMissing()
+        {
+            var user = TestDataFactory.SeedUser(_context);
+            var hospital = TestDataFactory.SeedHospital(_context, user.UserID, isPubliclyListed: true);
+            var doctor = TestDataFactory.SeedDoctor(_context, user, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, hospital.HospitalID);
+            var department = new Department { DepartmentID = Guid.NewGuid(), Name = "Urology", IsActive = true };
+            _context.Departments.Add(department);
+            doctor.PrimaryDepartmentID = department.DepartmentID;
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetPublicSpecialtiesRequestModel(), CancellationToken.None);
+
+            Assert.That(response.Specialties, Has.Count.EqualTo(1));
+            Assert.That(response.Specialties[0].Category, Is.EqualTo("Urology"));
+            Assert.That(response.Specialties[0].DisplayName, Is.EqualTo("Urology"));
+            Assert.That(response.Specialties[0].DoctorCount, Is.EqualTo(1));
+        }
+
+        [Test]
+        public async Task Handle_FallsBackToDepartmentName_WhenPrimarySpecialityIsInactive()
+        {
+            var user = TestDataFactory.SeedUser(_context);
+            var hospital = TestDataFactory.SeedHospital(_context, user.UserID, isPubliclyListed: true);
+            var doctor = TestDataFactory.SeedDoctor(_context, user, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, hospital.HospitalID);
+            var inactiveSpeciality = SeedSpeciality("Cardiologist", "Cardiologist");
+            inactiveSpeciality.IsActive = false;
+            var department = new Department { DepartmentID = Guid.NewGuid(), Name = "General Surgery", IsActive = true };
+            _context.Departments.Add(department);
+            doctor.PrimaryMedicalSpecialityId = inactiveSpeciality.SpecialityId;
+            doctor.PrimaryDepartmentID = department.DepartmentID;
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetPublicSpecialtiesRequestModel(), CancellationToken.None);
+
+            Assert.That(response.Specialties, Has.Count.EqualTo(1));
+            Assert.That(response.Specialties[0].Category, Is.EqualTo("General Surgery"));
         }
     }
 }
