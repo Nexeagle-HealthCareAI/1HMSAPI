@@ -19,15 +19,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         private readonly AppDbContext _context;
         private readonly ISmsService _smsService;
         private readonly IWhatsAppMessagingService _whatsAppMessagingService;
+        private readonly IEmailService _emailService;
         private readonly IMediator _mediator;
         private readonly IMemoryCache _cache;
         private readonly IUsageLimitService _usageLimitService;
 
-        public RegisterAppointmentHandler(AppDbContext context, ISmsService smsService, IWhatsAppMessagingService whatsAppMessagingService, IMediator mediator, IMemoryCache cache, IUsageLimitService usageLimitService)
+        public RegisterAppointmentHandler(AppDbContext context, ISmsService smsService, IWhatsAppMessagingService whatsAppMessagingService, IEmailService emailService, IMediator mediator, IMemoryCache cache, IUsageLimitService usageLimitService)
         {
             _context = context;
             _smsService = smsService;
             _whatsAppMessagingService = whatsAppMessagingService;
+            _emailService = emailService;
             _mediator = mediator;
             _cache = cache;
             _usageLimitService = usageLimitService;
@@ -173,12 +175,22 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     }
                 }
 
-                // Send SMS reminder
-                //bool isSmsSent = false;
+                // Notify the patient of the change: a brand-new booking gets the existing
+                // WhatsApp confirmation. Editing an existing appointment sends an EMAIL instead,
+                // never WhatsApp -- re-firing the same "your appointment is booked" WhatsApp
+                // template on every edit (even one that only tweaks payment mode or insurance)
+                // was noisy and easy for a patient to mistake for a second, duplicate booking.
                 bool isReminderSent = false;
-                if (!string.IsNullOrWhiteSpace(patient.Mobile))
+                var hospitalName = await _context.Hospitals
+                    .Where(h => h.HospitalID == request.HospitalId)
+                    .Select(h => h.Name)
+                    .FirstOrDefaultAsync(cancellationToken);
+                var doctorName = existingDoctor.DoctorName;
+                var appointmentDate = appointment.ApptDate.Date.ToString("dd-MM-yyyy");
+                var appointmentTime = appointment.StartAt.ToString("HH:mm");
+
+                if (isNewAppointment && !string.IsNullOrWhiteSpace(patient.Mobile))
                 {
-                    var smsMsg = $"Dear {patient.FullName}, your appointment is booked for {appointment.ApptDate:yyyy-MM-dd} at {appointment.StartAt:HH:mm}.";
                     var token = string.Empty;
                     if (tokenNumber.HasValue && tokenNumber.Value > 0)
                     {
@@ -186,22 +198,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         var prefix = (char)(65 + groupIndex);
                         var num = ((tokenNumber.Value - 1) % 30) + 1;
                         token = $"{prefix}-{num}";
-                        smsMsg += $" Your token number is {token}.";
                     }
                     else if (tokenNumber.HasValue)
                     {
                         token = tokenNumber.Value.ToString();
-                        smsMsg += $" Your token number is {token}.";
                     }
-                    //isSmsSent = await _smsService.SendInvitationSmsAsync(patient.Mobile, smsMsg);
-
-                    var hospitalName = await _context.Hospitals
-                        .Where(h => h.HospitalID == request.HospitalId)
-                        .Select(h => h.Name)
-                        .FirstOrDefaultAsync(cancellationToken);
-                    var doctorName = existingDoctor.DoctorName;
-                    var appointmentDate = appointment.ApptDate.Date.ToString("dd-MM-yyyy");
-                    var appointmentTime = appointment.StartAt.ToString("HH:mm");
                     isReminderSent = await _whatsAppMessagingService.SendAppointmentConfirmationAsync(
                         patient.Mobile,
                         patient.FullName ?? string.Empty,
@@ -210,6 +211,20 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         token,
                         appointmentDate,
                         appointmentTime);
+                }
+                else if (!isNewAppointment && !string.IsNullOrWhiteSpace(patient.Email))
+                {
+                    try
+                    {
+                        var html = $"<p>Dear {patient.FullName},</p>" +
+                                   $"<p>Your appointment with {doctorName} at {hospitalName} has been updated.</p>" +
+                                   $"<p><b>Date:</b> {appointmentDate}<br/><b>Time:</b> {appointmentTime}</p>";
+                        isReminderSent = await _emailService.SendInvitationEmailAsync(patient.Email, "Your appointment has been updated", html);
+                    }
+                    catch
+                    {
+                        // Best-effort -- never fail the edit because the SMTP provider is down.
+                    }
                 }
 
                 var message = "Appointment registered successfully";
