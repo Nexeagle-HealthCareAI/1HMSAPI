@@ -22,6 +22,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         private AppDbContext _context = null!;
         private Mock<ISmsService> _smsServiceMock = null!;
         private Mock<IWhatsAppMessagingService> _whatsAppServiceMock = null!;
+        private Mock<IEmailService> _emailServiceMock = null!;
         private Mock<IMediator> _mediatorMock = null!;
         private RegisterAppointmentHandler _handler = null!;
 
@@ -31,9 +32,10 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             _context = InMemoryDbContextFactory.CreateContext();
             _smsServiceMock = new Mock<ISmsService>();
             _whatsAppServiceMock = new Mock<IWhatsAppMessagingService>();
+            _emailServiceMock = new Mock<IEmailService>();
             _mediatorMock = new Mock<IMediator>();
 
-            _handler = new RegisterAppointmentHandler(_context, _smsServiceMock.Object, _whatsAppServiceMock.Object, _mediatorMock.Object, new MemoryCache(new MemoryCacheOptions()), UsageLimitTestHelper.AlwaysAllow());
+            _handler = new RegisterAppointmentHandler(_context, _smsServiceMock.Object, _whatsAppServiceMock.Object, _emailServiceMock.Object, _mediatorMock.Object, new MemoryCache(new MemoryCacheOptions()), UsageLimitTestHelper.AlwaysAllow());
         }
 
         [TearDown]
@@ -198,6 +200,63 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task Handle_EditAppointment_NeverSendsWhatsApp_SendsEmailInstead()
+        {
+            // Re-firing the "your appointment is booked" WhatsApp template on every edit (even a
+            // trivial one like a payment-mode tweak) was noisy and easy for a patient to mistake
+            // for a second, duplicate booking -- edits now notify by email instead.
+            var user = TestDataFactory.SeedUser(_context);
+            var doctor = TestDataFactory.SeedDoctor(_context, user);
+            var hospitalId = Guid.NewGuid();
+            _context.Hospitals.Add(new Hospital { HospitalID = hospitalId, Name = "Hosp", Email = "e@m.com", Type = "General", RegistrationNumber = "REG004", Contact = "1234567890", Location = "Test Location", City = "Test City", State = "Test State", Country = "Test Country", Pincode = "123456", CreatedByUserID = Guid.NewGuid() });
+            await _context.SaveChangesAsync();
+
+            _whatsAppServiceMock
+                .Setup(w => w.SendAppointmentConfirmationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync(true);
+            _emailServiceMock
+                .Setup(e => e.SendInvitationEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync(true);
+
+            var apptDate = DateTime.Today.AddDays(1);
+            var created = await _handler.Handle(new RegisterAppointmentRequestModel
+            {
+                UserId = user.UserID,
+                DoctorId = doctor.DoctorID,
+                HospitalId = hospitalId,
+                ApptDate = apptDate,
+                StartAt = apptDate.AddHours(10),
+                Patient = new Patient { FullName = "Email Patient", Mobile = "9876500004", Email = "patient@example.com", Age = 28, Sex = "Female" },
+                AllocateToken = true
+            }, CancellationToken.None);
+
+            // The new booking itself must still use WhatsApp, exactly as before.
+            _whatsAppServiceMock.Verify(w => w.SendAppointmentConfirmationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()),
+                Times.Once);
+            _emailServiceMock.Verify(e => e.SendInvitationEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+
+            _whatsAppServiceMock.Invocations.Clear();
+
+            // Edit: must send email instead, and must never touch WhatsApp again.
+            await _handler.Handle(new RegisterAppointmentRequestModel
+            {
+                UserId = user.UserID,
+                DoctorId = doctor.DoctorID,
+                HospitalId = hospitalId,
+                ApptDate = apptDate,
+                StartAt = apptDate.AddHours(10),
+                AppointmentId = created.AppointmentId,
+                Patient = new Patient { FullName = "Email Patient", Mobile = "9876500004", Email = "patient@example.com", Age = 28, Sex = "Female", PaymentMode = "CARD" },
+            }, CancellationToken.None);
+
+            _whatsAppServiceMock.Verify(w => w.SendAppointmentConfirmationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()),
+                Times.Never, "Editing an appointment must never trigger a WhatsApp message.");
+            _emailServiceMock.Verify(e => e.SendInvitationEmailAsync("patient@example.com", It.IsAny<string>(), It.IsAny<string>()), Times.Once);
+        }
+
+        [Test]
         public async Task Handle_FreeTierLimitReached_ThrowsAndNeverPersistsAppointment()
         {
             var user = TestDataFactory.SeedUser(_context);
@@ -206,7 +265,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             _context.Hospitals.Add(new Hospital { HospitalID = hospitalId, Name = "Hosp", Email = "e@m.com", Type = "General", RegistrationNumber = "REG001", Contact = "1234567890", Location = "Test Location", City = "Test City", State = "Test State", Country = "Test Country", Pincode = "123456", CreatedByUserID = Guid.NewGuid() });
             await _context.SaveChangesAsync();
 
-            var blockedHandler = new RegisterAppointmentHandler(_context, _smsServiceMock.Object, _whatsAppServiceMock.Object, _mediatorMock.Object, new MemoryCache(new MemoryCacheOptions()), UsageLimitTestHelper.AlwaysBlock());
+            var blockedHandler = new RegisterAppointmentHandler(_context, _smsServiceMock.Object, _whatsAppServiceMock.Object, _emailServiceMock.Object, _mediatorMock.Object, new MemoryCache(new MemoryCacheOptions()), UsageLimitTestHelper.AlwaysBlock());
             var request = new RegisterAppointmentRequestModel
             {
                 UserId = user.UserID,
