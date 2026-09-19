@@ -85,7 +85,7 @@ namespace EasyHMSAPI.Api.Controllers.V1
 
             if (sub == null)
             {
-                return Ok(new { Status = "Trial", DaysLeft = 30 }); // Fallback
+                return Ok(new { Status = "Trial" }); // Fallback
             }
 
             var effectiveStatus = sub.GetEffectiveStatus(DateTime.UtcNow);
@@ -98,16 +98,13 @@ namespace EasyHMSAPI.Api.Controllers.V1
                 await _context.SaveChangesAsync();
             }
 
-            var daysLeft = 0;
-            if (effectiveStatus == "Trial" && sub.TrialEndDate.HasValue)
+            // Only a paid (Active) plan has a meaningful days-remaining -- a real billing cycle end
+            // date. Trial has no time limit at all any more (see HospitalSubscription.GetEffectiveStatus);
+            // its only cap is the free-tier monthly usage count returned by GET {hospitalId}/usage.
+            int? daysLeft = null;
+            if (effectiveStatus == "Active" && sub.SubscriptionEndDate.HasValue)
             {
-                daysLeft = (sub.TrialEndDate.Value - DateTime.UtcNow).Days;
-                if (daysLeft < 0) daysLeft = 0;
-            }
-            else if (effectiveStatus == "Active" && sub.SubscriptionEndDate.HasValue)
-            {
-                daysLeft = (sub.SubscriptionEndDate.Value - DateTime.UtcNow).Days;
-                if (daysLeft < 0) daysLeft = 0;
+                daysLeft = Math.Max(0, (sub.SubscriptionEndDate.Value - DateTime.UtcNow).Days);
             }
 
             return Ok(new
@@ -115,8 +112,6 @@ namespace EasyHMSAPI.Api.Controllers.V1
                 sub.HospitalSubscriptionId,
                 sub.PlanId,
                 Status = effectiveStatus,
-                sub.TrialStartDate,
-                sub.TrialEndDate,
                 sub.SubscriptionStartDate,
                 sub.SubscriptionEndDate,
                 DaysLeft = daysLeft,
