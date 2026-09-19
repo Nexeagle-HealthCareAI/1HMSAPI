@@ -148,6 +148,56 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task Handle_EditAppointment_CorrectingPatientNameAndMobile_UpdatesSamePatientRecord()
+        {
+            // Regression test: editing an appointment used to re-find the patient by an exact
+            // Mobile+FullName match (AppointmentBookingHelpers.FindOrCreatePatientAsync). The
+            // moment the edit itself corrected a typo'd name or phone number, that match no
+            // longer found the real patient and silently created an orphaned duplicate instead
+            // -- the correction never reached the appointment's actual patient record, which is
+            // exactly what staff reported as "editing an appointment loses the data".
+            var user = TestDataFactory.SeedUser(_context);
+            var doctor = TestDataFactory.SeedDoctor(_context, user);
+            var hospitalId = Guid.NewGuid();
+            _context.Hospitals.Add(new Hospital { HospitalID = hospitalId, Name = "Hosp", Email = "e@m.com", Type = "General", RegistrationNumber = "REG003", Contact = "1234567890", Location = "Test Location", City = "Test City", State = "Test State", Country = "Test Country", Pincode = "123456", CreatedByUserID = Guid.NewGuid() });
+            await _context.SaveChangesAsync();
+
+            var apptDate = DateTime.Today.AddDays(1);
+            var created = await _handler.Handle(new RegisterAppointmentRequestModel
+            {
+                UserId = user.UserID,
+                DoctorId = doctor.DoctorID,
+                HospitalId = hospitalId,
+                ApptDate = apptDate,
+                StartAt = apptDate.AddHours(10),
+                Patient = new Patient { FullName = "Jhon Doe", Mobile = "9876500002", Age = 35, Sex = "Male" },
+                AllocateToken = true
+            }, CancellationToken.None);
+
+            var originalPatientId = (await _context.Appointments.FindAsync(created.AppointmentId))!.PatientId;
+
+            // Edit: fix the typo'd name AND the mobile number in the same request.
+            await _handler.Handle(new RegisterAppointmentRequestModel
+            {
+                UserId = user.UserID,
+                DoctorId = doctor.DoctorID,
+                HospitalId = hospitalId,
+                ApptDate = apptDate,
+                StartAt = apptDate.AddHours(10),
+                AppointmentId = created.AppointmentId,
+                Patient = new Patient { FullName = "John Doe", Mobile = "9876500003", Age = 35, Sex = "Male" },
+            }, CancellationToken.None);
+
+            var appointment = await _context.Appointments.FindAsync(created.AppointmentId);
+            Assert.That(appointment!.PatientId, Is.EqualTo(originalPatientId), "The appointment must keep pointing at its original patient, not a new one.");
+
+            var allPatientsForHospital = await _context.PatientRegistrations.Where(p => p.HospitalId == hospitalId).ToListAsync();
+            Assert.That(allPatientsForHospital, Has.Count.EqualTo(1), "Correcting name/mobile on edit must never create an orphaned duplicate patient.");
+            Assert.That(allPatientsForHospital[0].FullName, Is.EqualTo("John Doe"));
+            Assert.That(allPatientsForHospital[0].Mobile, Is.EqualTo("9876500003"));
+        }
+
+        [Test]
         public async Task Handle_FreeTierLimitReached_ThrowsAndNeverPersistsAppointment()
         {
             var user = TestDataFactory.SeedUser(_context);

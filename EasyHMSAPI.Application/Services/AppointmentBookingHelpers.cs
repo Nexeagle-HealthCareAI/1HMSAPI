@@ -29,13 +29,30 @@ namespace EasyHMSAPI.Application.Services
             Patient? patientInfo,
             Guid hospitalId,
             Guid? registeredByUserId,
+            string? existingPatientId,
             CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(patientInfo?.Mobile))
                 throw new ArgumentException("Patient mobile number is required");
 
+            // Editing an existing appointment: the patient's identity is already known and
+            // unambiguous (the appointment's own PatientId) -- look it up directly instead of
+            // re-matching by Mobile+FullName below. That match is a heuristic for figuring out
+            // "is this a returning patient" when booking fresh and the identity ISN'T known yet;
+            // reusing it here would silently miss the real record the moment an edit corrects a
+            // typo'd name or phone number, creating an orphaned duplicate patient with the
+            // correction instead of applying it to the appointment's actual patient. Same
+            // lookup-by-PatientId pattern as PublicUpdatePatientAppointmentHandler.
+            PatientRegistration? patient = null;
+            if (!string.IsNullOrEmpty(existingPatientId))
+            {
+                patient = await context.PatientRegistrations
+                    .Where(x => x.PatientId == existingPatientId)
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
+
             // Find patient by both mobile and name
-            var patient = await context.PatientRegistrations
+            patient ??= await context.PatientRegistrations
                 .Where(x => x.Mobile == patientInfo.Mobile && x.FullName == patientInfo.FullName)
                 .FirstOrDefaultAsync(cancellationToken);
 
