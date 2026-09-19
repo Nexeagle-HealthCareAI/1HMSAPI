@@ -40,7 +40,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     if (!request.IsLoginWithOtp)
                     {
                         var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.EmailOrPhone && u.UserStatusId != (int)UserStatusEnum.Revoked, cancellationToken);
-                        user ??= await _context.Users.FirstOrDefaultAsync(u => u.MobileNumber == request.EmailOrPhone && u.UserStatusId != (int)UserStatusEnum.Revoked, cancellationToken);
+                        if (user == null)
+                        {
+                            var normalizedPhone = new string((request.EmailOrPhone ?? "").Where(c => char.IsDigit(c) || c == '+').ToArray());
+                            user = await _context.Users.FirstOrDefaultAsync(u => u.MobileNumber == normalizedPhone && u.UserStatusId != (int)UserStatusEnum.Revoked, cancellationToken);
+                        }
 
 
                         if (user != null)

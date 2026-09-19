@@ -246,25 +246,6 @@ builder.Services.AddRateLimiter(options =>
          })
      );
 
-     // Public doctor listing (GET /public/doctors) — read-only, so it doesn't need the tight,
-     // abuse-oriented ceiling PublicBookingPolicy applies to booking/review writes. Split out
-     // after that shared 20/min bucket caused live 503 bursts for a legitimate integration (the
-     // WhatsApp booking bot): server-to-server callers pool ALL their traffic — across every
-     // hospital and every PublicController endpoint — behind one outbound IP, so a single busy
-     // minute of doctor-search traffic could exhaust the whole controller's shared budget and
-     // 503 booking/review calls too. Same fix shape as TrackVisitPolicy below.
-     options.AddPolicy("PublicDoctorsListPolicy", context =>
-         RateLimitPartition.GetFixedWindowLimiter(
-         partitionKey: EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(context, proxyForwardingSecret),
-         factory: key => new FixedWindowRateLimiterOptions
-         {
-             PermitLimit = 60,
-             Window = TimeSpan.FromMinutes(1),
-             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-             QueueLimit = 0
-         })
-     );
-
      // Patient WhatsApp-OTP login (Doctor Dekho) — tighter per-IP ceiling than PublicBookingPolicy.
      // This is on top of, not instead of, the per-mobile-number cooldown/daily-cap enforced inside
      // PatientOtpSendHandler itself: this policy stops one IP from hammering many different numbers,

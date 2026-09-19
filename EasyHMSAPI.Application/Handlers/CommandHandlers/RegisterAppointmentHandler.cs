@@ -247,9 +247,20 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
         }
 
-        private Task<PatientRegistration> AddOrUpdatePatient(RegisterAppointmentRequestModel request, CancellationToken cancellationToken)
+        private async Task<PatientRegistration> AddOrUpdatePatient(RegisterAppointmentRequestModel request, CancellationToken cancellationToken)
         {
-            return AppointmentBookingHelpers.FindOrCreatePatientAsync(_context, request.Patient, request.HospitalId, request.UserId, cancellationToken);
+            // Editing an existing appointment: resolve its actual PatientId up front so
+            // FindOrCreatePatientAsync updates that exact record instead of re-matching by
+            // Mobile+FullName (see its own comment for why that match alone isn't safe here).
+            string? existingPatientId = null;
+            if (request.AppointmentId is not null)
+            {
+                existingPatientId = await _context.Appointments
+                    .Where(x => x.ApptId == request.AppointmentId)
+                    .Select(x => x.PatientId)
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
+            return await AppointmentBookingHelpers.FindOrCreatePatientAsync(_context, request.Patient, request.HospitalId, request.UserId, existingPatientId, cancellationToken);
         }
 
         private async Task<(Appointment appointment, bool isNewAppointment)> CreateOrUpdateAppointment(RegisterAppointmentRequestModel request, PatientRegistration patient, string statusCode, CancellationToken cancellationToken)

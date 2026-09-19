@@ -23,7 +23,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             try
             {
                 var patient = await AppointmentBookingHelpers.FindOrCreatePatientAsync(
-                    _context, request.Patient, request.HospitalId, request.UserId, cancellationToken);
+                    _context, request.Patient, request.HospitalId, request.UserId, null, cancellationToken);
 
                 await _context.SaveChangesAsync(cancellationToken);
 

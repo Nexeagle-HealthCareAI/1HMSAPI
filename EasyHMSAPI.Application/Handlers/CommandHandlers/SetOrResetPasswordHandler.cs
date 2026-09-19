@@ -1,4 +1,4 @@
-﻿using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
+using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Enums;
@@ -282,7 +282,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
         private static string HashPassword(string password)
         {
-            return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(password));
+            var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(password));
+            return BitConverter.ToString(bytes).Replace("-", "").ToLower();
         }
     }
 

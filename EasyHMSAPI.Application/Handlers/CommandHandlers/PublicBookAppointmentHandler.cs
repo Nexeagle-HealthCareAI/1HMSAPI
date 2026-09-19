@@ -62,7 +62,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             PatientRegistration patient;
             try
             {
-                patient = await AppointmentBookingHelpers.FindOrCreatePatientAsync(_context, request.Patient, hospitalId, null, cancellationToken);
+                patient = await AppointmentBookingHelpers.FindOrCreatePatientAsync(_context, request.Patient, hospitalId, null, null, cancellationToken);
             }
             catch (ArgumentException ex)
             {

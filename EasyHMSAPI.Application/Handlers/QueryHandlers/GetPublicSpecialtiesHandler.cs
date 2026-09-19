@@ -15,6 +15,12 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
     /// actually book a doctor in it via GET /public/doctors?specialtyCategory=... . Exists so callers
     /// (e.g. the WhatsApp booking bot) don't have to page through every doctor and group client-side
     /// just to build a department/specialty menu.
+    /// A doctor's category prefers the normalized MedicalSpecialities.PatientFacingCategory
+    /// (Doctor.PrimaryMedicalSpecialityId), but that link is optional and admin-set — nothing
+    /// requires it to be filled in when a doctor is onboarded. A doctor whose link is missing or
+    /// points at an inactive/incomplete row falls back to their plain Department name instead of
+    /// being dropped entirely (see bug: prod doctors mostly had Department set but not
+    /// PrimaryMedicalSpecialityId, so this endpoint returned only 2 of ~11 real categories).
     /// </summary>
     public class GetPublicSpecialtiesHandler : IRequestHandler<GetPublicSpecialtiesRequestModel, GetPublicSpecialtiesResponseModel>
     {
@@ -80,24 +86,74 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 return EmptyResult();
             }
 
-            var categories = await (
+            var doctorRows = await (
                 from d in _context.Doctors
                 where eligibleDoctorIds.Contains(d.DoctorID) && d.IsPubliclyListed && !d.IsDelistedByAdmin
-                      && d.PrimaryMedicalSpecialityId != null
                 join u in _context.Users on d.UserID equals u.UserID
                 where u.UserStatusId != (int)UserStatusEnum.Revoked
-                join ms in _context.MedicalSpecialities on d.PrimaryMedicalSpecialityId equals ms.SpecialityId
-                where ms.IsActive && ms.PatientFacingCategory != null
-                group ms by ms.PatientFacingCategory into g
-                select new PublicSpecialtyInfo
+                select new { d.DoctorID, d.PrimaryMedicalSpecialityId, d.PrimaryDepartmentID })
+                .ToListAsync(cancellationToken);
+
+            if (doctorRows.Count == 0)
+            {
+                return EmptyResult();
+            }
+
+            var specialityIds = doctorRows
+                .Where(r => r.PrimaryMedicalSpecialityId.HasValue)
+                .Select(r => r.PrimaryMedicalSpecialityId!.Value)
+                .Distinct()
+                .ToList();
+
+            var specialityById = await _context.MedicalSpecialities
+                .Where(ms => specialityIds.Contains(ms.SpecialityId) && ms.IsActive && ms.PatientFacingCategory != null)
+                .Select(ms => new { ms.SpecialityId, ms.PatientFacingCategory, ms.PatientFacingName })
+                .ToDictionaryAsync(ms => ms.SpecialityId, cancellationToken);
+
+            var departmentIds = doctorRows
+                .Where(r => r.PrimaryDepartmentID.HasValue)
+                .Select(r => r.PrimaryDepartmentID!.Value)
+                .Distinct()
+                .ToList();
+
+            var departmentNameById = await _context.Departments
+                .Where(dept => departmentIds.Contains(dept.DepartmentID) && dept.IsActive)
+                .Select(dept => new { dept.DepartmentID, dept.Name })
+                .ToDictionaryAsync(dept => dept.DepartmentID, dept => dept.Name, cancellationToken);
+
+            // A doctor's category is their normalized MedicalSpecialities.PatientFacingCategory when
+            // that (optional, admin-set) link is populated and still active; otherwise fall back to
+            // their Department name so a doctor with a department but no speciality mapping doesn't
+            // silently disappear from this list. GetPublicDoctorsHandler's SpecialtyCategory filter
+            // applies the identical fallback, so a Category returned here always round-trips there.
+            var categories = doctorRows
+                .Select(r =>
                 {
-                    Category = g.Key!,
-                    DisplayName = g.Select(x => x.PatientFacingName).FirstOrDefault(n => n != null) ?? g.Key,
+                    if (r.PrimaryMedicalSpecialityId.HasValue &&
+                        specialityById.TryGetValue(r.PrimaryMedicalSpecialityId.Value, out var speciality))
+                    {
+                        return (Category: speciality.PatientFacingCategory, DisplayName: speciality.PatientFacingName ?? speciality.PatientFacingCategory);
+                    }
+
+                    if (r.PrimaryDepartmentID.HasValue &&
+                        departmentNameById.TryGetValue(r.PrimaryDepartmentID.Value, out var deptName))
+                    {
+                        return (Category: deptName, DisplayName: deptName)!;
+                    }
+
+                    return (Category: null, DisplayName: null);
+                })
+                .Where(x => x.Category != null)
+                .GroupBy(x => x.Category!)
+                .Select(g => new PublicSpecialtyInfo
+                {
+                    Category = g.Key,
+                    DisplayName = g.First().DisplayName ?? g.Key,
                     DoctorCount = g.Count(),
                 })
                 .OrderByDescending(c => c.DoctorCount)
                 .ThenBy(c => c.Category)
-                .ToListAsync(cancellationToken);
+                .ToList();
 
             var response = new GetPublicSpecialtiesResponseModel { Success = true, Specialties = categories };
             _cache.Set(PublicDirectoryCacheKeys.PublicSpecialtiesList, response, CacheTtl);

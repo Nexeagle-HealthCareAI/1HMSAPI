@@ -165,11 +165,30 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
             if (!string.IsNullOrWhiteSpace(request.SpecialtyCategory))
             {
-                filteredQuery =
-                    from x in filteredQuery
-                    join ms in _context.MedicalSpecialities on x.d.PrimaryMedicalSpecialityId equals ms.SpecialityId
-                    where ms.PatientFacingCategory == request.SpecialtyCategory
-                    select x;
+                var category = request.SpecialtyCategory;
+
+                // A doctor matches by their normalized MedicalSpecialities category, or — when that
+                // (optional, admin-set) link is missing/inactive — by their Department name. Mirrors
+                // the identical fallback GetPublicSpecialtiesHandler uses to build this category
+                // list in the first place, so every Category it returns actually filters here too.
+                var matchedBySpeciality = await _context.Doctors
+                    .Where(d => candidateDoctorIds.Contains(d.DoctorID) && d.PrimaryMedicalSpecialityId != null)
+                    .Join(_context.MedicalSpecialities.Where(ms => ms.IsActive && ms.PatientFacingCategory == category),
+                          d => d.PrimaryMedicalSpecialityId, ms => ms.SpecialityId, (d, ms) => d.DoctorID)
+                    .ToListAsync(cancellationToken);
+
+                var matchedSpecialityDoctorIds = matchedBySpeciality.ToHashSet();
+
+                var matchedByDepartmentFallback = await _context.Doctors
+                    .Where(d => candidateDoctorIds.Contains(d.DoctorID) && !matchedSpecialityDoctorIds.Contains(d.DoctorID)
+                                && d.PrimaryDepartmentID != null)
+                    .Join(_context.Departments.Where(dep => dep.IsActive && dep.Name == category),
+                          d => d.PrimaryDepartmentID, dep => dep.DepartmentID, (d, dep) => d.DoctorID)
+                    .ToListAsync(cancellationToken);
+
+                var matchingDoctorIds = matchedSpecialityDoctorIds.Union(matchedByDepartmentFallback).ToHashSet();
+
+                filteredQuery = filteredQuery.Where(x => matchingDoctorIds.Contains(x.d.DoctorID));
             }
 
             if (!string.IsNullOrWhiteSpace(request.Search))

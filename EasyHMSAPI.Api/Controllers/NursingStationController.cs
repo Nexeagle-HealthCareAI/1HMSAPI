@@ -195,6 +195,32 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Bulk counterpart to GetPatientAssignments above -- the ward board needs every visible
+        // bed's assignments at once (previously one GetPatientAssignments call per occupied bed).
+        [HttpGet("patient-assignments/bulk")]
+        public async Task<ActionResult<GetPatientNurseAssignmentsResponseModel>> GetPatientAssignmentsBulk(
+            [FromQuery] Guid hospitalId, [FromQuery] List<Guid> admissionIds, [FromQuery] bool activeOnly = true)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetPatientNurseAssignmentsBulkRequestModel
+                {
+                    HospitalId = hospitalId,
+                    AdmissionIds = admissionIds ?? new List<Guid>(),
+                    ActiveOnly = activeOnly,
+                });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetPatientAssignmentsBulk for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
         [HttpGet("nurses")]
         public async Task<ActionResult<GetHospitalNursesResponseModel>> GetNurses([FromQuery] Guid hospitalId)
         {
