@@ -304,6 +304,28 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Polled every few seconds by every open appointment board to surface "a new online booking
+        // just came in". Same permission gate as the rest of this controller (anyone who can see the
+        // board), and HospitalAccessFilter already scopes it to the caller's own hospital via hospitalId.
+        [HttpGet("online-bookings/recent")]
+        [Authorize]
+        public async Task<IActionResult> GetRecentOnlineBookings([FromQuery] Guid hospitalId, [FromQuery] DateTime? since)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "HospitalId is required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetRecentOnlineBookingsRequestModel { HospitalId = hospitalId, Since = since });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetRecentOnlineBookings for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "Error checking for new online bookings." });
+            }
+        }
+
         [HttpGet("patient-booked-slots")]
         [Authorize]
         public async Task<IActionResult> GetPatientBookedSlots([FromQuery] Guid doctorId, [FromQuery] Guid hospitalId, [FromQuery] DateTime date, [FromQuery] Guid? excludeAppointmentId = null)
