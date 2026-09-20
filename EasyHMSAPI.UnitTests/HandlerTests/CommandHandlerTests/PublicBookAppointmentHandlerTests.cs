@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.CommandHandlers;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
+using EasyHMSAPI.Application.Services.Implementations;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
@@ -13,6 +14,7 @@ using EasyHMSAPI.UnitTests.TestUtils;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using NUnit.Framework;
 
@@ -43,7 +45,8 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var configuration = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?> { ["WebApp:BaseUrl"] = "https://1hms-test.example.com" })
                 .Build();
-            _handler = new PublicBookAppointmentHandler(_context, _smsServiceMock.Object, _whatsAppMessagingServiceMock.Object, _emailServiceMock.Object, new MemoryCache(new MemoryCacheOptions()), configuration);
+            _handler = new PublicBookAppointmentHandler(_context, _smsServiceMock.Object, _whatsAppMessagingServiceMock.Object, _emailServiceMock.Object, new MemoryCache(new MemoryCacheOptions()), configuration,
+                new MagicLinkService(_context, new Mock<IJwtAuthService>().Object, configuration, NullLogger<MagicLinkService>.Instance));
 
             var user = TestDataFactory.SeedUser(_context);
             var hospital = TestDataFactory.SeedHospital(_context, user.UserID, isPubliclyListed: true);
@@ -316,7 +319,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                 "Alert Visitor",
                 It.Is<string>(masked => masked.EndsWith("7780") && !masked.Contains("9998887780")),
                 "12 MG Road",
-                It.Is<string>(url => url.StartsWith("https://1hms-test.example.com"))), Times.Once);
+                It.Is<string>(url => url.StartsWith("https://1hms-test.example.com/magic-login#t="))), Times.Once);
 
             _emailServiceMock.Verify(e => e.SendInvitationEmailAsync(
                 "test@example.com", "New online appointment request", It.IsAny<string>()), Times.Once);
@@ -361,6 +364,71 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 
             var roleAlert = await _context.Alert.FirstOrDefaultAsync(a => a.AudienceRoles == "Admin,AdminDoctor");
             Assert.That(roleAlert, Is.Not.Null);
+        }
+
+        [Test]
+        public async Task Handle_NewBooking_GivesEachRecipientTheirOwnMagicLink_BoundToThemAndTheHospital()
+        {
+            var adminUser = TestDataFactory.SeedUser(_context, email: "admin2@example.com", phone: "7770003333");
+            _context.HospitalUsers.Add(new HospitalUser { HospitalUserID = Guid.NewGuid(), HospitalID = _hospitalId, UserID = adminUser.UserID });
+            var adminRole = new Role { RoleID = Guid.NewGuid(), HospitalID = _hospitalId, RoleName = "Admin" };
+            _context.Roles.Add(adminRole);
+            _context.UserRoles.Add(new UserRole { UserID = adminUser.UserID, RoleID = adminRole.RoleID });
+            await _context.SaveChangesAsync();
+
+            var sentUrls = new Dictionary<string, string>();
+            _whatsAppMessagingServiceMock
+                .Setup(w => w.SendDoctorNewOnlineAppointmentAlertAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+                .Callback<string, string, string, string, string, string>((mobile, _, _, _, _, url) => sentUrls[mobile] = url)
+                .ReturnsAsync(true);
+
+            await _handler.Handle(new PublicBookAppointmentRequestModel
+            {
+                DoctorId = _doctor.DoctorID,
+                PreferredDate = DateTime.Today.AddDays(1),
+                Patient = new Patient { FullName = "Link Visitor", Mobile = "9998887782" },
+            }, CancellationToken.None);
+
+            Assert.That(sentUrls.Keys, Is.EquivalentTo(new[] { "1234567890", "7770003333" }));
+            Assert.That(sentUrls.Values.Distinct().Count(), Is.EqualTo(2), "Each recipient must get a different link.");
+
+            var links = await _context.MagicLoginTokens.ToListAsync();
+            Assert.That(links, Has.Count.EqualTo(2));
+            Assert.That(links.Select(l => l.UserId), Is.EquivalentTo(new[] { _doctor.UserID, adminUser.UserID }));
+            Assert.That(links.All(l => l.HospitalId == _hospitalId && l.TargetPath == "/appointment-dashboard" && l.ConsumedAt == null), Is.True);
+
+            // The raw token is only in the message; the database holds just its hash.
+            foreach (var url in sentUrls.Values)
+            {
+                var rawToken = url[(url.IndexOf("#t=", StringComparison.Ordinal) + 3)..];
+                Assert.That(links.Any(l => l.TokenHash == rawToken), Is.False);
+            }
+        }
+
+        [Test]
+        public async Task Handle_NewBooking_WhenMagicLinkCannotBeIssued_StillSendsPlainLoginLink()
+        {
+            // Simulates the MagicLoginToken table not being deployed yet: link creation throws, but the
+            // alert must still go out with the ordinary (login-required) URL.
+            var failingLinks = new Mock<IMagicLinkService>();
+            failingLinks.Setup(m => m.CreateLinkAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new InvalidOperationException("table missing"));
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?> { ["WebApp:BaseUrl"] = "https://1hms-test.example.com" })
+                .Build();
+            var handler = new PublicBookAppointmentHandler(_context, _smsServiceMock.Object, _whatsAppMessagingServiceMock.Object, _emailServiceMock.Object, new MemoryCache(new MemoryCacheOptions()), configuration, failingLinks.Object);
+
+            var response = await handler.Handle(new PublicBookAppointmentRequestModel
+            {
+                DoctorId = _doctor.DoctorID,
+                PreferredDate = DateTime.Today.AddDays(1),
+                Patient = new Patient { FullName = "Fallback Visitor", Mobile = "9998887783" },
+            }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            _whatsAppMessagingServiceMock.Verify(w => w.SendDoctorNewOnlineAppointmentAlertAsync(
+                "1234567890", It.IsAny<string>(), "Fallback Visitor", It.IsAny<string>(), It.IsAny<string>(),
+                "https://1hms-test.example.com/appointment-dashboard"), Times.Once);
         }
     }
 }

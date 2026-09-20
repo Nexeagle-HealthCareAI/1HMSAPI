@@ -159,6 +159,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<ConsentTemplate> ConsentTemplate { get; set; }
         public DbSet<AbhaAccount> AbhaAccount { get; set; }
         public DbSet<AbdmProfileShare> AbdmProfileShares { get; set; }
+        public DbSet<MagicLoginToken> MagicLoginTokens { get; set; }
         public DbSet<AbdmFacility> AbdmFacilities { get; set; }
         public DbSet<VitalReading> VitalReading { get; set; }
         public DbSet<FluidEntry> FluidEntry { get; set; }
@@ -1021,6 +1022,17 @@ namespace EasyHMSAPI.Domain.Context
                 entity.HasKey(s => s.ProfileShareId);
                 entity.Property(s => s.ReceivedAt).HasColumnType("datetime2(3)");
                 entity.Property(s => s.HandledAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<MagicLoginToken>(entity =>
+            {
+                entity.ToTable("MagicLoginToken");
+                entity.HasKey(t => t.TokenId);
+                entity.Property(t => t.TokenHash).HasColumnType("char(64)");
+                entity.Property(t => t.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(t => t.ExpiresAt).HasColumnType("datetime2(3)");
+                entity.Property(t => t.ConsumedAt).HasColumnType("datetime2(3)");
+                entity.Property(t => t.RowVersion).IsRowVersion();
             });
 
             modelBuilder.Entity<AbdmFacility>(entity =>

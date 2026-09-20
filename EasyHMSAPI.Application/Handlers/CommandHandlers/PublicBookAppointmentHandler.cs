@@ -36,8 +36,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         private readonly IEmailService _emailService;
         private readonly IMemoryCache _cache;
         private readonly IConfiguration _configuration;
+        private readonly IMagicLinkService _magicLinkService;
 
-        public PublicBookAppointmentHandler(AppDbContext context, ISmsService smsService, IWhatsAppMessagingService whatsAppMessagingService, IEmailService emailService, IMemoryCache cache, IConfiguration configuration)
+        public PublicBookAppointmentHandler(AppDbContext context, ISmsService smsService, IWhatsAppMessagingService whatsAppMessagingService, IEmailService emailService, IMemoryCache cache, IConfiguration configuration, IMagicLinkService magicLinkService)
         {
             _context = context;
             _smsService = smsService;
@@ -45,6 +46,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             _emailService = emailService;
             _cache = cache;
             _configuration = configuration;
+            _magicLinkService = magicLinkService;
         }
 
         public async Task<PublicBookAppointmentResponseModel> Handle(PublicBookAppointmentRequestModel request, CancellationToken cancellationToken)
@@ -194,7 +196,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             var patientAddress = string.IsNullOrWhiteSpace(patient.AddressLine) ? "Not provided" : patient.AddressLine;
             var maskedMobile = MaskMobile(patient.Mobile);
             var webAppBaseUrl = (_configuration["WebApp:BaseUrl"] ?? "https://1hms.nexeagle.com").TrimEnd('/');
-            var loginUrl = $"{webAppBaseUrl}/appointment-dashboard";
+            const string landingPath = "/appointment-dashboard";
+            // Plain (login-required) link; each recipient below gets a personal one-tap link instead,
+            // and this is what they fall back to if issuing that link fails.
+            var fallbackUrl = $"{webAppBaseUrl}{landingPath}";
             var treatingDoctorName = doctorInfo.DoctorName ?? "Doctor";
 
             // Admin/AdminDoctor users at this hospital — same role names + case-insensitive match
@@ -218,10 +223,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 .Select(g => g.First())
                 .ToList();
 
-            await SendAppointmentAlertAsync(doctorInfo.MobileNumber, doctorInfo.Email, treatingDoctorName, isTreatingDoctor: true, treatingDoctorName, patientName, maskedMobile, patientAddress, hospitalName, loginUrl);
+            var doctorUrl = await BuildLoginUrlAsync(doctorInfo.UserID, doctorInfo.MobileNumber, doctorInfo.Email, hospitalId, landingPath, fallbackUrl, cancellationToken);
+            await SendAppointmentAlertAsync(doctorInfo.MobileNumber, doctorInfo.Email, treatingDoctorName, isTreatingDoctor: true, treatingDoctorName, patientName, maskedMobile, patientAddress, hospitalName, doctorUrl);
             foreach (var admin in adminUsers)
             {
-                await SendAppointmentAlertAsync(admin.MobileNumber, admin.Email, "there", isTreatingDoctor: false, treatingDoctorName, patientName, maskedMobile, patientAddress, hospitalName, loginUrl);
+                var adminUrl = await BuildLoginUrlAsync(admin.UserID, admin.MobileNumber, admin.Email, hospitalId, landingPath, fallbackUrl, cancellationToken);
+                await SendAppointmentAlertAsync(admin.MobileNumber, admin.Email, "there", isTreatingDoctor: false, treatingDoctorName, patientName, maskedMobile, patientAddress, hospitalName, adminUrl);
             }
 
             try
@@ -269,6 +276,26 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             catch
             {
                 // Best-effort — never fail the booking because the in-app alert insert threw.
+            }
+        }
+
+        // A personal, single-use one-tap sign-in link for one recipient (see MagicLinkService) — tapping
+        // it lands them signed-in on the appointment board instead of at a login form. It NEVER
+        // carries the recipient's credentials. No link is minted for a recipient who has no phone or
+        // email to receive it, and any failure (e.g. the token table not deployed yet) degrades to the
+        // plain login-required URL rather than blocking the alert.
+        private async Task<string> BuildLoginUrlAsync(Guid userId, string? mobileNumber, string? email, Guid hospitalId, string landingPath, string fallbackUrl, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(mobileNumber) && string.IsNullOrWhiteSpace(email))
+                return fallbackUrl;
+
+            try
+            {
+                return await _magicLinkService.CreateLinkAsync(userId, hospitalId, landingPath, "ONLINE_APPOINTMENT_REQUEST", cancellationToken);
+            }
+            catch
+            {
+                return fallbackUrl;
             }
         }
 

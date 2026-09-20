@@ -452,10 +452,10 @@ namespace EasyHMSAPI.Application.Services.Implementations
                             type = "body",
                             parameters = new object[]
                             {
-                                new { type = "text", text = FormatDoctorName(doctorName), parameter_name = "doctor_name" },
-                                new { type = "text", text = patientName, parameter_name = "patient_name" },
-                                new { type = "text", text = maskedPatientMobile, parameter_name = "patient_mobile" },
-                                new { type = "text", text = patientAddress, parameter_name = "patient_address" },
+                                new { type = "text", text = SanitizeTemplateParam(FormatDoctorName(doctorName)), parameter_name = "doctor_name" },
+                                new { type = "text", text = SanitizeTemplateParam(patientName), parameter_name = "patient_name" },
+                                new { type = "text", text = SanitizeTemplateParam(maskedPatientMobile), parameter_name = "patient_mobile" },
+                                new { type = "text", text = SanitizeTemplateParam(patientAddress), parameter_name = "patient_address" },
                                 new { type = "text", text = loginUrl, parameter_name = "login_url" }
                             }
                         }
@@ -479,6 +479,16 @@ namespace EasyHMSAPI.Application.Services.Implementations
             if (!digits.StartsWith(_countryCode))
                 digits = _countryCode + digits;
             return digits;
+        }
+
+        // Meta rejects a template send (#132018) when a parameter contains a newline, a tab or 4+
+        // consecutive spaces, and rejects an empty one. Patient-typed fields (name, address) are free
+        // text, so they are flattened to single-spaced one-liners before being sent.
+        private static string SanitizeTemplateParam(string? value, int maxLength = 500)
+        {
+            var flattened = string.Join(' ', (value ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+            if (flattened.Length == 0) return "-";
+            return flattened.Length <= maxLength ? flattened : flattened[..maxLength];
         }
 
         private static string FormatDoctorName(string doctorName)

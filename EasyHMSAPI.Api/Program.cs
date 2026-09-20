@@ -165,6 +165,7 @@ builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(UserL
 // Custom Services
 // ------------------------------------------------------------
 builder.Services.AddScoped<IJwtAuthService, JwtAuthService>();
+builder.Services.AddScoped<IMagicLinkService, MagicLinkService>();
 builder.Services.AddScoped<IMaskingService, MaskingService>();
 // Object storage: S3-compatible (MinIO) bucket.
 builder.Services.AddScoped<IBlobStorageService, S3StorageService>();
@@ -257,6 +258,20 @@ builder.Services.AddRateLimiter(options =>
          factory: key => new FixedWindowRateLimiterOptions
          {
              PermitLimit = 8,
+             Window = TimeSpan.FromMinutes(1),
+             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+             QueueLimit = 0
+         })
+     );
+
+     // One-tap sign-in links from WhatsApp/email notifications. Tokens are 256-bit random so
+     // guessing is hopeless regardless; this only caps how fast one IP can probe the endpoint.
+     options.AddPolicy("MagicLinkPolicy", context =>
+         RateLimitPartition.GetFixedWindowLimiter(
+         partitionKey: EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(context, proxyForwardingSecret),
+         factory: key => new FixedWindowRateLimiterOptions
+         {
+             PermitLimit = 10,
              Window = TimeSpan.FromMinutes(1),
              QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
              QueueLimit = 0
