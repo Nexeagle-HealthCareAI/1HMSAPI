@@ -184,6 +184,7 @@ builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.ExpiryAlertB
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmEncryptionService, EasyHMSAPI.Application.Services.Implementations.AbdmEncryptionService>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmGatewayService, EasyHMSAPI.Application.Services.Implementations.AbdmGatewayService>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmAbhaService, EasyHMSAPI.Application.Services.Implementations.AbdmAbhaService>();
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmProfileShareService, EasyHMSAPI.Application.Services.Implementations.AbdmProfileShareService>();
 
 builder.Services.AddHttpClient<ITranslationService, GroqTranslationService>();
 builder.Services.AddHttpClient<IBillingInsightService, GroqBillingInsightService>();

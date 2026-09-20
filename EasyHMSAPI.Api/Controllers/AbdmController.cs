@@ -3,6 +3,7 @@ using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Application.Services.Interfaces;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -24,11 +25,111 @@ namespace EasyHMSAPI.Api.Controllers
     {
         private readonly IMediator _mediator;
         private readonly ILogger<AbdmController> _logger;
+        private readonly IAbdmProfileShareService _profileShareService;
+        private readonly IConfiguration _configuration;
 
-        public AbdmController(IMediator mediator, ILogger<AbdmController> logger)
+        public AbdmController(IMediator mediator, ILogger<AbdmController> logger, IAbdmProfileShareService profileShareService, IConfiguration configuration)
         {
             _mediator = mediator;
             _logger = logger;
+            _profileShareService = profileShareService;
+            _configuration = configuration;
+        }
+
+        // ---- "Scan Health Facility QR": counter QR + patient-shared profiles (M1 §2.2) ----
+
+        [HttpGet("facility")]
+        public async Task<ActionResult<GetAbdmFacilityResponseModel>> GetFacility([FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
+            try
+            {
+                return Ok(await _mediator.Send(new GetAbdmFacilityRequestModel { HospitalId = hospitalId }));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching ABDM facility for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching the facility settings." });
+            }
+        }
+
+        [HttpPut("facility")]
+        public async Task<ActionResult<SaveAbdmFacilityResponseModel>> SaveFacility([FromBody] SaveAbdmFacilityRequestModel request)
+        {
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success) return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error saving ABDM facility.");
+                return StatusCode(500, new { Message = "An error occurred while saving the HIP ID." });
+            }
+        }
+
+        [HttpGet("profile-shares")]
+        public async Task<ActionResult<GetAbdmProfileSharesResponseModel>> GetProfileShares([FromQuery] Guid hospitalId, [FromQuery] string? counterId, [FromQuery] string? status)
+        {
+            if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
+            try
+            {
+                var response = await _mediator.Send(new GetAbdmProfileSharesRequestModel { HospitalId = hospitalId, CounterId = counterId, Status = status });
+                if (!response.Success) return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching ABDM profile shares for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching scanned profiles." });
+            }
+        }
+
+        [HttpPost("profile-shares/{profileShareId}/handle")]
+        public async Task<ActionResult<HandleAbdmProfileShareResponseModel>> HandleProfileShare(Guid profileShareId, [FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
+            try
+            {
+                var response = await _mediator.Send(new HandleAbdmProfileShareRequestModel
+                {
+                    HospitalId = hospitalId,
+                    ProfileShareId = profileShareId,
+                    LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext)
+                });
+                if (!response.Success) return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error handling ABDM profile share {ProfileShareId}.", profileShareId);
+                return StatusCode(500, new { Message = "An error occurred while updating the scanned profile." });
+            }
+        }
+
+        // Registers this API's public callback (bridge) URL with ABDM. The URL is platform-wide (one
+        // per ABDM client, not per hospital) and built from config, so re-running it is harmless.
+        [HttpPost("bridge/register")]
+        public async Task<IActionResult> RegisterBridgeUrl(CancellationToken cancellationToken)
+        {
+            var publicBase = _configuration["Abdm:PublicBaseUrl"];
+            var secret = _configuration["Abdm:CallbackSecret"];
+            if (string.IsNullOrWhiteSpace(publicBase) || string.IsNullOrWhiteSpace(secret) || secret.StartsWith('<'))
+                return BadRequest(new { Message = "Abdm:PublicBaseUrl and Abdm:CallbackSecret must be configured first." });
+
+            try
+            {
+                var bridgeUrl = $"{publicBase.TrimEnd('/')}/abdm-callback/{secret}";
+                var abdmResponse = await _profileShareService.RegisterBridgeUrlAsync(bridgeUrl, cancellationToken);
+                return Ok(new { Message = "Bridge URL registered with ABDM.", AbdmResponse = abdmResponse });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error registering ABDM bridge URL.");
+                return StatusCode(502, new { Message = ex.Message });
+            }
         }
 
         [HttpGet("accounts")]
