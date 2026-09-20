@@ -142,7 +142,11 @@ namespace EasyHMSAPI.Api.Controllers.V1
                              && (ur.Role.HospitalID == null || ur.Role.HospitalID == hospitalId)
                              && (ur.Role.RoleName == "Admin" || ur.Role.RoleName == "AdminDoctor"));
 
-            if (!isAdmin) return Forbid("Only administrators can manage subscriptions.");
+            // Forbid(string) treats its argument as an authentication scheme name to challenge, not
+            // a message -- passing free text there throws "No authentication handler is registered
+            // for the scheme '...'" (a 500, not the intended 403). StatusCode+body is what
+            // HospitalAccessFilter/PermissionAuthorizationFilter already use for the same case.
+            if (!isAdmin) return StatusCode(StatusCodes.Status403Forbidden, new { message = "Only administrators can manage subscriptions." });
 
             var sub = await _context.HospitalSubscriptions.FirstOrDefaultAsync(s => s.HospitalId == hospitalId);
             if (sub == null)
@@ -179,7 +183,11 @@ namespace EasyHMSAPI.Api.Controllers.V1
                              && (ur.Role.HospitalID == null || ur.Role.HospitalID == hospitalId)
                              && (ur.Role.RoleName == "Admin" || ur.Role.RoleName == "AdminDoctor"));
 
-            if (!isAdmin) return Forbid("Only administrators can manage subscriptions.");
+            // Forbid(string) treats its argument as an authentication scheme name to challenge, not
+            // a message -- passing free text there throws "No authentication handler is registered
+            // for the scheme '...'" (a 500, not the intended 403). StatusCode+body is what
+            // HospitalAccessFilter/PermissionAuthorizationFilter already use for the same case.
+            if (!isAdmin) return StatusCode(StatusCodes.Status403Forbidden, new { message = "Only administrators can manage subscriptions." });
 
             var sub = await _context.HospitalSubscriptions.FirstOrDefaultAsync(s => s.HospitalId == hospitalId);
             if (sub == null) return NotFound("Subscription not found.");
