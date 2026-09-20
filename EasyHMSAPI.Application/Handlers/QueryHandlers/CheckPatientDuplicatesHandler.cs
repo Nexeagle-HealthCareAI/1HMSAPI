@@ -11,9 +11,11 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
     /// <summary>
     /// Fuzzy duplicate detection. Narrows candidates in SQL (same hospital, not merged, sharing a
     /// strong signal), then scores names with Jaro-Winkler and classifies per the agreed rules:
-    ///   NEAR_CERTAIN — Aadhaar last-4 match + name ≥ 0.80
-    ///   PROBABLE     — mobile match + name ≥ 0.85
-    ///   POSSIBLE     — DOB match + name ≥ 0.85
+    ///   ABHA_VERIFIED — exact ABHA number match (no name-similarity gate — a government-verified
+    ///                   national ID match is deterministic proof of identity on its own)
+    ///   NEAR_CERTAIN  — Aadhaar last-4 match + name ≥ 0.80
+    ///   PROBABLE      — mobile match + name ≥ 0.85
+    ///   POSSIBLE      — DOB match + name ≥ 0.85
     /// </summary>
     public class CheckPatientDuplicatesHandler : IRequestHandler<CheckPatientDuplicatesRequestModel, CheckPatientDuplicatesResponseModel>
     {
@@ -36,6 +38,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 var mobile = string.IsNullOrWhiteSpace(request.Mobile) ? null : request.Mobile.Trim();
                 var dob = request.DateOfBirth?.Date;
                 var aadhaar4 = FuzzyMatch.Last4Digits(request.AadhaarNumber);
+                var abhaId = string.IsNullOrWhiteSpace(request.AbhaId) ? null : request.AbhaId.Trim();
                 var namePrefix = FuzzyMatch.Normalize(request.FullName);
                 namePrefix = namePrefix.Length >= 3 ? namePrefix[..3] : namePrefix;
 
@@ -50,6 +53,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     (mobile != null && p.Mobile == mobile) ||
                     (dob != null && p.DateOfBirth != null && p.DateOfBirth.Value.Date == dob) ||
                     (aadhaar4 != null && p.AadhaarNumber != null && p.AadhaarNumber.EndsWith(aadhaar4)) ||
+                    (abhaId != null && p.AbhaId != null && p.AbhaId.ToLower() == abhaId.ToLower()) ||
                     (namePrefix.Length > 0 && p.FullName != null && p.FullName.ToLower().StartsWith(namePrefix)));
 
                 var candidates = await q.Take(200).ToListAsync(cancellationToken);
@@ -63,14 +67,17 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     bool mobileMatch = mobile != null && c.Mobile == mobile;
                     bool dobMatch = dob != null && c.DateOfBirth?.Date == dob;
                     bool aadhaarMatch = aadhaar4 != null && FuzzyMatch.Last4Digits(c.AadhaarNumber) == aadhaar4;
+                    bool abhaMatch = abhaId != null && c.AbhaId != null && c.AbhaId.Equals(abhaId, StringComparison.OrdinalIgnoreCase);
 
                     string? confidence = null;
-                    if (aadhaarMatch && sim >= NearCertainNameThreshold) confidence = "NEAR_CERTAIN";
+                    if (abhaMatch) confidence = "ABHA_VERIFIED";
+                    else if (aadhaarMatch && sim >= NearCertainNameThreshold) confidence = "NEAR_CERTAIN";
                     else if (mobileMatch && sim >= FuzzyNameThreshold) confidence = "PROBABLE";
                     else if (dobMatch && sim >= FuzzyNameThreshold) confidence = "POSSIBLE";
 
                     if (confidence == null) continue;
 
+                    if (abhaMatch) matchedOn.Add("ABHA");
                     if (sim >= FuzzyNameThreshold || aadhaarMatch) matchedOn.Add("NAME");
                     if (mobileMatch) matchedOn.Add("MOBILE");
                     if (dobMatch) matchedOn.Add("DOB");
@@ -91,7 +98,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     });
                 }
 
-                int Rank(string c) => c switch { "NEAR_CERTAIN" => 0, "PROBABLE" => 1, _ => 2 };
+                int Rank(string c) => c switch { "ABHA_VERIFIED" => -1, "NEAR_CERTAIN" => 0, "PROBABLE" => 1, _ => 2 };
                 matches = matches
                     .OrderBy(m => Rank(m.Confidence))
                     .ThenByDescending(m => m.Similarity)
