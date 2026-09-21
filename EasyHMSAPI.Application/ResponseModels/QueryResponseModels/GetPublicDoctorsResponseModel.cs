@@ -16,7 +16,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
     }
 
     // Public-safe field set only — no LicenseNumber, MedicalCouncil, RegistrationYear, UserId,
-    // mobile/email, or anything queue/schedule-internal.
+    // the DOCTOR's own mobile/email, or anything queue/schedule-internal. (HospitalContact below is
+    // the hospital's published front-desk number — not any individual's — and is deliberate.)
     [ExcludeFromCodeCoverage]
     public class PublicDoctorInfo
     {
@@ -70,6 +71,10 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? City { get; set; }
         public string? State { get; set; }
         public string? Pincode { get; set; }
+        // The hospital's own contact number (Hospital.Contact, falling back to AlternateContact when
+        // that is blank) so patients can call the hospital straight from the doctor card. Null when
+        // the hospital has neither on file — the frontend hides the phone row in that case.
+        public string? HospitalContact { get; set; }
         // GPS pin for a "get directions" link — inherited from the hospital, since a doctor
         // doesn't have their own address (see Hospital.Latitude/Longitude).
         public decimal? Latitude { get; set; }

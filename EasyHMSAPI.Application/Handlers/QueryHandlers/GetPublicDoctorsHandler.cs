@@ -222,7 +222,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             var hospitalIdsUsed = pageRows.Select(r => doctorHospital[r.DoctorID]).Distinct().ToList();
             var hospitalById = await _context.Hospitals
                 .Where(h => hospitalIdsUsed.Contains(h.HospitalID))
-                .Select(h => new { h.HospitalID, h.Name, h.Location, h.City, h.State, h.Pincode, h.Latitude, h.Longitude })
+                .Select(h => new { h.HospitalID, h.Name, h.Location, h.City, h.State, h.Pincode, h.Contact, h.AlternateContact, h.Latitude, h.Longitude })
                 .ToDictionaryAsync(h => h.HospitalID, cancellationToken);
 
             var deptIds = pageRows.Where(r => r.PrimaryDepartmentID.HasValue).Select(r => r.PrimaryDepartmentID!.Value).Distinct().ToList();
@@ -347,6 +347,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     City = hospital?.City,
                     State = hospital?.State,
                     Pincode = hospital?.Pincode,
+                    HospitalContact = PublicHospitalContact(hospital?.Contact, hospital?.AlternateContact),
                     Latitude = hospital?.Latitude,
                     Longitude = hospital?.Longitude,
                     Rating = reviewAgg != null ? Math.Round(reviewAgg.Average, 1) : (double?)null,
@@ -373,6 +374,17 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             };
             _cache.Set(cacheKey, response, CacheTtl);
             return response;
+        }
+
+        // Hospital.Contact is required at onboarding, but older/partial rows can hold blanks — fall back
+        // to the alternate number, and return null (not "") when neither is usable so the frontend's
+        // "hide when absent" rendering applies.
+        private static string? PublicHospitalContact(string? contact, string? alternateContact)
+        {
+            var primary = contact?.Trim();
+            if (!string.IsNullOrEmpty(primary)) return primary;
+            var alternate = alternateContact?.Trim();
+            return string.IsNullOrEmpty(alternate) ? null : alternate;
         }
 
         private static GetPublicDoctorsResponseModel EmptyResult(int page, int pageSize, int totalCount = 0) =>
