@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Common;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Domain.Context;
@@ -21,8 +22,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
         public async Task<DecideHrLeaveResponseModel> Handle(DecideHrLeaveRequestModel request, CancellationToken cancellationToken)
         {
-            var leave = await _context.HrLeaveRequest.FindAsync(new object[] { request.LeaveId }, cancellationToken);
-            if (leave == null)
+            var leave = await _context.HrLeaveRequest
+                .Include(l => l.HrEmployee)
+                .FirstOrDefaultAsync(l => l.HrLeaveRequestId == request.LeaveId, cancellationToken);
+
+            // Looked up by ID alone, so authorize against the employee's own hospital: HospitalAccessFilter
+            // never sees a hospitalId on this request, and [RequiresPermission] is not hospital-scoped.
+            // A leave at someone else's hospital gets the same "not found" as a missing one.
+            if (leave == null || !await CallerGuards.HasPermissionAtHospitalAsync(_context, request.ApprovedByUserId, leave.HrEmployee.HospitalId, "hr.manage_leaves", cancellationToken))
             {
                 return new DecideHrLeaveResponseModel
                 {
@@ -30,6 +37,30 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     Message = "Leave request not found.",
                     LeaveId = request.LeaveId,
                     Status = request.Status
+                };
+            }
+
+            if (request.Status != "APPROVED" && request.Status != "REJECTED")
+            {
+                return new DecideHrLeaveResponseModel
+                {
+                    Success = false,
+                    Message = "Status must be APPROVED or REJECTED.",
+                    LeaveId = request.LeaveId,
+                    Status = leave.Status
+                };
+            }
+
+            // Only a PENDING request can be decided. Without this, approving the same request twice deducted
+            // the employee's balance twice, and a rejected request could be flipped to approved later.
+            if (leave.Status != "PENDING")
+            {
+                return new DecideHrLeaveResponseModel
+                {
+                    Success = false,
+                    Message = $"This leave request is already {leave.Status.ToLowerInvariant()}.",
+                    LeaveId = request.LeaveId,
+                    Status = leave.Status
                 };
             }
 

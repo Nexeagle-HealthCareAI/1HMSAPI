@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Common;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Domain.Context;
@@ -20,12 +21,22 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
         public async Task<GetPayslipsByRunResponseModel> Handle(GetPayslipsByRunRequestModel request, CancellationToken cancellationToken)
         {
-            // RBAC Check for Self-Service Isolation
-            var hasManagePayroll = await _dbContext.UserRoles
-                .Include(ur => ur.Role)
-                .ThenInclude(r => r.RolePermissions)
-                .AnyAsync(ur => ur.UserID == request.LoggedInUserId &&
-                                ur.Role.RolePermissions.Any(p => p.PermissionKey == "hr.manage_payroll" && p.IsAllowed), cancellationToken);
+            // RBAC Check for Self-Service Isolation. "Payroll manager" must mean manager AT THE RUN'S
+            // HOSPITAL: the old check asked whether the caller held hr.manage_payroll on any role anywhere,
+            // which let a manager at one hospital read every other hospital's payslips (PAN, bank account,
+            // salary) by run ID.
+            var runHospitalId = await _dbContext.HrPayrollRun
+                .AsNoTracking()
+                .Where(r => r.HrPayrollRunId == request.HrPayrollRunId)
+                .Select(r => (Guid?)r.HospitalId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (runHospitalId == null)
+            {
+                return new GetPayslipsByRunResponseModel();
+            }
+
+            var hasManagePayroll = await CallerGuards.HasPermissionAtHospitalAsync(
+                _dbContext, request.LoggedInUserId, runHospitalId.Value, "hr.manage_payroll", cancellationToken);
 
             var query = _dbContext.HrPayslip
                 .Include(p => p.HrEmployee)

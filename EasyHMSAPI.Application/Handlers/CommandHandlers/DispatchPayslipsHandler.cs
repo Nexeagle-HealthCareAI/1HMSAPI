@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Common;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
@@ -27,7 +28,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 .Include(r => r.Hospital)
                 .FirstOrDefaultAsync(r => r.HrPayrollRunId == request.HrPayrollRunId, cancellationToken);
 
-            if (run == null)
+            // Looked up by ID alone, so authorize against the run's own hospital (see ExportBankFileHandler).
+            // Without this a manager at any hospital could message another hospital's whole workforce.
+            if (run == null || !await CallerGuards.HasPermissionAtHospitalAsync(_dbContext, request.LoggedInUserId, run.HospitalId, "hr.manage_payroll", cancellationToken))
             {
                 return new DispatchPayslipsResponseModel { Success = false, Message = "Payroll run not found." };
             }

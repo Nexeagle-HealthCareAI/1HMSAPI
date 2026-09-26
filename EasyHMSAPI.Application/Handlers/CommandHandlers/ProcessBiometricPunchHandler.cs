@@ -22,9 +22,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
         public async Task<ProcessBiometricPunchResponseModel> Handle(ProcessBiometricPunchRequestModel request, CancellationToken cancellationToken)
         {
-            // 1. Lookup Employee
+            // 1. Lookup Employee. Scoped to the punch's hospital: employee codes (EMP-YYYY-NNNN) repeat across
+            // hospitals, so looking up by code alone attached the punch to whichever hospital's employee
+            // the database returned first.
             var employee = await _dbContext.HrEmployee
-                .FirstOrDefaultAsync(e => e.EmployeeCode == request.EmployeeCode, cancellationToken);
+                .FirstOrDefaultAsync(e => e.HospitalId == request.HospitalId && e.EmployeeCode == request.EmployeeCode, cancellationToken);
 
             if (employee == null)
             {

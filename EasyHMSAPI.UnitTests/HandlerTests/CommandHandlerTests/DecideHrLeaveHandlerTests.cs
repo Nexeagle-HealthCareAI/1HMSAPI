@@ -17,6 +17,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         private AppDbContext _context = null!;
         private DecideHrLeaveHandler _handler = null!;
         private HrEmployee _employee = null!;
+        private Guid _approverId;
 
         [SetUp]
         public void SetUp()
@@ -45,6 +46,9 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             };
             _context.HrEmployee.Add(_employee);
             _context.SaveChanges();
+
+            // The approver must be a leave manager AT THE EMPLOYEE'S hospital, not just anyone.
+            _approverId = HrAuthSeed.SeedMember(_context, _employee.HospitalId, "hr.manage_leaves");
         }
 
         [TearDown]
@@ -78,7 +82,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             _context.HrLeaveBalance.Add(new HrLeaveBalance { HrEmployeeId = _employee.HrEmployeeId, Year = 2026 });
             await _context.SaveChangesAsync();
             var leave = SeedLeaveRequest("CASUAL", 3m);
-            var approverId = Guid.NewGuid();
+            var approverId = _approverId;
 
             var response = await _handler.Handle(new DecideHrLeaveRequestModel
             {
@@ -107,7 +111,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             {
                 LeaveId = leave.HrLeaveRequestId,
                 Status = "APPROVED",
-                ApprovedByUserId = Guid.NewGuid(),
+                ApprovedByUserId = _approverId,
             }, CancellationToken.None);
 
             var balance = _context.HrLeaveBalance.Single(b => b.HrEmployeeId == _employee.HrEmployeeId && b.Year == 2026);
@@ -126,7 +130,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             {
                 LeaveId = leave.HrLeaveRequestId,
                 Status = "APPROVED",
-                ApprovedByUserId = Guid.NewGuid(),
+                ApprovedByUserId = _approverId,
             }, CancellationToken.None);
 
             var balance = _context.HrLeaveBalance.Single(b => b.HrEmployeeId == _employee.HrEmployeeId && b.Year == 2026);
@@ -147,7 +151,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                 LeaveId = leave.HrLeaveRequestId,
                 Status = "REJECTED",
                 Reason = "Insufficient staffing on requested dates",
-                ApprovedByUserId = Guid.NewGuid(),
+                ApprovedByUserId = _approverId,
             }, CancellationToken.None);
 
             Assert.That(response.Success, Is.True);
@@ -166,10 +170,81 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             {
                 LeaveId = Guid.NewGuid(),
                 Status = "APPROVED",
-                ApprovedByUserId = Guid.NewGuid(),
+                ApprovedByUserId = _approverId,
             }, CancellationToken.None);
 
             Assert.That(response.Success, Is.False);
+        }
+
+        [Test]
+        public async Task Handle_ApprovedTwice_SecondCallRefusedAndBalanceDeductedOnlyOnce()
+        {
+            _context.HrLeaveBalance.Add(new HrLeaveBalance { HrEmployeeId = _employee.HrEmployeeId, Year = 2026 });
+            await _context.SaveChangesAsync();
+            var leave = SeedLeaveRequest("CASUAL", 3m);
+            var request = new DecideHrLeaveRequestModel { LeaveId = leave.HrLeaveRequestId, Status = "APPROVED", ApprovedByUserId = _approverId };
+
+            var first = await _handler.Handle(request, CancellationToken.None);
+            var second = await _handler.Handle(request, CancellationToken.None);
+
+            Assert.That(first.Success, Is.True);
+            Assert.That(second.Success, Is.False, "an already-decided request must not be decided again");
+            var balance = _context.HrLeaveBalance.Single(b => b.HrEmployeeId == _employee.HrEmployeeId && b.Year == 2026);
+            Assert.That(balance.CasualLeaveBalance, Is.EqualTo(9m), "12 - 3, deducted once, not twice");
+            Assert.That(balance.CasualLeaveUsed, Is.EqualTo(3m));
+        }
+
+        [Test]
+        public async Task Handle_RejectedLeave_CannotBeApprovedLater()
+        {
+            var leave = SeedLeaveRequest("SICK", 2m);
+            await _handler.Handle(new DecideHrLeaveRequestModel { LeaveId = leave.HrLeaveRequestId, Status = "REJECTED", ApprovedByUserId = _approverId }, CancellationToken.None);
+
+            var response = await _handler.Handle(new DecideHrLeaveRequestModel { LeaveId = leave.HrLeaveRequestId, Status = "APPROVED", ApprovedByUserId = _approverId }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(_context.HrLeaveRequest.Single().Status, Is.EqualTo("REJECTED"));
+            Assert.That(_context.HrLeaveBalance.Any(), Is.False, "a refused decision must not create or change a balance");
+        }
+
+        [TestCase("PENDING")]
+        [TestCase("approved")]
+        [TestCase("")]
+        [TestCase("SOMETHING_ELSE")]
+        public async Task Handle_StatusOtherThanApprovedOrRejected_IsRefusedAndLeaveStaysPending(string status)
+        {
+            var leave = SeedLeaveRequest("CASUAL", 1m);
+
+            var response = await _handler.Handle(new DecideHrLeaveRequestModel { LeaveId = leave.HrLeaveRequestId, Status = status, ApprovedByUserId = _approverId }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(_context.HrLeaveRequest.Single().Status, Is.EqualTo("PENDING"));
+        }
+
+        [Test]
+        public async Task Handle_ApproverFromAnotherHospital_IsDeniedAndLeaveUntouched()
+        {
+            // A fully-permitted leave manager -- but at a DIFFERENT hospital than the employee's.
+            var otherHospitalManager = HrAuthSeed.SeedMember(_context, Guid.NewGuid(), "hr.manage_leaves");
+            var leave = SeedLeaveRequest("CASUAL", 2m);
+
+            var response = await _handler.Handle(new DecideHrLeaveRequestModel { LeaveId = leave.HrLeaveRequestId, Status = "APPROVED", ApprovedByUserId = otherHospitalManager }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Is.EqualTo("Leave request not found."), "same answer as a missing leave, so its existence isn't revealed");
+            Assert.That(_context.HrLeaveRequest.Single().Status, Is.EqualTo("PENDING"));
+        }
+
+        [Test]
+        public async Task Handle_MemberWithoutLeavePermission_IsDenied()
+        {
+            var plainMember = HrAuthSeed.SeedMember(_context, _employee.HospitalId);
+            var leave = SeedLeaveRequest("CASUAL", 2m);
+
+            var response = await _handler.Handle(new DecideHrLeaveRequestModel { LeaveId = leave.HrLeaveRequestId, Status = "APPROVED", ApprovedByUserId = plainMember }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(_context.HrLeaveRequest.Single().Status, Is.EqualTo("PENDING"));
         }
     }
 }

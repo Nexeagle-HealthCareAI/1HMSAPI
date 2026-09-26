@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Common;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Domain.Context;
@@ -23,12 +24,15 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
         {
             var year = request.Year ?? DateTime.UtcNow.Year;
 
-            // RBAC Check for Self-Service Isolation
-            var hasManageLeaves = await _context.UserRoles
-                .Include(ur => ur.Role)
-                .ThenInclude(r => r.RolePermissions)
-                .AnyAsync(ur => ur.UserID == request.LoggedInUserId &&
-                                ur.Role.RolePermissions.Any(p => p.PermissionKey == "hr.manage_leaves" && p.IsAllowed), cancellationToken);
+            // RBAC Check for Self-Service Isolation. The employee is looked up by ID alone, so "manager" has to
+            // mean manager at THAT EMPLOYEE'S hospital, not hr.manage_leaves on any role at any hospital.
+            var employeeHospitalId = await _context.HrEmployee
+                .AsNoTracking()
+                .Where(e => e.HrEmployeeId == request.EmployeeId)
+                .Select(e => (Guid?)e.HospitalId)
+                .FirstOrDefaultAsync(cancellationToken);
+            var hasManageLeaves = employeeHospitalId.HasValue
+                && await CallerGuards.HasPermissionAtHospitalAsync(_context, request.LoggedInUserId, employeeHospitalId.Value, "hr.manage_leaves", cancellationToken);
 
             var query = _context.HrLeaveBalance.Include(b => b.HrEmployee).AsQueryable();
 
