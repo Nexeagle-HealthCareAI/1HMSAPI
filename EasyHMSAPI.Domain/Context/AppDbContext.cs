@@ -242,6 +242,9 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<HrConsultantFeeConfig> HrConsultantFeeConfig { get; set; }
         public DbSet<HrPayrollRun> HrPayrollRun { get; set; }
         public DbSet<HrPayslip> HrPayslip { get; set; }
+        public DbSet<HrBiometricDevice> HrBiometricDevice { get; set; }
+        public DbSet<HrBiometricPunch> HrBiometricPunch { get; set; }
+        public DbSet<HrEmployeeDeviceUser> HrEmployeeDeviceUser { get; set; }
 
         // Pathology
         public DbSet<PathologyTestMaster> PathologyTestMaster { get; set; }

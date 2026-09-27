@@ -186,6 +186,9 @@ builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmEncry
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmGatewayService, EasyHMSAPI.Application.Services.Implementations.AbdmGatewayService>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmAbhaService, EasyHMSAPI.Application.Services.Implementations.AbdmAbhaService>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmProfileShareService, EasyHMSAPI.Application.Services.Implementations.AbdmProfileShareService>();
+// HR biometric attendance: stores device scans and rebuilds attendance from them.
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IBiometricPunchIngestionService, EasyHMSAPI.Application.Services.Implementations.BiometricPunchIngestionService>();
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IZktecoPushService, EasyHMSAPI.Application.Services.Implementations.ZktecoPushService>();
 
 builder.Services.AddHttpClient<ITranslationService, GroqTranslationService>();
 builder.Services.AddHttpClient<IBillingInsightService, GroqBillingInsightService>();

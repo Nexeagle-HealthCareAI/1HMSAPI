@@ -7,8 +7,6 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System;
-using System.Security.Cryptography;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace EasyHMSAPI.Api.Controllers.V1
@@ -20,12 +18,10 @@ namespace EasyHMSAPI.Api.Controllers.V1
     public class HrController : ControllerBase
     {
         private readonly IMediator _mediator;
-        private readonly IConfiguration _configuration;
 
-        public HrController(IMediator mediator, IConfiguration configuration)
+        public HrController(IMediator mediator)
         {
             _mediator = mediator;
-            _configuration = configuration;
         }
 
         // ─── Employees ────────────────────────────────────────────────────────
@@ -259,42 +255,9 @@ namespace EasyHMSAPI.Api.Controllers.V1
             return Ok(result);
         }
 
-        // ─── Attendance & Biometrics ──────────────────────────────────────────
-
-        [HttpPost("biometric-punch")]
-        [AllowAnonymous] // Devices can't sign in; they authenticate with the shared ingest key below.
-        public async Task<ActionResult<ProcessBiometricPunchResponseModel>> BiometricPunch(
-            [FromBody] ProcessBiometricPunchRequestModel request,
-            [FromHeader(Name = "X-API-KEY")] string? apiKey)
-        {
-            // The key comes from configuration (Hr:BiometricIngestKey), never from source: the previous
-            // hardcoded "ZKTeco-Hook-Secret" was readable by anyone with repo access and identical everywhere.
-            // Unconfigured = endpoint off, so it fails closed until a key is deliberately set. This is an
-            // interim shared key; per-device credentials replace it once the device registry exists.
-            var expectedKey = _configuration["Hr:BiometricIngestKey"];
-            if (string.IsNullOrWhiteSpace(expectedKey) || expectedKey.StartsWith('<'))
-            {
-                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = "Biometric ingestion is not configured." });
-            }
-
-            if (string.IsNullOrEmpty(apiKey) ||
-                !CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(apiKey), Encoding.UTF8.GetBytes(expectedKey)))
-            {
-                return Unauthorized(new { message = "Invalid API Key" });
-            }
-
-            if (request.HospitalId == Guid.Empty)
-            {
-                return BadRequest(new { message = "hospitalId is required." });
-            }
-
-            var result = await _mediator.Send(request);
-            if (result.Success)
-            {
-                return Ok(result);
-            }
-            return BadRequest(result);
-        }
+        // ─── Attendance ───────────────────────────────────────────────────────
+        // Biometric device scans are received by BiometricIngestController (per-device credentials) and
+        // ZktecoPushController; devices are managed in HrBiometricController.
 
         [HttpGet("attendance/exceptions")]
         [RequiresPermission("hr.view_dashboard")]

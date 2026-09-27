@@ -238,42 +238,8 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(result.LeaveBalance, Is.Null);
         }
 
-        // ─── Biometric punch ─────────────────────────────────────────────────
-
-        [Test]
-        public async Task ProcessBiometricPunch_SameCodeAtTwoHospitals_AttachesOnlyToTheHospitalNamed()
-        {
-            var result = await new ProcessBiometricPunchHandler(_context).Handle(new ProcessBiometricPunchRequestModel
-            {
-                HospitalId = _hospitalB,
-                EmployeeCode = "EMP-2026-0001",
-                DeviceId = "K40-B-01",
-                PunchType = "IN",
-                PunchTime = new DateTime(2026, 8, 10, 9, 5, 0),
-            }, CancellationToken.None);
-
-            Assert.That(result.Success, Is.True);
-            var log = _context.HrAttendanceLog.Single();
-            Assert.That(log.HrEmployeeId, Is.EqualTo(_empB.HrEmployeeId), "must be hospital B's employee, not hospital A's with the same code");
-        }
-
-        [Test]
-        public async Task ProcessBiometricPunch_CodeThatOnlyExistsAtAnotherHospital_IsRejectedAndNothingRecorded()
-        {
-            var thirdHospital = Guid.NewGuid();
-
-            var result = await new ProcessBiometricPunchHandler(_context).Handle(new ProcessBiometricPunchRequestModel
-            {
-                HospitalId = thirdHospital,
-                EmployeeCode = "EMP-2026-0001",
-                DeviceId = "K40-C-01",
-                PunchType = "IN",
-                PunchTime = new DateTime(2026, 8, 10, 9, 5, 0),
-            }, CancellationToken.None);
-
-            Assert.That(result.Success, Is.False);
-            Assert.That(_context.HrAttendanceLog.Any(), Is.False);
-        }
+        // (Biometric scans: the "same PIN at two hospitals" isolation cases live in
+        // BiometricPunchIngestionServiceTests and HrBiometricHandlerTests.)
 
         // ─── helpers ─────────────────────────────────────────────────────────
 
