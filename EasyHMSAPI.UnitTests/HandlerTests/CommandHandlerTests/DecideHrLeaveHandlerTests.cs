@@ -246,5 +246,52 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(response.Success, Is.False);
             Assert.That(_context.HrLeaveRequest.Single().Status, Is.EqualTo("PENDING"));
         }
+
+        // ─── Approval -> attendance ────────────────────────────────────────────
+
+        [Test]
+        public async Task Handle_Approved_MarksEveryDayInTheRangeOnLeave()
+        {
+            var leave = SeedLeaveRequest("CASUAL", 3m); // 2026-08-10 .. 2026-08-12
+
+            var response = await _handler.Handle(new DecideHrLeaveRequestModel { LeaveId = leave.HrLeaveRequestId, Status = "APPROVED", ApprovedByUserId = _approverId }, CancellationToken.None);
+
+            Assert.That(response.AttendanceDaysUpdated, Is.EqualTo(3));
+            var logs = _context.HrAttendanceLog.Where(a => a.HrEmployeeId == _employee.HrEmployeeId).OrderBy(a => a.AttendanceDate).ToList();
+            Assert.That(logs.Select(l => l.AttendanceDate), Is.EqualTo(new[] { new DateOnly(2026, 8, 10), new DateOnly(2026, 8, 11), new DateOnly(2026, 8, 12) }));
+            Assert.That(logs.All(l => l.Status == "ON_LEAVE"), Is.True);
+            Assert.That(logs.All(l => l.PunchSource == "MANUAL_OVERRIDE"), Is.True);
+            Assert.That(logs.All(l => l.OverriddenByUserId == _approverId), Is.True);
+            Assert.That(logs[0].Notes, Is.EqualTo("Approved CASUAL leave"));
+        }
+
+        [Test]
+        public async Task Handle_Approved_ADayThatAlreadyHasAttendance_IsLeftAlone()
+        {
+            var leave = SeedLeaveRequest("CASUAL", 3m); // 2026-08-10 .. 2026-08-12
+            _context.HrAttendanceLog.Add(new HrAttendanceLog
+            {
+                HrEmployeeId = _employee.HrEmployeeId, AttendanceDate = new DateOnly(2026, 8, 11),
+                PunchIn = new DateTime(2026, 8, 11, 9, 0, 0), Status = "PRESENT", PunchSource = "BIOMETRIC",
+            });
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new DecideHrLeaveRequestModel { LeaveId = leave.HrLeaveRequestId, Status = "APPROVED", ApprovedByUserId = _approverId }, CancellationToken.None);
+
+            Assert.That(response.AttendanceDaysUpdated, Is.EqualTo(2), "the 11th already had a record");
+            var day11 = _context.HrAttendanceLog.Single(a => a.AttendanceDate == new DateOnly(2026, 8, 11));
+            Assert.That(day11.Status, Is.EqualTo("PRESENT"), "real punches are never overwritten by a leave approval");
+            Assert.That(_context.HrAttendanceLog.Count(a => a.Status == "ON_LEAVE"), Is.EqualTo(2));
+        }
+
+        [Test]
+        public async Task Handle_Rejected_CreatesNoAttendanceRows()
+        {
+            var leave = SeedLeaveRequest("CASUAL", 3m);
+
+            await _handler.Handle(new DecideHrLeaveRequestModel { LeaveId = leave.HrLeaveRequestId, Status = "REJECTED", ApprovedByUserId = _approverId }, CancellationToken.None);
+
+            Assert.That(_context.HrAttendanceLog.Any(), Is.False);
+        }
     }
 }

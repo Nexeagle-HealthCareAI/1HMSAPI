@@ -54,6 +54,14 @@ namespace EasyHMSAPI.Domain.Entities
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+        /// <summary>Who (a manual correction) or, when null with PunchSource=MANUAL_OVERRIDE, what
+        /// (the nightly AttendanceDailyClose job) last set this row's Status away from a plain
+        /// biometric scan. Added by create_tables_hr__attendance_override_columns.sql.</summary>
+        public Guid? OverriddenByUserId { get; set; }
+        public DateTime? OverriddenAt { get; set; }
+        [MaxLength(300)]
+        public string? OverrideReason { get; set; }
+
         public HrEmployee HrEmployee { get; set; } = null!;
     }
 }

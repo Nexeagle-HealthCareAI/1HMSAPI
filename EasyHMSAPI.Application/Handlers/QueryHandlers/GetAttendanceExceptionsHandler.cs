@@ -31,7 +31,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .Where(a => a.HrEmployee.HospitalId == request.HospitalId 
                          && a.AttendanceDate >= start 
                          && a.AttendanceDate <= end
-                         && (a.Status == "LATE" || a.Notes == "MISSING_IN_PUNCH" || a.Notes == "UNSCHEDULED" || (!a.PunchOut.HasValue && a.PunchIn.HasValue && a.AttendanceDate < DateOnly.FromDateTime(DateTime.UtcNow))))
+                         // ON_LEAVE is deliberately excluded: approved leave is expected, not an
+                         // operational anomaly HR needs to chase.
+                         && (a.Status == "LATE" || a.Status == "ABSENT" || a.Notes == "MISSING_IN_PUNCH" || a.Notes == "UNSCHEDULED" || (!a.PunchOut.HasValue && a.PunchIn.HasValue && a.AttendanceDate < DateOnly.FromDateTime(DateTime.UtcNow))))
                 .ToListAsync(cancellationToken);
 
             var exceptions = new List<AttendanceExceptionDto>();
@@ -41,7 +43,12 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 string type = "UNKNOWN";
                 string desc = "";
 
-                if (log.Status == "LATE")
+                if (log.Status == "ABSENT")
+                {
+                    type = "ABSENT";
+                    desc = "Did not check in and no leave on record";
+                }
+                else if (log.Status == "LATE")
                 {
                     type = "LATE";
                     desc = "Punched in late for shift";

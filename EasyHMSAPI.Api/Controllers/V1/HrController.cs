@@ -276,6 +276,17 @@ namespace EasyHMSAPI.Api.Controllers.V1
             return Ok(result);
         }
 
+        [HttpPut("attendance/{employeeId}/override")]
+        [RequiresPermission("hr.manage_employees")]
+        public async Task<ActionResult<SetAttendanceOverrideResponseModel>> SetAttendanceOverride(
+            Guid employeeId, [FromBody] SetAttendanceOverrideRequestModel request)
+        {
+            request.HrEmployeeId = employeeId;
+            request.LoggedInUserId = UserContextHelper.GetUserId(User) ?? Guid.Empty;
+            var result = await _mediator.Send(request);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+
         // ─── Dashboard & KPI ──────────────────────────────────────────────────
         [HttpGet("kpi-summary")]
         [RequiresPermission("hr.view_dashboard")]
