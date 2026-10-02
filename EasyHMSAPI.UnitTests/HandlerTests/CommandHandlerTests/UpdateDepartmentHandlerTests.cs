@@ -36,13 +36,15 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         {
             // Arrange
             var deptId = Guid.NewGuid();
-            var department = new Department { DepartmentID = deptId, Name = "Old Name", Description = "Old Desc" };
+            var hospitalId = Guid.NewGuid();
+            var department = new Department { DepartmentID = deptId, HospitalID = hospitalId, Name = "Old Name", Description = "Old Desc" };
             _context.Departments.Add(department);
             await _context.SaveChangesAsync();
 
             var request = new UpdateDepartmentRequestModel
             {
                 DepartmentId = deptId,
+                CallerUserId = HrAuthSeed.SeedMember(_context, hospitalId, "admin_panel"),
                 Name = "New Name",
                 Description = "New Desc"
             };

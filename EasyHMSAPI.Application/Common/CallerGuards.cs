@@ -33,14 +33,55 @@ namespace EasyHMSAPI.Application.Common
                 && ur.Role.RolePermissions.Any(p => p.PermissionKey == permissionKey && p.IsAllowed), cancellationToken);
         }
 
-        /// <summary>True if the caller holds an Admin or AdminDoctor role.</summary>
-        public static async Task<bool> IsAdminAsync(AppDbContext context, Guid callerUserId, CancellationToken cancellationToken)
+        /// <summary>True if the two users are members of at least one common hospital.</summary>
+        public static Task<bool> SharesHospitalAsync(AppDbContext context, Guid callerUserId, Guid targetUserId, CancellationToken cancellationToken)
         {
-            var roles = await context.UserRoles
-                .Where(ur => ur.UserID == callerUserId)
-                .Join(context.Roles, ur => ur.RoleID, r => r.RoleID, (ur, r) => r.RoleName)
+            if (callerUserId == Guid.Empty || targetUserId == Guid.Empty) return Task.FromResult(false);
+            return context.HospitalUsers
+                .Where(hu => hu.UserID == callerUserId)
+                .AnyAsync(caller => context.HospitalUsers.Any(target =>
+                    target.UserID == targetUserId && target.HospitalID == caller.HospitalID), cancellationToken);
+        }
+
+        /// <summary>
+        /// Self-or-admin access to another user's own record (profile, picture, details). True when the
+        /// caller IS the target, or holds <paramref name="permissionKey"/> (default admin_panel) at a hospital
+        /// the target also belongs to. The caller id must come from the verified JWT, never the client.
+        /// </summary>
+        public static async Task<bool> CanAccessUserAsync(AppDbContext context, Guid? callerUserId, Guid targetUserId, CancellationToken cancellationToken, string permissionKey = "admin_panel")
+        {
+            if (callerUserId == null || callerUserId == Guid.Empty || targetUserId == Guid.Empty) return false;
+            if (callerUserId.Value == targetUserId) return true;
+
+            var sharedHospitalIds = await context.HospitalUsers
+                .Where(hu => hu.UserID == callerUserId.Value)
+                .Select(hu => hu.HospitalID)
+                .Where(hid => context.HospitalUsers.Any(t => t.UserID == targetUserId && t.HospitalID == hid))
                 .ToListAsync(cancellationToken);
 
+            foreach (var hospitalId in sharedHospitalIds)
+            {
+                if (await HasPermissionAtHospitalAsync(context, callerUserId.Value, hospitalId, permissionKey, cancellationToken))
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// True if the caller is a member of <paramref name="hospitalId"/> AND holds an Admin or AdminDoctor
+        /// role that applies there (owned by that hospital, or a legacy global role with no hospital). A role
+        /// owned by a DIFFERENT hospital does not count, so an admin of hospital A who is only a staff member
+        /// of hospital B is not an administrator of B.
+        /// </summary>
+        public static async Task<bool> IsAdminAtHospitalAsync(AppDbContext context, Guid callerUserId, Guid hospitalId, CancellationToken cancellationToken)
+        {
+            if (callerUserId == Guid.Empty || hospitalId == Guid.Empty) return false;
+            if (!await IsHospitalMemberAsync(context, callerUserId, hospitalId, cancellationToken)) return false;
+
+            var roles = await context.UserRoles
+                .Where(ur => ur.UserID == callerUserId && (ur.Role.HospitalID == null || ur.Role.HospitalID == hospitalId))
+                .Select(ur => ur.Role.RoleName)
+                .ToListAsync(cancellationToken);
             return roles.Any(r => !string.IsNullOrWhiteSpace(r) && AdminRoles.Contains(r.Trim().ToLowerInvariant()));
         }
     }

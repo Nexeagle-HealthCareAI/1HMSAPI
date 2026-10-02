@@ -1,4 +1,4 @@
-﻿using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
+using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Enums;
@@ -26,6 +26,20 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         {
             var userExists = await _context.Users.Where(x => x.UserID == request.UserId && x.UserStatusId != (int)UserStatusEnum.Revoked).Select(x => x.UserID).FirstOrDefaultAsync(cancellationToken);
             UploadProfilePictureResponseModel response = new();
+
+            // Self, or an admin_panel holder at the supplied hospital acting on a doctor of that hospital
+            // (Public Directory tile editor). HospitalId is client-supplied, so it only counts when the
+            // caller really holds admin_panel there; otherwise only the user's own picture may change.
+            var isSelf = request.CallerUserId != null && request.CallerUserId == request.UserId;
+            var isHospitalAdmin = !isSelf && request.HospitalId.HasValue && request.CallerUserId.HasValue
+                && await Common.CallerGuards.HasPermissionAtHospitalAsync(_context, request.CallerUserId.Value, request.HospitalId.Value, "admin_panel", cancellationToken);
+            if (!isSelf && !isHospitalAdmin)
+            {
+                response.Success = false;
+                response.Forbidden = true;
+                response.ProfilePictureUrl = string.Empty;
+                return response;
+            }
 
             if (userExists == Guid.Empty)
             {

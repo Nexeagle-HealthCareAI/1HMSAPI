@@ -41,8 +41,7 @@ namespace EasyHMSAPI.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in RegisterHospital");
-                var errorMsg = ex.InnerException != null ? $"{ex.Message} Inner: {ex.InnerException.Message}" : ex.Message;
-                return StatusCode(500, new { Message = "An error occurred while registering hospital", Error = errorMsg });
+                return StatusCode(500, new { Message = "An error occurred while registering hospital" });
             }
         }
 
@@ -59,16 +58,18 @@ namespace EasyHMSAPI.Api.Controllers
                 }
 
                 request.HospitalId = hospitalId;
+                request.CallerUserId = EasyHMSAPI.Api.Common.UserContextHelper.GetUserId(User);
 
                 var response = await _mediator.Send(request);
                 _logger.LogInformation("UpdateHospital ended for hospitalId: {HospitalId}", hospitalId);
 
+                if (response.Forbidden) return StatusCode(403, new { message = response.Message });
                 return Ok(response);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in UpdateHospital for hospitalId: {HospitalId}", hospitalId);
-                return StatusCode(500, new { Message = "An error occurred while updating hospital", Error = ex.Message });
+                return StatusCode(500, new { Message = "An error occurred while updating hospital" });
             }
         }
 

@@ -1,4 +1,4 @@
-﻿using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
+using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Enums;
@@ -26,6 +26,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         {
             var userExists = await _context.Users.Where(x => x.UserID == request.UserId && x.UserStatusId != (int)UserStatusEnum.Revoked).Select(x => x.UserID).FirstOrDefaultAsync(cancellationToken);
             DeleteProfilePictureResponseModel response = new();
+
+            // Self, or an admin_panel holder who shares a hospital with the target.
+            if (!await Common.CallerGuards.CanAccessUserAsync(_context, request.CallerUserId, request.UserId, cancellationToken))
+            {
+                response.Success = false;
+                response.Forbidden = true;
+                response.Message = "You don't have permission to change this profile picture.";
+                return response;
+            }
 
             if(userExists == Guid.Empty)
             {

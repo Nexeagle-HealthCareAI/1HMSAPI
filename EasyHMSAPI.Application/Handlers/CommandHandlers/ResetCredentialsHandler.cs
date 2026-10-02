@@ -43,7 +43,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 .AnyAsync(hu => hu.UserID == request.CallerUserId && hu.HospitalID == request.HospitalId, cancellationToken);
             if (!callerIsMember)
                 return Fail("You don't have access to this hospital.");
-            if (!await Common.CallerGuards.IsAdminAsync(_context, request.CallerUserId, cancellationToken))
+            if (!await Common.CallerGuards.IsAdminAtHospitalAsync(_context, request.CallerUserId, request.HospitalId, cancellationToken))
                 return Fail("Only an administrator can reset a member's password.");
 
             // The target must be a member of the same hospital.

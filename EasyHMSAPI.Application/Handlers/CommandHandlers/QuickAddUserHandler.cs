@@ -62,7 +62,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 return Fail("This hospital has been archived and can no longer be modified.");
 
             // Adding team members is an administrator action.
-            if (!await Common.CallerGuards.IsAdminAsync(_context, request.CallerUserId, cancellationToken))
+            if (!await Common.CallerGuards.IsAdminAtHospitalAsync(_context, request.CallerUserId, request.HospitalId, cancellationToken))
                 return Fail("Only an administrator can add team members.");
 
             var mobile = request.MobileNumber.Trim();

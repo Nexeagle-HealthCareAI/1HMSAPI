@@ -26,6 +26,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 };
             }
 
+            // Profile, branding, GSTIN and public-listing changes are admin work.
+            if (request.CallerUserId == null
+                || !await Common.CallerGuards.HasPermissionAtHospitalAsync(_context, request.CallerUserId.Value, request.HospitalId, "admin_panel", cancellationToken))
+            {
+                return new HospitalUpdateResponseModel
+                {
+                    Success = false,
+                    Forbidden = true,
+                    Message = "You don't have permission to update this hospital.",
+                    HospitalId = null
+                };
+            }
+
             var hospital = await _context.Hospitals.FirstOrDefaultAsync(h => h.HospitalID == request.HospitalId, cancellationToken);
             if (hospital == null)
             {

@@ -14,6 +14,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
     [TestFixture]
     public class UserSearchHandlerTests
     {
+        private static readonly Guid _unknownId = Guid.NewGuid();
         private AppDbContext _context = null!;
         private UserSearchHandler _handler = null!;
 
@@ -44,7 +45,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             _context.UserProfiles.Add(profile);
             await _context.SaveChangesAsync();
 
-            var request = new UserSearchRequestModel { UserId = user.UserID };
+            var request = new UserSearchRequestModel { UserId = user.UserID, CallerUserId = user.UserID};
 
             // Act
             var response = await _handler.Handle(request, CancellationToken.None);
@@ -59,7 +60,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         public async Task Handle_NotFound_ReturnsNull()
         {
             // Arrange
-            var request = new UserSearchRequestModel { UserId = Guid.NewGuid() };
+            var request = new UserSearchRequestModel { UserId = _unknownId, CallerUserId = _unknownId };
 
             // Act
             var response = await _handler.Handle(request, CancellationToken.None);

@@ -88,15 +88,17 @@ namespace EasyHMSAPI.Api.Controllers
             _logger.LogInformation("CreateDepartment started at {Time} with request: {@Request}", DateTime.UtcNow, request);
             try
             {
+                request.CallerUserId = EasyHMSAPI.Api.Common.UserContextHelper.GetUserId(User);
                 var response = await _mediator.Send(request);
                 _logger.LogInformation("CreateDepartment ended with response: {@Response}", response);
 
+                if (response.Forbidden) return StatusCode(403, new { message = response.Message });
                 return Ok(response);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in CreateDepartment");
-                return StatusCode(500, new { Message = "An error occurred while creating department", Error = ex.Message });
+                return StatusCode(500, new { Message = "An error occurred while creating department" });
             }
         }
 
@@ -105,18 +107,20 @@ namespace EasyHMSAPI.Api.Controllers
         public async Task<IActionResult> UpdateDepartment([FromRoute] Guid departmentId, [FromBody] UpdateDepartmentRequestModel request)
         {
             request.DepartmentId = departmentId;
-            _logger.LogInformation("UpdateDepartment started at {Time} for departmentId: {DepartmentId} with request: {@Request}", DateTime.UtcNow, departmentId, request);
+            request.CallerUserId = EasyHMSAPI.Api.Common.UserContextHelper.GetUserId(User);
+            _logger.LogInformation("UpdateDepartment started at {Time} for departmentId: {DepartmentId}", DateTime.UtcNow, departmentId);
             try
             {
                 var response = await _mediator.Send(request);
-                _logger.LogInformation("UpdateDepartment ended for departmentId: {DepartmentId} with response: {@Response}", departmentId, response);
+                _logger.LogInformation("UpdateDepartment ended for departmentId: {DepartmentId}", departmentId);
 
+                if (response.Forbidden) return StatusCode(403, new { message = response.Message });
                 return Ok(response);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in UpdateDepartment for departmentId: {DepartmentId}", departmentId);
-                return StatusCode(500, new { Message = "An error occurred while updating department", Error = ex.Message });
+                return StatusCode(500, new { Message = "An error occurred while updating department" });
             }
         }
 
@@ -127,16 +131,17 @@ namespace EasyHMSAPI.Api.Controllers
             _logger.LogInformation("ToggleDepartmentStatus started at {Time} for departmentId: {DepartmentId}", DateTime.UtcNow, departmentId);
             try
             {
-                var request = new ToggleDepartmentStatusRequestModel { DepartmentId = departmentId };
+                var request = new ToggleDepartmentStatusRequestModel { DepartmentId = departmentId, CallerUserId = EasyHMSAPI.Api.Common.UserContextHelper.GetUserId(User) };
                 var response = await _mediator.Send(request);
-                _logger.LogInformation("ToggleDepartmentStatus ended for departmentId: {DepartmentId} with response: {@Response}", departmentId, response);
+                _logger.LogInformation("ToggleDepartmentStatus ended for departmentId: {DepartmentId}", departmentId);
 
+                if (response.Forbidden) return StatusCode(403, new { message = response.Message });
                 return Ok(response);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in ToggleDepartmentStatus for departmentId: {DepartmentId}", departmentId);
-                return StatusCode(500, new { Message = "An error occurred while toggling department status", Error = ex.Message });
+                return StatusCode(500, new { Message = "An error occurred while toggling department status" });
             }
         }
     }

@@ -25,6 +25,21 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     Message = "Department not found."
                 };
             }
+            // Global master departments (no hospital) are shared by every hospital: only the platform
+            // may change them. Hospital departments need admin_panel at the owning hospital.
+            if (department.HospitalID == null
+                || request.CallerUserId == null
+                || !await Common.CallerGuards.HasPermissionAtHospitalAsync(_context, request.CallerUserId.Value, department.HospitalID.Value, "admin_panel", cancellationToken))
+            {
+                return new UpdateDepartmentResponseModel
+                {
+                    DepartmentID = request.DepartmentId,
+                    Success = false,
+                    Forbidden = true,
+                    Message = "You don't have permission to change this department."
+                };
+            }
+
             department.Name = request.Name;
             department.Description = request.Description;
             await _context.SaveChangesAsync(cancellationToken);

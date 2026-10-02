@@ -17,6 +17,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
     [TestFixture]
     public class GetProfilePictureHandlerTests
     {
+        private static readonly Guid _unknownId = Guid.NewGuid();
          private AppDbContext _context = null!;
         private Mock<IBlobStorageService> _blobServiceMock = null!;
         private Mock<IConfiguration> _configurationMock = null!;
@@ -52,7 +53,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             _blobServiceMock.Setup(x => x.GetUrlAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync("http://example.com/photo.jpg");
 
-            var request = new GetProfilePictureRequestModel { UserId = user.UserID };
+            var request = new GetProfilePictureRequestModel { UserId = user.UserID, CallerUserId = user.UserID};
 
             // Act
             var response = await _handler.Handle(request, CancellationToken.None);
@@ -66,7 +67,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         public async Task Handle_UserNotFound_ReturnsEmpty()
         {
              // Arrange
-            var request = new GetProfilePictureRequestModel { UserId = Guid.NewGuid() };
+            var request = new GetProfilePictureRequestModel { UserId = _unknownId, CallerUserId = _unknownId };
 
             // Act
             var response = await _handler.Handle(request, CancellationToken.None);
