@@ -283,6 +283,26 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Allergy + drug-interaction screen for the medications currently on the prescription.
+        // Fails SAFE: Checked=false means "not screened", which callers must show as such (never as "safe").
+        [HttpPost("safety-check")]
+        [Authorize]
+        [RequiresPermission("doc_board", "ipd", "patients")]
+        public async Task<ActionResult<CheckPrescriptionSafetyResponseModel>> CheckPrescriptionSafety([FromQuery] Guid hospitalId, [FromBody] CheckPrescriptionSafetyRequestModel request)
+        {
+            try
+            {
+                request.HospitalId = hospitalId;
+                var result = await _mediator.Send(request);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in CheckPrescriptionSafety for hospitalId: {HospitalId}", hospitalId);
+                return Ok(new CheckPrescriptionSafetyResponseModel { Checked = false, Message = "Allergy/interaction check is currently unavailable." });
+            }
+        }
+
         [HttpPut("configuration/personalized-data")]
         [Authorize]
         public async Task<IActionResult> UpsertPersonalizedData([FromQuery] Guid hospitalId, [FromQuery] Guid doctorId, [FromQuery] string lookupType, [FromQuery] string? source, [FromBody] PersonalizedLookupDataModel model)

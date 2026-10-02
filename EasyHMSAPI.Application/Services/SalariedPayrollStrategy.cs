@@ -65,7 +65,7 @@ namespace EasyHMSAPI.Application.Services
                 .Where(a => a.HrEmployeeId == employee.HrEmployeeId
                          && a.AttendanceDate >= period.FirstDay
                          && a.AttendanceDate <= period.LastDay
-                         && (a.Status == "PRESENT" || a.Status == "LATE" || a.Status == "HALF_DAY"))
+                         && (a.Status == "PRESENT" || a.Status == "LATE" || a.Status == "HALF_DAY" || a.Status == "ON_LEAVE"))
                 .ToListAsync(cancellationToken);
 
             // ─── Roster: count night shifts in period ─────────────────────────
@@ -78,14 +78,23 @@ namespace EasyHMSAPI.Application.Services
                               && r.Status == "COMPLETED", cancellationToken);
 
             // ─── Compute payable days ─────────────────────────────────────────
-            decimal payableDays = 0m;
-            decimal totalOvertimeHours = 0m;
-
-            foreach (var log in attendance)
+            // Worked and approved-leave days (PRESENT / LATE / HALF_DAY / ON_LEAVE -- CASUAL, SICK and
+            // EARNED leave are all paid) plus weekly offs and declared holidays. Whether offs/holidays
+            // are payable is a per-hospital policy (HrPayrollSettings); the default is payable.
+            PayrollCalendarPolicy calendarPolicy;
+            try
             {
-                payableDays += log.Status == "HALF_DAY" ? 0.5m : 1.0m;
-                totalOvertimeHours += log.OvertimeHours;
+                calendarPolicy = await PayrollCalendarPolicy.LoadAsync(_context, employee.HospitalId, period, cancellationToken);
             }
+            catch (Exception)
+            {
+                // Settings tables not deployed yet: fall back to the documented default policy.
+                calendarPolicy = PayrollCalendarPolicy.Default;
+            }
+
+            decimal payableDays = PayableDayCalculator.Compute(
+                period, employee.DateOfJoining, attendance.Select(a => (a.AttendanceDate, a.Status)), calendarPolicy);
+            decimal totalOvertimeHours = attendance.Sum(a => a.OvertimeHours);
 
             // ─── Prorate earnings ─────────────────────────────────────────────
             int totalDays = period.DaysInMonth;

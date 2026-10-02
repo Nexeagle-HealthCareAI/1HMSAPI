@@ -1,4 +1,5 @@
 using EasyHMSAPI.Api.Common;
+using EasyHMSAPI.Application.Handlers.CommandHandlers;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
@@ -25,6 +26,46 @@ namespace EasyHMSAPI.Api.Controllers
         {
             _mediator = mediator;
             _logger = logger;
+        }
+
+        // Values of the custom (hospital/doctor-defined) discharge fields for one admission.
+        [HttpGet("custom-fields")]
+        public async Task<ActionResult<DischargeCustomFieldsResponseModel>> GetCustomFields([FromQuery] Guid hospitalId, [FromQuery] Guid admissionId)
+        {
+            if (hospitalId == Guid.Empty || admissionId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and admissionId are required." });
+            try
+            {
+                return Ok(await _mediator.Send(new GetDischargeCustomFieldsRequestModel { HospitalId = hospitalId, AdmissionId = admissionId }));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetCustomFields for admissionId: {AdmissionId}", admissionId);
+                return StatusCode(500, new { Message = "An error occurred while loading the custom discharge fields." });
+            }
+        }
+
+        [HttpPut("custom-fields")]
+        public async Task<ActionResult<DischargeCustomFieldsResponseModel>> SaveCustomFields([FromQuery] Guid hospitalId, [FromQuery] Guid admissionId, [FromBody] Dictionary<string, string> values)
+        {
+            if (hospitalId == Guid.Empty || admissionId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and admissionId are required." });
+            try
+            {
+                var response = await _mediator.Send(new SaveDischargeCustomFieldsRequestModel
+                {
+                    HospitalId = hospitalId,
+                    AdmissionId = admissionId,
+                    UpdatedBy = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext),
+                    Values = values ?? new Dictionary<string, string>(),
+                });
+                return response.Success ? Ok(response) : BadRequest(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in SaveCustomFields for admissionId: {AdmissionId}", admissionId);
+                return StatusCode(500, new { Message = "An error occurred while saving the custom discharge fields." });
+            }
         }
 
         [HttpGet("draft")]
