@@ -26,6 +26,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
         private readonly IAbdmEncryptionService _encryptionService;
         private readonly IMemoryCache _cache;
         private readonly string _abhaBaseUrl;
+        private readonly string _cmId;
         private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
         public AbdmAbhaService(
@@ -41,6 +42,8 @@ namespace EasyHMSAPI.Application.Services.Implementations
             _encryptionService = encryptionService;
             _cache = cache;
             var isProd = environment.IsProduction();
+            // Per the integrator guide's header table: "sbx" for Sandbox, "abdm" for Prod.
+            _cmId = isProd ? "abdm" : "sbx";
             // Sandbox default is confirmed against the V3 integrator guide's literal endpoint
             // examples. Production has no default — the PDF's stated prod ABHA base URL
             // ("https://abha.abdm.gov.in/api/abha") has a path shape inconsistent with the sandbox
@@ -450,7 +453,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
             request.Headers.Add("REQUEST-ID", Guid.NewGuid().ToString());
             request.Headers.Add("TIMESTAMP", DateTime.UtcNow.ToString("O"));
-            request.Headers.Add("X-CM-ID", "sbx");
+            request.Headers.Add("X-CM-ID", _cmId);
             // Every X-token header table in the integrator guide shows the example value as
             // "Bearer X-token" — i.e. the header itself needs a Bearer prefix, not just the raw
             // token. Sending the bare token got "Invalid X-token" back on every X-token-gated call
