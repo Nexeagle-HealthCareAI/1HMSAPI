@@ -281,6 +281,21 @@ builder.Services.AddRateLimiter(options =>
          })
      );
 
+     // Staff sign-in (password / OTP send / OTP verify). Per-IP ceiling on top of the per-account
+     // lockout enforced in UserLoginHandler / OtpVerifyHandler. Deliberately above a single user's
+     // needs: a whole hospital often shares one NAT'd IP at shift start.
+     options.AddPolicy("StaffAuthPolicy", context =>
+         RateLimitPartition.GetFixedWindowLimiter(
+         partitionKey: EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(context, proxyForwardingSecret),
+         factory: key => new FixedWindowRateLimiterOptions
+         {
+             PermitLimit = 30,
+             Window = TimeSpan.FromMinutes(1),
+             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+             QueueLimit = 0
+         })
+     );
+
      // Page-view beacons — fires on every page load, so this needs a much more generous ceiling
      // than the booking/auth policies above (a visitor browsing normally shouldn't get throttled).
      options.AddPolicy("TrackVisitPolicy", context =>

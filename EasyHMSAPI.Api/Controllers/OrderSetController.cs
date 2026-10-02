@@ -14,6 +14,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("order-set")]
     [Authorize]
+    [RequiresPermission("ipd", "ot_board", "admin_panel")]
     public class OrderSetController : ControllerBase
     {
         private readonly IMediator _mediator;

@@ -16,6 +16,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("consultant-incentive")]
     [Authorize]
+    [RequiresPermission("ipd", "billing")]
     public class ConsultantIncentiveController : ControllerBase
     {
         private readonly IMediator _mediator;

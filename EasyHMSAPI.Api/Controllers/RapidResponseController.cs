@@ -14,6 +14,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("rapid-response")]
     [Authorize]
+    [RequiresPermission("ipd", "nursing_station", "icu_board", "ot_board")]
     public class RapidResponseController : ControllerBase
     {
         private readonly IMediator _mediator;

@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
@@ -215,12 +216,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             });
         }
 
-        private string HashPassword(string password)
-        {
-            var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(password));
-            var hex = BitConverter.ToString(bytes).Replace("-", "").ToLower();
-            return _masking.IsMaskingEnabled() ? _masking.Mask(hex) : hex;
-        }
+        private string HashPassword(string password) => PasswordHasher.Hash(password);
 
         private async Task<string> GenerateNextEmployeeIdAsync(CancellationToken cancellationToken)
         {

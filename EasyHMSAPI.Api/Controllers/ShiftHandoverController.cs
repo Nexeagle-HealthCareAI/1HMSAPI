@@ -15,6 +15,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("shift-handover")]
     [Authorize]
+    [RequiresPermission("ipd", "nursing_station", "icu_board", "ot_board")]
     public class ShiftHandoverController : ControllerBase
     {
         private readonly IMediator _mediator;

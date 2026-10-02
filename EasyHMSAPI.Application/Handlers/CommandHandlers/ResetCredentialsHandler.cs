@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
@@ -115,12 +116,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             return sb.ToString();
         }
 
-        private string HashPassword(string password)
-        {
-            var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(password));
-            var hex = BitConverter.ToString(bytes).Replace("-", "").ToLower();
-            return _masking.IsMaskingEnabled() ? _masking.Mask(hex) : hex;
-        }
+        private string HashPassword(string password) => PasswordHasher.Hash(password);
 
         private static ResetCredentialsResponseModel Fail(string message) => new() { Success = false, Message = message };
     }

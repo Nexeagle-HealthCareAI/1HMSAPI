@@ -1,4 +1,4 @@
-﻿using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
+using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
 using MediatR;
@@ -30,6 +30,7 @@ namespace EasyHMSAPI.Api.Controllers
         }
 
         [HttpPost("user/login")]
+        [EnableRateLimiting("StaffAuthPolicy")]
         public async Task<ActionResult<UserLoginResponseModel>> Login([FromBody] UserLoginRequestModel request)
         {
             _logger.LogInformation("Login started at {Time}", DateTime.UtcNow);
@@ -87,6 +88,7 @@ namespace EasyHMSAPI.Api.Controllers
         }
 
         [HttpPost("otp/send")]
+        [EnableRateLimiting("StaffAuthPolicy")]
         public async Task<ActionResult<OtpSendResponseModel>> OtpGenerater([FromBody] OtpSendRequestModel request)
         {
             _logger.LogInformation("OtpGenerater started at {Time} for mobile: {MobileNumber}", DateTime.UtcNow, request.MobileNumber);
@@ -105,6 +107,7 @@ namespace EasyHMSAPI.Api.Controllers
         }
 
         [HttpPost("otp/verify")]
+        [EnableRateLimiting("StaffAuthPolicy")]
         public async Task<ActionResult<OtpVerifyResponseModel>> OtpChecker([FromBody] OtpVerifyRequestModel request)
         {
             _logger.LogInformation("OtpChecker started at {Time} for mobile: {MobileNumber}", DateTime.UtcNow, request.MobileNumber);

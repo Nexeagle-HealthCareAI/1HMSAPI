@@ -15,6 +15,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("nursing-assessment")]
     [Authorize]
+    [RequiresPermission("ipd", "nursing_station", "icu_board", "ot_board")]
     public class NursingAssessmentController : ControllerBase
     {
         private readonly IMediator _mediator;

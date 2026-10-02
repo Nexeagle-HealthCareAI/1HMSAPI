@@ -15,6 +15,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("cssd")]
     [Authorize]
+    [RequiresPermission("ipd", "ot_board", "inventory")]
     public class CssdController : ControllerBase
     {
         private readonly IMediator _mediator;

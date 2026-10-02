@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
@@ -77,23 +78,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                         if (!string.IsNullOrEmpty(request.Password))
                         {
-                            // Hash the incoming password once
-                            var hashedBytes = SHA256.HashData(Encoding.UTF8.GetBytes(request.Password));
-                            var hashedPassword = BitConverter.ToString(hashedBytes).Replace("-", "").ToLower();
-
-                            // Compare stored password (which may be masked) with incoming password
-                            bool passwordMatch = false;
-                            if (_maskingService.IsMaskingEnabled())
-                            {
-                                // Mask the incoming password and compare with stored masked password
-                                var maskedIncomingPassword = _maskingService.Mask(hashedPassword);
-                                passwordMatch = userAuth.HashedPassword == maskedIncomingPassword;
-                            }
-                            else
-                            {
-                                // Direct comparison when masking is disabled
-                                passwordMatch = userAuth.HashedPassword == hashedPassword;
-                            }
+                            bool passwordMatch = PasswordHasher.Verify(request.Password, userAuth.HashedPassword, _maskingService);
 
                             if (passwordMatch)
                             {
@@ -105,15 +90,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             }
                             else
                             {
-                                // Apply masking if enabled
-                                if (_maskingService.IsMaskingEnabled())
-                                {
-                                    userAuth.HashedPassword = _maskingService.Mask(hashedPassword);
-                                }
-                                else
-                                {
-                                    userAuth.HashedPassword = hashedPassword;
-                                }
+                                userAuth.HashedPassword = PasswordHasher.Hash(request.Password);
 
                                 await _context.SaveChangesAsync(cancellationToken);
 
@@ -137,47 +114,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     {
                         if (!string.IsNullOrEmpty(request.Password))
                         {
-                            // Hash the incoming password once
-                            var hashedBytes = SHA256.HashData(Encoding.UTF8.GetBytes(request.Password));
-                            var hashedPassword = BitConverter.ToString(hashedBytes).Replace("-", "").ToLower();
-
                             // Only compare passwords if there's an existing stored password
-                            if (!string.IsNullOrEmpty(userAuth.HashedPassword))
+                            if (!string.IsNullOrEmpty(userAuth.HashedPassword)
+                                && PasswordHasher.Verify(request.Password, userAuth.HashedPassword, _maskingService))
                             {
-                                // Compare stored password (which may be masked) with incoming password
-                                bool passwordMatch = false;
-                                if (_maskingService.IsMaskingEnabled())
+                                return new SetOrResetPasswordResponseModel
                                 {
-                                    // Mask the incoming password and compare with stored masked password
-                                    var maskedIncomingPassword = _maskingService.Mask(hashedPassword);
-                                    passwordMatch = userAuth.HashedPassword == maskedIncomingPassword;
-                                }
-                                else
-                                {
-                                    // Direct comparison when masking is disabled
-                                    passwordMatch = userAuth.HashedPassword == hashedPassword;
-                                }
-
-                                if (passwordMatch)
-                                {
-                                    return new SetOrResetPasswordResponseModel
-                                    {
-                                        Success = false,
-                                        Message = "New password cannot be same as the current password."
-                                    };
-                                }
+                                    Success = false,
+                                    Message = "New password cannot be same as the current password."
+                                };
                             }
 
                             // Update password (whether stored password was empty or different)
-                            // Apply masking if enabled
-                            if (_maskingService.IsMaskingEnabled())
-                            {
-                                userAuth.HashedPassword = _maskingService.Mask(hashedPassword);
-                            }
-                            else
-                            {
-                                userAuth.HashedPassword = hashedPassword;
-                            }
+                            userAuth.HashedPassword = PasswordHasher.Hash(request.Password);
 
                             await _context.SaveChangesAsync(cancellationToken);
 
@@ -215,11 +164,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             };
                         }
 
-                        var currentHashedBytes = SHA256.HashData(Encoding.UTF8.GetBytes(request.CurrentPassword));
-                        var currentHashed = BitConverter.ToString(currentHashedBytes).Replace("-", "").ToLower();
-                        bool currentMatches = _maskingService.IsMaskingEnabled()
-                            ? userAuth.HashedPassword == _maskingService.Mask(currentHashed)
-                            : userAuth.HashedPassword == currentHashed;
+                        bool currentMatches = PasswordHasher.Verify(request.CurrentPassword, userAuth.HashedPassword, _maskingService);
                         if (!currentMatches)
                         {
                             return new SetOrResetPasswordResponseModel
@@ -229,11 +174,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             };
                         }
 
-                        var newHashedBytes = SHA256.HashData(Encoding.UTF8.GetBytes(request.Password));
-                        var newHashed = BitConverter.ToString(newHashedBytes).Replace("-", "").ToLower();
-                        bool sameAsCurrent = _maskingService.IsMaskingEnabled()
-                            ? userAuth.HashedPassword == _maskingService.Mask(newHashed)
-                            : userAuth.HashedPassword == newHashed;
+                        bool sameAsCurrent = PasswordHasher.Verify(request.Password, userAuth.HashedPassword, _maskingService);
                         if (sameAsCurrent)
                         {
                             return new SetOrResetPasswordResponseModel
@@ -243,7 +184,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             };
                         }
 
-                        userAuth.HashedPassword = _maskingService.IsMaskingEnabled() ? _maskingService.Mask(newHashed) : newHashed;
+                        userAuth.HashedPassword = PasswordHasher.Hash(request.Password);
                         await _context.SaveChangesAsync(cancellationToken);
 
                         return new SetOrResetPasswordResponseModel
@@ -280,11 +221,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
         }
 
-        private static string HashPassword(string password)
-        {
-            var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(password));
-            return BitConverter.ToString(bytes).Replace("-", "").ToLower();
-        }
     }
 
 }

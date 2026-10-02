@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
@@ -57,31 +58,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                     return new UserLoginResponseModel
                                     {
                                         Success = false,
-                                        Message = "User account is not active",
+                                        Message = userAuth.IsLocked && user.UserStatusId == (int)UserStatusEnum.Active
+                                            ? "Account is locked after too many failed attempts. Use Forgot Password to unlock it."
+                                            : "User account is not active",
                                         AccessToken = accessToken
                                     };
                                 }
                                 
-                                string hashedInputPassword = string.Empty;
-                                if (!string.IsNullOrEmpty(request.Password))
-                                {
-                                    var hashedBytes = SHA256.HashData(Encoding.UTF8.GetBytes(request.Password));
-                                    hashedInputPassword = BitConverter.ToString(hashedBytes).Replace("-", "").ToLower();
-                                }
-                                
-                                // Compare passwords with masking consideration
-                                bool passwordMatch = false;
-                                if (_maskingService.IsMaskingEnabled())
-                                {
-                                    // Mask the hashed password and compare with stored masked password
-                                    var maskedInputPassword = _maskingService.Mask(hashedInputPassword);
-                                    passwordMatch = userAuth.HashedPassword == maskedInputPassword;
-                                }
-                                else
-                                {
-                                    // Direct comparison when masking is disabled
-                                    passwordMatch = userAuth.HashedPassword == hashedInputPassword;
-                                }
+                                // Salted PBKDF2, with transparent support for legacy unsalted SHA-256 rows.
+                                bool passwordMatch = PasswordHasher.Verify(request.Password, userAuth.HashedPassword, _maskingService);
                                 
                                 if (passwordMatch)
                                 {
@@ -97,6 +82,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                     claims.Add(new Claim("roles", rolesString));
                                     claims.Add(new Claim("isLoginWithOp", request.IsLoginWithOtp.ToString()));
                                     accessToken = _jwtAuthService.GenerateJwtToken(claims);
+
+                                    // Upgrade legacy / weaker hashes on the first successful sign-in.
+                                    if (PasswordHasher.NeedsRehash(userAuth.HashedPassword))
+                                    {
+                                        userAuth.HashedPassword = PasswordHasher.Hash(request.Password!);
+                                    }
 
                                     userAuth.LastLoginTime = DateTime.UtcNow;
                                     userAuth.LoginMethod = "Password";
@@ -116,13 +107,24 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 }
                                 else
                                 {
+                                    // Server-side lockout (the client-side counter in localStorage is trivially
+                                    // bypassed): lock the account once the ceiling is hit. It is unlocked through
+                                    // the Forgot Password OTP flow (OtpSendHandler resets IsLocked/attempts).
                                     userAuth.FailedLoginAttempts++;
+                                    var maxFailedPasswordAttempts = int.TryParse(_configuration["Auth:MaxFailedLoginAttempts"], out var configuredMax) && configuredMax > 0 ? configuredMax : 5;
+                                    var nowLocked = userAuth.FailedLoginAttempts >= maxFailedPasswordAttempts;
+                                    if (nowLocked)
+                                    {
+                                        userAuth.IsLocked = true;
+                                    }
                                     await _context.SaveChangesAsync(cancellationToken);
 
                                     return new UserLoginResponseModel
                                     {
                                         Success = false,
-                                        Message = "Invalid Password",
+                                        Message = nowLocked
+                                            ? "Too many failed attempts. Account locked — use Forgot Password to unlock it."
+                                            : "Invalid Password",
                                         AccessToken = accessToken
                                     };
                                 }

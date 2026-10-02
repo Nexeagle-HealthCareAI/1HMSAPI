@@ -1,3 +1,4 @@
+using EasyHMSAPI.Api.Common;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using MediatR;
@@ -13,6 +14,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("implant-log")]
     [Authorize]
+    [RequiresPermission("ipd", "ot_board", "icu_board")]
     public class ImplantLogController : ControllerBase
     {
         private readonly IMediator _mediator;
