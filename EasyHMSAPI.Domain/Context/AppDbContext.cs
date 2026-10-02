@@ -227,6 +227,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<RoomClassRateMultiplier> RoomClassRateMultiplier { get; set; }
         public DbSet<ConsultantIncentiveLedger> ConsultantIncentiveLedger { get; set; }
         public DbSet<PublicApiClient> PublicApiClient { get; set; }
+        public DbSet<HealthArticle> HealthArticles { get; set; }
 
         // ─── 1HR Suite — Hospital Workforce Management ────────────────────────
         public DbSet<HrEmployee> HrEmployee { get; set; }
@@ -863,6 +864,16 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(p => p.LastUsedAt).HasColumnType("datetime2(3)");
                 entity.Property(p => p.CreatedAt).HasColumnType("datetime2(3)");
                 entity.Property(p => p.UpdatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<HealthArticle>(entity =>
+            {
+                entity.ToTable("HealthArticle");
+                entity.HasKey(a => a.ArticleId);
+                entity.HasIndex(a => a.Slug).IsUnique();
+                entity.Property(a => a.PublishedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.UpdatedAt).HasColumnType("datetime2(3)");
             });
 
             modelBuilder.Entity<AdmissionStatusHistory>(entity =>

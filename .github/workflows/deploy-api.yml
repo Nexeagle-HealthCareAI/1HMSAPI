@@ -76,6 +76,9 @@
 #                                 setting (do not assume it mirrors the sandbox URL's path shape)
 #     ABDM_CERT_URL_PROD          Abdm:CertUrlProd — confirm against NHA's own docs before setting;
 #                                 sandbox is https://abhasbx.abdm.gov.in/abha/api/v3/profile/public/certificate
+#     INTERNAL_HEALTH_ARTICLES_KEY Internal:HealthArticlesKey — shared key the CMS / EasyHMS send as
+#                           X-Internal-Key to POST/PATCH /internal/health-articles. Unset = those
+#                           endpoints reject every call (fail closed); public reads are unaffected.
 #     INTERNAL_PROXY_SECRET Internal:ProxyForwardingSecret — lets the public-API rate limiters
 #                           (PerIpPolicy/PublicBookingPolicy/PatientAuthPolicy) see each real
 #                           visitor's IP instead of NexEagleWebsite's own container IP for every
@@ -217,6 +220,7 @@ jobs:
           CMS_SERVICE_KEY: ${{ secrets.CMS_SERVICE_KEY }}
           CMS_BASE_URL:    ${{ vars.CMS_BASE_URL || 'http://151.185.45.77:5002' }}
           PROXY_SECRET:    ${{ secrets.INTERNAL_PROXY_SECRET }}
+          HEALTH_ARTICLES_KEY: ${{ secrets.INTERNAL_HEALTH_ARTICLES_KEY }}
           WHATSAPP_BOT_BASE_URL: ${{ vars.WHATSAPP_BOT_BASE_URL || 'https://whatsapp-dev-api.nexeagle.com' }}
         with:
           host: ${{ secrets.DEV_SSH_HOST }}
@@ -224,7 +228,7 @@ jobs:
           password: ${{ secrets.DEV_SSH_PASSWORD }}
           port: 22
           command_timeout: 10m
-          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,JWT_ISSUER,JWT_AUDIENCE,OTP_PEPPER,SMTP_PW,TWILIO_SID,TWILIO_TOKEN,TWILIO_PHONE,WHATSAPP_TOKEN,WHATSAPP_ENABLED,WHATSAPP_API_URL,OPENAI_KEY,DEEPGRAM_KEY,GROQ_KEY,ABDM_CLIENT_ID,ABDM_CLIENT_SECRET,INVITATION_URL,STORAGE_PROVIDER,S3_SERVICE_URL,S3_ACCESS_KEY,S3_SECRET_KEY,S3_BUCKET,S3_PREFIX,CMS_SERVICE_KEY,CMS_BASE_URL,PROXY_SECRET,WHATSAPP_BOT_BASE_URL
+          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,JWT_ISSUER,JWT_AUDIENCE,OTP_PEPPER,SMTP_PW,TWILIO_SID,TWILIO_TOKEN,TWILIO_PHONE,WHATSAPP_TOKEN,WHATSAPP_ENABLED,WHATSAPP_API_URL,OPENAI_KEY,DEEPGRAM_KEY,GROQ_KEY,ABDM_CLIENT_ID,ABDM_CLIENT_SECRET,INVITATION_URL,STORAGE_PROVIDER,S3_SERVICE_URL,S3_ACCESS_KEY,S3_SECRET_KEY,S3_BUCKET,S3_PREFIX,CMS_SERVICE_KEY,CMS_BASE_URL,PROXY_SECRET,HEALTH_ARTICLES_KEY,WHATSAPP_BOT_BASE_URL
           script: |
             set -e
             : "${DB_CONN:?DEV_DB_CONNECTION is empty}"
@@ -264,6 +268,7 @@ jobs:
             add 'Cms__ServiceApiKey'                     "$CMS_SERVICE_KEY"
             add 'Cms__BaseUrl'                           "$CMS_BASE_URL"
             add 'Internal__ProxyForwardingSecret'        "$PROXY_SECRET"
+            add 'Internal__HealthArticlesKey'            "$HEALTH_ARTICLES_KEY"
             add 'WhatsAppBot__BaseUrl'                   "$WHATSAPP_BOT_BASE_URL"
 
             IMAGE_LC=$(printf '%s' "$IMAGE" | tr '[:upper:]' '[:lower:]')
@@ -347,6 +352,7 @@ jobs:
           CMS_SERVICE_KEY: ${{ secrets.CMS_SERVICE_KEY }}
           CMS_BASE_URL:    ${{ vars.CMS_BASE_URL || 'http://151.185.45.67:5002' }}
           PROXY_SECRET:    ${{ secrets.INTERNAL_PROXY_SECRET }}
+          HEALTH_ARTICLES_KEY: ${{ secrets.INTERNAL_HEALTH_ARTICLES_KEY }}
           WHATSAPP_BOT_BASE_URL: ${{ vars.WHATSAPP_BOT_BASE_URL }}
         run: |
           : "${DB_CONN:?PROD_DB_CONNECTION is empty}"
@@ -387,6 +393,7 @@ jobs:
           add 'Cms__ServiceApiKey'                     "$CMS_SERVICE_KEY"
           add 'Cms__BaseUrl'                           "$CMS_BASE_URL"
           add 'Internal__ProxyForwardingSecret'        "$PROXY_SECRET"
+          add 'Internal__HealthArticlesKey'            "$HEALTH_ARTICLES_KEY"
           add 'WhatsAppBot__BaseUrl'                   "$WHATSAPP_BOT_BASE_URL"
 
       - name: Copy prod.env to Prod VM

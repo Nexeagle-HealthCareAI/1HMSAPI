@@ -44,6 +44,8 @@ builder.Services.AddScoped<EasyHMSAPI.Api.Common.HospitalAccessFilter>();
 builder.Services.AddScoped<EasyHMSAPI.Api.Common.PermissionAuthorizationFilter>();
 // Public (Nexeagle) API-key gate — applied per-controller via [ServiceFilter], not globally.
 builder.Services.AddScoped<EasyHMSAPI.Api.Common.PublicApiKeyFilter>();
+// Mandatory shared-key gate for server-to-server /internal/* endpoints (Health Wiki writes).
+builder.Services.AddScoped<EasyHMSAPI.Api.Common.InternalApiKeyFilter>();
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<EasyHMSAPI.Api.Common.HospitalAccessFilter>();

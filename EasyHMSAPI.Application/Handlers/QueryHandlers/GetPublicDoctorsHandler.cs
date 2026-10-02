@@ -24,8 +24,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
     /// via DoctorDepartments, not the single retrofitted Doctor.HospitalId field (see
     /// GetDoctorFeesHandler for the same convention).
     /// Deliberately narrower than GetDepartmentDoctorsHandler / GetHospitalDoctorsHandler:
-    /// excludes LicenseNumber, MedicalCouncil, RegistrationYear, UserId, and any mobile/email/
-    /// queue-internal field, and additionally resolves a fresh presigned photo URL per doctor
+    /// excludes RegistrationYear, UserId, and any mobile/email/queue-internal field (LicenseNumber /
+    /// MedicalCouncil are exposed as RegistrationNumber / RegistrationCouncil), and additionally resolves a fresh presigned photo URL per doctor
     /// (same GetUrlAsync pattern as GetProfilePictureHandler — presigned URLs expire, so this is
     /// never cached long-term).
     /// </summary>
@@ -209,7 +209,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .Select(x => new
                 {
                     x.d.DoctorID, x.d.UserID, x.d.PrimaryDepartmentID, x.d.PrimaryMedicalSpecialityId, x.d.Qualification, x.d.ExperienceYears, x.d.Bio, x.d.LanguagesJson,
-                    x.d.IsFeatured, x.d.DiscountPercent, x.d.DiscountStartAt, x.d.DiscountEndAt, x.d.IsRegistrationVerified, x.d.IsOnlineNow,
+                    x.d.IsFeatured, x.d.DiscountPercent, x.d.DiscountStartAt, x.d.DiscountEndAt, x.d.IsRegistrationVerified, x.d.IsOnlineNow, x.d.LicenseNumber, x.d.MedicalCouncil,
                     x.FullName
                 })
                 .ToListAsync(cancellationToken);
@@ -359,6 +359,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         : null,
                     IsFeatured = r.IsFeatured,
                     IsRegistrationVerified = r.IsRegistrationVerified,
+                    RegistrationNumber = string.IsNullOrWhiteSpace(r.LicenseNumber) ? null : r.LicenseNumber.Trim(),
+                    RegistrationCouncil = string.IsNullOrWhiteSpace(r.MedicalCouncil) ? null : r.MedicalCouncil.Trim(),
                     IsAvailableToday = isAvailableToday,
                     IsOnlineNow = r.IsOnlineNow,
                 });

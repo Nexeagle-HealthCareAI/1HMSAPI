@@ -15,8 +15,10 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public int TotalCount { get; set; }
     }
 
-    // Public-safe field set only — no LicenseNumber, MedicalCouncil, RegistrationYear, UserId,
-    // the DOCTOR's own mobile/email, or anything queue/schedule-internal. (HospitalContact below is
+    // Public-safe field set only — no RegistrationYear, UserId, the DOCTOR's own mobile/email, or
+    // anything queue/schedule-internal. RegistrationNumber/RegistrationCouncil (Doctor.LicenseNumber/
+    // MedicalCouncil) ARE exposed: they are public NMC-register facts and back the "Medically
+    // reviewed by" badge on Doctor Dekho's Health Wiki. (HospitalContact below is
     // the hospital's published front-desk number — not any individual's — and is deliberate.)
     [ExcludeFromCodeCoverage]
     public class PublicDoctorInfo
@@ -52,6 +54,10 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         // Drives the public "Verified profile" badge — set by a CMS admin only after manually
         // confirming this doctor's registration against the NMC's Indian Medical Register.
         public bool IsRegistrationVerified { get; set; }
+        // Doctor.LicenseNumber / Doctor.MedicalCouncil — the checkable registration claim
+        // (e.g. "BMC-12345" / "Bihar Medical Council"). Null/empty-trimmed when not on file.
+        public string? RegistrationNumber { get; set; }
+        public string? RegistrationCouncil { get; set; }
         // Same TimeOff > Override > Template precedence as the single-doctor
         // GetPublicDoctorAvailabilityHandler (see DoctorAvailabilityResolver), resolved for
         // today's date and batched per page so the directory grid never needs a per-card call.

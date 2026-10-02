@@ -269,6 +269,41 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Health Wiki — published articles only (DRAFT / IN_REVIEW never exposed). Read-only; articles
+        // are written via /internal/health-articles. `id` in the response is the article slug.
+        [HttpGet("health-articles")]
+        public async Task<ActionResult<GetPublicHealthArticlesResponseModel>> GetHealthArticles([FromQuery] int pageSize = 100)
+        {
+            try
+            {
+                var response = await _mediator.Send(new GetPublicHealthArticlesRequestModel { PageSize = pageSize });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetHealthArticles");
+                return StatusCode(500, new { Message = "An error occurred while fetching health articles." });
+            }
+        }
+
+        [HttpGet("health-articles/{id}")]
+        public async Task<ActionResult<PublicHealthArticleInfo>> GetHealthArticleById(string id)
+        {
+            try
+            {
+                var response = await _mediator.Send(new GetPublicHealthArticlesRequestModel { Slug = id, PageSize = 1 });
+                var article = response.Articles.FirstOrDefault();
+                if (article == null)
+                    return NotFound(new { Message = "Article not found." });
+                return Ok(article);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetHealthArticleById for id: {Id}", id);
+                return StatusCode(500, new { Message = "An error occurred while fetching the article." });
+            }
+        }
+
         // Doctor's own WhatsApp-booking QR (NexEagle logo centered) -- rendered on their Doctor
         // Dekho profile page. Scanning it lands the patient straight into a booking flow for
         // THIS exact doctor (skips specialty/name search entirely) -- see the bot's DRBOOK
