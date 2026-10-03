@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Common;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Data.Constants;
@@ -190,14 +191,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return new RecordTransfusionResponseModel { Success = false, Message = "Invalid reaction value." };
                 if (reaction != IpdConstants.TransfusionReaction.None && string.IsNullOrWhiteSpace(request.ReactionNotes))
                     return new RecordTransfusionResponseModel { Success = false, Message = "Reaction notes are required when a reaction is recorded." };
-                if (string.IsNullOrWhiteSpace(request.WitnessName))
-                    return new RecordTransfusionResponseModel { Success = false, Message = "A witness name is required." };
 
                 var bag = await _context.BloodBag
                     .FirstOrDefaultAsync(b => b.BloodBagId == request.BloodBagId && b.HospitalId == request.HospitalId, cancellationToken);
                 if (bag == null)
                     return new RecordTransfusionResponseModel { Success = false, Message = "Blood bag not found." };
-                if (bag.Status != IpdConstants.BloodBagStatus.Available && bag.Status != IpdConstants.BloodBagStatus.Reserved)
+                if (bag.Status == IpdConstants.BloodBagStatus.Available)
+                    return new RecordTransfusionResponseModel { Success = false, Message = "Reserve and crossmatch this bag for the patient before transfusing it." };
+                if (bag.Status != IpdConstants.BloodBagStatus.Reserved)
                     return new RecordTransfusionResponseModel { Success = false, Message = $"Bag is {bag.Status.ToLowerInvariant()}, cannot transfuse." };
                 if (bag.ExpiresAt <= DateTime.UtcNow)
                 {
@@ -218,6 +219,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     .FirstOrDefaultAsync(a => a.AdmissionId == request.AdmissionId && a.HospitalId == request.HospitalId, cancellationToken);
                 if (admission == null)
                     return new RecordTransfusionResponseModel { Success = false, Message = "Admission not found." };
+
+                var (gateFailure, witnessName) = await CheckTransfusionGatesAsync(request, bag, admission, cancellationToken);
+                if (gateFailure != null)
+                    return new RecordTransfusionResponseModel { Success = false, Message = gateFailure };
 
                 var strategy = _context.Database.CreateExecutionStrategy();
                 return await strategy.ExecuteAsync(async () =>
@@ -243,7 +248,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             ReactionNotes = string.IsNullOrWhiteSpace(request.ReactionNotes) ? null : request.ReactionNotes.Trim(),
                             AdministeredBy = request.LoggedInUserName ?? "Unknown",
                             AdministeredByUserId = request.LoggedInUserId,
-                            WitnessName = request.WitnessName.Trim(),
+                            WitnessName = witnessName ?? request.WitnessName?.Trim() ?? "Witness",
                             WitnessUserId = request.WitnessUserId,
                             Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
                             CreatedAt = now,
@@ -304,6 +309,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             ChargeEventId = transfusion.ChargeEventId,
                         };
                     }
+                    catch (DbUpdateConcurrencyException)
+                    {
+                        await tx.RollbackAsync(cancellationToken);
+                        return new RecordTransfusionResponseModel { Success = false, Message = "This bag was just updated by someone else. Refresh and check its status before trying again." };
+                    }
                     catch (Exception)
                     {
                         await tx.RollbackAsync(cancellationToken);
@@ -315,6 +325,61 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             {
                 return new RecordTransfusionResponseModel { Success = false, Message = "Error recording transfusion." };
             }
+        }
+
+        /// <summary>
+        /// Bedside safety gates for a transfusion. Returns null when every gate passes, otherwise the message
+        /// to show. A bag has to be reserved for THIS admission with a COMPATIBLE crossmatch, its ABO/Rh has to
+        /// suit the patient's recorded group, a signed blood-transfusion consent has to exist, and a second,
+        /// different, real staff member has to witness.
+        /// </summary>
+        private async Task<(string? Failure, string? WitnessName)> CheckTransfusionGatesAsync(RecordTransfusionRequestModel request, BloodBag bag, Admission admission, CancellationToken cancellationToken)
+        {
+            if (bag.ReservedForAdmissionId != admission.AdmissionId)
+                return ("This bag is reserved for a different patient. Reserve it for this admission first.", null);
+
+            if (!string.Equals(bag.CrossmatchResult, IpdConstants.CrossmatchResult.Compatible, StringComparison.OrdinalIgnoreCase))
+            {
+                return (string.Equals(bag.CrossmatchResult, IpdConstants.CrossmatchResult.Incompatible, StringComparison.OrdinalIgnoreCase)
+                    ? "The crossmatch for this bag is INCOMPATIBLE. It must not be transfused."
+                    : "No compatible crossmatch is recorded for this bag. Complete the crossmatch before transfusing.", null);
+            }
+
+            var patientGroup = await _context.PatientRegistrations
+                .Where(p => p.PatientId == admission.PatientId)
+                .Select(p => p.BloodGroup)
+                .FirstOrDefaultAsync(cancellationToken);
+            var compatibilityProblem = BloodCompatibility.CheckBagForPatient(bag.Component, bag.BloodGroup, patientGroup);
+            if (compatibilityProblem != null) return (compatibilityProblem, null);
+
+            var started = request.StartedAt;
+            if (started == default || started > DateTime.UtcNow.AddMinutes(5))
+                return ("A valid transfusion start time (not in the future) is required.", null);
+            if (request.VolumeGivenMl <= 0 || request.VolumeGivenMl > bag.VolumeMl)
+                return ($"Volume given must be between 1 and the bag volume ({bag.VolumeMl:0.#} ml).", null);
+
+            var hasConsent = await _context.ConsentRecord.AnyAsync(c =>
+                c.HospitalId == request.HospitalId
+                && c.AdmissionId == admission.AdmissionId
+                && c.TemplateTypeCode == IpdConstants.ConsentTypeCode.BloodTransfusion
+                && c.SignedAt <= started.AddMinutes(5), cancellationToken);
+            if (!hasConsent)
+                return ("No signed blood-transfusion consent was found for this admission (signed before the transfusion started). Take consent first.", null);
+
+            if (request.LoggedInUserId == null || request.LoggedInUserId == Guid.Empty)
+                return ("Could not identify the signed-in user.", null);
+            if (request.WitnessUserId == null || request.WitnessUserId == Guid.Empty)
+                return ("Select the staff member who witnessed the bedside check.", null);
+            if (request.WitnessUserId == request.LoggedInUserId)
+                return ("The witness must be a different person from the one administering the transfusion.", null);
+            if (!await CallerGuards.IsHospitalMemberAsync(_context, request.WitnessUserId.Value, request.HospitalId, cancellationToken))
+                return ("The witness must be a staff member of this hospital.", null);
+
+            var witnessName = await _context.UserProfiles
+                .Where(u => u.UserID == request.WitnessUserId.Value)
+                .Select(u => u.FullName)
+                .FirstOrDefaultAsync(cancellationToken);
+            return (null, witnessName);
         }
     }
 }

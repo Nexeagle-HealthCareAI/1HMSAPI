@@ -160,7 +160,10 @@ namespace EasyHMSAPI.Api.Controllers
             try
             {
                 request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                request.LoggedInUserId = UserContextHelper.GetUserId(HttpContext.User);
                 var response = await _mediator.Send(request);
+                if (response.Forbidden)
+                    return StatusCode(403, new { response.Message });
                 if (!response.Success)
                     return BadRequest(new { response.Message });
                 return Ok(response);
@@ -169,6 +172,29 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 _logger.LogError(ex, "Error in Unsign for admissionId: {AdmissionId}", request.AdmissionId);
                 return StatusCode(500, new { Message = "An error occurred while unsigning the discharge summary." });
+            }
+        }
+
+        // Issues a new public link/QR token (old one stops working immediately) and restarts its validity.
+        [HttpPost("regenerate-link")]
+        public async Task<ActionResult<RegenerateDischargeLinkResponseModel>> RegenerateLink([FromBody] RegenerateDischargeLinkRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and admissionId are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                request.LoggedInUserId = UserContextHelper.GetUserId(HttpContext.User);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in RegenerateLink for admissionId: {AdmissionId}", request.AdmissionId);
+                return StatusCode(500, new { Message = "An error occurred while regenerating the discharge summary link." });
             }
         }
 

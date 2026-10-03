@@ -143,6 +143,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<AdmissionCoverage> AdmissionCoverage { get; set; }
         public DbSet<AdmissionStatusHistory> AdmissionStatusHistory { get; set; }
         public DbSet<DischargeSummary> DischargeSummary { get; set; }
+        public DbSet<DischargeSummaryAudit> DischargeSummaryAudit { get; set; }
         public DbSet<DischargeMedication> DischargeMedication { get; set; }
         public DbSet<BedAssignment> BedAssignment { get; set; }
         public DbSet<AdmissionDoctorAssignment> AdmissionDoctorAssignment { get; set; }

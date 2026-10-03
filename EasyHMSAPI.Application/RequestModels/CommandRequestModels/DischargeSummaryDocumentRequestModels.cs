@@ -13,6 +13,19 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public IFormFile File { get; set; } = null!;
     }
 
+    // Replaces the public link's token (and restarts its validity), so any copy of the old QR/link stops working.
+    [ExcludeFromCodeCoverage]
+    public class RegenerateDischargeLinkRequestModel : IRequest<RegenerateDischargeLinkResponseModel>
+    {
+        public Guid HospitalId { get; set; }
+        public Guid AdmissionId { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore]
+        public Guid? LoggedInUserId { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string? LoggedInUserName { get; set; }
+        public string? Reason { get; set; }
+    }
+
     // Sends the already-uploaded PDF (see UploadDischargeSummaryPdfRequestModel) as a WhatsApp
     // document — same document-header template shape as visit-summary/prescription sends.
     [ExcludeFromCodeCoverage]

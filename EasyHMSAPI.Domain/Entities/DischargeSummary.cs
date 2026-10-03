@@ -49,6 +49,8 @@ namespace EasyHMSAPI.Domain.Entities
         // encodes — lets the patient view the PDF without logging in, without being guessable.
         public string? PdfBlobKey { get; set; }
         public string? AccessToken { get; set; }
+        // The public link stops working after this moment (null = legacy row, treated as not expiring until re-minted).
+        public DateTime? AccessTokenExpiresAt { get; set; }
         public DateTime? PdfUploadedAt { get; set; }
 
         public DateTime CreatedAt { get; set; }
