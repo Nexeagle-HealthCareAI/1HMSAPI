@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Common;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services;
@@ -456,6 +457,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             activeBed.ReleasedBy = releasedBy;
             activeBed.UpdatedAt = now;
             activeBed.UpdatedBy = releasedBy;
+
+            // The patient has left: the bed needs cleaning before it can be assigned again.
+            var bed = await _context.BedMaster.FirstOrDefaultAsync(b => b.BedId == activeBed.BedId, cancellationToken);
+            if (bed != null) BedOccupancy.MarkVacated(bed, now, releasedBy);
             return true;
         }
     }
