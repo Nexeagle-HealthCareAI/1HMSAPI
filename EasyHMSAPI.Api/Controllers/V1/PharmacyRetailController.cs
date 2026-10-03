@@ -26,6 +26,11 @@ namespace EasyHMSAPI.Api.Controllers.V1
         public async Task<IActionResult> Checkout(Guid hospitalId, [FromBody] PharmacyRetailCheckoutCommand request)
         {
             request.HospitalId = hospitalId;
+            request.LoggedInUserId = UserContextHelper.GetUserId(User);
+            request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+            // One key per checkout attempt (the POS sends it; the offline outbox replays it) so a double click
+            // or retry returns the first sale instead of selling twice.
+            request.IdempotencyKey = Request.Headers["Idempotency-Key"].FirstOrDefault();
             var result = await _mediator.Send(request);
             if (!result.Success)
             {

@@ -163,7 +163,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             catch (Exception ex)
             {
                 await tx.RollbackAsync(cancellationToken);
-                return new CreateVendorReturnResponseModel { Success = false, Message = $"Error generating vendor return: {ex.Message}" };
+                return new CreateVendorReturnResponseModel { Success = false, Message = "An error occurred while generating the vendor return." };
             }
         }
     }

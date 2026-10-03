@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Domain.Entities
@@ -20,6 +20,10 @@ namespace EasyHMSAPI.Domain.Entities
         public string? PlaceOfSupplyStateCode { get; set; }
         public bool DefaultPriceIsTaxInclusive { get; set; }
         public string TaxRoundingMode { get; set; } = "ROUND"; // ROUND / FLOOR / CEIL
+
+        // Pharmacy counter: highest discount % a cashier may give on a line whose ChargeMaster row has no
+        // MaxDiscountPercent of its own. Default 20.
+        public decimal PharmacyMaxDiscountPercent { get; set; } = 20m;
 
         public DateTime CreatedAt { get; set; }
         public string? CreatedBy { get; set; }
