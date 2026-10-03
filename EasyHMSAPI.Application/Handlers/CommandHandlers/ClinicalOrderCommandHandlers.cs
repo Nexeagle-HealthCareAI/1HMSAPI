@@ -340,6 +340,41 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return new DiscontinueClinicalOrderLineResponseModel { Success = false, Message = "Line is already discontinued." };
 
                 var now = DateTime.UtcNow;
+
+                // A lab line also exists in the Pathology workspace: cancel it there while it is untouched, and refuse
+                // once the lab has collected the sample or produced a result (the test is real and billable).
+                var labLineCancelled = false;
+                if (line.LinkedPathologyOrderLineId.HasValue)
+                {
+                    var labLine = await _context.PathologyOrderLine
+                        .FirstOrDefaultAsync(l => l.OrderLineId == line.LinkedPathologyOrderLineId.Value && l.HospitalId == request.HospitalId, cancellationToken);
+                    if (labLine != null && labLine.Status != "CANCELLED")
+                    {
+                        if (labLine.Status != "PENDING")
+                            return new DiscontinueClinicalOrderLineResponseModel { Success = false, Message = "The lab has already collected or resulted this test, so it can no longer be discontinued. Ask the lab to cancel it." };
+
+                        labLine.Status = "CANCELLED";
+                        labLine.UpdatedAt = now;
+                        labLine.UpdatedBy = request.LoggedInUserName;
+                        labLineCancelled = true;
+
+                        var siblings = await _context.PathologyOrderLine
+                            .Where(l => l.OrderId == labLine.OrderId && l.HospitalId == request.HospitalId && l.OrderLineId != labLine.OrderLineId)
+                            .ToListAsync(cancellationToken);
+                        if (siblings.All(l => l.Status == "CANCELLED"))
+                        {
+                            var labOrder = await _context.PathologyOrder
+                                .FirstOrDefaultAsync(o => o.OrderId == labLine.OrderId && o.HospitalId == request.HospitalId, cancellationToken);
+                            if (labOrder != null && labOrder.Status != "COMPLETED")
+                            {
+                                labOrder.Status = "CANCELLED";
+                                labOrder.UpdatedAt = now;
+                                labOrder.UpdatedBy = request.LoggedInUserName;
+                            }
+                        }
+                    }
+                }
+
                 line.StatusCode = IpdConstants.ClinicalOrderLineStatus.Discontinued;
                 line.UpdatedAt = now;
                 line.UpdatedBy = request.LoggedInUserName;
@@ -369,6 +404,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     Message = "Order line discontinued.",
                     OrderLineId = line.OrderLineId,
                     ChargeVoided = chargeVoided,
+                    LabLineCancelled = labLineCancelled,
                 };
             }
             catch (Exception)

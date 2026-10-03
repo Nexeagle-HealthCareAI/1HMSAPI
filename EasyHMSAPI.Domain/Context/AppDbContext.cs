@@ -258,6 +258,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<PathologyOrder> PathologyOrder { get; set; }
         public DbSet<PathologyOrderLine> PathologyOrderLine { get; set; }
         public DbSet<PathologyResult> PathologyResult { get; set; }
+        public DbSet<PathologyResultHistory> PathologyResultHistory { get; set; }
         public DbSet<PathologyReport> PathologyReport { get; set; }
         public DbSet<PathologyTokenQueue> PathologyTokenQueue { get; set; }
         public DbSet<LabConfiguration> LabConfiguration { get; set; }
