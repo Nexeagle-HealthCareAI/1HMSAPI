@@ -1,3 +1,4 @@
+using System.Text.Json;
 using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
@@ -12,7 +13,8 @@ namespace EasyHMSAPI.Application.Services
     ///   PF Employee   = 12% of Basic Salary (capped at ₹1,800/mo if Basic > ₹15,000)
     ///   ESIC Employee = 0.75% of Gross (only if Gross ≤ ₹21,000/mo)
     ///   Prof Tax      = State-configured slab (e.g. ₹200/mo for Bihar/Maharashtra)
-    ///   TDS           = Section 192 (income tax slab — simplified as % for now)
+    ///   TDS           = Section 192: projected annual income -> slab tax (regime, 87A rebate, surcharge, 4% cess) less TDS already
+    ///                   deducted this financial year, spread over the months left (see IncomeTaxCalculator)
     ///
     /// Employer contributions (informational, not deducted from employee):
     ///   PF Employer   = 12% of Basic (8.33% → EPS, 3.67% → EPF)
@@ -137,19 +139,9 @@ namespace EasyHMSAPI.Application.Services
 
             decimal profTax = payableDays >= (totalDays * 0.5m) ? salary.ProfessionalTax : 0m;
 
-            // TDS Section 192: simplified computation
-            // A full implementation would use the annual CTC projection and IT slab table.
-            // Here we use 0% for annual income ≤ ₹5L, 5% for ₹5L-₹7.5L, etc.
-            decimal annualGross = salary.MonthlyGrossCtc * 12;
-            decimal tdsDeducted = annualGross switch
-            {
-                <= 500_000m => 0m,
-                <= 750_000m => Math.Round((annualGross - 500_000m) * 0.05m / 12, 2),
-                <= 1_000_000m => Math.Round(((annualGross - 750_000m) * 0.10m + 12_500m) / 12, 2),
-                <= 1_250_000m => Math.Round(((annualGross - 1_000_000m) * 0.15m + 37_500m) / 12, 2),
-                <= 1_500_000m => Math.Round(((annualGross - 1_250_000m) * 0.20m + 75_000m) / 12, 2),
-                _ => Math.Round(((annualGross - 1_500_000m) * 0.30m + 125_000m) / 12, 2),
-            };
+            // TDS Section 192 — projection-based. Never takes more than the pay left after PF / ESIC / professional tax.
+            var (tdsDeducted, tdsWorkingsJson) = await ComputeTdsAsync(
+                employee, salary, period, grossEarnings, pfEmployee + esiEmployee + profTax, profTax, cancellationToken);
 
             // TODO: Add loan installment deduction when HrLoanLedger is implemented
             decimal loanInstallment = 0m;
@@ -183,8 +175,65 @@ namespace EasyHMSAPI.Application.Services
                 TotalDeductions: totalDeductions,
                 NetSalary: netSalary,
                 PfEmployer: pfEmployer,
-                EsiEmployer: esiEmployer
+                EsiEmployer: esiEmployer,
+                TdsWorkingsJson: tdsWorkingsJson
             );
+        }
+
+        /// <summary>
+        /// Projects the financial year's salary: what was already paid (earlier payslips this FY), this month's actual gross, and the
+        /// recurring fixed pay for each remaining month (so one month of leave-without-pay or overtime does not distort the rest of the
+        /// year). Annual tax on that projection, minus TDS already deducted this FY, is spread over the months left, which also trues up
+        /// automatically when pay changes part-way through the year.
+        /// </summary>
+        private async Task<(decimal Tds, string WorkingsJson)> ComputeTdsAsync(
+            HrEmployee employee, HrSalaryStructure salary, PayrollPeriod period,
+            decimal grossThisMonth, decimal otherDeductionsThisMonth, decimal profTaxThisMonth, CancellationToken cancellationToken)
+        {
+            var fyStart = IncomeTaxCalculator.FinancialYearStart(period.Year, period.Month);
+            var rules = IncomeTaxCalculator.RulesFor(fyStart);
+            var regime = IncomeTaxCalculator.NormaliseRegime(salary.TaxRegime);
+            var monthsRemaining = IncomeTaxCalculator.MonthsRemainingInFinancialYear(period.Month);
+
+            // Earlier payslips of this financial year (months before this one), whichever run produced them.
+            var fyStartKey = fyStart * 12 + 3;                       // April of fyStart, as year*12 + (month-1)
+            var thisKey = period.Year * 12 + (period.Month - 1);
+            var earlier = await _context.Set<HrPayslip>()
+                .Where(p => p.HrEmployeeId == employee.HrEmployeeId
+                         && p.HrPayrollRun.Year * 12 + (p.HrPayrollRun.Month - 1) >= fyStartKey
+                         && p.HrPayrollRun.Year * 12 + (p.HrPayrollRun.Month - 1) < thisKey)
+                .Select(p => new { p.GrossEarnings, p.TdsDeducted })
+                .ToListAsync(cancellationToken);
+            decimal ytdGross = earlier.Sum(p => p.GrossEarnings);
+            decimal ytdTds = earlier.Sum(p => p.TdsDeducted);
+
+            decimal fixedMonthly = salary.BasicSalary + salary.Hra + salary.DearnessAllowance + salary.SpecialAllowance
+                                 + salary.MedicalAllowance + salary.UniformAllowance;
+            decimal projectedAnnualGross = ytdGross + grossThisMonth + (monthsRemaining - 1) * fixedMonthly;
+
+            // Old regime only: professional tax paid is a deduction (annualised from the structure's monthly figure).
+            decimal annualProfTax = (salary.ProfessionalTax > 0 ? salary.ProfessionalTax : profTaxThisMonth) * 12;
+            decimal taxable = IncomeTaxCalculator.TaxableIncome(rules, regime, projectedAnnualGross, salary.AnnualDeclaredDeductions, annualProfTax);
+            decimal annualTax = IncomeTaxCalculator.AnnualTax(rules, regime, taxable);
+
+            decimal remaining = Math.Max(0m, annualTax - ytdTds);
+            decimal monthly = Math.Round(remaining / monthsRemaining, 0, MidpointRounding.AwayFromZero);
+            decimal cap = Math.Max(0m, grossThisMonth - otherDeductionsThisMonth);
+            decimal tds = Math.Min(monthly, cap);
+
+            var workings = JsonSerializer.Serialize(new
+            {
+                financialYear = $"{fyStart}-{(fyStart + 1) % 100:D2}",
+                regime,
+                rulesFallback = rules.IsFallback,
+                projectedAnnualGross = Math.Round(projectedAnnualGross, 2),
+                taxableIncome = taxable,
+                annualTax,
+                tdsDeductedEarlierThisYear = ytdTds,
+                monthsRemaining,
+                cappedByTakeHome = tds < monthly,
+            });
+            return (tds, workings);
         }
     }
 }

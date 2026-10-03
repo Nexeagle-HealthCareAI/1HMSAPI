@@ -112,6 +112,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             EsiEmployee = result.EsiEmployee,
                             ProfTax = result.ProfTax,
                             TdsDeducted = result.TdsDeducted,
+                            TdsWorkingsJson = result.TdsWorkingsJson,
                             LoanInstallment = result.LoanInstallment,
                             TotalDeductions = result.TotalDeductions,
                             NetSalary = result.NetSalary,

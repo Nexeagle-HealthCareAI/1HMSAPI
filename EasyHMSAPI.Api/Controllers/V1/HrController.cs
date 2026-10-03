@@ -163,6 +163,20 @@ namespace EasyHMSAPI.Api.Controllers.V1
             return Ok(result);
         }
 
+        // ─── Income-tax profile (Track A TDS) ──────────────────────────────────
+        [HttpPut("employees/{hrEmployeeId}/tax-profile")]
+        [RequiresPermission("hr.manage_payroll")]
+        public async Task<ActionResult<UpdateEmployeeTaxProfileResponseModel>> UpdateTaxProfile(
+            Guid hrEmployeeId, [FromBody] UpdateEmployeeTaxProfileRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+            request.HrEmployeeId = hrEmployeeId;
+            request.LoggedInUserName = User.Identity?.Name;
+            var result = await _mediator.Send(request);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+
         // ─── Consultant Fee Config (Track B payroll) ───────────────────────────
         [HttpGet("consultant-fee-config/{hrEmployeeId}")]
         [RequiresPermission("hr.manage_payroll")]
