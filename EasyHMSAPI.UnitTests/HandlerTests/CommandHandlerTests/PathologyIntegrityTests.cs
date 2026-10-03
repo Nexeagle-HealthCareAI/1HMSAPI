@@ -155,7 +155,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         {
             await _enter.Handle(Command("14.0"), CancellationToken.None);
             var reportId = await GenerateReportFor();
-            var verify = new VerifyPathologyReportHandler(_context);
+            var verify = new VerifyPathologyReportHandler(_context, new Moq.Mock<MediatR.IMediator>().Object);
             VerifyPathologyReportCommand Cmd(string? name, string? reg) => new() { HospitalId = _hospitalId, OrderId = _orderId, ReportId = reportId, PathologistName = name, PathologistRegNo = reg, LoggedInUserId = Guid.NewGuid(), LoggedInUserName = "dr" };
 
             Assert.That((await verify.Handle(Cmd(null, "MCI-1"), CancellationToken.None)).Success, Is.False);
@@ -180,7 +180,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             await _enter.Handle(Command("14.0"), CancellationToken.None);
             var reportId = await GenerateReportFor();
 
-            var result = await new VerifyPathologyReportHandler(_context).Handle(new VerifyPathologyReportCommand
+            var result = await new VerifyPathologyReportHandler(_context, new Moq.Mock<MediatR.IMediator>().Object).Handle(new VerifyPathologyReportCommand
             { HospitalId = Guid.NewGuid(), OrderId = _orderId, ReportId = reportId, PathologistName = "Dr X", PathologistRegNo = "1" }, CancellationToken.None);
 
             Assert.That(result.Success, Is.False);
