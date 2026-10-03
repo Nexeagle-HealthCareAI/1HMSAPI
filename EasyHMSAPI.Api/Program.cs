@@ -185,6 +185,8 @@ builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.ExpiryAlertB
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmEncryptionService, EasyHMSAPI.Application.Services.Implementations.AbdmEncryptionService>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmGatewayService, EasyHMSAPI.Application.Services.Implementations.AbdmGatewayService>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmAbhaService, EasyHMSAPI.Application.Services.Implementations.AbdmAbhaService>();
+builder.Services.AddSingleton<EasyHMSAPI.Application.Services.IAbhaLinkProofStore, EasyHMSAPI.Application.Services.AbhaLinkProofStore>();
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.IAbdmCallbackGuard, EasyHMSAPI.Application.Services.AbdmCallbackGuard>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmProfileShareService, EasyHMSAPI.Application.Services.Implementations.AbdmProfileShareService>();
 // HR biometric attendance: stores device scans and rebuilds attendance from them.
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IBiometricPunchIngestionService, EasyHMSAPI.Application.Services.Implementations.BiometricPunchIngestionService>();

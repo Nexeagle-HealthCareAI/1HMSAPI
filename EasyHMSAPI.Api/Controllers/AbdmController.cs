@@ -1,5 +1,6 @@
 using EasyHMSAPI.Api.Common;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
@@ -169,11 +170,40 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // The consent wording shown before an Aadhaar-based ABHA enrolment. The server owns it (and its version).
+        [HttpGet("consent/text")]
+        public IActionResult GetConsentText() => Ok(new
+        {
+            code = AbhaConsentRules.Code,
+            version = AbhaConsentRules.Version,
+            text = AbhaConsentRules.Text,
+        });
+
+        // Records that the patient (or guardian) agreed; the returned consentId must accompany the Aadhaar OTP request.
+        [HttpPost("consent")]
+        public async Task<ActionResult<RecordAbhaConsentResponseModel>> RecordConsent([FromBody] RecordAbhaConsentRequestModel request)
+        {
+            try
+            {
+                request.CallerUserId = UserContextHelper.GetUserId(HttpContext.User) ?? Guid.Empty;
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success) return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error recording ABHA consent.");
+                return StatusCode(500, new { Message = "An error occurred while recording the consent." });
+            }
+        }
+
         [HttpPost("aadhaar/generate-otp")]
         public async Task<ActionResult<AbdmOtpTxnResponseModel>> GenerateAadhaarOtp([FromBody] GenerateAadhaarOtpRequestModel request)
         {
             try
             {
+                request.CallerUserId = UserContextHelper.GetUserId(HttpContext.User) ?? Guid.Empty;
                 var response = await _mediator.Send(request);
                 if (!response.Success) return BadRequest(new { response.Message });
                 return Ok(response);
@@ -287,6 +317,7 @@ namespace EasyHMSAPI.Api.Controllers
         {
             try
             {
+                request.CallerUserId = UserContextHelper.GetUserId(HttpContext.User) ?? Guid.Empty;
                 var response = await _mediator.Send(request);
                 if (!response.Success) return BadRequest(new { response.Message });
                 return Ok(response);
@@ -303,6 +334,7 @@ namespace EasyHMSAPI.Api.Controllers
         {
             try
             {
+                request.CallerUserId = UserContextHelper.GetUserId(HttpContext.User) ?? Guid.Empty;
                 request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
                 var response = await _mediator.Send(request);
                 if (!response.Success) return BadRequest(new { response.Message });

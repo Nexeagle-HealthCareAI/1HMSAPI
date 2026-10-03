@@ -159,6 +159,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<ConsentRecord> ConsentRecord { get; set; }
         public DbSet<ConsentTemplate> ConsentTemplate { get; set; }
         public DbSet<AbhaAccount> AbhaAccount { get; set; }
+        public DbSet<AbhaConsent> AbhaConsent { get; set; }
         public DbSet<AbdmProfileShare> AbdmProfileShares { get; set; }
         public DbSet<MagicLoginToken> MagicLoginTokens { get; set; }
         public DbSet<AbdmFacility> AbdmFacilities { get; set; }
