@@ -40,6 +40,21 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 {
                     if (scope?.ToLower() == "set-password")
                     {
+                        // The admin's name (registration). Validated and applied together with the email/password below; nothing is saved
+                        // unless the whole step succeeds.
+                        var fullName = request.FullName?.Trim();
+                        var profile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserID == user.UserID, cancellationToken);
+                        if (!string.IsNullOrEmpty(fullName))
+                        {
+                            if (fullName.Length < 2 || fullName.Length > 100)
+                                return new SetOrResetPasswordResponseModel { Success = false, Message = "Enter your full name (2 to 100 characters)." };
+                            if (profile != null) profile.FullName = fullName;
+                        }
+                        else if (profile != null && string.IsNullOrWhiteSpace(profile.FullName))
+                        {
+                            return new SetOrResetPasswordResponseModel { Success = false, Message = "Your name is required." };
+                        }
+
                         if(!string.IsNullOrEmpty(request.Email))
                         {
                             bool emailExists = await _context.Users.AnyAsync(x => x.Email == request.Email.ToLower() && x.UserID != user.UserID, cancellationToken);
