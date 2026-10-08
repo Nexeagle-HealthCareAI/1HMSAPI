@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Data.Enums;
@@ -15,9 +16,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     public class ReactivateUserHandler : IRequestHandler<ReactivateUserRequestModel, ReactivateUserResponseModel>
     {
         private readonly AppDbContext _context;
-        public ReactivateUserHandler(AppDbContext context)
+        private readonly ISubscriptionLimitHelper _subscriptionLimitHelper;
+        public ReactivateUserHandler(AppDbContext context, ISubscriptionLimitHelper subscriptionLimitHelper)
         {
             _context = context;
+            _subscriptionLimitHelper = subscriptionLimitHelper;
         }
 
         public async Task<ReactivateUserResponseModel> Handle(ReactivateUserRequestModel request, CancellationToken cancellationToken)
@@ -40,7 +43,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 resp.Message = "You don't have access to this hospital.";
                 return resp;
             }
-            if (!await Common.CallerGuards.IsAdminAsync(_context, request.CallerUserId, cancellationToken))
+            if (!await Common.CallerGuards.IsAdminAtHospitalAsync(_context, request.CallerUserId, request.HospitalId, cancellationToken))
             {
                 resp.Success = false;
                 resp.Message = "Only an administrator can reactivate a member.";
@@ -94,6 +97,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 {
                     resp.Success = false;
                     resp.Message = "This member's email is now used by a different active account. Contact support to reactivate.";
+                    return resp;
+                }
+            }
+
+            // A deactivated doctor does not count against the plan; bringing them back does. Without this check a hospital
+            // at its doctor limit could deactivate and reactivate its way past the plan.
+            if (await _context.Doctors.AnyAsync(d => d.UserID == user.UserID, cancellationToken))
+            {
+                var limit = await _subscriptionLimitHelper.CanAddDoctorAsync(request.HospitalId, cancellationToken);
+                if (!limit.Allowed)
+                {
+                    resp.Success = false;
+                    resp.Message = limit.Reason;
                     return resp;
                 }
             }

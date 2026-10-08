@@ -30,6 +30,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
         private readonly IAbdmGatewayService _gatewayService;
         private readonly IMemoryCache _cache;
         private readonly string _certUrl;
+        private readonly string _cmId;
 
         public AbdmEncryptionService(HttpClient httpClient, IAbdmGatewayService gatewayService, IMemoryCache cache, IConfiguration configuration, IHostEnvironment environment)
         {
@@ -37,6 +38,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
             _gatewayService = gatewayService;
             _cache = cache;
             var isProd = environment.IsProduction();
+            _cmId = isProd ? "abdm" : "sbx";
             // "healthidsbx.abdm.gov.in/api/v1/auth/cert" was a stale pre-ABHA-rebrand (Health ID era)
             // endpoint — it doesn't respond, so every encrypt call hung for the full 100s HttpClient
             // timeout before failing. Confirmed sandbox replacement via NHA's own Postman collection.
@@ -113,7 +115,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
                 request.Headers.Add("REQUEST-ID", Guid.NewGuid().ToString());
                 request.Headers.Add("TIMESTAMP", DateTime.UtcNow.ToString("O"));
-                request.Headers.Add("X-CM-ID", "sbx");
+                request.Headers.Add("X-CM-ID", _cmId);
 
                 using var response = await _httpClient.SendAsync(request, cancellationToken);
                 var body = await response.Content.ReadAsStringAsync(cancellationToken);

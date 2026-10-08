@@ -71,6 +71,13 @@ namespace EasyHMSAPI.Domain.Entities
         [Column(TypeName = "decimal(10,2)")]
         public decimal ProfessionalTax { get; set; } = 200.00m;
 
+        // Income-tax (Section 192) inputs. NEW (default) or OLD regime; under OLD, the employee's total annual declared deductions
+        // (80C, 80D, home-loan interest ... as one figure) are subtracted before the slabs. Ignored under NEW.
+        [MaxLength(10)]
+        public string TaxRegime { get; set; } = "NEW";
+        [Column(TypeName = "decimal(12,2)")]
+        public decimal AnnualDeclaredDeductions { get; set; } = 0.00m;
+
         public bool IsActive { get; set; } = true;
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

@@ -92,6 +92,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     HospitalUserId = null
                 };
             }
+            else if (request.Latitude.HasValue != request.Longitude.HasValue
+                     || (request.Latitude.HasValue && (request.Latitude < -90m || request.Latitude > 90m || request.Longitude < -180m || request.Longitude > 180m)))
+            {
+                return new HospitalRegisterResponseModel
+                {
+                    Success = false,
+                    Message = "The hospital location must have a valid latitude (-90 to 90) and longitude (-180 to 180).",
+                    HospitalId = null,
+                    HospitalUserId = null
+                };
+            }
             else
             {
                 // Chain onboarding: only the chain owner may add a hospital into their chain.
@@ -123,6 +134,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     CreatedAt = DateTime.UtcNow,
                     LastUpdatedAt = DateTime.UtcNow,
                     TimeZone = request.TimeZone ?? string.Empty,
+                    Latitude = request.Latitude,
+                    Longitude = request.Longitude,
                     GSTIN = request.GstIn ?? string.Empty,
                     PAN = request.PanNumber ?? string.Empty,
                     NABH_NABL = request.NabhNabl ?? string.Empty

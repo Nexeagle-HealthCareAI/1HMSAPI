@@ -1,4 +1,5 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.Services.Interfaces;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -26,19 +27,34 @@ namespace EasyHMSAPI.Api.Controllers
         private readonly IConfiguration _configuration;
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<AbdmCallbackController> _logger;
+        private readonly IAbdmCallbackGuard _guard;
 
-        public AbdmCallbackController(IMediator mediator, IConfiguration configuration, IServiceScopeFactory scopeFactory, ILogger<AbdmCallbackController> logger)
+        // A profile share is a few KB; anything near this size is not a real callback.
+        private const int MaxBodyBytes = 256 * 1024;
+
+        public AbdmCallbackController(IMediator mediator, IConfiguration configuration, IServiceScopeFactory scopeFactory, ILogger<AbdmCallbackController> logger, IAbdmCallbackGuard guard)
         {
             _mediator = mediator;
             _configuration = configuration;
             _scopeFactory = scopeFactory;
             _logger = logger;
+            _guard = guard;
         }
 
         [HttpPost("share")]
+        [RequestSizeLimit(MaxBodyBytes)]
         public async Task<IActionResult> Share(string secret, CancellationToken cancellationToken)
         {
             if (!SecretMatches(secret)) return NotFound();
+
+            // Extra authenticity layers (source address, ABDM-signed bearer JWT) when configured. The reason is logged WITHOUT the
+            // request body or headers, which carry patient data and credentials.
+            var (allowed, reason) = await _guard.CheckAsync(HttpContext.Connection.RemoteIpAddress, Request.Headers.Authorization.FirstOrDefault(), cancellationToken);
+            if (!allowed)
+            {
+                _logger.LogWarning("ABDM callback refused: {Reason}.", reason);
+                return NotFound();
+            }
 
             string body;
             using (var reader = new StreamReader(Request.Body, Encoding.UTF8))

@@ -24,6 +24,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             var updateTime = DateTime.UtcNow;
             try
             {
+                // Self-only: mobile and e-mail are login identifiers, so letting anyone edit another
+                // user's record is an account-takeover vector. Admin edits of members go through
+                // admin/users/update (AdminUpdateUserHandler). CallerUserId comes from the JWT.
+                if (request.CallerUserId == null || request.CallerUserId == Guid.Empty || request.CallerUserId != request.UserId)
+                {
+                    return new UserProfileUpdateResponseModel
+                    {
+                        Success = false,
+                        Forbidden = true,
+                        Message = "You can only update your own profile.",
+                    };
+                }
+
                 DateTime? parsedDob = ParseNullableDate(request.DateOfBirth);
                 var user = await _context.Users
                     .Include(u => u.UserAuths)
@@ -44,11 +57,21 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 if (!string.IsNullOrEmpty(request.MobileNumber) && request.MobileNumber != user.MobileNumber)
                 {
+                    var mobileTaken = await _context.Users.AnyAsync(u => u.UserID != user.UserID
+                        && u.MobileNumber == request.MobileNumber && u.UserStatusId != (int)UserStatusEnum.Revoked, cancellationToken);
+                    if (mobileTaken)
+                        return new UserProfileUpdateResponseModel { Success = false, Message = "This mobile number is already used by another account.", Errors = new List<string> { "Duplicate mobile number" } };
+
                     user.MobileNumber = request.MobileNumber;
                     updatedFields.Add("MobileNumber");
                 }
-                if (!string.IsNullOrEmpty(request.Email))
+                if (!string.IsNullOrEmpty(request.Email) && !string.Equals(request.Email, user.Email, StringComparison.OrdinalIgnoreCase))
                 {
+                    var emailTaken = await _context.Users.AnyAsync(u => u.UserID != user.UserID
+                        && u.Email == request.Email && u.UserStatusId != (int)UserStatusEnum.Revoked, cancellationToken);
+                    if (emailTaken)
+                        return new UserProfileUpdateResponseModel { Success = false, Message = "This e-mail is already used by another account.", Errors = new List<string> { "Duplicate e-mail" } };
+
                     user.Email = request.Email;
                     updatedFields.Add("Email");
                 }

@@ -31,6 +31,30 @@ namespace EasyHMSAPI.Api.Controllers.V1
             _usageLimitService = usageLimitService;
         }
 
+        // [SkipHospitalAccessCheck] on the subscription endpoints exists so a locked-out hospital can
+        // still see its status and pay, NOT so anyone can read or change another hospital's. These
+        // inline checks give the same effect as the membership filter without the lock-out handling.
+        private async Task<IActionResult?> RequireMemberAsync(Guid hospitalId)
+        {
+            var userId = UserContextHelper.GetUserId(User);
+            if (!userId.HasValue) return Unauthorized();
+            if (hospitalId == Guid.Empty || !await Application.Common.CallerGuards.IsHospitalMemberAsync(_context, userId.Value, hospitalId, HttpContext.RequestAborted))
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "You don't have access to this hospital." });
+            return null;
+        }
+
+        // Administrator OF THIS hospital (member + Admin/AdminDoctor role that applies here). A role held
+        // at another hospital does not count. Forbid(string) would treat its argument as an authentication
+        // scheme name and throw a 500, so StatusCode+body is used (same as HospitalAccessFilter).
+        private async Task<IActionResult?> RequireHospitalAdminAsync(Guid hospitalId)
+        {
+            var userId = UserContextHelper.GetUserId(User);
+            if (!userId.HasValue) return Unauthorized();
+            if (!await Application.Common.CallerGuards.IsAdminAtHospitalAsync(_context, userId.Value, hospitalId, HttpContext.RequestAborted))
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "Only administrators can manage subscriptions." });
+            return null;
+        }
+
         // Server-to-server proxy to CMSAPI's plan catalog: the browser never talks to CMSAPI
         // directly (it has no CMS credential, and CMSAPI's own endpoints require CMS auth), and
         // CMSAPI's plans stay fully behind [Authorize] for everyone except this shared-key call.
@@ -80,6 +104,9 @@ namespace EasyHMSAPI.Api.Controllers.V1
         [SkipHospitalAccessCheck]
         public async Task<IActionResult> GetSubscriptionStatus(Guid hospitalId)
         {
+            var denied = await RequireMemberAsync(hospitalId);
+            if (denied != null) return denied;
+
             var sub = await _context.HospitalSubscriptions
                 .FirstOrDefaultAsync(s => s.HospitalId == hospitalId);
 
@@ -132,22 +159,8 @@ namespace EasyHMSAPI.Api.Controllers.V1
         [SkipHospitalAccessCheck] // They might be blocked, so we must let them pay!
         public async Task<IActionResult> SelectPlan(Guid hospitalId, [FromBody] SelectPlanRequest request)
         {
-            // Verify user is an admin for this hospital
-            var userId = UserContextHelper.GetUserId(User);
-            if (!userId.HasValue) return Unauthorized();
-
-            var isAdmin = await _context.UserRoles
-                .Include(ur => ur.Role)
-                .AnyAsync(ur => ur.UserID == userId.Value 
-                             && (ur.Role.HospitalID == null || ur.Role.HospitalID == hospitalId)
-                             && (ur.Role.RoleName == "Admin" || ur.Role.RoleName == "AdminDoctor"));
-
-            // Forbid(string) treats its argument as an authentication scheme name to challenge, not
-            // a message -- passing free text there throws "No authentication handler is registered
-            // for the scheme '...'" (a 500, not the intended 403). StatusCode+body is what
-            // HospitalAccessFilter/PermissionAuthorizationFilter already use for the same case.
-            if (!isAdmin) return StatusCode(StatusCodes.Status403Forbidden, new { message = "Only administrators can manage subscriptions." });
-
+            var denied = await RequireHospitalAdminAsync(hospitalId);
+            if (denied != null) return denied;
             var sub = await _context.HospitalSubscriptions.FirstOrDefaultAsync(s => s.HospitalId == hospitalId);
             if (sub == null)
             {
@@ -174,21 +187,16 @@ namespace EasyHMSAPI.Api.Controllers.V1
         [SkipHospitalAccessCheck]
         public async Task<IActionResult> SubmitPayment(Guid hospitalId, [FromBody] SubmitPaymentRequest request)
         {
-            var userId = UserContextHelper.GetUserId(User);
-            if (!userId.HasValue) return Unauthorized();
+            var denied = await RequireHospitalAdminAsync(hospitalId);
+            if (denied != null) return denied;
 
-            var isAdmin = await _context.UserRoles
-                .Include(ur => ur.Role)
-                .AnyAsync(ur => ur.UserID == userId.Value 
-                             && (ur.Role.HospitalID == null || ur.Role.HospitalID == hospitalId)
-                             && (ur.Role.RoleName == "Admin" || ur.Role.RoleName == "AdminDoctor"));
-
-            // Forbid(string) treats its argument as an authentication scheme name to challenge, not
-            // a message -- passing free text there throws "No authentication handler is registered
-            // for the scheme '...'" (a 500, not the intended 403). StatusCode+body is what
-            // HospitalAccessFilter/PermissionAuthorizationFilter already use for the same case.
-            if (!isAdmin) return StatusCode(StatusCodes.Status403Forbidden, new { message = "Only administrators can manage subscriptions." });
-
+            // Server-side sanity on what the client says it paid: CMS reviews every submission, but a
+            // blank reference or a non-positive amount should never reach the review queue.
+            if (request.Amount <= 0)
+                return BadRequest(new { message = "Payment amount must be greater than zero." });
+            if (string.IsNullOrWhiteSpace(request.Reference) || request.Reference.Trim().Length > 100)
+                return BadRequest(new { message = "A payment reference (up to 100 characters) is required." });
+            request.Reference = request.Reference.Trim();
             var sub = await _context.HospitalSubscriptions.FirstOrDefaultAsync(s => s.HospitalId == hospitalId);
             if (sub == null) return NotFound("Subscription not found.");
 
@@ -254,6 +262,9 @@ namespace EasyHMSAPI.Api.Controllers.V1
         [SkipHospitalAccessCheck]
         public async Task<IActionResult> GetPaymentHistory(Guid hospitalId)
         {
+            var denied = await RequireMemberAsync(hospitalId);
+            if (denied != null) return denied;
+
             var history = await _context.HospitalSubscriptionPayments
                 .AsNoTracking()
                 .Where(p => p.HospitalId == hospitalId)
@@ -286,6 +297,9 @@ namespace EasyHMSAPI.Api.Controllers.V1
         [SkipHospitalAccessCheck]
         public async Task<IActionResult> GetUsage(Guid hospitalId)
         {
+            var denied = await RequireMemberAsync(hospitalId);
+            if (denied != null) return denied;
+
             var usage = await _subscriptionLimitHelper.GetUsageAsync(hospitalId, HttpContext.RequestAborted);
 
             // Free-tier monthly quota (IPD admission, OPD appointment confirm/walk-in, pathology

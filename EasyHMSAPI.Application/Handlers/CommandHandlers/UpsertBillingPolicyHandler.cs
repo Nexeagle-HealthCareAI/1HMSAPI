@@ -47,6 +47,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             policy.PlaceOfSupplyStateCode = string.IsNullOrWhiteSpace(request.PlaceOfSupplyStateCode) ? null : request.PlaceOfSupplyStateCode.Trim();
             policy.DefaultPriceIsTaxInclusive = request.DefaultPriceIsTaxInclusive;
             policy.TaxRoundingMode = string.IsNullOrWhiteSpace(request.TaxRoundingMode) ? "ROUND" : request.TaxRoundingMode.Trim().ToUpperInvariant();
+            if (request.PharmacyMaxDiscountPercent.HasValue)
+                policy.PharmacyMaxDiscountPercent = Math.Clamp(request.PharmacyMaxDiscountPercent.Value, 0m, 100m);
             policy.UpdatedAt = now;
             policy.UpdatedBy = request.LoggedInUserName;
 

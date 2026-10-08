@@ -19,5 +19,7 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public string? Message { get; set; }
         public Guid? OrderLineId { get; set; }
         public bool ChargeVoided { get; set; }
+        // True when the linked Pathology lab line was cancelled together with the order line.
+        public bool LabLineCancelled { get; set; }
     }
 }

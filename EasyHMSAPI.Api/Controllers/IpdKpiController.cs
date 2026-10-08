@@ -1,3 +1,4 @@
+using EasyHMSAPI.Api.Common;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using MediatR;
@@ -12,6 +13,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("ipd-kpi")]
     [Authorize]
+    [RequiresPermission("ipd")]
     public class IpdKpiController : ControllerBase
     {
         private readonly IMediator _mediator;

@@ -17,6 +17,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("vitals/ews")]
     [Authorize]
+    [RequiresPermission("ipd", "nursing_station", "icu_board", "ot_board")]
     public class EarlyWarningController : ControllerBase
     {
         private readonly IMediator _mediator;

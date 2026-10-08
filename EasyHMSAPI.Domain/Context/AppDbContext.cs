@@ -143,6 +143,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<AdmissionCoverage> AdmissionCoverage { get; set; }
         public DbSet<AdmissionStatusHistory> AdmissionStatusHistory { get; set; }
         public DbSet<DischargeSummary> DischargeSummary { get; set; }
+        public DbSet<DischargeSummaryAudit> DischargeSummaryAudit { get; set; }
         public DbSet<DischargeMedication> DischargeMedication { get; set; }
         public DbSet<BedAssignment> BedAssignment { get; set; }
         public DbSet<AdmissionDoctorAssignment> AdmissionDoctorAssignment { get; set; }
@@ -158,6 +159,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<ConsentRecord> ConsentRecord { get; set; }
         public DbSet<ConsentTemplate> ConsentTemplate { get; set; }
         public DbSet<AbhaAccount> AbhaAccount { get; set; }
+        public DbSet<AbhaConsent> AbhaConsent { get; set; }
         public DbSet<AbdmProfileShare> AbdmProfileShares { get; set; }
         public DbSet<MagicLoginToken> MagicLoginTokens { get; set; }
         public DbSet<AbdmFacility> AbdmFacilities { get; set; }
@@ -187,6 +189,8 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<GoodsReceiptNote> GoodsReceiptNote { get; set; }
         public DbSet<GoodsReceiptNoteLine> GoodsReceiptNoteLine { get; set; }
         public DbSet<NarcoticRegisterEntry> NarcoticRegisterEntry { get; set; }
+        public DbSet<PatientAllergy> PatientAllergy { get; set; }
+        public DbSet<DrugInteraction> DrugInteraction { get; set; }
         public DbSet<DrugScheduleRegisterEntry> DrugScheduleRegisterEntry { get; set; }
         public DbSet<PharmacyPrintSettings> PharmacyPrintSettings { get; set; }
         public DbSet<Molecule> Molecule { get; set; }
@@ -242,6 +246,10 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<HrSalaryStructure> HrSalaryStructure { get; set; }
         public DbSet<HrConsultantFeeConfig> HrConsultantFeeConfig { get; set; }
         public DbSet<HrPayrollRun> HrPayrollRun { get; set; }
+        public DbSet<HrPayrollSettings> HrPayrollSettings { get; set; }
+        public DbSet<HrHoliday> HrHoliday { get; set; }
+        public DbSet<NursingShift> NursingShift { get; set; }
+        public DbSet<DischargeSummaryCustomField> DischargeSummaryCustomField { get; set; }
         public DbSet<HrPayslip> HrPayslip { get; set; }
         public DbSet<HrBiometricDevice> HrBiometricDevice { get; set; }
         public DbSet<HrBiometricPunch> HrBiometricPunch { get; set; }
@@ -253,6 +261,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<PathologyOrder> PathologyOrder { get; set; }
         public DbSet<PathologyOrderLine> PathologyOrderLine { get; set; }
         public DbSet<PathologyResult> PathologyResult { get; set; }
+        public DbSet<PathologyResultHistory> PathologyResultHistory { get; set; }
         public DbSet<PathologyReport> PathologyReport { get; set; }
         public DbSet<PathologyTokenQueue> PathologyTokenQueue { get; set; }
         public DbSet<LabConfiguration> LabConfiguration { get; set; }

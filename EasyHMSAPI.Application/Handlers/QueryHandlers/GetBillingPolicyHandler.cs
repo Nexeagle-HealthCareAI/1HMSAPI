@@ -46,6 +46,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 PlaceOfSupplyStateCode = policy.PlaceOfSupplyStateCode,
                 DefaultPriceIsTaxInclusive = policy.DefaultPriceIsTaxInclusive,
                 TaxRoundingMode = policy.TaxRoundingMode,
+                PharmacyMaxDiscountPercent = policy.PharmacyMaxDiscountPercent,
                 UpdatedAt = policy.UpdatedAt,
                 UpdatedBy = policy.UpdatedBy,
                 NumberSeries = series.ToDictionary(

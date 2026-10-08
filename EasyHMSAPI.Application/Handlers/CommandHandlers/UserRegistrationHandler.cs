@@ -82,13 +82,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (roleId != Guid.Empty)
                 {
                     var userId = Guid.NewGuid();
-                    List<Claim> claims = new()
-                    {
-                        new Claim(ClaimTypes.MobilePhone, request.MobileNumber ?? string.Empty),
-                        new Claim("userId", userId.ToString()),
-                        new Claim("roles", request.Roles),
-                    };
-                    var accessToken = _jwtAuthService.GenerateJwtToken(claims);
 
                     var newUser = new User
                     {
@@ -147,7 +140,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         Success = true,
                         Message = "User registration successful.",
                         UserId = userId,
-                        AccessToken = accessToken
+                        // No access token here. This account's mobile number has not been verified yet, and a token carrying a client-chosen role
+                        // would let anyone act as that account without ever proving they own the number. The token is issued only by OTP verify.
+                        AccessToken = null
                     };
                 }
                 else

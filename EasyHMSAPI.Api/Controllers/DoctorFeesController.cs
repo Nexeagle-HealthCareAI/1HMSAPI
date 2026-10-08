@@ -54,8 +54,10 @@ namespace EasyHMSAPI.Api.Controllers
             try
             {
                 request.HospitalId = hospitalId;
+                request.CallerUserId = UserContextHelper.GetUserId(User);
                 request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
                 var response = await _mediator.Send(request);
+                if (response.Forbidden) return StatusCode(403, new { message = response.Message });
                 return Ok(response);
             }
             catch (Exception ex)

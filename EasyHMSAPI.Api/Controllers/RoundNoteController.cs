@@ -15,6 +15,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("round-note")]
     [Authorize]
+    [RequiresPermission("ipd", "nursing_station", "icu_board", "ot_board")]
     public class RoundNoteController : ControllerBase
     {
         private readonly IMediator _mediator;

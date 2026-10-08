@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Common;
 using EasyHMSAPI.Application.Handlers.QueryHandlers;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
@@ -176,6 +177,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 summary.UpdatedAt = now;
                 summary.UpdatedBy = request.LoggedInUserName;
 
+                _context.DischargeSummaryAudit.Add(new DischargeSummaryAudit
+                {
+                    AuditId = Guid.NewGuid(),
+                    HospitalId = summary.HospitalId,
+                    DischargeSummaryId = summary.DischargeSummaryId,
+                    AdmissionId = summary.AdmissionId,
+                    Action = DischargeSummaryAudit.ActionSign,
+                    PerformedByUserId = request.LoggedInUserId,
+                    PerformedBy = request.LoggedInUserName,
+                    PerformedAt = now,
+                });
+
                 await _context.SaveChangesAsync(cancellationToken);
                 return new SignDischargeSummaryResponseModel { Success = true, Message = "Discharge summary signed." };
             }
@@ -199,12 +212,46 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (!summary.IsSigned)
                     return new UnsignDischargeSummaryResponseModel { Success = false, Message = "Discharge summary is not signed." };
 
+                // A signed summary is a medico-legal document that may already be with the patient or a TPA, so
+                // withdrawing the signature is an administrative act: hospital admin, or the discharge_unsign
+                // permission, at the hospital that owns the summary. The reason is mandatory and audited.
+                var callerId = request.LoggedInUserId;
+                if (callerId == null || callerId == Guid.Empty
+                    || !(await CallerGuards.IsAdminAtHospitalAsync(_context, callerId.Value, summary.HospitalId, cancellationToken)
+                         || await CallerGuards.HasPermissionAtHospitalAsync(_context, callerId.Value, summary.HospitalId, "discharge_unsign", cancellationToken)))
+                    return new UnsignDischargeSummaryResponseModel { Success = false, Forbidden = true, Message = "Only a hospital administrator, or a user with the discharge_unsign permission, can withdraw a signed discharge summary." };
+
+                var reason = request.Reason?.Trim();
+                if (string.IsNullOrEmpty(reason) || reason.Length < 5)
+                    return new UnsignDischargeSummaryResponseModel { Success = false, Message = "A reason (at least 5 characters) is required to withdraw a signed discharge summary." };
+
                 var now = DateTime.UtcNow;
+                _context.DischargeSummaryAudit.Add(new DischargeSummaryAudit
+                {
+                    AuditId = Guid.NewGuid(),
+                    HospitalId = summary.HospitalId,
+                    DischargeSummaryId = summary.DischargeSummaryId,
+                    AdmissionId = summary.AdmissionId,
+                    Action = DischargeSummaryAudit.ActionUnsign,
+                    Reason = reason,
+                    PreviousSignedBy = summary.SignedByDoctorName ?? summary.SignedBy,
+                    PreviousSignedAt = summary.SignedAt,
+                    PerformedByUserId = callerId,
+                    PerformedBy = request.LoggedInUserName,
+                    PerformedAt = now,
+                });
+
                 summary.IsSigned = false;
                 summary.SignedAt = null;
                 summary.SignedBy = null;
                 summary.SignedByDoctorId = null;
                 summary.SignedByDoctorName = null;
+                // The shared PDF and its link belong to the signed version: drop both so a retracted summary
+                // cannot be fetched or re-sent, and the corrected one gets a fresh link when it is re-signed.
+                summary.AccessToken = null;
+                summary.AccessTokenExpiresAt = null;
+                summary.PdfBlobKey = null;
+                summary.PdfUploadedAt = null;
                 summary.UpdatedAt = now;
                 summary.UpdatedBy = request.LoggedInUserName;
 

@@ -10,6 +10,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     {
         public Guid UserId { get; set; }
         public string? Email { get; set; }
+        // scope=set-password (registration): the person's own name, saved on their profile. Required while the profile has no name yet.
+        public string? FullName { get; set; }
         public string Password { get; set; } = string.Empty;
         // Required for scope=change-password — verified against the stored hash before the
         // new password is accepted.

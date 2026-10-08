@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Common;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services;
@@ -292,6 +293,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 await tx.RollbackAsync(cancellationToken);
                                 return new AdmitPatientResponseModel { Success = false, Message = "Bed not found." };
                             }
+
+                            var bedProblem = await BedOccupancy.CheckAssignableAsync(_context, bed, patient?.Sex ?? request.Sex, cancellationToken);
+                            if (bedProblem != null)
+                            {
+                                await tx.RollbackAsync(cancellationToken);
+                                return new AdmitPatientResponseModel { Success = false, Message = bedProblem };
+                            }
+                            BedOccupancy.MarkOccupied(bed, now, request.LoggedInUserName);
 
                             bedAssignment = new BedAssignment
                             {

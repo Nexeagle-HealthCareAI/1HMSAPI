@@ -34,8 +34,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty)
                     return new CreateShiftHandoverNoteResponseModel { Success = false, Message = "HospitalId and AdmissionId are required." };
 
-                var shiftCode = request.ShiftCode?.Trim().ToUpperInvariant();
-                if (string.IsNullOrWhiteSpace(shiftCode) || !IpdConstants.ShiftCode.All.Contains(shiftCode))
+                // Valid against the hospital's own shift list (built-ins until it defines any).
+                var shiftCode = await Common.NursingShiftRules.ResolveAsync(_context, request.HospitalId, request.ShiftCode, cancellationToken);
+                if (shiftCode == null)
                     return new CreateShiftHandoverNoteResponseModel { Success = false, Message = "Invalid shift code." };
 
                 if (string.IsNullOrWhiteSpace(request.OutgoingNurseName))

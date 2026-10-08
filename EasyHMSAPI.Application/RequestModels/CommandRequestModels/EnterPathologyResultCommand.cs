@@ -12,6 +12,9 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string ResultValuesJson { get; set; } = "{}";
         public string? Interpretation { get; set; }
 
+        // Mandatory when the line already has a report: the change is kept in PathologyResultHistory and the report is marked AMENDED.
+        public string? AmendmentReason { get; set; }
+
         [JsonIgnore]
         public string? LoggedInUserName { get; set; }
         

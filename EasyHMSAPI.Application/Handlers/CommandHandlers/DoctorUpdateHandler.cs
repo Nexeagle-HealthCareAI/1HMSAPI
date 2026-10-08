@@ -436,7 +436,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             int score = 0;
             int currentYear = DateTime.UtcNow.Year;
 
-            if (!string.IsNullOrWhiteSpace(d.LicenseNumber?.Trim())) score += 30;
+            if (!EasyHMSAPI.Application.Common.DoctorProfileRules.IsPlaceholderLicence(d.LicenseNumber)) score += 30;   // "PENDING" is not a licence
             if (!string.IsNullOrWhiteSpace(d.Qualification?.Trim()) && d.Qualification.Trim().Length >= 2) score += 15;
             if (d.ExperienceYears.HasValue && d.ExperienceYears >= 0 && d.ExperienceYears <= 60) score += 15;
             if (!string.IsNullOrWhiteSpace(d.MedicalCouncil?.Trim())) score += 10;

@@ -187,6 +187,8 @@ builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.ExpiryAlertB
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmEncryptionService, EasyHMSAPI.Application.Services.Implementations.AbdmEncryptionService>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmGatewayService, EasyHMSAPI.Application.Services.Implementations.AbdmGatewayService>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmAbhaService, EasyHMSAPI.Application.Services.Implementations.AbdmAbhaService>();
+builder.Services.AddSingleton<EasyHMSAPI.Application.Services.IAbhaLinkProofStore, EasyHMSAPI.Application.Services.AbhaLinkProofStore>();
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.IAbdmCallbackGuard, EasyHMSAPI.Application.Services.AbdmCallbackGuard>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmProfileShareService, EasyHMSAPI.Application.Services.Implementations.AbdmProfileShareService>();
 // HR biometric attendance: stores device scans and rebuilds attendance from them.
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IBiometricPunchIngestionService, EasyHMSAPI.Application.Services.Implementations.BiometricPunchIngestionService>();
@@ -277,6 +279,21 @@ builder.Services.AddRateLimiter(options =>
          factory: key => new FixedWindowRateLimiterOptions
          {
              PermitLimit = 10,
+             Window = TimeSpan.FromMinutes(1),
+             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+             QueueLimit = 0
+         })
+     );
+
+     // Staff sign-in (password / OTP send / OTP verify). Per-IP ceiling on top of the per-account
+     // lockout enforced in UserLoginHandler / OtpVerifyHandler. Deliberately above a single user's
+     // needs: a whole hospital often shares one NAT'd IP at shift start.
+     options.AddPolicy("StaffAuthPolicy", context =>
+         RateLimitPartition.GetFixedWindowLimiter(
+         partitionKey: EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(context, proxyForwardingSecret),
+         factory: key => new FixedWindowRateLimiterOptions
+         {
+             PermitLimit = 30,
              Window = TimeSpan.FromMinutes(1),
              QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
              QueueLimit = 0

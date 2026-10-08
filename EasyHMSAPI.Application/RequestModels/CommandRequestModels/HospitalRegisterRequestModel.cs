@@ -21,6 +21,9 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModel
         public string Country { get; set; } = null!;
         public string Pincode { get; set; } = null!;
         public string? TimeZone { get; set; }
+        // GPS position picked on the map during registration (both or neither).
+        public decimal? Latitude { get; set; }
+        public decimal? Longitude { get; set; }
         [JsonPropertyName("gstin")]
         public string? GstIn { get; set; }
         [JsonPropertyName("pan")]

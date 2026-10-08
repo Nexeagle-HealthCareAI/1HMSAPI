@@ -10,6 +10,8 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public List<string>? Errors { get; set; }
         public Guid HrPayrollRunId { get; set; }
         public int PayslipsGenerated { get; set; }
+        /// <summary>Employees skipped (e.g. no active salary structure) -- they have no payslip in this run.</summary>
+        public List<string> SkippedEmployees { get; set; } = new();
         public decimal TotalNetDisbursement { get; set; }
     }
 }

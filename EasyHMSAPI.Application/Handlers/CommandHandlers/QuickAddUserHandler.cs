@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
@@ -61,7 +62,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 return Fail("This hospital has been archived and can no longer be modified.");
 
             // Adding team members is an administrator action.
-            if (!await Common.CallerGuards.IsAdminAsync(_context, request.CallerUserId, cancellationToken))
+            if (!await Common.CallerGuards.IsAdminAtHospitalAsync(_context, request.CallerUserId, request.HospitalId, cancellationToken))
                 return Fail("Only an administrator can add team members.");
 
             var mobile = request.MobileNumber.Trim();
@@ -215,12 +216,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             });
         }
 
-        private string HashPassword(string password)
-        {
-            var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(password));
-            var hex = BitConverter.ToString(bytes).Replace("-", "").ToLower();
-            return _masking.IsMaskingEnabled() ? _masking.Mask(hex) : hex;
-        }
+        private string HashPassword(string password) => PasswordHasher.Hash(password);
 
         private async Task<string> GenerateNextEmployeeIdAsync(CancellationToken cancellationToken)
         {
