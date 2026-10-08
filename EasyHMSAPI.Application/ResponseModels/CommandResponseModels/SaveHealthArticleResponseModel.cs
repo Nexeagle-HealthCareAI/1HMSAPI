@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using System.Diagnostics.CodeAnalysis;
 
 namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
@@ -11,5 +12,7 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public string? Slug { get; set; }
         public string? Status { get; set; }
         public DateTime? PublishedAt { get; set; }
+        // The article after the change, as the CMS shows it.
+        public HealthArticleAdminInfo? Article { get; set; }
     }
 }

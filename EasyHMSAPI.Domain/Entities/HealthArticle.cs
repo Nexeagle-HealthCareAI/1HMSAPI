@@ -15,6 +15,9 @@ namespace EasyHMSAPI.Domain.Entities
         public const string StatusInReview = "IN_REVIEW";
         public const string StatusPublished = "PUBLISHED";
 
+        public const string TypeMedical = "MEDICAL";
+        public const string TypeSectorUpdate = "SECTOR_UPDATE";
+
         [Key]
         public Guid ArticleId { get; set; }
         public string Slug { get; set; } = null!;
@@ -23,7 +26,24 @@ namespace EasyHMSAPI.Domain.Entities
         // Markdown.
         public string Content { get; set; } = null!;
         public string? RelatedConditionSlug { get; set; }
-        // Match the doctorId returned by /public/doctors.
+        // MEDICAL (needs a verified doctor reviewer, shows the badge) or SECTOR_UPDATE (CMS editor approves, never a reviewer).
+        public string Type { get; set; } = TypeMedical;
+        public string? CoverImageUrl { get; set; }
+        public string? CoverImageAlt { get; set; }
+        public string? Disclosure { get; set; }
+        // One source per line.
+        public string? References { get; set; }
+        public Guid? AuthorContributorId { get; set; }
+        public Guid? ReviewerContributorId { get; set; }
+        // Why the article was sent back for changes.
+        public string? ReviewerComment { get; set; }
+        public DateTime? SubmittedAt { get; set; }
+        // The reviewer approved (a MEDICAL article is published only after this and a VERIFIED reviewer).
+        public DateTime? ApprovedAt { get; set; }
+        public string? ApprovedByName { get; set; }
+        public long ViewCount { get; set; }
+        public long LikeCount { get; set; }
+        // DEPRECATED: replaced by the contributor ids above. Kept only so the old column mapping stays valid until a later migration drops them.
         public Guid? AuthorDoctorId { get; set; }
         public Guid? ReviewerDoctorId { get; set; }
         public string Status { get; set; } = StatusDraft;
