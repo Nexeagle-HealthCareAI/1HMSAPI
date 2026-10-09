@@ -152,6 +152,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             c.VerifiedBy = actor;
             c.UpdatedAt = now;
             HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityContributor, c.ContributorId, "VERIFIED", HealthWikiAudit.ActorCmsUser, actor);
+            // Articles this doctor approved while their registration was still being checked go live now.
+            await HealthArticlePublisher.PublishWaitingFor(_context, c, actor, now, ct);
             await _context.SaveChangesAsync(ct);
             return new ContributorAdminResponseModel { Success = true, StatusCode = 200, Contributor = ContributorInvites.ToAdminInfo(c) };
         }

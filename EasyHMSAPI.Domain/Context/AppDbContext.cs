@@ -238,6 +238,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<HealthWikiTopicRequest> HealthWikiTopicRequests { get; set; }
         public DbSet<HealthArticleAccessLink> HealthArticleAccessLinks { get; set; }
         public DbSet<ContributorOtp> ContributorOtps { get; set; }
+        public DbSet<HealthArticleReview> HealthArticleReviews { get; set; }
         public DbSet<ContributorSession> ContributorSessions { get; set; }
 
         // ─── 1HR Suite — Hospital Workforce Management ────────────────────────
@@ -920,6 +921,13 @@ namespace EasyHMSAPI.Domain.Context
                 entity.ToTable("HealthWikiAudit");
                 entity.HasKey(a => a.AuditId);
                 entity.Property(a => a.CreatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<HealthArticleReview>(entity =>
+            {
+                entity.ToTable("HealthArticleReview");
+                entity.HasKey(r => r.ReviewId);
+                entity.Property(r => r.DecidedAt).HasColumnType("datetime2(3)");
             });
 
             modelBuilder.Entity<HealthArticleAccessLink>(entity =>

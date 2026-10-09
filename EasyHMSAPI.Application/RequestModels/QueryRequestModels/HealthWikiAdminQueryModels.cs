@@ -41,3 +41,40 @@ namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
         public string? Type { get; set; }
     }
 }
+
+namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
+{
+    [ExcludeFromCodeCoverage]
+    public class GetContributorMeRequestModel : IRequest<EasyHMSAPI.Application.ResponseModels.ApiResult<ContributorMeInfo>>
+    {
+        public Guid ContributorId { get; set; }
+    }
+
+    // The contributor's articles, grouped; with Slug set, one article (404 unless they wrote it or must review it).
+    [ExcludeFromCodeCoverage]
+    public class GetContributorArticlesRequestModel : IRequest<EasyHMSAPI.Application.ResponseModels.ApiResult<MyArticleListInfo>>
+    {
+        public Guid ContributorId { get; set; }
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class GetContributorArticleRequestModel : IRequest<EasyHMSAPI.Application.ResponseModels.ApiResult<MyArticleInfo>>
+    {
+        public Guid ContributorId { get; set; }
+        public string Slug { get; set; } = null!;
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class GetContributorTopicsRequestModel : IRequest<EasyHMSAPI.Application.ResponseModels.ApiResult<List<MyTopicInfo>>>
+    {
+        public Guid ContributorId { get; set; }
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class GetTopicRequestsAdminRequestModel : IRequest<EasyHMSAPI.Application.ResponseModels.ApiResult<List<TopicRequestAdminInfo>>>
+    {
+        // One topic when set.
+        public Guid? TopicId { get; set; }
+        public string? Status { get; set; }
+    }
+}

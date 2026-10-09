@@ -31,6 +31,10 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? Status { get; set; }
         // Who made the change, for the history. The CMS API passes the signed-in CMS user.
         public string? ActorName { get; set; }
+        // A contributor may save a draft before the text is written. Ignored once the article is sent for review or published.
+        public bool AllowEmptyContent { get; set; }
+        // CMS_USER (default) or CONTRIBUTOR, for the history.
+        public string? ActorType { get; set; }
 
         // camelCase JSON keys the caller sent.
         public HashSet<string>? Provided { get; set; }

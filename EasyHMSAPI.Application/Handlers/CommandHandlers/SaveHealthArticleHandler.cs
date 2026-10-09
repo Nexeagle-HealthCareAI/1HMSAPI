@@ -34,6 +34,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 return Fail(400, "slug must be lowercase letters/digits separated by single hyphens (max 200 chars).");
 
             var actor = HealthWikiAuditLog.ActorOrDefault(request.ActorName);
+            var actorType = request.ActorType == HealthWikiAudit.ActorContributor ? HealthWikiAudit.ActorContributor : HealthWikiAudit.ActorCmsUser;
 
             string? status = null;
             if (request.Has("status", request.Status))
@@ -102,6 +103,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return Fail(400, "Only a doctor can review an article.");
             }
 
+            if (authorId.HasValue && authorId == reviewerId)
+                return Fail(400, "The author cannot review their own article. Choose a different doctor as reviewer.");
+
             // ---- text fields: build the working copy -----------------------------------------------------------
             HealthArticleRevision? revision = null;
             if (wasPublished)
@@ -123,11 +127,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             if (request.Has("disclosure", request.Disclosure)) { working.Disclosure = Clean(request.Disclosure); contentChanged = true; }
             if (request.Has("references", request.References)) { working.References = Clean(request.References); contentChanged = true; }
 
-            if (isNew && (string.IsNullOrWhiteSpace(working.Title) || string.IsNullOrWhiteSpace(working.Content)))
-                return Fail(400, "title and content are required.");
+            // An empty body is accepted only for a draft that is not live and not going to review in this call.
+            var allowEmpty = request.AllowEmptyContent && !wasPublished && (status ?? article.Status) == HealthArticle.StatusDraft;
+            if (isNew && (string.IsNullOrWhiteSpace(working.Title) || (!allowEmpty && string.IsNullOrWhiteSpace(working.Content))))
+                return Fail(400, allowEmpty ? "title is required." : "title and content are required.");
             if (isNew || contentChanged)
             {
-                var problem = HealthArticleRules.ValidateContent(working);
+                var problem = HealthArticleRules.ValidateContent(working, requireContent: !allowEmpty);
                 if (problem != null) return Fail(400, problem);
             }
 
@@ -161,7 +167,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     revision.Status = HealthArticleRevision.StatusDraft; // an edit after "sent for review" needs sending again
                     revision.ReviewerComment = null;
                     revision.UpdatedAt = now;
-                    HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "REVISION_SAVED", HealthWikiAudit.ActorCmsUser, actor);
+                    HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "REVISION_SAVED", actorType, actor);
                 }
 
                 if (status == HealthArticle.StatusInReview)
@@ -172,14 +178,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     revision.Status = HealthArticleRevision.StatusInReview;
                     revision.UpdatedAt = now;
                     article.SubmittedAt = now;
-                    HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "SUBMITTED", HealthWikiAudit.ActorCmsUser, actor, "Edit of the published article");
+                    HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "SUBMITTED", actorType, actor, "Edit of the published article");
                 }
 
                 if (request.Has("authorContributorId", request.AuthorContributorId)) article.AuthorContributorId = authorId;
                 if (assignedReviewer)
                 {
                     article.ReviewerContributorId = reviewerId;
-                    HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "REVIEWER_ASSIGNED", HealthWikiAudit.ActorCmsUser, actor, reviewer?.FullName);
+                    HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "REVIEWER_ASSIGNED", actorType, actor, reviewer?.FullName);
                 }
             }
             else
@@ -193,9 +199,16 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 var target = status ?? article.Status;
                 var wasInReview = article.Status == HealthArticle.StatusInReview;
 
+                // A reviewer's approval covers the text they read: change the text, or send it back, and it must be approved again.
+                // This runs before the publish check below, so changed text can never go live on an old approval.
+                if (!isNew && (contentChanged || target == HealthArticle.StatusDraft))
+                    article.ApprovedAt = null;
+
                 if (target == HealthArticle.StatusInReview)
                 {
-                    if (type == HealthArticle.TypeMedical && !reviewerId.HasValue)
+                    // The reviewer is needed to START a review. An author may submit a medical article and wait for the team
+                    // to assign a doctor, and text edits while it waits must still be possible.
+                    if (!wasInReview && type == HealthArticle.TypeMedical && !reviewerId.HasValue)
                         return Fail(400, "Choose a doctor reviewer before sending a medical article for review.");
                     if (!wasInReview)
                     {
@@ -227,18 +240,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (isNew)
                 {
                     _context.HealthArticles.Add(article);
-                    HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "CREATED", HealthWikiAudit.ActorCmsUser, actor);
+                    HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "CREATED", actorType, actor);
                 }
                 else if (contentChanged)
                 {
-                    HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "UPDATED", HealthWikiAudit.ActorCmsUser, actor);
+                    HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "UPDATED", actorType, actor);
                 }
                 if (assignedReviewer && reviewerId.HasValue)
-                    HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "REVIEWER_ASSIGNED", HealthWikiAudit.ActorCmsUser, actor, reviewer!.FullName);
+                    HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "REVIEWER_ASSIGNED", actorType, actor, reviewer!.FullName);
                 if (target == HealthArticle.StatusInReview && !wasInReview)
-                    HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "SUBMITTED", HealthWikiAudit.ActorCmsUser, actor);
+                    HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "SUBMITTED", actorType, actor);
                 if (target == HealthArticle.StatusPublished)
-                    HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "PUBLISHED", HealthWikiAudit.ActorCmsUser, actor);
+                    HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "PUBLISHED", actorType, actor);
             }
 
             try

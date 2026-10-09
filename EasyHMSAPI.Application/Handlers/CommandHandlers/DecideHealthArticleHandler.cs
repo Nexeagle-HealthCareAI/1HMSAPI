@@ -87,6 +87,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     else if (article.Status == HealthArticle.StatusInReview)
                     {
                         article.Status = HealthArticle.StatusDraft;
+                        article.ApprovedAt = null; // an approval does not survive being sent back
                         article.ReviewerComment = reason;
                         article.UpdatedAt = now;
                     }

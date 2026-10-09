@@ -1,5 +1,7 @@
 using EasyHMSAPI.Api.Common;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
+using EasyHMSAPI.Application.ResponseModels;
+using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -110,6 +112,51 @@ namespace EasyHMSAPI.Api.Controllers
         [HttpPost("contributors/{id:guid}/reject")]
         public Task<IActionResult> Reject(Guid id, [FromBody] ReasonBody? body) =>
             Run(() => _mediator.Send(new RejectContributorRequestModel { ContributorId = id, Reason = body?.Reason, ActorName = Actor() }), "rejecting a contributor");
+
+        // ---- topic requests (CMS inbox) ----------------------------------------------------------------------------
+
+        public class DeclineBody { public string? Reason { get; set; } }
+        public class AskDetailBody { public string? Message { get; set; } }
+
+        [HttpGet("topic-requests")]
+        public Task<IActionResult> TopicRequests([FromQuery] string? status) =>
+            RunTopic(async () => await _mediator.Send(new GetTopicRequestsAdminRequestModel { Status = status }), "listing topic requests");
+
+        [HttpGet("topic-requests/{id:guid}")]
+        public Task<IActionResult> TopicRequest(Guid id) =>
+            RunTopic(async () => await _mediator.Send(new GetTopicRequestsAdminRequestModel { TopicId = id }), "reading a topic request", single: true);
+
+        // Creates a draft for the contributor to write.
+        [HttpPost("topic-requests/{id:guid}/accept")]
+        public Task<IActionResult> AcceptTopic(Guid id) => DecideTopic(id, DecideTopicRequestModel.Accept, null);
+
+        [HttpPost("topic-requests/{id:guid}/decline")]
+        public Task<IActionResult> DeclineTopic(Guid id, [FromBody] DeclineBody? body) => DecideTopic(id, DecideTopicRequestModel.Decline, body?.Reason);
+
+        [HttpPost("topic-requests/{id:guid}/ask-detail")]
+        public Task<IActionResult> AskTopicDetail(Guid id, [FromBody] AskDetailBody? body) => DecideTopic(id, DecideTopicRequestModel.AskDetail, body?.Message);
+
+        private Task<IActionResult> DecideTopic(Guid id, string action, string? note) =>
+            RunTopic(async () =>
+            {
+                var res = await _mediator.Send(new DecideTopicRequestModel { TopicId = id, Action = action, Note = note, ActorName = Actor() });
+                return res.Success ? ApiResult<List<TopicRequestAdminInfo>>.Ok(new List<TopicRequestAdminInfo> { res.Data! }) : ApiResult<List<TopicRequestAdminInfo>>.Fail(res.StatusCode, res.Message!);
+            }, "deciding a topic request", single: true);
+
+        private async Task<IActionResult> RunTopic(Func<Task<ApiResult<List<TopicRequestAdminInfo>>>> send, string doing, bool single = false)
+        {
+            try
+            {
+                var res = await send();
+                if (!res.Success) return StatusCode(res.StatusCode, new { message = res.Message });
+                return Ok(single ? res.Data!.First() : res.Data);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error while {Doing}", doing);
+                return StatusCode(500, new { message = "An error occurred. Try again." });
+            }
+        }
 
         private async Task<IActionResult> Run(Func<Task<EasyHMSAPI.Application.ResponseModels.CommandResponseModels.ContributorAdminResponseModel>> send, string doing)
         {

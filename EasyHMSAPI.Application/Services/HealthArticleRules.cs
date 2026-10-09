@@ -72,13 +72,13 @@ namespace EasyHMSAPI.Application.Services
             && Uri.TryCreate(url, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps;
 
         /// <summary>First problem with the text fields of an article, or null when they are acceptable.</summary>
-        public static string? ValidateContent(ArticleContent c)
+        public static string? ValidateContent(ArticleContent c, bool requireContent = true)
         {
             if (string.IsNullOrWhiteSpace(c.Title) || c.Title.Length > MaxTitleLength)
                 return $"title is required (max {MaxTitleLength} chars).";
             if (c.Description != null && c.Description.Length > MaxDescriptionLength)
                 return $"description is max {MaxDescriptionLength} chars.";
-            if (string.IsNullOrWhiteSpace(c.Content))
+            if (requireContent && string.IsNullOrWhiteSpace(c.Content))
                 return "content cannot be empty.";
             if (c.RelatedConditionSlug != null && !IsValidSlug(c.RelatedConditionSlug))
                 return "relatedConditionSlug must be lowercase letters/digits separated by single hyphens.";
