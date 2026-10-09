@@ -466,6 +466,43 @@ namespace EasyHMSAPI.Application.Services.Implementations
             return SendAsync(nameof(SendDoctorNewOnlineAppointmentAlertAsync), to, payload);
         }
 
+        public Task<bool> SendHealthWikiInviteAsync(string mobileNumber, string contributorName, string task, string url)
+        {
+            if (!IsEnabled)
+            {
+                _logger.LogInformation("WhatsApp is disabled (WhatsApp:IsEnabled); skipping {Method} for {Mobile}", nameof(SendHealthWikiInviteAsync), MaskMobile(mobileNumber));
+                return Task.FromResult(false);
+            }
+
+            var to = NormalizeToE164(mobileNumber);
+            var payload = new
+            {
+                messaging_product = "whatsapp",
+                to,
+                type = "template",
+                template = new
+                {
+                    name = "health_wiki_invite",
+                    language = new { code = "en" },
+                    components = new object[]
+                    {
+                        new
+                        {
+                            type = "body",
+                            parameters = new object[]
+                            {
+                                new { type = "text", text = SanitizeTemplateParam(contributorName, 100), parameter_name = "contributor_name" },
+                                new { type = "text", text = SanitizeTemplateParam(task, 200), parameter_name = "task" },
+                                new { type = "text", text = url, parameter_name = "url" }
+                            }
+                        }
+                    }
+                }
+            };
+
+            return SendAsync(nameof(SendHealthWikiInviteAsync), to, payload);
+        }
+
         // Normalizes a mobile number to E.164 style (no leading '+') as required by the Meta
         // Cloud API. Strips non-digits, removes a leading '0', and prepends the configured
         // country code if not already present. Example: "9876543210" → "919876543210".

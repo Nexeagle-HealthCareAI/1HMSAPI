@@ -236,6 +236,9 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<HealthArticleRevision> HealthArticleRevisions { get; set; }
         public DbSet<HealthWikiAudit> HealthWikiAudits { get; set; }
         public DbSet<HealthWikiTopicRequest> HealthWikiTopicRequests { get; set; }
+        public DbSet<HealthArticleAccessLink> HealthArticleAccessLinks { get; set; }
+        public DbSet<ContributorOtp> ContributorOtps { get; set; }
+        public DbSet<ContributorSession> ContributorSessions { get; set; }
 
         // ─── 1HR Suite — Hospital Workforce Management ────────────────────────
         public DbSet<HrEmployee> HrEmployee { get; set; }
@@ -917,6 +920,41 @@ namespace EasyHMSAPI.Domain.Context
                 entity.ToTable("HealthWikiAudit");
                 entity.HasKey(a => a.AuditId);
                 entity.Property(a => a.CreatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<HealthArticleAccessLink>(entity =>
+            {
+                entity.ToTable("HealthArticleAccessLink");
+                entity.HasKey(l => l.LinkId);
+                entity.HasIndex(l => l.TokenHash).IsUnique();
+                entity.Property(l => l.TokenHash).HasColumnType("char(64)");
+                entity.Property(l => l.ExpiresAt).HasColumnType("datetime2(3)");
+                entity.Property(l => l.UsedAt).HasColumnType("datetime2(3)");
+                entity.Property(l => l.RevokedAt).HasColumnType("datetime2(3)");
+                entity.Property(l => l.LastSentAt).HasColumnType("datetime2(3)");
+                entity.Property(l => l.CreatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<ContributorOtp>(entity =>
+            {
+                entity.ToTable("ContributorOtp");
+                entity.HasKey(o => o.OtpId);
+                entity.Property(o => o.CodeHash).HasColumnType("char(64)");
+                entity.Property(o => o.ExpiresAt).HasColumnType("datetime2(3)");
+                entity.Property(o => o.ConsumedAt).HasColumnType("datetime2(3)");
+                entity.Property(o => o.CreatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<ContributorSession>(entity =>
+            {
+                entity.ToTable("ContributorSession");
+                entity.HasKey(s => s.SessionId);
+                entity.HasIndex(s => s.TokenHash).IsUnique();
+                entity.Property(s => s.TokenHash).HasColumnType("char(64)");
+                entity.Property(s => s.ExpiresAt).HasColumnType("datetime2(3)");
+                entity.Property(s => s.LastSeenAt).HasColumnType("datetime2(3)");
+                entity.Property(s => s.RevokedAt).HasColumnType("datetime2(3)");
+                entity.Property(s => s.CreatedAt).HasColumnType("datetime2(3)");
             });
 
             modelBuilder.Entity<HealthWikiTopicRequest>(entity =>

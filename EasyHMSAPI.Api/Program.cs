@@ -46,6 +46,7 @@ builder.Services.AddScoped<EasyHMSAPI.Api.Common.PermissionAuthorizationFilter>(
 builder.Services.AddScoped<EasyHMSAPI.Api.Common.PublicApiKeyFilter>();
 // Mandatory shared-key gate for server-to-server /internal/* endpoints (Health Wiki writes).
 builder.Services.AddScoped<EasyHMSAPI.Api.Common.InternalApiKeyFilter>();
+builder.Services.AddScoped<EasyHMSAPI.Api.Common.ContributorSessionFilter>();
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<EasyHMSAPI.Api.Common.HospitalAccessFilter>();
@@ -260,6 +261,20 @@ builder.Services.AddRateLimiter(options =>
      // PatientOtpSendHandler itself: this policy stops one IP from hammering many different numbers,
      // the handler-level check stops any single number from being spammed regardless of IP rotation.
      options.AddPolicy("PatientAuthPolicy", context =>
+         RateLimitPartition.GetFixedWindowLimiter(
+         partitionKey: EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(context, proxyForwardingSecret),
+         factory: key => new FixedWindowRateLimiterOptions
+         {
+             PermitLimit = 8,
+             Window = TimeSpan.FromMinutes(1),
+             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+             QueueLimit = 0
+         })
+     );
+
+     // Health Wiki contributor sign-in (invitation link, WhatsApp code). The per-number limits (60 s between codes, 5 a day, 5 tries
+     // per code) are enforced in the handlers; this stops one IP from trying many numbers.
+     options.AddPolicy("ContributorAuthPolicy", context =>
          RateLimitPartition.GetFixedWindowLimiter(
          partitionKey: EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(context, proxyForwardingSecret),
          factory: key => new FixedWindowRateLimiterOptions

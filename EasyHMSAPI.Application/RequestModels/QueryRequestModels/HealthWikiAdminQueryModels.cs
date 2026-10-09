@@ -25,3 +25,19 @@ namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
     [ExcludeFromCodeCoverage]
     public class GetHealthWikiSummaryRequestModel : IRequest<GetHealthWikiSummaryResponseModel> { }
 }
+
+namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
+{
+    [ExcludeFromCodeCoverage]
+    public class GetContributorInviteRequestModel : IRequest<ContributorInviteInfo>
+    {
+        public string? Token { get; set; }
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class GetContributorsAdminRequestModel : IRequest<GetContributorsAdminResponseModel>
+    {
+        public string? Status { get; set; }
+        public string? Type { get; set; }
+    }
+}
