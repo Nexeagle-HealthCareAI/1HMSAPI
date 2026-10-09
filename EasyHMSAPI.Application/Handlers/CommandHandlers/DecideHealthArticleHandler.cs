@@ -124,7 +124,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return Fail(400, "action must be APPROVE, WITHDRAW or UNPUBLISH.");
             }
 
-            await _context.SaveChangesAsync(cancellationToken);
+            try
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException)
+            {
+                return Fail(409, "The article was changed by someone else at the same moment. Reload it and try again.");
+            }
 
             return new SaveHealthArticleResponseModel
             {

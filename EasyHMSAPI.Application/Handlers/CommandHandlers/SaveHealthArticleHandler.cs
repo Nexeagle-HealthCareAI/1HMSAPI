@@ -241,7 +241,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "PUBLISHED", HealthWikiAudit.ActorCmsUser, actor);
             }
 
-            await _context.SaveChangesAsync(cancellationToken);
+            try
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException)
+            {
+                // Two callers raced: the unique index on the slug (create) or on "one open edit per article" (edit) refused the second.
+                return Fail(409, isNew
+                    ? "An article with this slug already exists."
+                    : "Someone else is editing this article at the same moment. Reload it and try again.");
+            }
 
             return new SaveHealthArticleResponseModel
             {

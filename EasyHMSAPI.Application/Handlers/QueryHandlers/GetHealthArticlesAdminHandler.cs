@@ -11,6 +11,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
     /// <summary>All Health Wiki articles in any status, for the CMS (never exposed publicly).</summary>
     public class GetHealthArticlesAdminHandler : IRequestHandler<GetHealthArticlesAdminRequestModel, GetHealthArticlesAdminResponseModel>
     {
+        // The CMS list is for people; a hard cap keeps one call from loading every article body.
+        private const int MaxRows = 500;
+
         private readonly AppDbContext _context;
 
         public GetHealthArticlesAdminHandler(AppDbContext context)
@@ -32,7 +35,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             var type = HealthArticleRules.NormalizeType(request.Type);
             if (type != null) query = query.Where(a => a.Type == type);
 
-            var articles = await query.OrderByDescending(a => a.UpdatedAt).ThenBy(a => a.Slug).ToListAsync(cancellationToken);
+            var articles = await query.OrderByDescending(a => a.UpdatedAt).ThenBy(a => a.Slug).Take(MaxRows).ToListAsync(cancellationToken);
             var ids = articles.Select(a => a.ArticleId).ToList();
             var open = await _context.HealthArticleRevisions.AsNoTracking()
                 .Where(r => ids.Contains(r.ArticleId) && (r.Status == HealthArticleRevision.StatusDraft || r.Status == HealthArticleRevision.StatusInReview))
