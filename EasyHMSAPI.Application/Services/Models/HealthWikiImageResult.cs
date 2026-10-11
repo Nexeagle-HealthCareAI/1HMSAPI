@@ -9,7 +9,10 @@ namespace EasyHMSAPI.Application.Services.Models
         public int StatusCode { get; set; } = 200;
         public string? Message { get; set; }
         public string? Url { get; set; }
+        // Why storing failed, for the CMS team only (a storage error code, or "address-not-https"). Never shown to a contributor.
+        public string? Diagnostic { get; set; }
 
-        public static HealthWikiImageResult Fail(int status, string message) => new() { Success = false, StatusCode = status, Message = message };
+        public static HealthWikiImageResult Fail(int status, string message, string? diagnostic = null) =>
+            new() { Success = false, StatusCode = status, Message = message, Diagnostic = diagnostic };
     }
 }

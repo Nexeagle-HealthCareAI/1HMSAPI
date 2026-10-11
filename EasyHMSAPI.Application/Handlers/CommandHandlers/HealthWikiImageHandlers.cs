@@ -32,7 +32,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         }
 
         internal static UploadHealthWikiImageResponseModel ToResponse(HealthWikiImageResult r) =>
-            new() { Success = r.Success, StatusCode = r.StatusCode, Message = r.Message, Url = r.Url };
+            new() { Success = r.Success, StatusCode = r.StatusCode, Message = r.Message, Url = r.Url, Diagnostic = r.Diagnostic };
     }
 
     public class UploadHealthArticleImageHandler : IRequestHandler<UploadHealthArticleImageRequestModel, UploadHealthWikiImageResponseModel>

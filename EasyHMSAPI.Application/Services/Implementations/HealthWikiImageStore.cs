@@ -1,6 +1,7 @@
 using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.S3.Model;
+using EasyHMSAPI.Application.Exceptions;
 using EasyHMSAPI.Application.Services.Interfaces;
 using Microsoft.Extensions.Configuration;
 using System.Diagnostics.CodeAnalysis;
@@ -76,7 +77,14 @@ namespace EasyHMSAPI.Application.Services.Implementations
             };
             request.Headers.ContentLength = length;
             request.Headers.CacheControl = "public, max-age=31536000, immutable";
-            await _client!.PutObjectAsync(request, cancellationToken);
+            try
+            {
+                await _client!.PutObjectAsync(request, cancellationToken);
+            }
+            catch (AmazonServiceException ex)
+            {
+                throw new HealthWikiImageStoreException($"{(int)ex.StatusCode} {ex.ErrorCode}", ex);
+            }
             return $"{_publicBaseUrl.TrimEnd('/')}/{key}";
         }
 

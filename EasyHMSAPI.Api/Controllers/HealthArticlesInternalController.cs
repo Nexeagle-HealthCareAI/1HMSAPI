@@ -96,7 +96,7 @@ namespace EasyHMSAPI.Api.Controllers
             try
             {
                 var res = await _mediator.Send(new UploadHealthArticleImageRequestModel { File = file, ActorName = Actor() });
-                return res.Success ? StatusCode(res.StatusCode, new { url = res.Url }) : StatusCode(res.StatusCode, new { message = res.Message });
+                return res.Success ? StatusCode(res.StatusCode, new { url = res.Url }) : StatusCode(res.StatusCode, new { message = res.Message, diagnostic = res.Diagnostic });
             }
             catch (Exception ex)
             {

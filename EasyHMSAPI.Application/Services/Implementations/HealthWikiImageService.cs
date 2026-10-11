@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Exceptions;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Application.Services.Models;
 using EasyHMSAPI.Domain.Context;
@@ -53,14 +54,15 @@ namespace EasyHMSAPI.Application.Services.Implementations
             catch (Exception ex)
             {
                 _logger.LogError(ex, "The Health Wiki image {Key} could not be stored", key);
-                return HealthWikiImageResult.Fail(502, "The image could not be saved. Please try again.");
+                var why = ex is HealthWikiImageStoreException store ? store.Code : ex.GetType().Name;
+                return HealthWikiImageResult.Fail(502, "The image could not be saved. Please try again.", why);
             }
 
             // Readers' browsers only load https images, and the database refuses anything else.
             if (!HealthArticleRules.IsHttpsUrl(url))
             {
                 _logger.LogError("The Health Wiki image address {Url} is not https; check HealthWiki:ImageBaseUrl / Storage:S3:ServiceUrl", url);
-                return HealthWikiImageResult.Fail(502, "The image could not be saved. Please try again.");
+                return HealthWikiImageResult.Fail(502, "The image could not be saved. Please try again.", "address-not-https");
             }
 
             _context.HealthArticleImages.Add(new HealthArticleImage

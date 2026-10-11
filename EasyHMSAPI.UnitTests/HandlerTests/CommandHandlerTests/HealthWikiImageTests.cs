@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using EasyHMSAPI.Application.Exceptions;
 using EasyHMSAPI.Application.Handlers.CommandHandlers;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.Services;
@@ -152,6 +153,21 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(res.StatusCode, Is.EqualTo(502));
             Assert.That(res.Message, Does.Not.Contain("AccessDenied"), "storage internals are not shown to the person");
             Assert.That(_context.HealthArticleImages.Count(), Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task WhenTheBucketRefuses_TheCmsTeamGetsTheStorageErrorCode_ButTheContributorDoesNot()
+        {
+            _store.Setup(s => s.PutAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new HealthWikiImageStoreException("403 AccessDenied", new Exception("inner")));
+            var me = new HealthWikiContributor { ContributorId = Guid.NewGuid(), Type = "INDEPENDENT_DOCTOR", FullName = "Dr. A", Mobile = "9100000009", Status = "VERIFIED", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+            _context.HealthWikiContributors.Add(me); await _context.SaveChangesAsync();
+
+            var cms = await new UploadHealthArticleImageHandler(Service).Handle(new UploadHealthArticleImageRequestModel { File = File(Jpeg), ActorName = "Priya" }, CancellationToken.None);
+            var contributor = await new UploadContributorImageHandler(_context, Service).Handle(new UploadContributorImageRequestModel { ContributorId = me.ContributorId, File = File(Jpeg) }, CancellationToken.None);
+
+            Assert.That(cms.Diagnostic, Is.EqualTo("403 AccessDenied"));
+            Assert.That(contributor.StatusCode, Is.EqualTo(502));
         }
 
         [Test]
