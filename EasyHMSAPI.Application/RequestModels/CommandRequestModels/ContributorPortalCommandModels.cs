@@ -1,5 +1,4 @@
-using EasyHMSAPI.Application.ResponseModels;
-using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using MediatR;
 using System.Diagnostics.CodeAnalysis;
 
@@ -13,7 +12,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     }
 
     [ExcludeFromCodeCoverage]
-    public class RegisterContributorRequestModel : ContributorRequest, IRequest<ApiResult<ContributorMeInfo>>
+    public class RegisterContributorRequestModel : ContributorRequest, IRequest<RegisterContributorResponseModel>
     {
         public string? FullName { get; set; }
         public string? PhotoUrl { get; set; }
@@ -33,7 +32,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
 
     // Create (Slug null) or edit (Slug set) the contributor's own article.
     [ExcludeFromCodeCoverage]
-    public class SaveContributorArticleRequestModel : ContributorRequest, IRequest<ApiResult<MyArticleInfo>>
+    public class SaveContributorArticleRequestModel : ContributorRequest, IRequest<ContributorArticleResponseModel>
     {
         public string? Slug { get; set; }
         public string? Type { get; set; }
@@ -48,14 +47,14 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     }
 
     [ExcludeFromCodeCoverage]
-    public class SubmitContributorArticleRequestModel : ContributorRequest, IRequest<ApiResult<MyArticleInfo>>
+    public class SubmitContributorArticleRequestModel : ContributorRequest, IRequest<ContributorArticleResponseModel>
     {
         public string Slug { get; set; } = null!;
     }
 
     // The assigned doctor's decision. APPROVE needs AccuracyConfirmed; REQUEST_CHANGES needs a comment of 10 or more characters.
     [ExcludeFromCodeCoverage]
-    public class ReviewContributorArticleRequestModel : ContributorRequest, IRequest<ApiResult<MyArticleInfo>>
+    public class ReviewContributorArticleRequestModel : ContributorRequest, IRequest<ContributorArticleResponseModel>
     {
         public const string Approve = "APPROVE";
         public const string RequestChanges = "REQUEST_CHANGES";
@@ -67,7 +66,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     }
 
     [ExcludeFromCodeCoverage]
-    public class CreateContributorTopicRequestModel : ContributorRequest, IRequest<ApiResult<MyTopicInfo>>
+    public class CreateContributorTopicRequestModel : ContributorRequest, IRequest<ContributorTopicResponseModel>
     {
         public string? Title { get; set; }
         public string? Type { get; set; }
@@ -79,7 +78,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
 
     // Answer a "needs detail" request: only the fields sent are changed, and the request goes back to SUBMITTED.
     [ExcludeFromCodeCoverage]
-    public class AddContributorTopicDetailRequestModel : ContributorRequest, IRequest<ApiResult<MyTopicInfo>>
+    public class AddContributorTopicDetailRequestModel : ContributorRequest, IRequest<ContributorTopicResponseModel>
     {
         public Guid TopicId { get; set; }
         public string? Outline { get; set; }
@@ -91,7 +90,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
 
     // CMS: ACCEPT (creates a draft for the contributor), DECLINE (reason) or ASK_DETAIL (message).
     [ExcludeFromCodeCoverage]
-    public class DecideTopicRequestModel : IRequest<ApiResult<TopicRequestAdminInfo>>
+    public class DecideTopicRequestModel : IRequest<DecideTopicResponseModel>
     {
         public const string Accept = "ACCEPT";
         public const string Decline = "DECLINE";

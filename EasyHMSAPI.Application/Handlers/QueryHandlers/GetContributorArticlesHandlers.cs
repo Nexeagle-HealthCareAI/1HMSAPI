@@ -1,5 +1,5 @@
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
-using EasyHMSAPI.Application.ResponseModels;
+using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Domain.Context;
@@ -47,7 +47,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
         }
     }
 
-    public class GetContributorArticlesHandler : IRequestHandler<GetContributorArticlesRequestModel, ApiResult<MyArticleListInfo>>
+    public class GetContributorArticlesHandler : IRequestHandler<GetContributorArticlesRequestModel, GetContributorArticlesResponseModel>
     {
         private readonly AppDbContext _context;
 
@@ -56,12 +56,12 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             _context = context;
         }
 
-        public async Task<ApiResult<MyArticleListInfo>> Handle(GetContributorArticlesRequestModel request, CancellationToken ct)
+        public async Task<GetContributorArticlesResponseModel> Handle(GetContributorArticlesRequestModel request, CancellationToken ct)
         {
             var all = await ContributorArticleLoader.Load(_context, request.ContributorId, null, ct);
             bool Reviewer(MyArticleInfo a) => a.MyRole == ContributorPortalMapper.RoleReviewer;
 
-            return ApiResult<MyArticleListInfo>.Ok(new MyArticleListInfo
+            return GetContributorArticlesResponseModel.Ok(new MyArticleListInfo
             {
                 // Waiting for MY decision: in review and not yet approved by me, or a live article with an edit in review.
                 Pending = all.Where(a => Reviewer(a) && !a.AwaitingVerification
@@ -73,7 +73,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
         }
     }
 
-    public class GetContributorArticleHandler : IRequestHandler<GetContributorArticleRequestModel, ApiResult<MyArticleInfo>>
+    public class GetContributorArticleHandler : IRequestHandler<GetContributorArticleRequestModel, GetContributorArticleResponseModel>
     {
         private readonly AppDbContext _context;
 
@@ -82,12 +82,12 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             _context = context;
         }
 
-        public async Task<ApiResult<MyArticleInfo>> Handle(GetContributorArticleRequestModel request, CancellationToken ct)
+        public async Task<GetContributorArticleResponseModel> Handle(GetContributorArticleRequestModel request, CancellationToken ct)
         {
             var slug = request.Slug?.Trim().ToLowerInvariant();
             var found = (await ContributorArticleLoader.Load(_context, request.ContributorId, slug, ct)).FirstOrDefault();
             // Someone else's article reads the same as one that does not exist.
-            return found == null ? ApiResult<MyArticleInfo>.Fail(404, "Article not found.") : ApiResult<MyArticleInfo>.Ok(found);
+            return found == null ? GetContributorArticleResponseModel.Fail(404, "Article not found.") : GetContributorArticleResponseModel.Ok(found);
         }
     }
 }

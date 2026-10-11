@@ -45,33 +45,33 @@ namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
 namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
 {
     [ExcludeFromCodeCoverage]
-    public class GetContributorMeRequestModel : IRequest<EasyHMSAPI.Application.ResponseModels.ApiResult<ContributorMeInfo>>
+    public class GetContributorMeRequestModel : IRequest<GetContributorMeResponseModel>
     {
         public Guid ContributorId { get; set; }
     }
 
     // The contributor's articles, grouped; with Slug set, one article (404 unless they wrote it or must review it).
     [ExcludeFromCodeCoverage]
-    public class GetContributorArticlesRequestModel : IRequest<EasyHMSAPI.Application.ResponseModels.ApiResult<MyArticleListInfo>>
+    public class GetContributorArticlesRequestModel : IRequest<GetContributorArticlesResponseModel>
     {
         public Guid ContributorId { get; set; }
     }
 
     [ExcludeFromCodeCoverage]
-    public class GetContributorArticleRequestModel : IRequest<EasyHMSAPI.Application.ResponseModels.ApiResult<MyArticleInfo>>
+    public class GetContributorArticleRequestModel : IRequest<GetContributorArticleResponseModel>
     {
         public Guid ContributorId { get; set; }
         public string Slug { get; set; } = null!;
     }
 
     [ExcludeFromCodeCoverage]
-    public class GetContributorTopicsRequestModel : IRequest<EasyHMSAPI.Application.ResponseModels.ApiResult<List<MyTopicInfo>>>
+    public class GetContributorTopicsRequestModel : IRequest<GetContributorTopicsResponseModel>
     {
         public Guid ContributorId { get; set; }
     }
 
     [ExcludeFromCodeCoverage]
-    public class GetTopicRequestsAdminRequestModel : IRequest<EasyHMSAPI.Application.ResponseModels.ApiResult<List<TopicRequestAdminInfo>>>
+    public class GetTopicRequestsAdminRequestModel : IRequest<GetTopicRequestsAdminResponseModel>
     {
         // One topic when set.
         public Guid? TopicId { get; set; }

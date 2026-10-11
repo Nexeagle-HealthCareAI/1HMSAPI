@@ -55,7 +55,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         {
             var res = await new SaveContributorArticleHandler(_context, new HealthArticleService(_context)).Handle(Draft(author.ContributorId, null, type, title), Ct);
             Assert.That(res.Success, Is.True, res.Message);
-            return res.Data!.Slug;
+            return res.Article!.Slug;
         }
 
         /// <summary>A MEDICAL article by <paramref name="author"/>, assigned to <paramref name="reviewer"/> and sent for review.</summary>
@@ -70,7 +70,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             return slug;
         }
 
-        private Task<EasyHMSAPI.Application.ResponseModels.ApiResult<EasyHMSAPI.Application.ResponseModels.QueryResponseModels.MyArticleInfo>> Review(
+        private Task<EasyHMSAPI.Application.ResponseModels.CommandResponseModels.ContributorArticleResponseModel> Review(
             HealthWikiContributor who, string slug, string decision, string? comment = null, bool accuracy = true) =>
             new ReviewContributorArticleHandler(_context).Handle(new ReviewContributorArticleRequestModel
             { ContributorId = who.ContributorId, Slug = slug, Decision = decision, Comment = comment, AccuracyConfirmed = accuracy }, Ct);
@@ -123,9 +123,9 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var res = await new RegisterContributorHandler(_context).Handle(Reg(c.ContributorId), Ct);
 
             Assert.That(res.Success, Is.True, res.Message);
-            Assert.That(res.Data!.Status, Is.EqualTo("PENDING"));
-            Assert.That(res.Data.FullName, Is.EqualTo("Dr. Meera Nair"));
-            Assert.That(res.Data.MobileMasked, Does.Contain("•"));
+            Assert.That(res.Profile!.Status, Is.EqualTo("PENDING"));
+            Assert.That(res.Profile.FullName, Is.EqualTo("Dr. Meera Nair"));
+            Assert.That(res.Profile.MobileMasked, Does.Contain("•"));
             var row = _context.HealthWikiContributors.Single();
             Assert.That(row.ConsentAt, Is.Not.Null);
             Assert.That(row.ConsentVersion, Is.EqualTo(ContributorPortalRules.ConsentVersion));
@@ -158,8 +158,8 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 
             Assert.That(none.Message, Does.Contain("job title"));
             Assert.That(ok.Success, Is.True, ok.Message);
-            Assert.That(ok.Data!.RegistrationNumber, Is.Null);
-            Assert.That(ok.Data.RoleTitle, Is.EqualTo("ANM"));
+            Assert.That(ok.Profile!.RegistrationNumber, Is.Null);
+            Assert.That(ok.Profile.RoleTitle, Is.EqualTo("ANM"));
         }
 
         [Test]
@@ -171,10 +171,10 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var h = new RegisterContributorHandler(_context);
 
             var same = await h.Handle(Reg(c.ContributorId), Ct);
-            Assert.That(same.Data!.Status, Is.EqualTo("VERIFIED"), "editing the name or bio keeps the verification");
+            Assert.That(same.Profile!.Status, Is.EqualTo("VERIFIED"), "editing the name or bio keeps the verification");
 
             var changed = await h.Handle(Reg(c.ContributorId, r => r.RegistrationNumber = "99999"), Ct);
-            Assert.That(changed.Data!.Status, Is.EqualTo("PENDING"));
+            Assert.That(changed.Profile!.Status, Is.EqualTo("PENDING"));
             Assert.That(_context.HealthWikiContributors.Single().VerifiedAt, Is.Null);
         }
 
@@ -195,8 +195,8 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var c = Person();
             var res = await new GetContributorMeHandler(_context).Handle(new GetContributorMeRequestModel { ContributorId = c.ContributorId }, Ct);
 
-            Assert.That(res.Data!.Role, Is.EqualTo("INDEPENDENT_DOCTOR"));
-            Assert.That(System.Text.Json.JsonSerializer.Serialize(res.Data), Does.Not.Contain(c.Mobile!));
+            Assert.That(res.Profile!.Role, Is.EqualTo("INDEPENDENT_DOCTOR"));
+            Assert.That(System.Text.Json.JsonSerializer.Serialize(res.Profile), Does.Not.Contain(c.Mobile!));
             Assert.That((await new GetContributorMeHandler(_context).Handle(new GetContributorMeRequestModel { ContributorId = Guid.NewGuid() }, Ct)).StatusCode, Is.EqualTo(404));
         }
 
@@ -212,9 +212,9 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var no = await new SaveContributorArticleHandler(_context, new HealthArticleService(_context)).Handle(Draft(invited.ContributorId), Ct);
 
             Assert.That(ok.StatusCode, Is.EqualTo(201));
-            Assert.That(ok.Data!.Status, Is.EqualTo("DRAFT"));
-            Assert.That(ok.Data.MyRole, Is.EqualTo("AUTHOR"));
-            Assert.That(ok.Data.Slug, Is.EqualTo("living-with-high-blood-pressure"));
+            Assert.That(ok.Article!.Status, Is.EqualTo("DRAFT"));
+            Assert.That(ok.Article.MyRole, Is.EqualTo("AUTHOR"));
+            Assert.That(ok.Article.Slug, Is.EqualTo("living-with-high-blood-pressure"));
             Assert.That(no.StatusCode, Is.EqualTo(403));
         }
 
@@ -272,7 +272,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 
             var edited = await h.Handle(Draft(author.ContributorId, slug, title: "New title"), Ct);
             var stranger = await h.Handle(Draft(other.ContributorId, slug, title: "Hijack"), Ct);
-            Assert.That(edited.Data!.Title, Is.EqualTo("New title"));
+            Assert.That(edited.Article!.Title, Is.EqualTo("New title"));
             Assert.That(stranger.StatusCode, Is.EqualTo(404), "someone else's article reads as missing");
 
             var a = _context.HealthArticles.Single(); a.ReviewerContributorId = reviewer.ContributorId; await _context.SaveChangesAsync();
@@ -289,14 +289,14 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That((await PublicList()).Single().Title, Is.EqualTo("Living with High Blood Pressure"));
 
             var edit = await new SaveContributorArticleHandler(_context, new HealthArticleService(_context)).Handle(Draft(author.ContributorId, slug, title: "High Blood Pressure, updated"), Ct);
-            Assert.That(edit.Data!.Status, Is.EqualTo("PUBLISHED"));
-            Assert.That(edit.Data.HasPendingRevision, Is.True);
-            Assert.That(edit.Data.Title, Is.EqualTo("High Blood Pressure, updated"), "the author sees their working copy");
+            Assert.That(edit.Article!.Status, Is.EqualTo("PUBLISHED"));
+            Assert.That(edit.Article.HasPendingRevision, Is.True);
+            Assert.That(edit.Article.Title, Is.EqualTo("High Blood Pressure, updated"), "the author sees their working copy");
             Assert.That((await PublicList()).Single().Title, Is.EqualTo("Living with High Blood Pressure"), "readers still see the live text");
 
             await new SubmitContributorArticleHandler(_context).Handle(new SubmitContributorArticleRequestModel { ContributorId = author.ContributorId, Slug = slug }, Ct);
             var pending = await new GetContributorArticlesHandler(_context).Handle(new GetContributorArticlesRequestModel { ContributorId = reviewer.ContributorId }, Ct);
-            Assert.That(pending.Data!.Pending.Select(p => p.Slug), Is.EqualTo(new[] { slug }), "the edit is waiting for the reviewer");
+            Assert.That(pending.Articles!.Pending.Select(p => p.Slug), Is.EqualTo(new[] { slug }), "the edit is waiting for the reviewer");
             Assert.That((await PublicList()).Single().Title, Is.EqualTo("Living with High Blood Pressure"), "still the old text while in review");
 
             var done = await Review(reviewer, slug, "APPROVE");
@@ -316,7 +316,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var h = new SubmitContributorArticleHandler(_context);
 
             Assert.That((await h.Handle(new SubmitContributorArticleRequestModel { ContributorId = pending.ContributorId, Slug = slugP }, Ct)).StatusCode, Is.EqualTo(403));
-            var empty = await h.Handle(new SubmitContributorArticleRequestModel { ContributorId = verified.ContributorId, Slug = slugV.Data!.Slug }, Ct);
+            var empty = await h.Handle(new SubmitContributorArticleRequestModel { ContributorId = verified.ContributorId, Slug = slugV.Article!.Slug }, Ct);
             Assert.That(empty.StatusCode, Is.EqualTo(400));
             Assert.That(empty.Message, Is.EqualTo("Add a title and some content first."));
         }
@@ -330,8 +330,8 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var res = await new SubmitContributorArticleHandler(_context).Handle(new SubmitContributorArticleRequestModel { ContributorId = author.ContributorId, Slug = slug }, Ct);
 
             Assert.That(res.Success, Is.True, res.Message);
-            Assert.That(res.Data!.Status, Is.EqualTo("IN_REVIEW"));
-            Assert.That(res.Data.ReviewerName, Is.Null);
+            Assert.That(res.Article!.Status, Is.EqualTo("IN_REVIEW"));
+            Assert.That(res.Article.ReviewerName, Is.Null);
             Assert.That(_context.HealthArticles.Single().SubmittedAt, Is.Not.Null);
         }
 
@@ -358,8 +358,8 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             _context.HealthArticles.Single(a => a.Slug == draft).ReviewerContributorId = reviewer.ContributorId; // reviewer assigned, but still a draft
             await _context.SaveChangesAsync();
 
-            var mineAuthor = (await new GetContributorArticlesHandler(_context).Handle(new GetContributorArticlesRequestModel { ContributorId = author.ContributorId }, Ct)).Data!;
-            var mineReviewer = (await new GetContributorArticlesHandler(_context).Handle(new GetContributorArticlesRequestModel { ContributorId = reviewer.ContributorId }, Ct)).Data!;
+            var mineAuthor = (await new GetContributorArticlesHandler(_context).Handle(new GetContributorArticlesRequestModel { ContributorId = author.ContributorId }, Ct)).Articles!;
+            var mineReviewer = (await new GetContributorArticlesHandler(_context).Handle(new GetContributorArticlesRequestModel { ContributorId = reviewer.ContributorId }, Ct)).Articles!;
 
             Assert.That(mineAuthor.Drafts.Select(d => d.Slug), Is.EquivalentTo(new[] { draft, review }));
             Assert.That(mineAuthor.Pending, Is.Empty, "the author does not review their own work");
@@ -393,8 +393,8 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var res = await Review(reviewer, slug, "approve");
 
             Assert.That(res.Success, Is.True, res.Message);
-            Assert.That(res.Data!.Status, Is.EqualTo("PUBLISHED"));
-            Assert.That(res.Data.AwaitingVerification, Is.False);
+            Assert.That(res.Article!.Status, Is.EqualTo("PUBLISHED"));
+            Assert.That(res.Article.AwaitingVerification, Is.False);
             var live = (await PublicList()).Single();
             Assert.That(live.Reviewer!.FullName, Is.EqualTo("Dr. Imran Qureshi"));
             Assert.That(live.Reviewer.IsRegistrationVerified, Is.True);
@@ -426,11 +426,11 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var res = await Review(reviewer, slug, "APPROVE");
 
             Assert.That(res.Success, Is.True, res.Message);
-            Assert.That(res.Data!.AwaitingVerification, Is.True);
-            Assert.That(res.Data.Status, Is.EqualTo("PUBLISHED"), "the reviewer's view, as the pages expect");
+            Assert.That(res.Article!.AwaitingVerification, Is.True);
+            Assert.That(res.Article.Status, Is.EqualTo("PUBLISHED"), "the reviewer's view, as the pages expect");
             Assert.That(_context.HealthArticles.Single().Status, Is.EqualTo("IN_REVIEW"), "but it is not live");
             Assert.That(await PublicList(), Is.Empty);
-            var mine = (await new GetContributorArticlesHandler(_context).Handle(new GetContributorArticlesRequestModel { ContributorId = reviewer.ContributorId }, Ct)).Data!;
+            var mine = (await new GetContributorArticlesHandler(_context).Handle(new GetContributorArticlesRequestModel { ContributorId = reviewer.ContributorId }, Ct)).Articles!;
             Assert.That(mine.Pending, Is.Empty, "nothing left to decide");
 
             var verified = await new VerifyContributorHandler(_context).Handle(new VerifyContributorRequestModel { ContributorId = reviewer.ContributorId, ActorName = "Priya" }, Ct);
@@ -454,8 +454,8 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(ok.Success, Is.True, ok.Message);
             Assert.That(_context.HealthArticles.Single().Status, Is.EqualTo("DRAFT"));
             var back = await new GetContributorArticleHandler(_context).Handle(new GetContributorArticleRequestModel { ContributorId = author.ContributorId, Slug = slug }, Ct);
-            Assert.That(back.Data!.Status, Is.EqualTo("DRAFT"));
-            Assert.That(back.Data.ReturnedComment, Is.EqualTo("Please add when to see a doctor."));
+            Assert.That(back.Article!.Status, Is.EqualTo("DRAFT"));
+            Assert.That(back.Article.ReturnedComment, Is.EqualTo("Please add when to see a doctor."));
             Assert.That(await PublicList(), Is.Empty);
         }
 
@@ -503,8 +503,8 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(res.Success, Is.True, res.Message);
             Assert.That((await PublicList()).Single().Title, Is.EqualTo("Living with High Blood Pressure"));
             var mine = await new GetContributorArticleHandler(_context).Handle(new GetContributorArticleRequestModel { ContributorId = author.ContributorId, Slug = slug }, Ct);
-            Assert.That(mine.Data!.RevisionStatus, Is.EqualTo("DRAFT"));
-            Assert.That(mine.Data.ReturnedComment, Is.EqualTo("The new dose is wrong, please check."));
+            Assert.That(mine.Article!.RevisionStatus, Is.EqualTo("DRAFT"));
+            Assert.That(mine.Article.ReturnedComment, Is.EqualTo("The new dose is wrong, please check."));
         }
 
         [Test]
@@ -555,7 +555,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That((await h.Handle(noWhy, Ct)).StatusCode, Is.EqualTo(400));
             var ok = await h.Handle(Topic(doctor.ContributorId), Ct);
             Assert.That(ok.StatusCode, Is.EqualTo(201));
-            Assert.That(ok.Data!.Status, Is.EqualTo("SUBMITTED"));
+            Assert.That(ok.Topic!.Status, Is.EqualTo("SUBMITTED"));
         }
 
         [Test]
@@ -589,9 +589,9 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var doctor = Person();
             var create = new CreateContributorTopicHandler(_context);
             var decide = new DecideTopicHandler(_context);
-            var accept = (await create.Handle(Topic(doctor.ContributorId, "Silent heart attack"), Ct)).Data!;
-            var decline = (await create.Handle(Topic(doctor.ContributorId, "Off topic"), Ct)).Data!;
-            var ask = (await create.Handle(Topic(doctor.ContributorId, "Vague one"), Ct)).Data!;
+            var accept = (await create.Handle(Topic(doctor.ContributorId, "Silent heart attack"), Ct)).Topic!;
+            var decline = (await create.Handle(Topic(doctor.ContributorId, "Off topic"), Ct)).Topic!;
+            var ask = (await create.Handle(Topic(doctor.ContributorId, "Vague one"), Ct)).Topic!;
 
             Assert.That((await decide.Handle(new DecideTopicRequestModel { TopicId = decline.Id, Action = "DECLINE" }, Ct)).StatusCode, Is.EqualTo(400), "a reason is required");
             Assert.That((await decide.Handle(new DecideTopicRequestModel { TopicId = ask.Id, Action = "ASK_DETAIL", Note = " " }, Ct)).StatusCode, Is.EqualTo(400));
@@ -601,15 +601,15 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             await decide.Handle(new DecideTopicRequestModel { TopicId = decline.Id, Action = "DECLINE", Note = "Out of scope." }, Ct);
             await decide.Handle(new DecideTopicRequestModel { TopicId = ask.Id, Action = "ASK_DETAIL", Note = "Which age group?" }, Ct);
 
-            Assert.That(accepted.Data!.Status, Is.EqualTo("ACCEPTED"));
-            Assert.That(accepted.Data.ArticleSlug, Is.EqualTo("silent-heart-attack"));
+            Assert.That(accepted.Topic!.Status, Is.EqualTo("ACCEPTED"));
+            Assert.That(accepted.Topic.ArticleSlug, Is.EqualTo("silent-heart-attack"));
             var draft = _context.HealthArticles.Single();
             Assert.That(draft.Status, Is.EqualTo("DRAFT"));
             Assert.That(draft.AuthorContributorId, Is.EqualTo(doctor.ContributorId));
             Assert.That(draft.Content, Does.Contain("Symptoms that are easy to miss."));
             Assert.That((await decide.Handle(new DecideTopicRequestModel { TopicId = accept.Id, Action = "DECLINE", Note = "again" }, Ct)).StatusCode, Is.EqualTo(409), "decided is final");
 
-            var mine = (await new GetContributorTopicsHandler(_context).Handle(new GetContributorTopicsRequestModel { ContributorId = doctor.ContributorId }, Ct)).Data!;
+            var mine = (await new GetContributorTopicsHandler(_context).Handle(new GetContributorTopicsRequestModel { ContributorId = doctor.ContributorId }, Ct)).Topics!;
             Assert.That(mine.Single(t => t.Id == decline.Id).DecisionNote, Is.EqualTo("Out of scope."));
             Assert.That(mine.Single(t => t.Id == ask.Id).Status, Is.EqualTo("NEEDS_DETAIL"));
             Assert.That(mine.Single(t => t.Id == accept.Id).ArticleSlug, Is.EqualTo("silent-heart-attack"));
@@ -619,7 +619,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public async Task Topic_AddingDetail_OnlyWhenAskedFor_AndItGoesBackToSubmitted()
         {
             var doctor = Person();
-            var topic = (await new CreateContributorTopicHandler(_context).Handle(Topic(doctor.ContributorId), Ct)).Data!;
+            var topic = (await new CreateContributorTopicHandler(_context).Handle(Topic(doctor.ContributorId), Ct)).Topic!;
             var add = new AddContributorTopicDetailHandler(_context);
             var detail = new AddContributorTopicDetailRequestModel
             { ContributorId = doctor.ContributorId, TopicId = topic.Id, Outline = "Adults over 50.", Provided = new HashSet<string> { "outline" } };
@@ -632,18 +632,18 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var res = await add.Handle(detail, Ct);
 
             Assert.That(res.Success, Is.True, res.Message);
-            Assert.That(res.Data!.Status, Is.EqualTo("SUBMITTED"));
-            Assert.That(res.Data.DecisionNote, Is.Null);
-            Assert.That(res.Data.Outline, Is.EqualTo("Adults over 50."));
-            Assert.That(res.Data.WhyItMatters, Is.EqualTo("People wait too long."), "fields not sent are unchanged");
+            Assert.That(res.Topic!.Status, Is.EqualTo("SUBMITTED"));
+            Assert.That(res.Topic.DecisionNote, Is.Null);
+            Assert.That(res.Topic.Outline, Is.EqualTo("Adults over 50."));
+            Assert.That(res.Topic.WhyItMatters, Is.EqualTo("People wait too long."), "fields not sent are unchanged");
         }
 
         [Test]
         public async Task Topic_WhenTheAuthorStartsWritingTheAcceptedDraft_ItBecomesArticleStarted()
         {
             var doctor = Person();
-            var topic = (await new CreateContributorTopicHandler(_context).Handle(Topic(doctor.ContributorId, "Silent heart attack"), Ct)).Data!;
-            var accepted = (await new DecideTopicHandler(_context).Handle(new DecideTopicRequestModel { TopicId = topic.Id, Action = "ACCEPT" }, Ct)).Data!;
+            var topic = (await new CreateContributorTopicHandler(_context).Handle(Topic(doctor.ContributorId, "Silent heart attack"), Ct)).Topic!;
+            var accepted = (await new DecideTopicHandler(_context).Handle(new DecideTopicRequestModel { TopicId = topic.Id, Action = "ACCEPT" }, Ct)).Topic!;
 
             var edit = await new SaveContributorArticleHandler(_context, new HealthArticleService(_context)).Handle(Draft(doctor.ContributorId, accepted.ArticleSlug, title: "Silent heart attack", content: "My first paragraph."), Ct);
 
@@ -656,14 +656,14 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         {
             var doctor = Person();
             var create = new CreateContributorTopicHandler(_context);
-            var a = (await create.Handle(Topic(doctor.ContributorId, "A"), Ct)).Data!;
+            var a = (await create.Handle(Topic(doctor.ContributorId, "A"), Ct)).Topic!;
             await create.Handle(Topic(doctor.ContributorId, "B"), Ct);
             await new DecideTopicHandler(_context).Handle(new DecideTopicRequestModel { TopicId = a.Id, Action = "DECLINE", Note = "no" }, Ct);
             var h = new GetTopicRequestsAdminHandler(_context);
 
-            Assert.That((await h.Handle(new GetTopicRequestsAdminRequestModel(), Ct)).Data!, Has.Count.EqualTo(2));
-            Assert.That((await h.Handle(new GetTopicRequestsAdminRequestModel { Status = "submitted" }, Ct)).Data!.Select(t => t.Title), Is.EqualTo(new[] { "B" }));
-            Assert.That((await h.Handle(new GetTopicRequestsAdminRequestModel { TopicId = a.Id }, Ct)).Data!.Single().DecisionReason, Is.EqualTo("no"));
+            Assert.That((await h.Handle(new GetTopicRequestsAdminRequestModel(), Ct)).Topics!, Has.Count.EqualTo(2));
+            Assert.That((await h.Handle(new GetTopicRequestsAdminRequestModel { Status = "submitted" }, Ct)).Topics!.Select(t => t.Title), Is.EqualTo(new[] { "B" }));
+            Assert.That((await h.Handle(new GetTopicRequestsAdminRequestModel { TopicId = a.Id }, Ct)).Topics!.Single().DecisionReason, Is.EqualTo("no"));
             Assert.That((await h.Handle(new GetTopicRequestsAdminRequestModel { TopicId = Guid.NewGuid() }, Ct)).StatusCode, Is.EqualTo(404));
         }
     }

@@ -82,7 +82,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                 ContributorId = reviewerId, FullName = "Dr. Reviewer " + tag, Speciality = "Cardiologist", Qualification = "MBBS, MD",
                 RegistrationNumber = "R" + tag, RegistrationCouncil = "Delhi Medical Council", RegistrationYear = "2012", Consent = true,
             }, Ct);
-            Assert.That(reg.Data!.Status, Is.EqualTo("PENDING"), reg.Message);
+            Assert.That(reg.Profile!.Status, Is.EqualTo("PENDING"), reg.Message);
             Assert.That((await new VerifyContributorHandler(_db).Handle(new VerifyContributorRequestModel { ContributorId = reviewerId, ActorName = "Priya" }, Ct)).Success, Is.True);
 
             await SignIn(author, role: "INDEPENDENT_DOCTOR");
@@ -98,12 +98,12 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var created = await new SaveContributorArticleHandler(_db, new HealthArticleService(_db)).Handle(new SaveContributorArticleRequestModel
             { ContributorId = authorId, Type = "MEDICAL", Title = "BP " + tag, Description = "d", Content = "## Hello" }, Ct);
             Assert.That(created.StatusCode, Is.EqualTo(201), created.Message);
-            var slug = created.Data!.Slug;
+            var slug = created.Article!.Slug;
             var assign = await new SaveHealthArticleHandler(new HealthArticleService(_db)).Handle(new SaveHealthArticleRequestModel { Slug = slug, ReviewerContributorId = reviewerId, ActorName = "Priya" }, Ct);
             Assert.That(assign.Success, Is.True, assign.Message);
             Assert.That((await new SubmitContributorArticleHandler(_db).Handle(new SubmitContributorArticleRequestModel { ContributorId = authorId, Slug = slug }, Ct)).Success, Is.True);
 
-            var pending = (await new GetContributorArticlesHandler(_db).Handle(new GetContributorArticlesRequestModel { ContributorId = reviewerId }, Ct)).Data!;
+            var pending = (await new GetContributorArticlesHandler(_db).Handle(new GetContributorArticlesRequestModel { ContributorId = reviewerId }, Ct)).Articles!;
             Assert.That(pending.Pending.Select(a => a.Slug), Does.Contain(slug));
             var approved = await new ReviewContributorArticleHandler(_db).Handle(new ReviewContributorArticleRequestModel
             { ContributorId = reviewerId, Slug = slug, Decision = "APPROVE", AccuracyConfirmed = true }, Ct);
@@ -125,9 +125,9 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var topic = await new CreateContributorTopicHandler(_db).Handle(new CreateContributorTopicRequestModel
             { ContributorId = authorId, Title = "Topic " + tag, Type = "MEDICAL", Outline = "o", WhyItMatters = "w" }, Ct);
             Assert.That(topic.StatusCode, Is.EqualTo(201), topic.Message);
-            var accepted = await new DecideTopicHandler(_db).Handle(new DecideTopicRequestModel { TopicId = topic.Data!.Id, Action = "ACCEPT", ActorName = "Priya" }, Ct);
+            var accepted = await new DecideTopicHandler(_db).Handle(new DecideTopicRequestModel { TopicId = topic.Topic!.Id, Action = "ACCEPT", ActorName = "Priya" }, Ct);
             Assert.That(accepted.Success, Is.True, accepted.Message);
-            Assert.That((await new GetTopicRequestsAdminHandler(_db).Handle(new GetTopicRequestsAdminRequestModel(), Ct)).Data!.Select(t => t.TopicId), Does.Contain(topic.Data.Id));
+            Assert.That((await new GetTopicRequestsAdminHandler(_db).Handle(new GetTopicRequestsAdminRequestModel(), Ct)).Topics!.Select(t => t.TopicId), Does.Contain(topic.Topic.Id));
             var summary = await new GetHealthWikiSummaryHandler(_db).Handle(new GetHealthWikiSummaryRequestModel(), Ct);
             Assert.That(summary.PendingContributors, Is.GreaterThanOrEqualTo(0));
             Assert.That((await new GetHealthArticleHistoryHandler(_db).Handle(new GetHealthArticleHistoryRequestModel { Slug = slug }, Ct)).Entries, Is.Not.Empty);

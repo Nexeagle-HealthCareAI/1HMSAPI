@@ -1,6 +1,6 @@
 using EasyHMSAPI.Application.Handlers.QueryHandlers;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
-using EasyHMSAPI.Application.ResponseModels;
+using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.Services.Interfaces;
@@ -25,7 +25,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     /// Create or edit the contributor's own article. The rules (who may author what, https cover with alt text, a published
     /// article's edit held as a pending revision) are those of the CMS save; this adds ownership and "no edits while with the reviewer".
     /// </summary>
-    public class SaveContributorArticleHandler : IRequestHandler<SaveContributorArticleRequestModel, ApiResult<MyArticleInfo>>
+    public class SaveContributorArticleHandler : IRequestHandler<SaveContributorArticleRequestModel, ContributorArticleResponseModel>
     {
         private static readonly HashSet<string> AllKeys = new(StringComparer.Ordinal)
         {
@@ -41,15 +41,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             _articles = articles;
         }
 
-        public async Task<ApiResult<MyArticleInfo>> Handle(SaveContributorArticleRequestModel r, CancellationToken ct)
+        public async Task<ContributorArticleResponseModel> Handle(SaveContributorArticleRequestModel r, CancellationToken ct)
         {
             var me = await _context.HealthWikiContributors.AsNoTracking().FirstOrDefaultAsync(c => c.ContributorId == r.ContributorId, ct);
-            if (me == null) return ApiResult<MyArticleInfo>.Fail(404, "Profile not found.");
+            if (me == null) return ContributorArticleResponseModel.Fail(404, "Profile not found.");
             if (!ContributorPortalRules.IsProfileAccepted(me.Status))
-                return ApiResult<MyArticleInfo>.Fail(403, "Your profile has not been accepted yet. Finish registering first.");
+                return ContributorArticleResponseModel.Fail(403, "Your profile has not been accepted yet. Finish registering first.");
 
             var type = HealthArticleRules.NormalizeType(r.Type);
-            if (r.Type != null && type == null) return ApiResult<MyArticleInfo>.Fail(400, "type must be MEDICAL or SECTOR_UPDATE.");
+            if (r.Type != null && type == null) return ContributorArticleResponseModel.Fail(400, "type must be MEDICAL or SECTOR_UPDATE.");
 
             string slug;
             var isCreate = string.IsNullOrWhiteSpace(r.Slug);
@@ -57,20 +57,20 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             {
                 type ??= HealthArticle.TypeMedical;
                 if (!HealthArticleRules.CanAuthor(type, me.Type))
-                    return ApiResult<MyArticleInfo>.Fail(403, "Only doctors can write medical articles. You can write sector updates.");
-                if (string.IsNullOrWhiteSpace(r.Title)) return ApiResult<MyArticleInfo>.Fail(400, "Title is required.");
+                    return ContributorArticleResponseModel.Fail(403, "Only doctors can write medical articles. You can write sector updates.");
+                if (string.IsNullOrWhiteSpace(r.Title)) return ContributorArticleResponseModel.Fail(400, "Title is required.");
                 slug = await UniqueSlug(ContributorPortalRules.Slugify(r.Title), ct);
             }
             else
             {
                 slug = r.Slug!.Trim().ToLowerInvariant();
                 var article = await _context.HealthArticles.AsNoTracking().FirstOrDefaultAsync(a => a.Slug == slug && a.AuthorContributorId == me.ContributorId, ct);
-                if (article == null) return ApiResult<MyArticleInfo>.Fail(404, "Article not found.");
+                if (article == null) return ContributorArticleResponseModel.Fail(404, "Article not found.");
                 var revision = await ContributorArticles.OpenRevision(_context, article.ArticleId, ct);
                 if (article.Status == HealthArticle.StatusInReview || revision?.Status == HealthArticleRevision.StatusInReview)
-                    return ApiResult<MyArticleInfo>.Fail(409, "This article is with the reviewer. Wait for their decision before editing.");
+                    return ContributorArticleResponseModel.Fail(409, "This article is with the reviewer. Wait for their decision before editing.");
                 if (type != null && type != article.Type && !HealthArticleRules.CanAuthor(type, me.Type))
-                    return ApiResult<MyArticleInfo>.Fail(403, "Only doctors can write medical articles. You can write sector updates.");
+                    return ContributorArticleResponseModel.Fail(403, "Only doctors can write medical articles. You can write sector updates.");
             }
 
             var provided = new HashSet<string>(AllKeys, StringComparer.Ordinal);
@@ -96,7 +96,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 AllowEmptyContent = true,
                 Provided = provided,
             }, ct);
-            if (!result.Success) return ApiResult<MyArticleInfo>.Fail(result.StatusCode, result.Message ?? "The article could not be saved.");
+            if (!result.Success) return ContributorArticleResponseModel.Fail(result.StatusCode, result.Message ?? "The article could not be saved.");
 
             if (!isCreate)
             {
@@ -112,7 +112,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
 
             var mine = await ContributorArticles.Reload(_context, me.ContributorId, slug, ct);
-            return mine == null ? ApiResult<MyArticleInfo>.Fail(500, "The article was saved but could not be read back.") : ApiResult<MyArticleInfo>.Ok(mine, isCreate ? 201 : 200);
+            return mine == null ? ContributorArticleResponseModel.Fail(500, "The article was saved but could not be read back.") : ContributorArticleResponseModel.Ok(mine, isCreate ? 201 : 200);
         }
 
         private async Task<string> UniqueSlug(string baseSlug, CancellationToken ct)
@@ -131,7 +131,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     /// The author sends a draft for review (or, for a live article, the edit waiting). Needs a VERIFIED profile: the team
     /// has checked who is writing. A medical article may be sent before a doctor is assigned; the CMS assigns one next.
     /// </summary>
-    public class SubmitContributorArticleHandler : IRequestHandler<SubmitContributorArticleRequestModel, ApiResult<MyArticleInfo>>
+    public class SubmitContributorArticleHandler : IRequestHandler<SubmitContributorArticleRequestModel, ContributorArticleResponseModel>
     {
         private readonly AppDbContext _context;
 
@@ -140,23 +140,23 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             _context = context;
         }
 
-        public async Task<ApiResult<MyArticleInfo>> Handle(SubmitContributorArticleRequestModel r, CancellationToken ct)
+        public async Task<ContributorArticleResponseModel> Handle(SubmitContributorArticleRequestModel r, CancellationToken ct)
         {
             var me = await _context.HealthWikiContributors.AsNoTracking().FirstOrDefaultAsync(c => c.ContributorId == r.ContributorId, ct);
-            if (me == null) return ApiResult<MyArticleInfo>.Fail(404, "Profile not found.");
+            if (me == null) return ContributorArticleResponseModel.Fail(404, "Profile not found.");
             if (me.Status != HealthWikiContributor.StatusVerified)
-                return ApiResult<MyArticleInfo>.Fail(403, "You can submit articles after the team has checked your profile.");
+                return ContributorArticleResponseModel.Fail(403, "You can submit articles after the team has checked your profile.");
 
             var slug = r.Slug?.Trim().ToLowerInvariant();
             var article = await _context.HealthArticles.FirstOrDefaultAsync(a => a.Slug == slug && a.AuthorContributorId == me.ContributorId, ct);
-            if (article == null) return ApiResult<MyArticleInfo>.Fail(404, "Article not found.");
+            if (article == null) return ContributorArticleResponseModel.Fail(404, "Article not found.");
             var revision = await ContributorArticles.OpenRevision(_context, article.ArticleId, ct);
             var now = DateTime.UtcNow;
 
             if (article.Status == HealthArticle.StatusDraft)
             {
                 var problem = HealthArticleRules.ValidateContent(ArticleContent.From(article));
-                if (problem != null) return ApiResult<MyArticleInfo>.Fail(400, FriendlyProblem(problem));
+                if (problem != null) return ContributorArticleResponseModel.Fail(400, FriendlyProblem(problem));
                 article.Status = HealthArticle.StatusInReview;
                 article.SubmittedAt = now;
                 article.ReviewerComment = null;
@@ -166,7 +166,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             else if (article.Status == HealthArticle.StatusPublished && revision?.Status == HealthArticleRevision.StatusDraft)
             {
                 var problem = HealthArticleRules.ValidateContent(ArticleContent.From(revision));
-                if (problem != null) return ApiResult<MyArticleInfo>.Fail(400, FriendlyProblem(problem));
+                if (problem != null) return ContributorArticleResponseModel.Fail(400, FriendlyProblem(problem));
                 revision.Status = HealthArticleRevision.StatusInReview;
                 revision.ReviewerComment = null;
                 revision.UpdatedAt = now;
@@ -174,7 +174,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
             else
             {
-                return ApiResult<MyArticleInfo>.Fail(409, "Only a draft can be submitted.");
+                return ContributorArticleResponseModel.Fail(409, "Only a draft can be submitted.");
             }
 
             HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "SUBMITTED", HealthWikiAudit.ActorContributor, me.FullName,
@@ -185,11 +185,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
             catch (DbUpdateException)
             {
-                return ApiResult<MyArticleInfo>.Fail(409, "The article was changed at the same moment. Reload it and try again.");
+                return ContributorArticleResponseModel.Fail(409, "The article was changed at the same moment. Reload it and try again.");
             }
 
             var mine = await ContributorArticles.Reload(_context, me.ContributorId, article.Slug, ct);
-            return ApiResult<MyArticleInfo>.Ok(mine!);
+            return ContributorArticleResponseModel.Ok(mine!);
         }
 
         private static string FriendlyProblem(string problem) =>
@@ -203,7 +203,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     /// REQUEST_CHANGES needs a comment of at least 10 characters and sends the article (or edit) back to the author.
     /// Every decision is kept in HealthArticleReview with the name and registration as they were that day.
     /// </summary>
-    public class ReviewContributorArticleHandler : IRequestHandler<ReviewContributorArticleRequestModel, ApiResult<MyArticleInfo>>
+    public class ReviewContributorArticleHandler : IRequestHandler<ReviewContributorArticleRequestModel, ContributorArticleResponseModel>
     {
         private readonly AppDbContext _context;
 
@@ -212,25 +212,25 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             _context = context;
         }
 
-        public async Task<ApiResult<MyArticleInfo>> Handle(ReviewContributorArticleRequestModel r, CancellationToken ct)
+        public async Task<ContributorArticleResponseModel> Handle(ReviewContributorArticleRequestModel r, CancellationToken ct)
         {
             var me = await _context.HealthWikiContributors.FirstOrDefaultAsync(c => c.ContributorId == r.ContributorId, ct);
-            if (me == null) return ApiResult<MyArticleInfo>.Fail(404, "Profile not found.");
+            if (me == null) return ContributorArticleResponseModel.Fail(404, "Profile not found.");
 
             var slug = r.Slug?.Trim().ToLowerInvariant();
             var article = await _context.HealthArticles.FirstOrDefaultAsync(a => a.Slug == slug && a.ReviewerContributorId == me.ContributorId, ct);
-            if (article == null) return ApiResult<MyArticleInfo>.Fail(404, "Article not found.");
-            if (!HealthArticleRules.IsDoctorType(me.Type)) return ApiResult<MyArticleInfo>.Fail(403, "Only doctors can review.");
+            if (article == null) return ContributorArticleResponseModel.Fail(404, "Article not found.");
+            if (!HealthArticleRules.IsDoctorType(me.Type)) return ContributorArticleResponseModel.Fail(403, "Only doctors can review.");
 
             var decision = r.Decision?.Trim().ToUpperInvariant();
             if (decision != ReviewContributorArticleRequestModel.Approve && decision != ReviewContributorArticleRequestModel.RequestChanges)
-                return ApiResult<MyArticleInfo>.Fail(400, "decision must be APPROVE or REQUEST_CHANGES.");
+                return ContributorArticleResponseModel.Fail(400, "decision must be APPROVE or REQUEST_CHANGES.");
 
             var revision = await ContributorArticles.OpenRevision(_context, article.ArticleId, ct);
             var reviewingEdit = article.Status == HealthArticle.StatusPublished && revision?.Status == HealthArticleRevision.StatusInReview;
             var reviewingArticle = article.Status == HealthArticle.StatusInReview && article.ApprovedAt == null;
             if (!reviewingEdit && !reviewingArticle)
-                return ApiResult<MyArticleInfo>.Fail(409, "This article is not waiting for your review.");
+                return ContributorArticleResponseModel.Fail(409, "This article is not waiting for your review.");
 
             var now = DateTime.UtcNow;
             string? comment = null;
@@ -239,9 +239,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             {
                 comment = r.Comment?.Trim();
                 if (comment == null || comment.Length < HealthArticleRules.MinChangeCommentLength)
-                    return ApiResult<MyArticleInfo>.Fail(400, "Add a short comment so the writer knows what to change.");
+                    return ContributorArticleResponseModel.Fail(400, "Add a short comment so the writer knows what to change.");
                 if (comment.Length > HealthArticleRules.MaxReasonLength)
-                    return ApiResult<MyArticleInfo>.Fail(400, $"The comment is too long (max {HealthArticleRules.MaxReasonLength} characters).");
+                    return ContributorArticleResponseModel.Fail(400, $"The comment is too long (max {HealthArticleRules.MaxReasonLength} characters).");
 
                 if (reviewingEdit)
                 {
@@ -260,12 +260,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             else
             {
                 if (!r.AccuracyConfirmed)
-                    return ApiResult<MyArticleInfo>.Fail(400, "Confirm that you have checked the article for medical accuracy.");
+                    return ContributorArticleResponseModel.Fail(400, "Confirm that you have checked the article for medical accuracy.");
 
                 if (reviewingEdit)
                 {
                     if (me.Status != HealthWikiContributor.StatusVerified)
-                        return ApiResult<MyArticleInfo>.Fail(403, "You can approve edits to a live article after the team has verified your registration.");
+                        return ContributorArticleResponseModel.Fail(403, "You can approve edits to a live article after the team has verified your registration.");
                     HealthArticlePublisher.ApplyRevision(_context, article, revision!, HealthWikiAudit.ActorContributor, me.FullName, now);
                     article.ApprovedAt = now;
                 }
@@ -301,13 +301,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
             catch (DbUpdateException)
             {
-                return ApiResult<MyArticleInfo>.Fail(409, "The article was changed at the same moment. Reload it and try again.");
+                return ContributorArticleResponseModel.Fail(409, "The article was changed at the same moment. Reload it and try again.");
             }
 
             var mine = await ContributorArticles.Reload(_context, me.ContributorId, article.Slug, ct);
             // After "request changes" the article is back with its author and no longer visible to the reviewer; say so plainly.
-            return mine != null ? ApiResult<MyArticleInfo>.Ok(mine)
-                : ApiResult<MyArticleInfo>.Ok(ContributorPortalMapper.ToMyArticle(article, null, me.ContributorId, null, me.FullName, now));
+            return mine != null ? ContributorArticleResponseModel.Ok(mine)
+                : ContributorArticleResponseModel.Ok(ContributorPortalMapper.ToMyArticle(article, null, me.ContributorId, null, me.FullName, now));
         }
     }
 }

@@ -1,6 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
-using EasyHMSAPI.Application.ResponseModels;
+using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Domain.Context;
@@ -31,7 +31,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         public static string? Clean(string? v) { var t = v?.Trim(); return string.IsNullOrEmpty(t) ? null : t; }
     }
 
-    public class GetContributorTopicsHandler : IRequestHandler<GetContributorTopicsRequestModel, ApiResult<List<MyTopicInfo>>>
+    public class GetContributorTopicsHandler : IRequestHandler<GetContributorTopicsRequestModel, GetContributorTopicsResponseModel>
     {
         private readonly AppDbContext _context;
 
@@ -40,13 +40,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             _context = context;
         }
 
-        public async Task<ApiResult<List<MyTopicInfo>>> Handle(GetContributorTopicsRequestModel request, CancellationToken ct)
+        public async Task<GetContributorTopicsResponseModel> Handle(GetContributorTopicsRequestModel request, CancellationToken ct)
         {
             var topics = await _context.HealthWikiTopicRequests.AsNoTracking().Where(t => t.ContributorId == request.ContributorId)
                 .OrderByDescending(t => t.UpdatedAt).Take(200).ToListAsync(ct);
             var result = new List<MyTopicInfo>();
             foreach (var t in topics) result.Add(ContributorPortalMapper.ToMyTopic(t, await TopicRules.ArticleSlug(_context, t.ArticleId, ct)));
-            return ApiResult<List<MyTopicInfo>>.Ok(result);
+            return GetContributorTopicsResponseModel.Ok(result);
         }
     }
 
@@ -55,7 +55,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     /// at most 5 open requests (SUBMITTED or NEEDS_DETAIL), and only what the person may write about
     /// (a health worker or writer suggests sector updates).
     /// </summary>
-    public class CreateContributorTopicHandler : IRequestHandler<CreateContributorTopicRequestModel, ApiResult<MyTopicInfo>>
+    public class CreateContributorTopicHandler : IRequestHandler<CreateContributorTopicRequestModel, ContributorTopicResponseModel>
     {
         private readonly AppDbContext _context;
 
@@ -64,30 +64,30 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             _context = context;
         }
 
-        public async Task<ApiResult<MyTopicInfo>> Handle(CreateContributorTopicRequestModel r, CancellationToken ct)
+        public async Task<ContributorTopicResponseModel> Handle(CreateContributorTopicRequestModel r, CancellationToken ct)
         {
             var me = await _context.HealthWikiContributors.AsNoTracking().FirstOrDefaultAsync(c => c.ContributorId == r.ContributorId, ct);
-            if (me == null) return ApiResult<MyTopicInfo>.Fail(404, "Profile not found.");
+            if (me == null) return ContributorTopicResponseModel.Fail(404, "Profile not found.");
             if (!ContributorPortalRules.IsProfileAccepted(me.Status))
-                return ApiResult<MyTopicInfo>.Fail(403, "Your profile has not been accepted yet. Finish registering first.");
+                return ContributorTopicResponseModel.Fail(403, "Your profile has not been accepted yet. Finish registering first.");
 
             var title = TopicRules.Clean(r.Title);
             var outline = TopicRules.Clean(r.Outline);
             var why = TopicRules.Clean(r.WhyItMatters);
             if (title == null || outline == null || why == null)
-                return ApiResult<MyTopicInfo>.Fail(400, "Fill in the topic, the outline and why it matters.");
-            if (title.Length > TopicRules.MaxTitle) return ApiResult<MyTopicInfo>.Fail(400, $"The topic is too long (max {TopicRules.MaxTitle} characters).");
+                return ContributorTopicResponseModel.Fail(400, "Fill in the topic, the outline and why it matters.");
+            if (title.Length > TopicRules.MaxTitle) return ContributorTopicResponseModel.Fail(400, $"The topic is too long (max {TopicRules.MaxTitle} characters).");
             var invalid = TopicRules.Validate(outline, why, r.ConditionSlug, r.References);
-            if (invalid != null) return ApiResult<MyTopicInfo>.Fail(400, invalid);
+            if (invalid != null) return ContributorTopicResponseModel.Fail(400, invalid);
 
             var type = HealthArticleRules.NormalizeType(r.Type) ?? HealthArticle.TypeMedical;
             if (!HealthArticleRules.CanAuthor(type, me.Type))
-                return ApiResult<MyTopicInfo>.Fail(403, "You can suggest sector updates. Medical topics are for doctors.");
+                return ContributorTopicResponseModel.Fail(403, "You can suggest sector updates. Medical topics are for doctors.");
 
             var open = await _context.HealthWikiTopicRequests.CountAsync(t => t.ContributorId == me.ContributorId
                 && (t.Status == HealthWikiTopicRequest.StatusSubmitted || t.Status == HealthWikiTopicRequest.StatusNeedsDetail), ct);
             if (open >= ContributorPortalRules.MaxOpenTopics)
-                return ApiResult<MyTopicInfo>.Fail(409, $"You already have {ContributorPortalRules.MaxOpenTopics} open requests. Wait for a decision before sending another.");
+                return ContributorTopicResponseModel.Fail(409, $"You already have {ContributorPortalRules.MaxOpenTopics} open requests. Wait for a decision before sending another.");
 
             var now = DateTime.UtcNow;
             var topic = new HealthWikiTopicRequest
@@ -99,12 +99,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             _context.HealthWikiTopicRequests.Add(topic);
             HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityTopic, topic.TopicId, "SUBMITTED", HealthWikiAudit.ActorContributor, me.FullName, title);
             await _context.SaveChangesAsync(ct);
-            return ApiResult<MyTopicInfo>.Ok(ContributorPortalMapper.ToMyTopic(topic, null), 201);
+            return ContributorTopicResponseModel.Ok(ContributorPortalMapper.ToMyTopic(topic, null), 201);
         }
     }
 
     /// <summary>The contributor answers "needs detail": the changed fields are saved and the request goes back to the team as SUBMITTED.</summary>
-    public class AddContributorTopicDetailHandler : IRequestHandler<AddContributorTopicDetailRequestModel, ApiResult<MyTopicInfo>>
+    public class AddContributorTopicDetailHandler : IRequestHandler<AddContributorTopicDetailRequestModel, ContributorTopicResponseModel>
     {
         private readonly AppDbContext _context;
 
@@ -113,20 +113,20 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             _context = context;
         }
 
-        public async Task<ApiResult<MyTopicInfo>> Handle(AddContributorTopicDetailRequestModel r, CancellationToken ct)
+        public async Task<ContributorTopicResponseModel> Handle(AddContributorTopicDetailRequestModel r, CancellationToken ct)
         {
             var topic = await _context.HealthWikiTopicRequests.FirstOrDefaultAsync(t => t.TopicId == r.TopicId && t.ContributorId == r.ContributorId, ct);
-            if (topic == null) return ApiResult<MyTopicInfo>.Fail(404, "Topic not found.");
+            if (topic == null) return ContributorTopicResponseModel.Fail(404, "Topic not found.");
             if (topic.Status != HealthWikiTopicRequest.StatusNeedsDetail)
-                return ApiResult<MyTopicInfo>.Fail(409, "The team has not asked for more detail on this one.");
+                return ContributorTopicResponseModel.Fail(409, "The team has not asked for more detail on this one.");
 
             var outline = r.Provided.Contains("outline") ? TopicRules.Clean(r.Outline) : topic.Outline;
             var why = r.Provided.Contains("whyItMatters") ? TopicRules.Clean(r.WhyItMatters) : topic.WhyItMatters;
             var condition = r.Provided.Contains("conditionSlug") ? TopicRules.Clean(r.ConditionSlug)?.ToLowerInvariant() : topic.ConditionSlug;
             var references = r.Provided.Contains("references") ? TopicRules.Clean(r.References) : topic.References;
-            if (outline == null || why == null) return ApiResult<MyTopicInfo>.Fail(400, "The outline and why it matters cannot be empty.");
+            if (outline == null || why == null) return ContributorTopicResponseModel.Fail(400, "The outline and why it matters cannot be empty.");
             var invalid = TopicRules.Validate(outline, why, condition, references);
-            if (invalid != null) return ApiResult<MyTopicInfo>.Fail(400, invalid);
+            if (invalid != null) return ContributorTopicResponseModel.Fail(400, invalid);
 
             topic.Outline = outline;
             topic.WhyItMatters = why;
@@ -138,11 +138,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             var name = await _context.HealthWikiContributors.Where(c => c.ContributorId == r.ContributorId).Select(c => c.FullName).FirstOrDefaultAsync(ct);
             HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityTopic, topic.TopicId, "DETAIL_ADDED", HealthWikiAudit.ActorContributor, name);
             await _context.SaveChangesAsync(ct);
-            return ApiResult<MyTopicInfo>.Ok(ContributorPortalMapper.ToMyTopic(topic, await TopicRules.ArticleSlug(_context, topic.ArticleId, ct)));
+            return ContributorTopicResponseModel.Ok(ContributorPortalMapper.ToMyTopic(topic, await TopicRules.ArticleSlug(_context, topic.ArticleId, ct)));
         }
     }
 
-    public class GetTopicRequestsAdminHandler : IRequestHandler<GetTopicRequestsAdminRequestModel, ApiResult<List<TopicRequestAdminInfo>>>
+    public class GetTopicRequestsAdminHandler : IRequestHandler<GetTopicRequestsAdminRequestModel, GetTopicRequestsAdminResponseModel>
     {
         private readonly AppDbContext _context;
 
@@ -151,7 +151,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             _context = context;
         }
 
-        public async Task<ApiResult<List<TopicRequestAdminInfo>>> Handle(GetTopicRequestsAdminRequestModel request, CancellationToken ct)
+        public async Task<GetTopicRequestsAdminResponseModel> Handle(GetTopicRequestsAdminRequestModel request, CancellationToken ct)
         {
             var query = _context.HealthWikiTopicRequests.AsNoTracking().AsQueryable();
             if (request.TopicId.HasValue) query = query.Where(t => t.TopicId == request.TopicId.Value);
@@ -161,8 +161,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             var topics = await query.OrderByDescending(t => t.UpdatedAt).Take(500).ToListAsync(ct);
             var result = new List<TopicRequestAdminInfo>();
             foreach (var t in topics) result.Add(ContributorPortalMapper.ToAdminTopic(t, await TopicRules.ArticleSlug(_context, t.ArticleId, ct)));
-            if (request.TopicId.HasValue && result.Count == 0) return ApiResult<List<TopicRequestAdminInfo>>.Fail(404, "Topic request not found.");
-            return ApiResult<List<TopicRequestAdminInfo>>.Ok(result);
+            if (request.TopicId.HasValue && result.Count == 0) return GetTopicRequestsAdminResponseModel.Fail(404, "Topic request not found.");
+            return GetTopicRequestsAdminResponseModel.Ok(result);
         }
     }
 
@@ -171,7 +171,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     /// DECLINE needs a reason; ASK_DETAIL needs a message and puts the request back with the contributor. A decided request is final
     /// until the contributor answers a "needs detail".
     /// </summary>
-    public class DecideTopicHandler : IRequestHandler<DecideTopicRequestModel, ApiResult<TopicRequestAdminInfo>>
+    public class DecideTopicHandler : IRequestHandler<DecideTopicRequestModel, DecideTopicResponseModel>
     {
         private readonly AppDbContext _context;
 
@@ -180,12 +180,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             _context = context;
         }
 
-        public async Task<ApiResult<TopicRequestAdminInfo>> Handle(DecideTopicRequestModel r, CancellationToken ct)
+        public async Task<DecideTopicResponseModel> Handle(DecideTopicRequestModel r, CancellationToken ct)
         {
             var topic = await _context.HealthWikiTopicRequests.FirstOrDefaultAsync(t => t.TopicId == r.TopicId, ct);
-            if (topic == null) return ApiResult<TopicRequestAdminInfo>.Fail(404, "Topic request not found.");
+            if (topic == null) return DecideTopicResponseModel.Fail(404, "Topic request not found.");
             if (topic.Status != HealthWikiTopicRequest.StatusSubmitted)
-                return ApiResult<TopicRequestAdminInfo>.Fail(409, "This request is already decided.");
+                return DecideTopicResponseModel.Fail(409, "This request is already decided.");
 
             var actor = HealthWikiAuditLog.ActorOrDefault(r.ActorName);
             var note = r.Note?.Trim();
@@ -198,9 +198,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 {
                     var author = await _context.HealthWikiContributors.AsNoTracking().FirstOrDefaultAsync(c => c.ContributorId == topic.ContributorId, ct);
                     if (author == null || author.Status == HealthWikiContributor.StatusRejected)
-                        return ApiResult<TopicRequestAdminInfo>.Fail(409, "This contributor can no longer write articles.");
+                        return DecideTopicResponseModel.Fail(409, "This contributor can no longer write articles.");
                     if (!HealthArticleRules.CanAuthor(topic.Type, author.Type))
-                        return ApiResult<TopicRequestAdminInfo>.Fail(409, "This contributor cannot write this type of article.");
+                        return DecideTopicResponseModel.Fail(409, "This contributor cannot write this type of article.");
 
                     articleSlug = await UniqueSlug(ContributorPortalRules.Slugify(topic.Title), ct);
                     var article = new HealthArticle
@@ -217,19 +217,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     break;
                 }
                 case DecideTopicRequestModel.Decline:
-                    if (string.IsNullOrEmpty(note)) return ApiResult<TopicRequestAdminInfo>.Fail(400, "A reason is required so the contributor understands.");
-                    if (note.Length > HealthArticleRules.MaxReasonLength) return ApiResult<TopicRequestAdminInfo>.Fail(400, $"The reason is too long (max {HealthArticleRules.MaxReasonLength} characters).");
+                    if (string.IsNullOrEmpty(note)) return DecideTopicResponseModel.Fail(400, "A reason is required so the contributor understands.");
+                    if (note.Length > HealthArticleRules.MaxReasonLength) return DecideTopicResponseModel.Fail(400, $"The reason is too long (max {HealthArticleRules.MaxReasonLength} characters).");
                     topic.Status = HealthWikiTopicRequest.StatusDeclined;
                     topic.DecisionNote = note;
                     break;
                 case DecideTopicRequestModel.AskDetail:
-                    if (string.IsNullOrEmpty(note)) return ApiResult<TopicRequestAdminInfo>.Fail(400, "Say what detail you need.");
-                    if (note.Length > HealthArticleRules.MaxReasonLength) return ApiResult<TopicRequestAdminInfo>.Fail(400, $"The message is too long (max {HealthArticleRules.MaxReasonLength} characters).");
+                    if (string.IsNullOrEmpty(note)) return DecideTopicResponseModel.Fail(400, "Say what detail you need.");
+                    if (note.Length > HealthArticleRules.MaxReasonLength) return DecideTopicResponseModel.Fail(400, $"The message is too long (max {HealthArticleRules.MaxReasonLength} characters).");
                     topic.Status = HealthWikiTopicRequest.StatusNeedsDetail;
                     topic.DecisionNote = note;
                     break;
                 default:
-                    return ApiResult<TopicRequestAdminInfo>.Fail(400, "action must be ACCEPT, DECLINE or ASK_DETAIL.");
+                    return DecideTopicResponseModel.Fail(400, "action must be ACCEPT, DECLINE or ASK_DETAIL.");
             }
 
             topic.DecidedByName = actor;
@@ -241,9 +241,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
             catch (DbUpdateException)
             {
-                return ApiResult<TopicRequestAdminInfo>.Fail(409, "The request was changed at the same moment. Reload it and try again.");
+                return DecideTopicResponseModel.Fail(409, "The request was changed at the same moment. Reload it and try again.");
             }
-            return ApiResult<TopicRequestAdminInfo>.Ok(ContributorPortalMapper.ToAdminTopic(topic, articleSlug ?? await TopicRules.ArticleSlug(_context, topic.ArticleId, ct)));
+            return DecideTopicResponseModel.Ok(ContributorPortalMapper.ToAdminTopic(topic, articleSlug ?? await TopicRules.ArticleSlug(_context, topic.ArticleId, ct)));
         }
 
         private async Task<string> UniqueSlug(string baseSlug, CancellationToken ct)

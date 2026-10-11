@@ -1,7 +1,6 @@
 using EasyHMSAPI.Api.Common;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
-using EasyHMSAPI.Application.ResponseModels;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -169,12 +168,15 @@ namespace EasyHMSAPI.Api.Controllers
 
         private Guid Me() => ContributorSessionFilter.ContributorId(HttpContext)!.Value;
 
-        private async Task<IActionResult> Reply<T>(Func<Task<ApiResult<T>>> send, string doing)
+        // 200/201 with the data, or the status with {"message"} for the person to read.
+        private IActionResult Respond(bool success, int status, string? message, object? data) =>
+            success ? StatusCode(status, data) : StatusCode(status, new { message });
+
+        private async Task<IActionResult> Reply<T>(Func<Task<T>> send, Func<T, IActionResult> toResult, string doing)
         {
             try
             {
-                var res = await send();
-                return res.Success ? StatusCode(res.StatusCode, res.Data) : StatusCode(res.StatusCode, new { message = res.Message });
+                return toResult(await send());
             }
             catch (Exception ex)
             {
@@ -191,42 +193,42 @@ namespace EasyHMSAPI.Api.Controllers
             Qualification = body?.Qualification, RegistrationNumber = body?.RegistrationNumber, RegistrationCouncil = body?.RegistrationCouncil,
             RegistrationYear = body?.RegistrationYear, RoleTitle = body?.RoleTitle, Organisation = body?.Organisation,
             FieldOfWork = body?.FieldOfWork, Consent = body?.Consent ?? false,
-        }), "saving a contributor profile");
+        }), r => Respond(r.Success, r.StatusCode, r.Message, r.Profile), "saving a contributor profile");
 
         [HttpGet("me")]
         [ServiceFilter(typeof(ContributorSessionFilter))]
-        public Task<IActionResult> GetMe() => Reply(() => _mediator.Send(new GetContributorMeRequestModel { ContributorId = Me() }), "reading a contributor profile");
+        public Task<IActionResult> GetMe() => Reply(() => _mediator.Send(new GetContributorMeRequestModel { ContributorId = Me() }), r => Respond(r.Success, r.StatusCode, r.Message, r.Profile), "reading a contributor profile");
 
         [HttpGet("articles")]
         [ServiceFilter(typeof(ContributorSessionFilter))]
-        public Task<IActionResult> Articles() => Reply(() => _mediator.Send(new GetContributorArticlesRequestModel { ContributorId = Me() }), "listing a contributor's articles");
+        public Task<IActionResult> Articles() => Reply(() => _mediator.Send(new GetContributorArticlesRequestModel { ContributorId = Me() }), r => Respond(r.Success, r.StatusCode, r.Message, r.Articles), "listing a contributor's articles");
 
         [HttpGet("articles/{slug}")]
         [ServiceFilter(typeof(ContributorSessionFilter))]
-        public Task<IActionResult> Article(string slug) => Reply(() => _mediator.Send(new GetContributorArticleRequestModel { ContributorId = Me(), Slug = slug }), "reading a contributor's article");
+        public Task<IActionResult> Article(string slug) => Reply(() => _mediator.Send(new GetContributorArticleRequestModel { ContributorId = Me(), Slug = slug }), r => Respond(r.Success, r.StatusCode, r.Message, r.Article), "reading a contributor's article");
 
         [HttpPost("articles")]
         [ServiceFilter(typeof(ContributorSessionFilter))]
-        public Task<IActionResult> CreateArticle([FromBody] ArticleBody body) => Reply(() => _mediator.Send(ToSave(null, body)), "creating an article");
+        public Task<IActionResult> CreateArticle([FromBody] ArticleBody body) => Reply(() => _mediator.Send(ToSave(null, body)), r => Respond(r.Success, r.StatusCode, r.Message, r.Article), "creating an article");
 
         [HttpPatch("articles/{slug}")]
         [ServiceFilter(typeof(ContributorSessionFilter))]
-        public Task<IActionResult> UpdateArticle(string slug, [FromBody] ArticleBody body) => Reply(() => _mediator.Send(ToSave(slug, body)), "editing an article");
+        public Task<IActionResult> UpdateArticle(string slug, [FromBody] ArticleBody body) => Reply(() => _mediator.Send(ToSave(slug, body)), r => Respond(r.Success, r.StatusCode, r.Message, r.Article), "editing an article");
 
         [HttpPost("articles/{slug}/submit")]
         [ServiceFilter(typeof(ContributorSessionFilter))]
-        public Task<IActionResult> SubmitArticle(string slug) => Reply(() => _mediator.Send(new SubmitContributorArticleRequestModel { ContributorId = Me(), Slug = slug }), "submitting an article");
+        public Task<IActionResult> SubmitArticle(string slug) => Reply(() => _mediator.Send(new SubmitContributorArticleRequestModel { ContributorId = Me(), Slug = slug }), r => Respond(r.Success, r.StatusCode, r.Message, r.Article), "submitting an article");
 
         [HttpPost("articles/{slug}/review")]
         [ServiceFilter(typeof(ContributorSessionFilter))]
         public Task<IActionResult> ReviewArticle(string slug, [FromBody] ReviewBody body) => Reply(() => _mediator.Send(new ReviewContributorArticleRequestModel
         {
             ContributorId = Me(), Slug = slug, Decision = body?.Decision, Comment = body?.Comment, AccuracyConfirmed = body?.AccuracyConfirmed ?? false,
-        }), "reviewing an article");
+        }), r => Respond(r.Success, r.StatusCode, r.Message, r.Article), "reviewing an article");
 
         [HttpGet("topics")]
         [ServiceFilter(typeof(ContributorSessionFilter))]
-        public Task<IActionResult> Topics() => Reply(() => _mediator.Send(new GetContributorTopicsRequestModel { ContributorId = Me() }), "listing topics");
+        public Task<IActionResult> Topics() => Reply(() => _mediator.Send(new GetContributorTopicsRequestModel { ContributorId = Me() }), r => Respond(r.Success, r.StatusCode, r.Message, r.Topics), "listing topics");
 
         [HttpPost("topics")]
         [ServiceFilter(typeof(ContributorSessionFilter))]
@@ -234,7 +236,7 @@ namespace EasyHMSAPI.Api.Controllers
         {
             ContributorId = Me(), Title = body?.Title, Type = body?.Type, Outline = body?.Outline, WhyItMatters = body?.WhyItMatters,
             ConditionSlug = body?.ConditionSlug, References = body?.References,
-        }), "creating a topic");
+        }), r => Respond(r.Success, r.StatusCode, r.Message, r.Topic), "creating a topic");
 
         // Only the fields sent are changed.
         [HttpPatch("topics/{id:guid}")]
@@ -248,7 +250,7 @@ namespace EasyHMSAPI.Api.Controllers
                 ContributorId = Me(), TopicId = id, Outline = Text("outline"), WhyItMatters = Text("whyItMatters"),
                 ConditionSlug = Text("conditionSlug"), References = Text("references"), Provided = provided,
             });
-        }, "adding topic detail");
+        }, r => Respond(r.Success, r.StatusCode, r.Message, r.Topic), "adding topic detail");
 
         private SaveContributorArticleRequestModel ToSave(string? slug, ArticleBody? b) => new()
         {
