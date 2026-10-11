@@ -179,6 +179,8 @@ builder.Services.AddScoped<IHealthArticleService, HealthArticleService>();
 builder.Services.AddScoped<IHealthArticleReviewService, HealthArticleReviewService>();
 builder.Services.AddScoped<IHealthWikiStaffService, HealthWikiStaffService>();
 builder.Services.AddScoped<IHealthArticleStatsService, HealthArticleStatsService>();
+builder.Services.AddSingleton<IHealthWikiImageStore, HealthWikiImageStore>();
+builder.Services.AddScoped<IHealthWikiImageService, HealthWikiImageService>();
 builder.Services.AddScoped<IUsageLimitService, UsageLimitService>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IPatientTokenValidator, EasyHMSAPI.Application.Services.Implementations.PatientTokenValidator>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IGeoIpLookupService, EasyHMSAPI.Application.Services.Implementations.IpApiGeoLookupService>();

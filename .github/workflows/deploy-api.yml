@@ -81,6 +81,12 @@
 #                           route (articles, contributors, topic requests). Unset = those endpoints
 #                           reject every call (fail closed, 503); public reads are unaffected.
 #                           The same value goes into the CMS API's own secrets.
+#     DEV_HEALTHWIKI_BUCKET / PROD_HEALTHWIKI_BUCKET (variables, optional)
+#                           HealthWiki:ImageBucket — the bucket for Health Wiki article images, apart from
+#                           the patient-file bucket. Defaults nexeagle-healthwiki-dev / -prod. It uses the
+#                           same Storage:S3:* credentials, which must be allowed to write to it, and the
+#                           bucket must let anyone read single files (never list them). Unset or without
+#                           access: image upload answers 503 / 502 and nothing else is affected.
 #     DEV_DOCTORDEKHO_URL / PROD_DOCTORDEKHO_URL (variables, optional)
 #                           HealthWiki:ContributorBaseUrl — the Doctor Dekho site's public address,
 #                           used to build the invitation links sent to Health Wiki contributors
@@ -229,6 +235,7 @@ jobs:
           PROXY_SECRET:    ${{ secrets.INTERNAL_PROXY_SECRET }}
           HEALTH_ARTICLES_KEY: ${{ secrets.INTERNAL_HEALTH_ARTICLES_KEY }}
           HEALTHWIKI_BASE_URL: ${{ vars.DEV_DOCTORDEKHO_URL || 'https://doctordekho-dev.nexeagle.com' }}
+          HEALTHWIKI_IMAGE_BUCKET: ${{ vars.DEV_HEALTHWIKI_BUCKET || 'nexeagle-healthwiki-dev' }}
           WHATSAPP_BOT_BASE_URL: ${{ vars.WHATSAPP_BOT_BASE_URL || 'https://whatsapp-dev-api.nexeagle.com' }}
         with:
           host: ${{ secrets.DEV_SSH_HOST }}
@@ -236,7 +243,7 @@ jobs:
           password: ${{ secrets.DEV_SSH_PASSWORD }}
           port: 22
           command_timeout: 10m
-          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,JWT_ISSUER,JWT_AUDIENCE,OTP_PEPPER,SMTP_PW,TWILIO_SID,TWILIO_TOKEN,TWILIO_PHONE,WHATSAPP_TOKEN,WHATSAPP_ENABLED,WHATSAPP_API_URL,OPENAI_KEY,DEEPGRAM_KEY,GROQ_KEY,ABDM_CLIENT_ID,ABDM_CLIENT_SECRET,INVITATION_URL,STORAGE_PROVIDER,S3_SERVICE_URL,S3_ACCESS_KEY,S3_SECRET_KEY,S3_BUCKET,S3_PREFIX,CMS_SERVICE_KEY,CMS_BASE_URL,PROXY_SECRET,HEALTH_ARTICLES_KEY,HEALTHWIKI_BASE_URL,WHATSAPP_BOT_BASE_URL
+          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,JWT_ISSUER,JWT_AUDIENCE,OTP_PEPPER,SMTP_PW,TWILIO_SID,TWILIO_TOKEN,TWILIO_PHONE,WHATSAPP_TOKEN,WHATSAPP_ENABLED,WHATSAPP_API_URL,OPENAI_KEY,DEEPGRAM_KEY,GROQ_KEY,ABDM_CLIENT_ID,ABDM_CLIENT_SECRET,INVITATION_URL,STORAGE_PROVIDER,S3_SERVICE_URL,S3_ACCESS_KEY,S3_SECRET_KEY,S3_BUCKET,S3_PREFIX,CMS_SERVICE_KEY,CMS_BASE_URL,PROXY_SECRET,HEALTH_ARTICLES_KEY,HEALTHWIKI_BASE_URL,HEALTHWIKI_IMAGE_BUCKET,WHATSAPP_BOT_BASE_URL
           script: |
             set -e
             : "${DB_CONN:?DEV_DB_CONNECTION is empty}"
@@ -278,6 +285,7 @@ jobs:
             add 'Internal__ProxyForwardingSecret'        "$PROXY_SECRET"
             add 'Internal__HealthArticlesKey'            "$HEALTH_ARTICLES_KEY"
             add 'HealthWiki__ContributorBaseUrl'         "$HEALTHWIKI_BASE_URL"
+            add 'HealthWiki__ImageBucket'                "$HEALTHWIKI_IMAGE_BUCKET"
             add 'WhatsAppBot__BaseUrl'                   "$WHATSAPP_BOT_BASE_URL"
 
             IMAGE_LC=$(printf '%s' "$IMAGE" | tr '[:upper:]' '[:lower:]')
@@ -363,6 +371,7 @@ jobs:
           PROXY_SECRET:    ${{ secrets.INTERNAL_PROXY_SECRET }}
           HEALTH_ARTICLES_KEY: ${{ secrets.INTERNAL_HEALTH_ARTICLES_KEY }}
           HEALTHWIKI_BASE_URL: ${{ vars.PROD_DOCTORDEKHO_URL || 'https://doctordekho.nexeagle.com' }}
+          HEALTHWIKI_IMAGE_BUCKET: ${{ vars.PROD_HEALTHWIKI_BUCKET || 'nexeagle-healthwiki-prod' }}
           WHATSAPP_BOT_BASE_URL: ${{ vars.WHATSAPP_BOT_BASE_URL }}
         run: |
           : "${DB_CONN:?PROD_DB_CONNECTION is empty}"
@@ -405,6 +414,7 @@ jobs:
           add 'Internal__ProxyForwardingSecret'        "$PROXY_SECRET"
           add 'Internal__HealthArticlesKey'            "$HEALTH_ARTICLES_KEY"
           add 'HealthWiki__ContributorBaseUrl'         "$HEALTHWIKI_BASE_URL"
+          add 'HealthWiki__ImageBucket'                "$HEALTHWIKI_IMAGE_BUCKET"
           add 'WhatsAppBot__BaseUrl'                   "$WHATSAPP_BOT_BASE_URL"
 
       - name: Copy prod.env to Prod VM

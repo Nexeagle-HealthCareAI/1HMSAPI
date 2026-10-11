@@ -87,6 +87,24 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // One image for an article (the CMS editor's cover or inline image). Multipart, JPG / PNG / WebP, up to 2 MB.
+        [HttpPost("images")]
+        [RequestSizeLimit(3 * 1024 * 1024)]
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> UploadImage(IFormFile? file)
+        {
+            try
+            {
+                var res = await _mediator.Send(new UploadHealthArticleImageRequestModel { File = file, ActorName = Actor() });
+                return res.Success ? StatusCode(res.StatusCode, new { url = res.Url }) : StatusCode(res.StatusCode, new { message = res.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error uploading a Health Wiki image");
+                return StatusCode(500, new { message = "An error occurred while uploading the image." });
+            }
+        }
+
         // Create. 201 / 400 / 409 (slug taken).
         [HttpPost]
         public Task<IActionResult> Create([FromBody] JsonElement body) => Save(body, isCreate: true, slugFromRoute: null);

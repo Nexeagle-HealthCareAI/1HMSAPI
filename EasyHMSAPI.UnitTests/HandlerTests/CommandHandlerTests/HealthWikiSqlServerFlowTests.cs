@@ -11,7 +11,9 @@ using EasyHMSAPI.Application.Services.Implementations;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Configuration;
 using Moq;
 using NUnit.Framework;
@@ -206,6 +208,23 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(after.Article.DailyViews[13], Is.EqualTo(2));
             Assert.That(after.Article.Views, Is.EqualTo(2));
             Assert.That(after.Article.Likes, Is.EqualTo(2));
+        }
+
+        [Test]
+        public async Task ImageUpload_RecordsTheImageOnSqlServer_WithTheRealConstraints()
+        {
+            var store = new Mock<IHealthWikiImageStore>();
+            store.SetupGet(x => x.IsConfigured).Returns(true);
+            store.Setup(x => x.PutAsync(It.IsAny<string>(), It.IsAny<System.IO.Stream>(), It.IsAny<string>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((string k, System.IO.Stream _, string _, long _, CancellationToken _) => "https://nexeagle-healthwiki-dev.example.net/" + k);
+            var png = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0x0D, 0x49, 0x48, 0x44, 0x52 };
+            var file = new FormFile(new System.IO.MemoryStream(png), 0, png.Length, "file", "cover.png");
+            var service = new HealthWikiImageService(_db, store.Object, NullLogger<HealthWikiImageService>.Instance);
+
+            var res = await service.UploadAsync(file, null, "CMS " + Guid.NewGuid().ToString("N")[..6], Ct);
+
+            Assert.That(res.Success, Is.True, res.Message);
+            Assert.That(_db.HealthArticleImages.Any(i => i.Url == res.Url && i.ContentType == "image/png" && i.SizeBytes == png.Length), Is.True);
         }
     }
 }

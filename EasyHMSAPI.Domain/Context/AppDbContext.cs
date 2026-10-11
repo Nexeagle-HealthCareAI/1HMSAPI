@@ -240,6 +240,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<ContributorOtp> ContributorOtps { get; set; }
         public DbSet<HealthArticleReview> HealthArticleReviews { get; set; }
         public DbSet<HealthArticleLike> HealthArticleLikes { get; set; }
+        public DbSet<HealthArticleImage> HealthArticleImages { get; set; }
         public DbSet<HealthArticleStatDaily> HealthArticleStatDailies { get; set; }
         public DbSet<ContributorSession> ContributorSessions { get; set; }
 
@@ -930,6 +931,13 @@ namespace EasyHMSAPI.Domain.Context
                 entity.ToTable("HealthArticleReview");
                 entity.HasKey(r => r.ReviewId);
                 entity.Property(r => r.DecidedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<HealthArticleImage>(entity =>
+            {
+                entity.ToTable("HealthArticleImage");
+                entity.HasKey(i => i.ImageId);
+                entity.Property(i => i.CreatedAt).HasColumnType("datetime2(3)");
             });
 
             modelBuilder.Entity<HealthArticleLike>(entity =>

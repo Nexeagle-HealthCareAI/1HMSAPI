@@ -226,6 +226,16 @@ namespace EasyHMSAPI.Api.Controllers
             ContributorId = Me(), Slug = slug, Decision = body?.Decision, Comment = body?.Comment, AccuracyConfirmed = body?.AccuracyConfirmed ?? false,
         }), r => Respond(r.Success, r.StatusCode, r.Message, r.Article), "reviewing an article");
 
+        // Multipart upload of one image (JPG, PNG or WebP, up to 2 MB). Returns the https address to use in the article.
+        [HttpPost("images")]
+        [ServiceFilter(typeof(ContributorSessionFilter))]
+        [RequestSizeLimit(3 * 1024 * 1024)]
+        [Consumes("multipart/form-data")]
+        public Task<IActionResult> UploadImage(IFormFile? file) => Reply(() => _mediator.Send(new UploadContributorImageRequestModel
+        {
+            ContributorId = Me(), File = file,
+        }), r => r.Success ? StatusCode(r.StatusCode, new { url = r.Url }) : StatusCode(r.StatusCode, new { message = r.Message }), "uploading an image");
+
         [HttpGet("topics")]
         [ServiceFilter(typeof(ContributorSessionFilter))]
         public Task<IActionResult> Topics() => Reply(() => _mediator.Send(new GetContributorTopicsRequestModel { ContributorId = Me() }), r => Respond(r.Success, r.StatusCode, r.Message, r.Topics), "listing topics");
