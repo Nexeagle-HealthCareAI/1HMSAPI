@@ -7,6 +7,7 @@ using EasyHMSAPI.Application.Handlers.CommandHandlers;
 using EasyHMSAPI.Application.Handlers.QueryHandlers;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
+using EasyHMSAPI.Application.Services.Implementations;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
 using Microsoft.EntityFrameworkCore;
@@ -94,11 +95,11 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             await new VerifyContributorHandler(_db).Handle(new VerifyContributorRequestModel { ContributorId = authorId }, Ct);
 
             // Author writes, CMS assigns the reviewer, author submits, reviewer approves: the article is live.
-            var created = await new SaveContributorArticleHandler(_db).Handle(new SaveContributorArticleRequestModel
+            var created = await new SaveContributorArticleHandler(_db, new HealthArticleService(_db)).Handle(new SaveContributorArticleRequestModel
             { ContributorId = authorId, Type = "MEDICAL", Title = "BP " + tag, Description = "d", Content = "## Hello" }, Ct);
             Assert.That(created.StatusCode, Is.EqualTo(201), created.Message);
             var slug = created.Data!.Slug;
-            var assign = await new SaveHealthArticleHandler(_db).Handle(new SaveHealthArticleRequestModel { Slug = slug, ReviewerContributorId = reviewerId, ActorName = "Priya" }, Ct);
+            var assign = await new SaveHealthArticleHandler(new HealthArticleService(_db)).Handle(new SaveHealthArticleRequestModel { Slug = slug, ReviewerContributorId = reviewerId, ActorName = "Priya" }, Ct);
             Assert.That(assign.Success, Is.True, assign.Message);
             Assert.That((await new SubmitContributorArticleHandler(_db).Handle(new SubmitContributorArticleRequestModel { ContributorId = authorId, Slug = slug }, Ct)).Success, Is.True);
 
@@ -114,7 +115,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(pub.Author!.FullName, Is.EqualTo("Dr. Author " + tag));
 
             // An edit to the live article stays pending; the live text is untouched.
-            await new SaveContributorArticleHandler(_db).Handle(new SaveContributorArticleRequestModel
+            await new SaveContributorArticleHandler(_db, new HealthArticleService(_db)).Handle(new SaveContributorArticleRequestModel
             { ContributorId = authorId, Slug = slug, Type = "MEDICAL", Title = "BP edited " + tag, Content = "## Edited" }, Ct);
             Assert.That((await new GetPublicHealthArticlesHandler(_db).Handle(new GetPublicHealthArticlesRequestModel { Slug = slug }, Ct)).Articles.Single().Title, Is.EqualTo("BP " + tag));
             var admin = (await new GetHealthArticlesAdminHandler(_db).Handle(new GetHealthArticlesAdminRequestModel { Slug = slug }, Ct)).Articles.Single();

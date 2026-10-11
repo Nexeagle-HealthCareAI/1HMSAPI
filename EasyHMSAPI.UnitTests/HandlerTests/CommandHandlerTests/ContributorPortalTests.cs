@@ -8,6 +8,7 @@ using EasyHMSAPI.Application.Handlers.QueryHandlers;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.Services;
+using EasyHMSAPI.Application.Services.Implementations;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using NUnit.Framework;
@@ -52,7 +53,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 
         private async Task<string> NewDraft(HealthWikiContributor author, string type = "MEDICAL", string title = "Living with High Blood Pressure")
         {
-            var res = await new SaveContributorArticleHandler(_context).Handle(Draft(author.ContributorId, null, type, title), Ct);
+            var res = await new SaveContributorArticleHandler(_context, new HealthArticleService(_context)).Handle(Draft(author.ContributorId, null, type, title), Ct);
             Assert.That(res.Success, Is.True, res.Message);
             return res.Data!.Slug;
         }
@@ -207,8 +208,8 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var pending = Person(status: "PENDING");
             var invited = Person(status: "INVITED", name: "Not yet");
 
-            var ok = await new SaveContributorArticleHandler(_context).Handle(Draft(pending.ContributorId), Ct);
-            var no = await new SaveContributorArticleHandler(_context).Handle(Draft(invited.ContributorId), Ct);
+            var ok = await new SaveContributorArticleHandler(_context, new HealthArticleService(_context)).Handle(Draft(pending.ContributorId), Ct);
+            var no = await new SaveContributorArticleHandler(_context, new HealthArticleService(_context)).Handle(Draft(invited.ContributorId), Ct);
 
             Assert.That(ok.StatusCode, Is.EqualTo(201));
             Assert.That(ok.Data!.Status, Is.EqualTo("DRAFT"));
@@ -231,7 +232,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         {
             var writer = Person("WRITER", "VERIFIED", "W");
             var worker = Person("HEALTH_WORKER", "VERIFIED", "H");
-            var h = new SaveContributorArticleHandler(_context);
+            var h = new SaveContributorArticleHandler(_context, new HealthArticleService(_context));
 
             Assert.That((await h.Handle(Draft(writer.ContributorId, type: "MEDICAL"), Ct)).StatusCode, Is.EqualTo(403));
             Assert.That((await h.Handle(Draft(worker.ContributorId, type: "MEDICAL"), Ct)).StatusCode, Is.EqualTo(403));
@@ -242,7 +243,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public async Task Create_ADraftMayHaveNoTextYet_ButNeedsATitle()
         {
             var c = Person();
-            var h = new SaveContributorArticleHandler(_context);
+            var h = new SaveContributorArticleHandler(_context, new HealthArticleService(_context));
 
             Assert.That((await h.Handle(Draft(c.ContributorId, content: ""), Ct)).StatusCode, Is.EqualTo(201));
             Assert.That((await h.Handle(Draft(c.ContributorId, title: " "), Ct)).StatusCode, Is.EqualTo(400));
@@ -252,7 +253,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public async Task Create_CoverNeedsAltText_AndOnlyHttps()
         {
             var c = Person();
-            var h = new SaveContributorArticleHandler(_context);
+            var h = new SaveContributorArticleHandler(_context, new HealthArticleService(_context));
             var noAlt = Draft(c.ContributorId); noAlt.CoverImageUrl = "https://cdn.example.com/a.jpg";
             var http = Draft(c.ContributorId); http.CoverImageUrl = "http://cdn.example.com/a.jpg"; http.CoverImageAlt = "x";
 
@@ -267,7 +268,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var other = Person(name: "Other");
             var reviewer = Person(name: "Reviewer");
             var slug = await NewDraft(author);
-            var h = new SaveContributorArticleHandler(_context);
+            var h = new SaveContributorArticleHandler(_context, new HealthArticleService(_context));
 
             var edited = await h.Handle(Draft(author.ContributorId, slug, title: "New title"), Ct);
             var stranger = await h.Handle(Draft(other.ContributorId, slug, title: "Hijack"), Ct);
@@ -287,7 +288,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             await Review(reviewer, slug, "APPROVE");
             Assert.That((await PublicList()).Single().Title, Is.EqualTo("Living with High Blood Pressure"));
 
-            var edit = await new SaveContributorArticleHandler(_context).Handle(Draft(author.ContributorId, slug, title: "High Blood Pressure, updated"), Ct);
+            var edit = await new SaveContributorArticleHandler(_context, new HealthArticleService(_context)).Handle(Draft(author.ContributorId, slug, title: "High Blood Pressure, updated"), Ct);
             Assert.That(edit.Data!.Status, Is.EqualTo("PUBLISHED"));
             Assert.That(edit.Data.HasPendingRevision, Is.True);
             Assert.That(edit.Data.Title, Is.EqualTo("High Blood Pressure, updated"), "the author sees their working copy");
@@ -311,7 +312,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var pending = Person(status: "PENDING", name: "Pending");
             var verified = Person(name: "Verified");
             var slugP = await NewDraft(pending);
-            var slugV = await new SaveContributorArticleHandler(_context).Handle(Draft(verified.ContributorId, content: ""), Ct);
+            var slugV = await new SaveContributorArticleHandler(_context, new HealthArticleService(_context)).Handle(Draft(verified.ContributorId, content: ""), Ct);
             var h = new SubmitContributorArticleHandler(_context);
 
             Assert.That((await h.Handle(new SubmitContributorArticleRequestModel { ContributorId = pending.ContributorId, Slug = slugP }, Ct)).StatusCode, Is.EqualTo(403));
@@ -477,7 +478,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var author = Person(name: "Author"); var reviewer = Person(name: "Reviewer");
             var slug = await InReview(author, reviewer);
             await Review(reviewer, slug, "APPROVE");
-            await new SaveContributorArticleHandler(_context).Handle(Draft(author.ContributorId, slug, title: "Edited"), Ct);
+            await new SaveContributorArticleHandler(_context, new HealthArticleService(_context)).Handle(Draft(author.ContributorId, slug, title: "Edited"), Ct);
             await new SubmitContributorArticleHandler(_context).Handle(new SubmitContributorArticleRequestModel { ContributorId = author.ContributorId, Slug = slug }, Ct);
             var row = _context.HealthWikiContributors.Single(c => c.ContributorId == reviewer.ContributorId);
             row.Status = "PENDING"; await _context.SaveChangesAsync(); // their registration is being re-checked
@@ -494,7 +495,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var author = Person(name: "Author"); var reviewer = Person(name: "Reviewer");
             var slug = await InReview(author, reviewer);
             await Review(reviewer, slug, "APPROVE");
-            await new SaveContributorArticleHandler(_context).Handle(Draft(author.ContributorId, slug, title: "Edited"), Ct);
+            await new SaveContributorArticleHandler(_context, new HealthArticleService(_context)).Handle(Draft(author.ContributorId, slug, title: "Edited"), Ct);
             await new SubmitContributorArticleHandler(_context).Handle(new SubmitContributorArticleRequestModel { ContributorId = author.ContributorId, Slug = slug }, Ct);
 
             var res = await Review(reviewer, slug, "REQUEST_CHANGES", "The new dose is wrong, please check.");
@@ -512,7 +513,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var author = Person(name: "Author");
             var slug = await NewDraft(author);
 
-            var res = await new SaveHealthArticleHandler(_context).Handle(new SaveHealthArticleRequestModel
+            var res = await new SaveHealthArticleHandler(new HealthArticleService(_context)).Handle(new SaveHealthArticleRequestModel
             { Slug = slug, ReviewerContributorId = author.ContributorId }, Ct);
 
             Assert.That(res.StatusCode, Is.EqualTo(400));
@@ -527,7 +528,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             await Review(reviewer, slug, "APPROVE"); // approved, waiting for verification
             Assert.That(_context.HealthArticles.Single().ApprovedAt, Is.Not.Null);
 
-            var edit = await new SaveHealthArticleHandler(_context).Handle(new SaveHealthArticleRequestModel { Slug = slug, Content = "Quietly changed text" }, Ct);
+            var edit = await new SaveHealthArticleHandler(new HealthArticleService(_context)).Handle(new SaveHealthArticleRequestModel { Slug = slug, Content = "Quietly changed text" }, Ct);
             Assert.That(edit.Success, Is.True, edit.Message);
             Assert.That(_context.HealthArticles.Single().ApprovedAt, Is.Null);
 
@@ -644,7 +645,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var topic = (await new CreateContributorTopicHandler(_context).Handle(Topic(doctor.ContributorId, "Silent heart attack"), Ct)).Data!;
             var accepted = (await new DecideTopicHandler(_context).Handle(new DecideTopicRequestModel { TopicId = topic.Id, Action = "ACCEPT" }, Ct)).Data!;
 
-            var edit = await new SaveContributorArticleHandler(_context).Handle(Draft(doctor.ContributorId, accepted.ArticleSlug, title: "Silent heart attack", content: "My first paragraph."), Ct);
+            var edit = await new SaveContributorArticleHandler(_context, new HealthArticleService(_context)).Handle(Draft(doctor.ContributorId, accepted.ArticleSlug, title: "Silent heart attack", content: "My first paragraph."), Ct);
 
             Assert.That(edit.Success, Is.True, edit.Message);
             Assert.That(_context.HealthWikiTopicRequests.Single().Status, Is.EqualTo("ARTICLE_STARTED"));

@@ -3,6 +3,7 @@ using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Application.Services;
+using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
@@ -32,10 +33,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         };
 
         private readonly AppDbContext _context;
+        private readonly IHealthArticleService _articles;
 
-        public SaveContributorArticleHandler(AppDbContext context)
+        public SaveContributorArticleHandler(AppDbContext context, IHealthArticleService articles)
         {
             _context = context;
+            _articles = articles;
         }
 
         public async Task<ApiResult<MyArticleInfo>> Handle(SaveContributorArticleRequestModel r, CancellationToken ct)
@@ -74,7 +77,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             if (type == null) provided.Remove("type");
             if (isCreate) provided.Add("authorContributorId");
 
-            var result = await new SaveHealthArticleHandler(_context).Handle(new SaveHealthArticleRequestModel
+            var result = await _articles.SaveAsync(new SaveHealthArticleRequestModel
             {
                 IsCreate = isCreate,
                 Slug = slug,

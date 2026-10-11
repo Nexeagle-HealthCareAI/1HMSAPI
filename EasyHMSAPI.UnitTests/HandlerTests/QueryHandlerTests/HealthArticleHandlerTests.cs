@@ -7,6 +7,7 @@ using EasyHMSAPI.Application.Handlers.QueryHandlers;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.Services;
+using EasyHMSAPI.Application.Services.Implementations;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using Microsoft.Extensions.Configuration;
@@ -28,7 +29,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         public void SetUp()
         {
             _context = InMemoryDbContextFactory.CreateContext();
-            _save = new SaveHealthArticleHandler(_context);
+            _save = new SaveHealthArticleHandler(new HealthArticleService(_context));
             _decide = new DecideHealthArticleHandler(_context);
             _get = new GetPublicHealthArticlesHandler(_context);
             _admin = new GetHealthArticlesAdminHandler(_context);
