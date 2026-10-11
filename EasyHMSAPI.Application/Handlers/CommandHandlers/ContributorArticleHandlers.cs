@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Services.Models;
 using EasyHMSAPI.Application.Handlers.QueryHandlers;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
@@ -134,10 +135,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     public class SubmitContributorArticleHandler : IRequestHandler<SubmitContributorArticleRequestModel, ContributorArticleResponseModel>
     {
         private readonly AppDbContext _context;
+        private readonly IHealthWikiNotifier _notifier;
 
-        public SubmitContributorArticleHandler(AppDbContext context)
+        public SubmitContributorArticleHandler(AppDbContext context, IHealthWikiNotifier notifier)
         {
             _context = context;
+            _notifier = notifier;
         }
 
         public async Task<ContributorArticleResponseModel> Handle(SubmitContributorArticleRequestModel r, CancellationToken ct)
@@ -187,6 +190,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             {
                 return ContributorArticleResponseModel.Fail(409, "The article was changed at the same moment. Reload it and try again.");
             }
+
+            // A medical article with a doctor assigned goes to that doctor now (N5). Without one it waits, and the doctor is told when the team assigns them.
+            if (article.Type == HealthArticle.TypeMedical && article.ReviewerContributorId.HasValue)
+                await _notifier.ReviewRequestedAsync(new HealthArticleRef(article.ArticleId, article.Slug,
+                    article.Status == HealthArticle.StatusPublished && revision != null ? revision.Title : article.Title), article.ReviewerContributorId.Value, ct);
 
             var mine = await ContributorArticles.Reload(_context, me.ContributorId, article.Slug, ct);
             return ContributorArticleResponseModel.Ok(mine!);

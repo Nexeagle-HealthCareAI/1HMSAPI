@@ -44,6 +44,9 @@ namespace EasyHMSAPI.Application.Services
             "REVIEWER_ASSIGNED" => "Assigned a reviewer",
             "REVIEWER_APPROVED" => "Reviewer approved",
             "REVIEWER_REQUESTED_CHANGES" => "Reviewer asked for changes",
+            "NOTIFIED" => "Told on WhatsApp",
+            "NOTIFY_FAILED" => "Could not tell on WhatsApp",
+            "NOTIFY_SKIPPED" => "Not told on WhatsApp",
             _ => action,
         };
     }

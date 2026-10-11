@@ -29,8 +29,8 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         public void SetUp()
         {
             _context = InMemoryDbContextFactory.CreateContext();
-            _save = new SaveHealthArticleHandler(new HealthArticleService(_context));
-            _decide = new DecideHealthArticleHandler(_context);
+            _save = new SaveHealthArticleHandler(new HealthArticleService(_context, new RecordingNotifier()));
+            _decide = new DecideHealthArticleHandler(_context, new RecordingNotifier());
             _get = new GetPublicHealthArticlesHandler(_context);
             _admin = new GetHealthArticlesAdminHandler(_context);
             _history = new GetHealthArticleHistoryHandler(_context);

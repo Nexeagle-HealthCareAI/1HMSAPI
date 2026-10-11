@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Services.Models;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services;
@@ -127,11 +128,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     {
         private readonly AppDbContext _context;
         private readonly IHealthWikiStaffService _staff;
+        private readonly IHealthWikiNotifier _notifier;
 
-        public VerifyContributorHandler(AppDbContext context, IHealthWikiStaffService staff)
+        public VerifyContributorHandler(AppDbContext context, IHealthWikiStaffService staff, IHealthWikiNotifier notifier)
         {
             _context = context;
             _staff = staff;
+            _notifier = notifier;
         }
 
         public async Task<ContributorAdminResponseModel> Handle(VerifyContributorRequestModel request, CancellationToken ct)
@@ -165,8 +168,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             c.UpdatedAt = now;
             HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityContributor, c.ContributorId, "VERIFIED", HealthWikiAudit.ActorCmsUser, actor);
             // Articles this doctor approved while their registration was still being checked go live now.
-            await HealthArticlePublisher.PublishWaitingFor(_context, c, actor, now, ct);
+            var wentLive = await HealthArticlePublisher.PublishWaitingFor(_context, c, actor, now, ct);
             await _context.SaveChangesAsync(ct);
+
+            // Saved, so the person is told (N3), and so are the author and reviewer of anything that just went live (N8).
+            await _notifier.ProfileApprovedAsync(c, ct);
+            foreach (var a in wentLive)
+                await _notifier.PublishedAsync(HealthArticleRef.From(a), a.AuthorContributorId, a.ReviewerContributorId, ct);
             return new ContributorAdminResponseModel { Success = true, StatusCode = 200, Contributor = ContributorInvites.ToAdminInfo(c) };
         }
     }
@@ -175,10 +183,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     public class RejectContributorHandler : IRequestHandler<RejectContributorRequestModel, ContributorAdminResponseModel>
     {
         private readonly AppDbContext _context;
+        private readonly IHealthWikiNotifier _notifier;
 
-        public RejectContributorHandler(AppDbContext context)
+        public RejectContributorHandler(AppDbContext context, IHealthWikiNotifier notifier)
         {
             _context = context;
+            _notifier = notifier;
         }
 
         public async Task<ContributorAdminResponseModel> Handle(RejectContributorRequestModel request, CancellationToken ct)
@@ -204,6 +214,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
             HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityContributor, c.ContributorId, "REJECTED", HealthWikiAudit.ActorCmsUser, actor, reason);
             await _context.SaveChangesAsync(ct);
+            await _notifier.ProfileRejectedAsync(c, ct);
             return new ContributorAdminResponseModel { Success = true, StatusCode = 200, Contributor = ContributorInvites.ToAdminInfo(c) };
         }
     }

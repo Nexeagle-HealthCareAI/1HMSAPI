@@ -111,6 +111,23 @@ namespace EasyHMSAPI.Api.Controllers
         public Task<IActionResult> Reject(Guid id, [FromBody] ReasonBody? body) =>
             Run(() => _mediator.Send(new RejectContributorRequestModel { ContributorId = id, Reason = body?.Reason, ActorName = Actor() }), "rejecting a contributor");
 
+        // Runs the daily upkeep now (doctor reminders, closing stale topic requests, clearing old sign-in records) and says what it did.
+        // It also runs by itself once a day; this is for checking it, or for a scheduler outside the API.
+        [HttpPost("maintenance/run")]
+        public async Task<IActionResult> RunMaintenance()
+        {
+            try
+            {
+                var r = await _mediator.Send(new RunHealthWikiMaintenanceRequestModel());
+                return Ok(new { r.RemindersSent, r.RemindersNotSent, r.TopicsClosed, r.OtpsRemoved, r.SessionsRemoved });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error running the Health Wiki upkeep");
+                return StatusCode(500, new { message = "An error occurred. Try again." });
+            }
+        }
+
         // ---- topic requests (CMS inbox) ----------------------------------------------------------------------------
 
         public class DeclineBody { public string? Reason { get; set; } }

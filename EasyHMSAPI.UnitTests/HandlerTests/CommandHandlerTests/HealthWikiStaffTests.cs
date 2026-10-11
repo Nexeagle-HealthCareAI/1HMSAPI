@@ -27,7 +27,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public void SetUp()
         {
             _context = InMemoryDbContextFactory.CreateContext();
-            _staff = new HealthWikiStaffService(_context);
+            _staff = new HealthWikiStaffService(_context, new RecordingNotifier());
         }
 
         [TearDown]
@@ -83,7 +83,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 
         private GetHealthWikiInboxHandler Inbox => new(_context, _staff);
         private GetHealthWikiStaffArticleHandler Detail => new(_context, _staff);
-        private ReviewHealthWikiArticleHandler Review => new(_staff, new HealthArticleReviewService(_context));
+        private ReviewHealthWikiArticleHandler Review => new(_staff, new HealthArticleReviewService(_context, new RecordingNotifier()));
 
         // ------------------------------------------------------------------------------------------ hospital doctor as contributor
 
@@ -166,7 +166,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         {
             var d = AddDoctor();
             var c = (await _staff.EnsureContributorAsync(d.UserID, Ct))!;
-            var verify = new VerifyContributorHandler(_context, _staff);
+            var verify = new VerifyContributorHandler(_context, _staff, new RecordingNotifier());
 
             var refused = await verify.Handle(new VerifyContributorRequestModel { ContributorId = c.ContributorId }, Ct);
             Assert.That(refused.StatusCode, Is.EqualTo(409));

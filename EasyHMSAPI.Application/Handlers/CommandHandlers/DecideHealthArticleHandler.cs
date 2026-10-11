@@ -1,6 +1,8 @@
+using EasyHMSAPI.Application.Services.Models;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services;
+using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
@@ -16,10 +18,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     public class DecideHealthArticleHandler : IRequestHandler<DecideHealthArticleRequestModel, SaveHealthArticleResponseModel>
     {
         private readonly AppDbContext _context;
+        private readonly IHealthWikiNotifier _notifier;
 
-        public DecideHealthArticleHandler(AppDbContext context)
+        public DecideHealthArticleHandler(AppDbContext context, IHealthWikiNotifier notifier)
         {
             _context = context;
+            _notifier = notifier;
         }
 
         public async Task<SaveHealthArticleResponseModel> Handle(DecideHealthArticleRequestModel request, CancellationToken cancellationToken)
@@ -31,6 +35,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             var actor = HealthWikiAuditLog.ActorOrDefault(request.ActorName);
             var reason = request.Reason?.Trim();
             var now = DateTime.UtcNow;
+            // The title the message shows: a pending edit may have a newer one than the live article.
+            var messageTitle = article.Title;
 
             var revision = await _context.HealthArticleRevisions.FirstOrDefaultAsync(
                 r => r.ArticleId == article.ArticleId && (r.Status == HealthArticleRevision.StatusDraft || r.Status == HealthArticleRevision.StatusInReview),
@@ -80,6 +86,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     if (revision != null && revision.Status == HealthArticleRevision.StatusInReview)
                     {
                         // Only the pending edit goes back; the live article is not touched.
+                        messageTitle = revision.Title;
                         revision.Status = HealthArticleRevision.StatusDraft;
                         revision.ReviewerComment = reason;
                         revision.UpdatedAt = now;
@@ -132,6 +139,21 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             catch (DbUpdateException)
             {
                 return Fail(409, "The article was changed by someone else at the same moment. Reload it and try again.");
+            }
+
+            // Saved, so the people are told. Telling them never changes the answer: the notifier does not throw.
+            var about = new HealthArticleRef(article.ArticleId, article.Slug, request.Action == DecideHealthArticleRequestModel.Withdraw ? messageTitle : article.Title);
+            switch (request.Action)
+            {
+                case DecideHealthArticleRequestModel.Approve:
+                    await _notifier.PublishedAsync(about, article.AuthorContributorId, null, cancellationToken);
+                    break;
+                case DecideHealthArticleRequestModel.Withdraw:
+                    await _notifier.ChangesRequestedAsync(about, article.AuthorContributorId, "the NexEagle editorial team", reason!, byEditor: true, cancellationToken);
+                    break;
+                case DecideHealthArticleRequestModel.Unpublish:
+                    await _notifier.ArticleRemovedAsync(about, article.AuthorContributorId, article.ReviewerContributorId, reason!, cancellationToken);
+                    break;
             }
 
             return new SaveHealthArticleResponseModel

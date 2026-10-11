@@ -549,7 +549,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             ok.RegistrationNumber = "48213"; ok.RegistrationCouncil = "Delhi Medical Council";
             var worker = AddContributor(type: "HEALTH_WORKER", status: "PENDING", mobile: "9000000006", name: "Worker");
             await _context.SaveChangesAsync();
-            var h = new VerifyContributorHandler(_context, new HealthWikiStaffService(_context));
+            var h = new VerifyContributorHandler(_context, new HealthWikiStaffService(_context, new RecordingNotifier()), new RecordingNotifier());
 
             Assert.That((await h.Handle(new VerifyContributorRequestModel { ContributorId = invited.ContributorId }, CancellationToken.None)).StatusCode, Is.EqualTo(409));
             Assert.That((await h.Handle(new VerifyContributorRequestModel { ContributorId = noReg.ContributorId }, CancellationToken.None)).StatusCode, Is.EqualTo(400));
@@ -567,7 +567,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var token = await InviteLink(c);
             var code = await Code();
             await Verify.Handle(new ContributorOtpVerifyRequestModel { Mobile = Mobile, Code = code }, CancellationToken.None);
-            var h = new RejectContributorHandler(_context);
+            var h = new RejectContributorHandler(_context, new RecordingNotifier());
 
             Assert.That((await h.Handle(new RejectContributorRequestModel { ContributorId = c.ContributorId }, CancellationToken.None)).StatusCode, Is.EqualTo(400));
             var res = await h.Handle(new RejectContributorRequestModel { ContributorId = c.ContributorId, Reason = "Registration not found." }, CancellationToken.None);
@@ -585,7 +585,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             AddContributor(name: "Dr. A", status: "PENDING");
             AddContributor(type: "WRITER", mobile: "9000000007", name: "B", status: "VERIFIED");
             AddContributor(type: "WRITER", mobile: "9000000008", name: "", status: "INVITED");
-            var h = new GetContributorsAdminHandler(_context, new HealthWikiStaffService(_context));
+            var h = new GetContributorsAdminHandler(_context, new HealthWikiStaffService(_context, new RecordingNotifier()));
 
             var all = await h.Handle(new GetContributorsAdminRequestModel(), CancellationToken.None);
             var pending = await h.Handle(new GetContributorsAdminRequestModel { Status = "pending" }, CancellationToken.None);

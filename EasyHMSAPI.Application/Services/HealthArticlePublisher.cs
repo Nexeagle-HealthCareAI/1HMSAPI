@@ -29,15 +29,15 @@ namespace EasyHMSAPI.Application.Services
 
         /// <summary>
         /// A doctor whose registration the team has just verified: every article they approved while waiting goes live now.
-        /// Returns how many were published.
+        /// Returns the articles that went live, so the caller can tell their author and reviewer once it has saved.
         /// </summary>
-        public static async Task<int> PublishWaitingFor(AppDbContext context, HealthWikiContributor reviewer, string actorName, DateTime now, CancellationToken ct)
+        public static async Task<List<HealthArticle>> PublishWaitingFor(AppDbContext context, HealthWikiContributor reviewer, string actorName, DateTime now, CancellationToken ct)
         {
             var waiting = await context.HealthArticles
                 .Where(a => a.ReviewerContributorId == reviewer.ContributorId && a.Status == HealthArticle.StatusInReview
                             && a.Type == HealthArticle.TypeMedical && a.ApprovedAt != null)
                 .ToListAsync(ct);
-            return waiting.Count(a => TryPublish(context, a, reviewer, actorName, now));
+            return waiting.Where(a => TryPublish(context, a, reviewer, actorName, now)).ToList();
         }
 
         /// <summary>The edit is approved: its text replaces the live text.</summary>

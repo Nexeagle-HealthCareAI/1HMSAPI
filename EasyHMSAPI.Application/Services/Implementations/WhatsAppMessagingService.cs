@@ -1,4 +1,5 @@
 using EasyHMSAPI.Application.Services.Interfaces;
+using EasyHMSAPI.Data.Constants;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System;
@@ -19,6 +20,8 @@ namespace EasyHMSAPI.Application.Services.Implementations
         // Country code (digits only, no '+') prepended to 10-digit numbers.
         // Defaults to "91" (India). Override via WhatsApp:CountryCode in appsettings.
         private readonly string _countryCode;
+        // Language the Health Wiki templates were created in. "en" is English; "en_US" would be English (US) in WhatsApp Manager.
+        private readonly string _healthWikiLanguage;
 
         public WhatsAppMessagingService(HttpClient httpClient, IConfiguration configuration, ILogger<WhatsAppMessagingService> logger)
         {
@@ -28,6 +31,8 @@ namespace EasyHMSAPI.Application.Services.Implementations
             _apiUrl = configuration["WhatsApp:ApiUrl"] ?? string.Empty;
             _accessToken = configuration["WhatsApp:AccessToken"] ?? string.Empty;
             _countryCode = configuration["WhatsApp:CountryCode"] ?? "91";
+            var language = configuration["HealthWiki:TemplateLanguage"]?.Trim();
+            _healthWikiLanguage = string.IsNullOrEmpty(language) || language.StartsWith("<") ? "en" : language;
         }
 
         private bool IsEnabled => !string.IsNullOrEmpty(_isEnabled) && _isEnabled.Trim().ToLower() == "true";
@@ -482,7 +487,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 type = "template",
                 template = new
                 {
-                    name = "health_wiki_invite",
+                    name = HealthWikiConstants.Template.Invite,
                     language = new { code = "en" },
                     components = new object[]
                     {
@@ -501,6 +506,40 @@ namespace EasyHMSAPI.Application.Services.Implementations
             };
 
             return SendAsync(nameof(SendHealthWikiInviteAsync), to, payload);
+        }
+
+        public Task<bool> SendHealthWikiTemplateAsync(string mobileNumber, string templateName, IReadOnlyList<KeyValuePair<string, string>> parameters)
+        {
+            if (!IsEnabled)
+            {
+                _logger.LogInformation("WhatsApp is disabled (WhatsApp:IsEnabled); skipping {Method} {Template} for {Mobile}", nameof(SendHealthWikiTemplateAsync), templateName, MaskMobile(mobileNumber));
+                return Task.FromResult(false);
+            }
+
+            var to = NormalizeToE164(mobileNumber);
+            var payload = new
+            {
+                messaging_product = "whatsapp",
+                to,
+                type = "template",
+                template = new
+                {
+                    name = templateName,
+                    language = new { code = _healthWikiLanguage },
+                    components = new object[]
+                    {
+                        new
+                        {
+                            type = "body",
+                            parameters = parameters
+                                .Select(p => (object)new { type = "text", text = SanitizeTemplateParam(p.Value, 300), parameter_name = p.Key })
+                                .ToArray(),
+                        },
+                    },
+                },
+            };
+
+            return SendAsync($"{nameof(SendHealthWikiTemplateAsync)}:{templateName}", to, payload);
         }
 
         // Normalizes a mobile number to E.164 style (no leading '+') as required by the Meta

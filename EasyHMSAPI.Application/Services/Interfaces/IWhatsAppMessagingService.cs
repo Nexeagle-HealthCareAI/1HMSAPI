@@ -42,5 +42,10 @@ namespace EasyHMSAPI.Application.Services.Interfaces
         /// approved in Meta Business Manager; returns false (no-op) until it exists or while WhatsApp:IsEnabled is off,
         /// so the CMS shows the link to copy instead.</summary>
         Task<bool> SendHealthWikiInviteAsync(string mobileNumber, string contributorName, string task, string url);
+
+        /// <summary>Sends one of the Health Wiki's approved templates (see HealthWikiConstants.Template). Parameters are the template's NAMED body
+        /// variables, matched by name in Meta, so each template's names must be exact. A value is flattened to one line and cut to a safe
+        /// length. Returns false (no-op) while WhatsApp:IsEnabled is off or when Meta refuses (for example a template not approved yet).</summary>
+        Task<bool> SendHealthWikiTemplateAsync(string mobileNumber, string templateName, IReadOnlyList<KeyValuePair<string, string>> parameters);
     }
 }

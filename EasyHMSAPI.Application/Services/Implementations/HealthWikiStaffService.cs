@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Services.Models;
 using EasyHMSAPI.Application.Common;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
@@ -9,10 +10,12 @@ namespace EasyHMSAPI.Application.Services.Implementations
     public class HealthWikiStaffService : IHealthWikiStaffService
     {
         private readonly AppDbContext _context;
+        private readonly IHealthWikiNotifier _notifier;
 
-        public HealthWikiStaffService(AppDbContext context)
+        public HealthWikiStaffService(AppDbContext context, IHealthWikiNotifier notifier)
         {
             _context = context;
+            _notifier = notifier;
         }
 
         public async Task<HealthWikiContributor?> EnsureContributorAsync(Guid userId, CancellationToken ct)
@@ -22,6 +25,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
             if (doctor == null) return null;
 
             var now = DateTime.UtcNow;
+            var wentLive = new List<HealthArticle>();
             var contributor = await _context.HealthWikiContributors.FirstOrDefaultAsync(c => c.DoctorId == doctor.DoctorID, ct);
             if (contributor == null)
             {
@@ -31,15 +35,16 @@ namespace EasyHMSAPI.Application.Services.Implementations
                     Status = HealthWikiContributor.StatusPending, EnrolmentSource = "SELF_ENROLLED", DoctorId = doctor.DoctorID, CreatedAt = now, UpdatedAt = now,
                 };
                 _context.HealthWikiContributors.Add(contributor);
-                await Apply(contributor, doctor, now, ct);
+                await Apply(contributor, doctor, now, wentLive, ct);
                 HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityContributor, contributor.ContributorId, "JOINED", HealthWikiAudit.ActorDoctorStaff, contributor.FullName);
             }
             else
             {
-                await Apply(contributor, doctor, now, ct);
+                await Apply(contributor, doctor, now, wentLive, ct);
             }
 
             await _context.SaveChangesAsync(ct);
+            await TellAsync(wentLive, ct);
             return contributor;
         }
 
@@ -53,13 +58,22 @@ namespace EasyHMSAPI.Application.Services.Implementations
             var doctorIds = rows.Select(c => c.DoctorId!.Value).ToList();
             var doctors = await _context.Doctors.AsNoTracking().Where(d => doctorIds.Contains(d.DoctorID)).ToDictionaryAsync(d => d.DoctorID, ct);
             var now = DateTime.UtcNow;
+            var wentLive = new List<HealthArticle>();
             foreach (var c in rows)
-                if (doctors.TryGetValue(c.DoctorId!.Value, out var doctor)) await Apply(c, doctor, now, ct);
+                if (doctors.TryGetValue(c.DoctorId!.Value, out var doctor)) await Apply(c, doctor, now, wentLive, ct);
             await _context.SaveChangesAsync(ct);
+            await TellAsync(wentLive, ct);
         }
 
         // Copies the doctor's profile onto the contributor row and makes the status follow Doctors.IsRegistrationVerified.
-        private async Task Apply(HealthWikiContributor c, Doctor doctor, DateTime now, CancellationToken ct)
+        // Articles that went live because their reviewer was just verified: their author and reviewer are told, after the change has saved.
+        private async Task TellAsync(List<HealthArticle> wentLive, CancellationToken ct)
+        {
+            foreach (var a in wentLive)
+                await _notifier.PublishedAsync(HealthArticleRef.From(a), a.AuthorContributorId, a.ReviewerContributorId, ct);
+        }
+
+        private async Task Apply(HealthWikiContributor c, Doctor doctor, DateTime now, List<HealthArticle> wentLive, CancellationToken ct)
         {
             if (c.Status == HealthWikiContributor.StatusRejected) return;
 
@@ -87,7 +101,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 c.VerifiedBy = "CMS (NMC register check)";
                 HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityContributor, c.ContributorId, "VERIFIED", HealthWikiAudit.ActorSystem, c.VerifiedBy);
                 // Articles this doctor approved while their registration was still being checked go live now.
-                await HealthArticlePublisher.PublishWaitingFor(_context, c, c.VerifiedBy, now, ct);
+                wentLive.AddRange(await HealthArticlePublisher.PublishWaitingFor(_context, c, c.VerifiedBy, now, ct));
             }
             else if (!verified && c.Status == HealthWikiContributor.StatusVerified)
             {

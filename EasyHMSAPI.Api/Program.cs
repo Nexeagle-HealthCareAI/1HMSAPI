@@ -179,6 +179,8 @@ builder.Services.AddScoped<IHealthArticleService, HealthArticleService>();
 builder.Services.AddScoped<IHealthArticleReviewService, HealthArticleReviewService>();
 builder.Services.AddScoped<IHealthWikiStaffService, HealthWikiStaffService>();
 builder.Services.AddScoped<IHealthArticleStatsService, HealthArticleStatsService>();
+builder.Services.AddScoped<IHealthWikiNotifier, HealthWikiNotifier>();
+builder.Services.AddScoped<IHealthWikiMaintenanceService, HealthWikiMaintenanceService>();
 builder.Services.AddSingleton<IHealthWikiImageStore, HealthWikiImageStore>();
 builder.Services.AddScoped<IHealthWikiImageService, HealthWikiImageService>();
 builder.Services.AddScoped<IUsageLimitService, UsageLimitService>();
@@ -190,6 +192,7 @@ builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IWhatsAppQ
 builder.Services.AddScoped<ISubscriptionLimitHelper, SubscriptionLimitHelper>();
 // Pharmacy Phase 3b: daily 90/60/30-day batch-expiry digest — the only scheduled job in the API.
 builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.ExpiryAlertBackgroundService>();
+builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.HealthWikiMaintenanceBackgroundService>();
 // ABDM M1: ABHA creation (Aadhaar-OTP) + existing-ABHA login (Mobile/Aadhaar-OTP).
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmEncryptionService, EasyHMSAPI.Application.Services.Implementations.AbdmEncryptionService>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmGatewayService, EasyHMSAPI.Application.Services.Implementations.AbdmGatewayService>();

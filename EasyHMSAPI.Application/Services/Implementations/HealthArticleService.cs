@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Services.Models;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
@@ -21,10 +22,12 @@ namespace EasyHMSAPI.Application.Services.Implementations
     public class HealthArticleService : IHealthArticleService
     {
         private readonly AppDbContext _context;
+        private readonly IHealthWikiNotifier _notifier;
 
-        public HealthArticleService(AppDbContext context)
+        public HealthArticleService(AppDbContext context, IHealthWikiNotifier notifier)
         {
             _context = context;
+            _notifier = notifier;
         }
 
         public async Task<SaveHealthArticleResponseModel> SaveAsync(SaveHealthArticleRequestModel request, CancellationToken cancellationToken)
@@ -138,6 +141,9 @@ namespace EasyHMSAPI.Application.Services.Implementations
             }
 
             var assignedReviewer = reviewerId != article.ReviewerContributorId;
+            // Who is to be told once this has saved: a reviewer who now has an article to review (N5), and the author when it goes live (N8).
+            Guid? notifyReviewer = null;
+            var notifyPublished = false;
 
             // ---- published article: the live text stays; the edit becomes a pending revision ------------------------
             if (wasPublished)
@@ -179,6 +185,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
                     revision.UpdatedAt = now;
                     article.SubmittedAt = now;
                     HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "SUBMITTED", actorType, actor, "Edit of the published article");
+                    if (type == HealthArticle.TypeMedical) notifyReviewer = reviewerId;
                 }
 
                 if (request.Has("authorContributorId", request.AuthorContributorId)) article.AuthorContributorId = authorId;
@@ -186,6 +193,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 {
                     article.ReviewerContributorId = reviewerId;
                     HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "REVIEWER_ASSIGNED", actorType, actor, reviewer?.FullName);
+                    if (reviewerId.HasValue && revision?.Status == HealthArticleRevision.StatusInReview) notifyReviewer = reviewerId;
                 }
             }
             else
@@ -252,6 +260,11 @@ namespace EasyHMSAPI.Application.Services.Implementations
                     HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "SUBMITTED", actorType, actor);
                 if (target == HealthArticle.StatusPublished)
                     HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "PUBLISHED", actorType, actor);
+
+                // The reviewer is told when the article reaches them: when it is sent for review with one, or when one is assigned while it waits.
+                if (type == HealthArticle.TypeMedical && reviewerId.HasValue && target == HealthArticle.StatusInReview && (!wasInReview || assignedReviewer))
+                    notifyReviewer = reviewerId;
+                if (target == HealthArticle.StatusPublished) notifyPublished = true;
             }
 
             try
@@ -265,6 +278,12 @@ namespace EasyHMSAPI.Application.Services.Implementations
                     ? "An article with this slug already exists."
                     : "Someone else is editing this article at the same moment. Reload it and try again.");
             }
+
+            // Saved, so it is true. Telling people never changes the answer: the notifier does not throw.
+            var messageTitle = new HealthArticleRef(article.ArticleId, article.Slug, working.Title);
+            if (notifyReviewer.HasValue) await _notifier.ReviewRequestedAsync(messageTitle, notifyReviewer.Value, cancellationToken);
+            if (notifyPublished)
+                await _notifier.PublishedAsync(messageTitle, article.AuthorContributorId, type == HealthArticle.TypeMedical ? article.ReviewerContributorId : null, cancellationToken);
 
             return new SaveHealthArticleResponseModel
             {

@@ -10,10 +10,12 @@ namespace EasyHMSAPI.Application.Services.Implementations
     public class HealthArticleReviewService : IHealthArticleReviewService
     {
         private readonly AppDbContext _context;
+        private readonly IHealthWikiNotifier _notifier;
 
-        public HealthArticleReviewService(AppDbContext context)
+        public HealthArticleReviewService(AppDbContext context, IHealthWikiNotifier notifier)
         {
             _context = context;
+            _notifier = notifier;
         }
 
         public async Task<HealthArticleReviewResult> ReviewAsync(Guid reviewerContributorId, string? slugInput, string? decisionInput, string? commentInput, bool accuracyConfirmed, CancellationToken ct)
@@ -114,6 +116,13 @@ namespace EasyHMSAPI.Application.Services.Implementations
             {
                 return HealthArticleReviewResult.Fail(409, "The article was changed at the same moment. Reload it and try again.");
             }
+
+            // Saved, so the author (and the reviewer) can be told. Telling people never changes the answer: the notifier does not throw.
+            if (outcome == HealthArticleReviewResult.OutcomeSentBack)
+                await _notifier.ChangesRequestedAsync(new HealthArticleRef(article.ArticleId, article.Slug, reviewingEdit ? revision!.Title : article.Title),
+                    article.AuthorContributorId, me.FullName, comment!, byEditor: false, ct);
+            else if (outcome == HealthArticleReviewResult.OutcomePublished)
+                await _notifier.PublishedAsync(HealthArticleRef.From(article), article.AuthorContributorId, article.ReviewerContributorId, ct);
 
             return new HealthArticleReviewResult { Success = true, StatusCode = 200, Outcome = outcome, Article = article, ReviewerName = me.FullName };
         }

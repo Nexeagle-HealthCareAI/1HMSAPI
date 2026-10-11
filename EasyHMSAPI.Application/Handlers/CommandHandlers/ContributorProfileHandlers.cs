@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
@@ -18,10 +19,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     public class RegisterContributorHandler : IRequestHandler<RegisterContributorRequestModel, RegisterContributorResponseModel>
     {
         private readonly AppDbContext _context;
+        private readonly IHealthWikiNotifier _notifier;
 
-        public RegisterContributorHandler(AppDbContext context)
+        public RegisterContributorHandler(AppDbContext context, IHealthWikiNotifier notifier)
         {
             _context = context;
+            _notifier = notifier;
         }
 
         public async Task<RegisterContributorResponseModel> Handle(RegisterContributorRequestModel r, CancellationToken ct)
@@ -60,6 +63,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 return RegisterContributorResponseModel.Fail(400, "Enter your job title.");
             }
 
+            var firstRegistration = c.Status == HealthWikiContributor.StatusInvited;
             var registrationChanged = doctor && (c.RegistrationNumber != regNo || c.RegistrationCouncil != council || c.RegistrationYear != year);
             var now = DateTime.UtcNow;
 
@@ -90,6 +94,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityContributor, c.ContributorId, "REGISTERED", HealthWikiAudit.ActorContributor, c.FullName,
                 registrationChanged && c.Status == HealthWikiContributor.StatusPending ? "Registration details changed" : null);
             await _context.SaveChangesAsync(ct);
+            // Only the first time: someone changing their bio later does not get "thank you for joining" again (N15).
+            if (firstRegistration) await _notifier.RegistrationReceivedAsync(c, ct);
             return RegisterContributorResponseModel.Ok(ContributorPortalMapper.ToMe(c));
         }
 

@@ -9,8 +9,11 @@ using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.Services.Implementations;
 using EasyHMSAPI.Application.Services.Interfaces;
+using EasyHMSAPI.Application.Services.Models;
+using EasyHMSAPI.Domain.Entities;
 using EasyHMSAPI.Domain.Context;
 using Microsoft.EntityFrameworkCore;
+using EasyHMSAPI.Application.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -80,35 +83,35 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 
             var reviewerSession = await SignIn(reviewerMobile, inviteToken);
             var reviewerId = _db.HealthWikiContributors.Single(c => c.Mobile == reviewerMobile).ContributorId;
-            var reg = await new RegisterContributorHandler(_db).Handle(new RegisterContributorRequestModel
+            var reg = await new RegisterContributorHandler(_db, new RecordingNotifier()).Handle(new RegisterContributorRequestModel
             {
                 ContributorId = reviewerId, FullName = "Dr. Reviewer " + tag, Speciality = "Cardiologist", Qualification = "MBBS, MD",
                 RegistrationNumber = "R" + tag, RegistrationCouncil = "Delhi Medical Council", RegistrationYear = "2012", Consent = true,
             }, Ct);
             Assert.That(reg.Profile!.Status, Is.EqualTo("PENDING"), reg.Message);
-            Assert.That((await new VerifyContributorHandler(_db, new HealthWikiStaffService(_db)).Handle(new VerifyContributorRequestModel { ContributorId = reviewerId, ActorName = "Priya" }, Ct)).Success, Is.True);
+            Assert.That((await new VerifyContributorHandler(_db, new HealthWikiStaffService(_db, new RecordingNotifier()), new RecordingNotifier()).Handle(new VerifyContributorRequestModel { ContributorId = reviewerId, ActorName = "Priya" }, Ct)).Success, Is.True);
 
             await SignIn(author, role: "INDEPENDENT_DOCTOR");
             var authorId = _db.HealthWikiContributors.Single(c => c.Mobile == author).ContributorId;
-            await new RegisterContributorHandler(_db).Handle(new RegisterContributorRequestModel
+            await new RegisterContributorHandler(_db, new RecordingNotifier()).Handle(new RegisterContributorRequestModel
             {
                 ContributorId = authorId, FullName = "Dr. Author " + tag, Speciality = "GP", Qualification = "MBBS",
                 RegistrationNumber = "A" + tag, RegistrationCouncil = "Delhi Medical Council", RegistrationYear = "2015", Consent = true,
             }, Ct);
-            await new VerifyContributorHandler(_db, new HealthWikiStaffService(_db)).Handle(new VerifyContributorRequestModel { ContributorId = authorId }, Ct);
+            await new VerifyContributorHandler(_db, new HealthWikiStaffService(_db, new RecordingNotifier()), new RecordingNotifier()).Handle(new VerifyContributorRequestModel { ContributorId = authorId }, Ct);
 
             // Author writes, CMS assigns the reviewer, author submits, reviewer approves: the article is live.
-            var created = await new SaveContributorArticleHandler(_db, new HealthArticleService(_db)).Handle(new SaveContributorArticleRequestModel
+            var created = await new SaveContributorArticleHandler(_db, new HealthArticleService(_db, new RecordingNotifier())).Handle(new SaveContributorArticleRequestModel
             { ContributorId = authorId, Type = "MEDICAL", Title = "BP " + tag, Description = "d", Content = "## Hello" }, Ct);
             Assert.That(created.StatusCode, Is.EqualTo(201), created.Message);
             var slug = created.Article!.Slug;
-            var assign = await new SaveHealthArticleHandler(new HealthArticleService(_db)).Handle(new SaveHealthArticleRequestModel { Slug = slug, ReviewerContributorId = reviewerId, ActorName = "Priya" }, Ct);
+            var assign = await new SaveHealthArticleHandler(new HealthArticleService(_db, new RecordingNotifier())).Handle(new SaveHealthArticleRequestModel { Slug = slug, ReviewerContributorId = reviewerId, ActorName = "Priya" }, Ct);
             Assert.That(assign.Success, Is.True, assign.Message);
-            Assert.That((await new SubmitContributorArticleHandler(_db).Handle(new SubmitContributorArticleRequestModel { ContributorId = authorId, Slug = slug }, Ct)).Success, Is.True);
+            Assert.That((await new SubmitContributorArticleHandler(_db, new RecordingNotifier()).Handle(new SubmitContributorArticleRequestModel { ContributorId = authorId, Slug = slug }, Ct)).Success, Is.True);
 
             var pending = (await new GetContributorArticlesHandler(_db).Handle(new GetContributorArticlesRequestModel { ContributorId = reviewerId }, Ct)).Articles!;
             Assert.That(pending.Pending.Select(a => a.Slug), Does.Contain(slug));
-            var approved = await new ReviewContributorArticleHandler(_db, new HealthArticleReviewService(_db)).Handle(new ReviewContributorArticleRequestModel
+            var approved = await new ReviewContributorArticleHandler(_db, new HealthArticleReviewService(_db, new RecordingNotifier())).Handle(new ReviewContributorArticleRequestModel
             { ContributorId = reviewerId, Slug = slug, Decision = "APPROVE", AccuracyConfirmed = true }, Ct);
             Assert.That(approved.Success, Is.True, approved.Message);
 
@@ -118,7 +121,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(pub.Author!.FullName, Is.EqualTo("Dr. Author " + tag));
 
             // An edit to the live article stays pending; the live text is untouched.
-            await new SaveContributorArticleHandler(_db, new HealthArticleService(_db)).Handle(new SaveContributorArticleRequestModel
+            await new SaveContributorArticleHandler(_db, new HealthArticleService(_db, new RecordingNotifier())).Handle(new SaveContributorArticleRequestModel
             { ContributorId = authorId, Slug = slug, Type = "MEDICAL", Title = "BP edited " + tag, Content = "## Edited" }, Ct);
             Assert.That((await new GetPublicHealthArticlesHandler(_db).Handle(new GetPublicHealthArticlesRequestModel { Slug = slug }, Ct)).Articles.Single().Title, Is.EqualTo("BP " + tag));
             var admin = (await new GetHealthArticlesAdminHandler(_db).Handle(new GetHealthArticlesAdminRequestModel { Slug = slug }, Ct)).Articles.Single();
@@ -128,13 +131,13 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var topic = await new CreateContributorTopicHandler(_db).Handle(new CreateContributorTopicRequestModel
             { ContributorId = authorId, Title = "Topic " + tag, Type = "MEDICAL", Outline = "o", WhyItMatters = "w" }, Ct);
             Assert.That(topic.StatusCode, Is.EqualTo(201), topic.Message);
-            var accepted = await new DecideTopicHandler(_db).Handle(new DecideTopicRequestModel { TopicId = topic.Topic!.Id, Action = "ACCEPT", ActorName = "Priya" }, Ct);
+            var accepted = await new DecideTopicHandler(_db, new RecordingNotifier()).Handle(new DecideTopicRequestModel { TopicId = topic.Topic!.Id, Action = "ACCEPT", ActorName = "Priya" }, Ct);
             Assert.That(accepted.Success, Is.True, accepted.Message);
             Assert.That((await new GetTopicRequestsAdminHandler(_db).Handle(new GetTopicRequestsAdminRequestModel(), Ct)).Topics!.Select(t => t.TopicId), Does.Contain(topic.Topic.Id));
             var summary = await new GetHealthWikiSummaryHandler(_db).Handle(new GetHealthWikiSummaryRequestModel(), Ct);
             Assert.That(summary.PendingContributors, Is.GreaterThanOrEqualTo(0));
             Assert.That((await new GetHealthArticleHistoryHandler(_db).Handle(new GetHealthArticleHistoryRequestModel { Slug = slug }, Ct)).Entries, Is.Not.Empty);
-            Assert.That((await new GetContributorsAdminHandler(_db, new HealthWikiStaffService(_db)).Handle(new GetContributorsAdminRequestModel(), Ct)).Contributors.Select(c => c.Mobile), Does.Contain(author));
+            Assert.That((await new GetContributorsAdminHandler(_db, new HealthWikiStaffService(_db, new RecordingNotifier())).Handle(new GetContributorsAdminRequestModel(), Ct)).Contributors.Select(c => c.Mobile), Does.Contain(author));
 
             // The same number cannot be enrolled twice (unique index), and the sessions are stored hashed.
             Assert.That((await new InviteContributorHandler(_db, _whatsApp.Object, _config).Handle(
@@ -158,12 +161,12 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                 INSERT dbo.Doctors(DoctorID, HospitalID, UserID, LicenseNumber, Qualification, MedicalCouncil, RegistrationYear)
                 VALUES({Guid.NewGuid()}, {Guid.NewGuid()}, {userId}, {"H" + tag}, {"MBBS, MD"}, {"Delhi Medical Council"}, 2011);");
 
-            var staff = new HealthWikiStaffService(_db);
+            var staff = new HealthWikiStaffService(_db, new RecordingNotifier());
             var me = await staff.EnsureContributorAsync(userId, Ct);
             Assert.That(me!.Status, Is.EqualTo("PENDING"));
             Assert.That((await staff.EnsureContributorAsync(userId, Ct))!.ContributorId, Is.EqualTo(me.ContributorId), "one row per doctor");
             // The CMS has not marked this doctor's registration yet, so the Health Wiki's verify button points to the doctor list.
-            Assert.That((await new VerifyContributorHandler(_db, new HealthWikiStaffService(_db)).Handle(new VerifyContributorRequestModel { ContributorId = me.ContributorId }, Ct)).StatusCode, Is.EqualTo(409));
+            Assert.That((await new VerifyContributorHandler(_db, new HealthWikiStaffService(_db, new RecordingNotifier()), new RecordingNotifier()).Handle(new VerifyContributorRequestModel { ContributorId = me.ContributorId }, Ct)).StatusCode, Is.EqualTo(409));
             await _db.Database.ExecuteSqlInterpolatedAsync($"UPDATE dbo.Doctors SET IsRegistrationVerified = 1, RegistrationVerifiedAt = SYSUTCDATETIME() WHERE UserID = {userId}");
             Assert.That((await staff.EnsureContributorAsync(userId, Ct))!.Status, Is.EqualTo("VERIFIED"), "follows the Doctors flag");
 
@@ -175,17 +178,17 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             };
             _db.HealthWikiContributors.Add(author);
             await _db.SaveChangesAsync();
-            var created = await new SaveContributorArticleHandler(_db, new HealthArticleService(_db)).Handle(new SaveContributorArticleRequestModel
+            var created = await new SaveContributorArticleHandler(_db, new HealthArticleService(_db, new RecordingNotifier())).Handle(new SaveContributorArticleRequestModel
             { ContributorId = author.ContributorId, Type = "MEDICAL", Title = "Hospital review " + tag, Content = "## Body" }, Ct);
             var slug = created.Article!.Slug;
-            Assert.That((await new HealthArticleService(_db).SaveAsync(new SaveHealthArticleRequestModel { Slug = slug, ReviewerContributorId = me.ContributorId }, Ct)).Success, Is.True);
-            Assert.That((await new SubmitContributorArticleHandler(_db).Handle(new SubmitContributorArticleRequestModel { ContributorId = author.ContributorId, Slug = slug }, Ct)).Success, Is.True);
+            Assert.That((await new HealthArticleService(_db, new RecordingNotifier()).SaveAsync(new SaveHealthArticleRequestModel { Slug = slug, ReviewerContributorId = me.ContributorId }, Ct)).Success, Is.True);
+            Assert.That((await new SubmitContributorArticleHandler(_db, new RecordingNotifier()).Handle(new SubmitContributorArticleRequestModel { ContributorId = author.ContributorId, Slug = slug }, Ct)).Success, Is.True);
 
             var inbox = await new GetHealthWikiInboxHandler(_db, staff).Handle(new GetHealthWikiInboxRequestModel { UserId = userId }, Ct);
             Assert.That(inbox.Pending.Select(p => p.Slug), Does.Contain(slug));
             var detail = await new GetHealthWikiStaffArticleHandler(_db, staff).Handle(new GetHealthWikiStaffArticleRequestModel { UserId = userId, Slug = slug }, Ct);
             Assert.That(detail.Article!.CanDecide, Is.True);
-            var review = await new ReviewHealthWikiArticleHandler(staff, new HealthArticleReviewService(_db)).Handle(
+            var review = await new ReviewHealthWikiArticleHandler(staff, new HealthArticleReviewService(_db, new RecordingNotifier())).Handle(
                 new ReviewHealthWikiArticleRequestModel { UserId = userId, Slug = slug, Decision = "APPROVE", AccuracyConfirmed = true }, Ct);
             Assert.That(review.Outcome, Is.EqualTo("PUBLISHED"), review.Message);
 
@@ -225,6 +228,57 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 
             Assert.That(res.Success, Is.True, res.Message);
             Assert.That(_db.HealthArticleImages.Any(i => i.Url == res.Url && i.ContentType == "image/png" && i.SizeBytes == png.Length), Is.True);
+        }
+
+        [Test]
+        public async Task NotificationsAndUpkeep_OnSqlServer()
+        {
+            var tag = Guid.NewGuid().ToString("N")[..6];
+            var whatsApp = new Mock<IWhatsAppMessagingService>();
+            whatsApp.Setup(w => w.SendHealthWikiTemplateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<KeyValuePair<string, string>>>())).ReturnsAsync(true);
+            var notifier = new HealthWikiNotifier(_db, whatsApp.Object, _config, NullLogger<HealthWikiNotifier>.Instance);
+
+            long n = 7100000000L + Math.Abs(tag.GetHashCode() % 800000000);
+            HealthWikiContributor Add(string name, string mobile) => new()
+            {
+                ContributorId = Guid.NewGuid(), Type = "INDEPENDENT_DOCTOR", FullName = name, Mobile = mobile, Status = "VERIFIED", RegistrationNumber = "R" + tag,
+                RegistrationCouncil = "MCI", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+            };
+            var doctor = Add("Dr. Upkeep " + tag, n.ToString()); var author = Add("Author " + tag, (n + 1).ToString());
+            _db.HealthWikiContributors.AddRange(doctor, author);
+            await _db.SaveChangesAsync(); // the people first: the model does not tell EF that an article points at them
+            var article = new HealthArticle
+            {
+                ArticleId = Guid.NewGuid(), Slug = "upkeep-" + tag, Title = "Upkeep " + tag, Content = "c", Type = "MEDICAL", Status = "IN_REVIEW", AuthorContributorId = author.ContributorId,
+                ReviewerContributorId = doctor.ContributorId, SubmittedAt = DateTime.UtcNow.AddDays(-5), CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+            };
+            _db.HealthArticles.Add(article);
+            var stale = new HealthWikiTopicRequest
+            {
+                TopicId = Guid.NewGuid(), ContributorId = author.ContributorId, Title = "Stale " + tag, Outline = "o", Status = "NEEDS_DETAIL", DecisionNote = "More detail?",
+                CreatedAt = DateTime.UtcNow.AddDays(-50), UpdatedAt = DateTime.UtcNow.AddDays(-40),
+            };
+            _db.HealthWikiTopicRequests.Add(stale);
+            await _db.SaveChangesAsync();
+
+            // messages are recorded under the real constraints (code format, status, entity type)
+            await notifier.ReviewRequestedAsync(new HealthArticleRef(article.ArticleId, article.Slug, article.Title), doctor.ContributorId, Ct);
+            Assert.That(_db.HealthWikiNotifications.Single(x => x.EntityId == article.ArticleId).Status, Is.EqualTo("SENT"));
+            _db.HealthWikiNotifications.Single(x => x.EntityId == article.ArticleId).CreatedAt = DateTime.UtcNow.AddDays(-4);
+            await _db.SaveChangesAsync();
+
+            // the daily upkeep's queries run on SQL Server: the reminder is due, the old request closes
+            var upkeep = new HealthWikiMaintenanceService(_db, notifier, NullLogger<HealthWikiMaintenanceService>.Instance);
+            var result = await upkeep.RunAsync(Ct);
+
+            Assert.That(result.RemindersSent, Is.GreaterThanOrEqualTo(1));
+            Assert.That(_db.HealthWikiNotifications.Count(x => x.EntityId == article.ArticleId && x.Code == "N6" && x.Status == "SENT"), Is.EqualTo(1));
+            Assert.That(_db.HealthWikiTopicRequests.Single(t => t.TopicId == stale.TopicId).Status, Is.EqualTo("DECLINED"));
+            Assert.That(_db.HealthWikiNotifications.Any(x => x.EntityId == stale.TopicId && x.Code == "N11" && x.Status == "SENT"), Is.True);
+
+            // a second run the same day repeats nothing for this article
+            await upkeep.RunAsync(Ct);
+            Assert.That(_db.HealthWikiNotifications.Count(x => x.EntityId == article.ArticleId && x.Code == "N6"), Is.EqualTo(1));
         }
     }
 }

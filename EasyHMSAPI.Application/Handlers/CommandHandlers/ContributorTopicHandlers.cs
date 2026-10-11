@@ -3,6 +3,7 @@ using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Application.Services;
+using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
@@ -174,10 +175,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     public class DecideTopicHandler : IRequestHandler<DecideTopicRequestModel, DecideTopicResponseModel>
     {
         private readonly AppDbContext _context;
+        private readonly IHealthWikiNotifier _notifier;
 
-        public DecideTopicHandler(AppDbContext context)
+        public DecideTopicHandler(AppDbContext context, IHealthWikiNotifier notifier)
         {
             _context = context;
+            _notifier = notifier;
         }
 
         public async Task<DecideTopicResponseModel> Handle(DecideTopicRequestModel r, CancellationToken ct)
@@ -243,7 +246,21 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             {
                 return DecideTopicResponseModel.Fail(409, "The request was changed at the same moment. Reload it and try again.");
             }
-            return DecideTopicResponseModel.Ok(ContributorPortalMapper.ToAdminTopic(topic, articleSlug ?? await TopicRules.ArticleSlug(_context, topic.ArticleId, ct)));
+            var slugForAnswer = articleSlug ?? await TopicRules.ArticleSlug(_context, topic.ArticleId, ct);
+            // Saved, so the contributor is told what the team decided (N10, N11 or N12).
+            switch (topic.Status)
+            {
+                case HealthWikiTopicRequest.StatusAccepted when slugForAnswer != null:
+                    await _notifier.TopicAcceptedAsync(topic, slugForAnswer, ct);
+                    break;
+                case HealthWikiTopicRequest.StatusDeclined:
+                    await _notifier.TopicDeclinedAsync(topic, ct);
+                    break;
+                case HealthWikiTopicRequest.StatusNeedsDetail:
+                    await _notifier.TopicNeedsDetailAsync(topic, ct);
+                    break;
+            }
+            return DecideTopicResponseModel.Ok(ContributorPortalMapper.ToAdminTopic(topic, slugForAnswer));
         }
 
         private async Task<string> UniqueSlug(string baseSlug, CancellationToken ct)
