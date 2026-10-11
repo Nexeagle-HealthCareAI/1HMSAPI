@@ -171,9 +171,9 @@ namespace EasyHMSAPI.Application.Services.Implementations
                         && n.Status == HealthWikiNotification.StatusSent && n.CreatedAt > since, ct))
                     return true;
 
-                Task<bool> send;
-                try { send = _whatsApp.SendHealthWikiTemplateAsync(mobile, template, parameters); }
-                catch (Exception ex) { send = Task.FromException<bool>(ex); }
+                Task<WhatsAppSendResult> send;
+                try { send = _whatsApp.SendHealthWikiTemplateTrackedAsync(mobile, template, parameters); }
+                catch (Exception ex) { send = Task.FromException<WhatsAppSendResult>(ex); }
 
                 var first = await Task.WhenAny(send, Task.Delay(SendTimeout, ct));
                 if (first != send)
@@ -184,10 +184,13 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 }
 
                 bool accepted;
+                string? messageId = null;
                 string? failure = null;
                 try
                 {
-                    accepted = await send;
+                    var result = await send;
+                    accepted = result.Accepted;
+                    messageId = result.MessageId;
                 }
                 catch (Exception ex)
                 {
@@ -197,7 +200,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 }
                 await RecordAsync(code, template, to, mobile, entityType, entityId, label,
                     accepted ? HealthWikiNotification.StatusSent : HealthWikiNotification.StatusFailed,
-                    accepted ? null : failure ?? "WhatsApp did not accept the message (the template may not be approved yet, or the number is not on WhatsApp).", ct);
+                    accepted ? null : failure ?? "WhatsApp did not accept the message (the template may not be approved yet, or the number is not on WhatsApp).", ct, messageId);
                 return accepted;
             }
             catch (Exception ex)
@@ -208,13 +211,13 @@ namespace EasyHMSAPI.Application.Services.Implementations
         }
 
         private async Task RecordAsync(string code, string template, HealthWikiContributor? to, string? mobile, string entityType, Guid entityId, string label,
-            string status, string? detail, CancellationToken ct)
+            string status, string? detail, CancellationToken ct, string? providerMessageId = null)
         {
             _context.HealthWikiNotifications.Add(new HealthWikiNotification
             {
                 NotificationId = Guid.NewGuid(), Code = code, TemplateName = template, RecipientContributorId = to?.ContributorId,
                 RecipientMobileMasked = mobile == null ? null : ContributorSecurity.MaskMobile(mobile), EntityType = entityType, EntityId = entityId,
-                Status = status, Detail = detail, CreatedAt = DateTime.UtcNow,
+                Status = status, Detail = detail, CreatedAt = DateTime.UtcNow, ProviderMessageId = providerMessageId,
             });
             var action = status == HealthWikiNotification.StatusSent ? "NOTIFIED" : status == HealthWikiNotification.StatusFailed ? "NOTIFY_FAILED" : "NOTIFY_SKIPPED";
             HealthWikiAuditLog.Add(_context, entityType, entityId, action, HealthWikiAudit.ActorSystem, "WhatsApp", $"{code} ({label}) to {to?.FullName ?? "nobody"}" + (detail == null ? "" : $": {detail}"));

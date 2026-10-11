@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Services.Models;
 using System;
 using System.Linq;
 using System.Threading;
@@ -143,7 +144,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public async Task AReminderWhatsAppRefused_IsRecorded_SoTheNextDaysRunDoesNotRepeatIt_WithTheRealNotifier()
         {
             var whatsApp = new Mock<IWhatsAppMessagingService>();
-            whatsApp.Setup(w => w.SendHealthWikiTemplateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<KeyValuePair<string, string>>>())).ReturnsAsync(false);
+            whatsApp.Setup(w => w.SendHealthWikiTemplateTrackedAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<KeyValuePair<string, string>>>())).ReturnsAsync(WhatsAppSendResult.Refused);
             var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["HealthWiki:ContributorBaseUrl"] = "https://dd.example.com" }).Build();
             var real = new HealthWikiMaintenanceService(_context, new HealthWikiNotifier(_context, whatsApp.Object, config, NullLogger<HealthWikiNotifier>.Instance), NullLogger<HealthWikiMaintenanceService>.Instance);
             var doctor = Person(); Waiting(doctor, 5);
@@ -153,7 +154,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 
             Assert.That(first.RemindersNotSent, Is.EqualTo(1));
             Assert.That(second.RemindersNotSent + second.RemindersSent, Is.EqualTo(0), "it was tried today and recorded, so it waits 3 days");
-            whatsApp.Verify(w => w.SendHealthWikiTemplateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<KeyValuePair<string, string>>>()), Times.Once);
+            whatsApp.Verify(w => w.SendHealthWikiTemplateTrackedAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<KeyValuePair<string, string>>>()), Times.Once);
             Assert.That(_context.HealthWikiNotifications.Count(n => n.Code == "N6" && n.Status == "FAILED"), Is.EqualTo(1));
         }
 

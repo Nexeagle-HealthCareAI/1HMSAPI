@@ -25,5 +25,15 @@ namespace EasyHMSAPI.Domain.Entities
         public string Status { get; set; } = null!;
         public string? Detail { get; set; }
         public DateTime CreatedAt { get; set; }
+
+        // After WhatsApp accepted the message: the id it gave, and what its later status callback said (DELIVERED, READ or FAILED).
+        public const string DeliveryDelivered = "DELIVERED";
+        public const string DeliveryRead = "READ";
+        public const string DeliveryFailed = "FAILED";
+
+        public string? ProviderMessageId { get; set; }
+        public string? DeliveryStatus { get; set; }
+        public string? DeliveryDetail { get; set; }
+        public DateTime? DeliveryAt { get; set; }
     }
 }

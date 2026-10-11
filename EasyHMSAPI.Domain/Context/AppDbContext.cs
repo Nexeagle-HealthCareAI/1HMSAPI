@@ -946,6 +946,7 @@ namespace EasyHMSAPI.Domain.Context
                 entity.ToTable("HealthWikiNotification");
                 entity.HasKey(n => n.NotificationId);
                 entity.Property(n => n.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(n => n.DeliveryAt).HasColumnType("datetime2(3)");
             });
 
             modelBuilder.Entity<HealthArticleLike>(entity =>

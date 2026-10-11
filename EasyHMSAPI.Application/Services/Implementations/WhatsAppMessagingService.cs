@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Services.Models;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Constants;
 using Microsoft.Extensions.Configuration;
@@ -40,7 +41,9 @@ namespace EasyHMSAPI.Application.Services.Implementations
         // Single transport chokepoint for every template send below -- centralizes the
         // request/response plumbing AND the logging, so a bad token/URL/template shows up in
         // the logs with the actual Meta error body instead of every caller just seeing `false`.
-        private async Task<bool> SendAsync(string methodName, string to, object payload)
+        private async Task<bool> SendAsync(string methodName, string to, object payload) => (await SendForResultAsync(methodName, to, payload)).Accepted;
+
+        private async Task<WhatsAppSendResult> SendForResultAsync(string methodName, string to, object payload)
         {
             try
             {
@@ -51,19 +54,34 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 request.Headers.Add("Authorization", $"Bearer {_accessToken}");
 
                 var response = await _httpClient.SendAsync(request);
+                var body = await response.Content.ReadAsStringAsync();
                 if (!response.IsSuccessStatusCode)
                 {
-                    var body = await response.Content.ReadAsStringAsync();
                     _logger.LogWarning("WhatsApp {Method} failed for {Mobile}: {StatusCode} {Body}",
                         methodName, MaskMobile(to), (int)response.StatusCode, body);
+                    return WhatsAppSendResult.Refused;
                 }
-                return response.IsSuccessStatusCode;
+                return new WhatsAppSendResult { Accepted = true, MessageId = ReadMessageId(body) };
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "WhatsApp {Method} threw for {Mobile}", methodName, MaskMobile(to));
-                return false;
+                return WhatsAppSendResult.Refused;
             }
+        }
+
+        // Meta answers {"messages":[{"id":"wamid...."}], ...}. A body in another shape just means no id to track.
+        private static string? ReadMessageId(string body)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(body);
+                if (doc.RootElement.TryGetProperty("messages", out var messages) && messages.ValueKind == JsonValueKind.Array && messages.GetArrayLength() > 0
+                    && messages[0].TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String)
+                    return id.GetString();
+            }
+            catch (JsonException) { }
+            return null;
         }
 
         public Task<bool> SendOtpAsync(string mobileNumber, string otp)
@@ -508,12 +526,15 @@ namespace EasyHMSAPI.Application.Services.Implementations
             return SendAsync(nameof(SendHealthWikiInviteAsync), to, payload);
         }
 
-        public Task<bool> SendHealthWikiTemplateAsync(string mobileNumber, string templateName, IReadOnlyList<KeyValuePair<string, string>> parameters)
+        public async Task<bool> SendHealthWikiTemplateAsync(string mobileNumber, string templateName, IReadOnlyList<KeyValuePair<string, string>> parameters)
+            => (await SendHealthWikiTemplateTrackedAsync(mobileNumber, templateName, parameters)).Accepted;
+
+        public Task<WhatsAppSendResult> SendHealthWikiTemplateTrackedAsync(string mobileNumber, string templateName, IReadOnlyList<KeyValuePair<string, string>> parameters)
         {
             if (!IsEnabled)
             {
                 _logger.LogInformation("WhatsApp is disabled (WhatsApp:IsEnabled); skipping {Method} {Template} for {Mobile}", nameof(SendHealthWikiTemplateAsync), templateName, MaskMobile(mobileNumber));
-                return Task.FromResult(false);
+                return Task.FromResult(WhatsAppSendResult.Refused);
             }
 
             var to = NormalizeToE164(mobileNumber);
@@ -539,7 +560,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 },
             };
 
-            return SendAsync($"{nameof(SendHealthWikiTemplateAsync)}:{templateName}", to, payload);
+            return SendForResultAsync($"{nameof(SendHealthWikiTemplateAsync)}:{templateName}", to, payload);
         }
 
         // Normalizes a mobile number to E.164 style (no leading '+') as required by the Meta

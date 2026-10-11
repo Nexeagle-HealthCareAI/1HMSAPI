@@ -7,7 +7,7 @@ namespace EasyHMSAPI.Application.Services
     /// <summary>Rules for the contributor pages that need no database, so they can be unit-tested on their own.</summary>
     public static class ContributorPortalRules
     {
-        public const string ConsentVersion = "2026-10";
+        public const string ConsentVersion = "2026-10-b";
         public const int MaxOpenTopics = 5;
         public const int MinRegistrationYear = 1950;
 

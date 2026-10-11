@@ -128,6 +128,46 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // The record of WhatsApp messages the Health Wiki sent, newest first, with WhatsApp's later delivery status for each.
+        [HttpGet("notifications")]
+        public async Task<IActionResult> Notifications([FromQuery] int take = 50, [FromQuery] bool problemsOnly = false)
+        {
+            try
+            {
+                var r = await _mediator.Send(new GetHealthWikiNotificationsRequestModel { Take = take, ProblemsOnly = problemsOnly });
+                return Ok(r.Notifications);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error reading the Health Wiki message record");
+                return StatusCode(500, new { message = "An error occurred. Try again." });
+            }
+        }
+
+        public class DeliveryBody
+        {
+            public string? MessageId { get; set; }
+            public string? Status { get; set; }
+            public string? Detail { get; set; }
+        }
+
+        // WhatsApp's status callback for one message, passed on by the WhatsApp webhook service. A message id that is not a Health Wiki
+        // message answers 200 with matched=false, because that service passes on every message status it receives.
+        [HttpPost("notifications/delivery")]
+        public async Task<IActionResult> RecordDelivery([FromBody] DeliveryBody? body)
+        {
+            try
+            {
+                var r = await _mediator.Send(new RecordHealthWikiDeliveryRequestModel { MessageId = body?.MessageId, Status = body?.Status, Detail = body?.Detail });
+                return r.Success ? Ok(new { r.Matched, r.Applied }) : StatusCode(r.StatusCode, new { message = r.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error recording a WhatsApp delivery status");
+                return StatusCode(500, new { message = "An error occurred. Try again." });
+            }
+        }
+
         // ---- topic requests (CMS inbox) ----------------------------------------------------------------------------
 
         public class DeclineBody { public string? Reason { get; set; } }

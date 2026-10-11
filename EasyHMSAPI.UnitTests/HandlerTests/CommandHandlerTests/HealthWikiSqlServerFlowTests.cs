@@ -235,7 +235,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         {
             var tag = Guid.NewGuid().ToString("N")[..6];
             var whatsApp = new Mock<IWhatsAppMessagingService>();
-            whatsApp.Setup(w => w.SendHealthWikiTemplateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<KeyValuePair<string, string>>>())).ReturnsAsync(true);
+            whatsApp.Setup(w => w.SendHealthWikiTemplateTrackedAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<KeyValuePair<string, string>>>())).ReturnsAsync(new WhatsAppSendResult { Accepted = true, MessageId = "wamid.TEST" });
             var notifier = new HealthWikiNotifier(_db, whatsApp.Object, _config, NullLogger<HealthWikiNotifier>.Instance);
 
             long n = 7100000000L + Math.Abs(tag.GetHashCode() % 800000000);

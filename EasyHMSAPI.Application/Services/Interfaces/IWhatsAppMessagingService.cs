@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Services.Models;
 namespace EasyHMSAPI.Application.Services.Interfaces
 {
     public interface IWhatsAppMessagingService
@@ -47,5 +48,9 @@ namespace EasyHMSAPI.Application.Services.Interfaces
         /// variables, matched by name in Meta, so each template's names must be exact. A value is flattened to one line and cut to a safe
         /// length. Returns false (no-op) while WhatsApp:IsEnabled is off or when Meta refuses (for example a template not approved yet).</summary>
         Task<bool> SendHealthWikiTemplateAsync(string mobileNumber, string templateName, IReadOnlyList<KeyValuePair<string, string>> parameters);
+
+        /// <summary>Same send as <see cref="SendHealthWikiTemplateAsync"/>, but also returns the message id WhatsApp gave it, so a later delivery
+        /// status (delivered, read, failed) can be matched to the message.</summary>
+        Task<WhatsAppSendResult> SendHealthWikiTemplateTrackedAsync(string mobileNumber, string templateName, IReadOnlyList<KeyValuePair<string, string>> parameters);
     }
 }

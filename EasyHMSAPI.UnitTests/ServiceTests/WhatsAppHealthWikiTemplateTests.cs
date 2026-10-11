@@ -21,13 +21,14 @@ namespace EasyHMSAPI.UnitTests.ServiceTests
             public string? Body;
             public string? Authorization;
             public HttpStatusCode Answer = HttpStatusCode.OK;
+            public string Reply = "{}";
 
             protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
             {
                 Calls++;
                 Authorization = request.Headers.Authorization?.ToString();
                 Body = request.Content == null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
-                return new HttpResponseMessage(Answer) { Content = new StringContent("{}") };
+                return new HttpResponseMessage(Answer) { Content = new StringContent(Reply) };
             }
         }
 
@@ -112,6 +113,42 @@ namespace EasyHMSAPI.UnitTests.ServiceTests
             await service.SendHealthWikiInviteAsync("9876543210", "Dr. Asha", "review the article \"X\"", "https://dd.example.com/contribute/invite/abc");
             using var doc = JsonDocument.Parse(meta.Body!);
             Assert.That(doc.RootElement.GetProperty("template").GetProperty("name").GetString(), Is.EqualTo("health_wiki_invite_1"));
+        }
+
+        [Test]
+        public async Task TheTrackedSend_ReturnsTheMessageIdWhatsAppGave()
+        {
+            var (service, meta) = Make();
+            meta.Reply = "{\"messaging_product\":\"whatsapp\",\"contacts\":[{\"input\":\"919876543210\",\"wa_id\":\"919876543210\"}],\"messages\":[{\"id\":\"wamid.ABC123\"}]}";
+
+            var r = await service.SendHealthWikiTemplateTrackedAsync("9876543210", "health_wiki_review_request", P(("reviewer_name", "Dr. A"), ("article_title", "T"), ("url", "https://x")));
+
+            Assert.That(r.Accepted, Is.True);
+            Assert.That(r.MessageId, Is.EqualTo("wamid.ABC123"));
+        }
+
+        [Test]
+        public async Task TheTrackedSend_WithAnUnexpectedReplyBody_IsStillAccepted_WithoutAnId()
+        {
+            var (service, meta) = Make();
+            meta.Reply = "not json";
+
+            var r = await service.SendHealthWikiTemplateTrackedAsync("9876543210", "t", P(("url", "https://x")));
+
+            Assert.That(r.Accepted, Is.True);
+            Assert.That(r.MessageId, Is.Null);
+        }
+
+        [Test]
+        public async Task TheTrackedSend_WhenMetaRefuses_IsNotAccepted()
+        {
+            var (service, meta) = Make();
+            meta.Answer = HttpStatusCode.BadRequest;
+
+            var r = await service.SendHealthWikiTemplateTrackedAsync("9876543210", "t", P(("url", "https://x")));
+
+            Assert.That(r.Accepted, Is.False);
+            Assert.That(r.MessageId, Is.Null);
         }
     }
 }

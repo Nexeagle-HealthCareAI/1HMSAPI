@@ -37,12 +37,12 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             _accept = true;
             _throws = null;
             _whatsApp = new Mock<IWhatsAppMessagingService>();
-            _whatsApp.Setup(w => w.SendHealthWikiTemplateAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<KeyValuePair<string, string>>>()))
+            _whatsApp.Setup(w => w.SendHealthWikiTemplateTrackedAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<KeyValuePair<string, string>>>()))
                 .Returns((string mobile, string template, IReadOnlyList<KeyValuePair<string, string>> p) =>
                 {
                     if (_throws != null) throw _throws;
                     _sent.Add(new Sent(mobile, template, p.ToDictionary(x => x.Key, x => x.Value)));
-                    return Task.FromResult(_accept);
+                    return Task.FromResult(new WhatsAppSendResult { Accepted = _accept, MessageId = _accept ? "wamid.TEST" : null });
                 });
         }
 
