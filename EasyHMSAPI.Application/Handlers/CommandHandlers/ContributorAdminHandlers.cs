@@ -126,16 +126,28 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     public class VerifyContributorHandler : IRequestHandler<VerifyContributorRequestModel, ContributorAdminResponseModel>
     {
         private readonly AppDbContext _context;
+        private readonly IHealthWikiStaffService _staff;
 
-        public VerifyContributorHandler(AppDbContext context)
+        public VerifyContributorHandler(AppDbContext context, IHealthWikiStaffService staff)
         {
             _context = context;
+            _staff = staff;
         }
 
         public async Task<ContributorAdminResponseModel> Handle(VerifyContributorRequestModel request, CancellationToken ct)
         {
             var c = await _context.HealthWikiContributors.FirstOrDefaultAsync(x => x.ContributorId == request.ContributorId, ct);
             if (c == null) return ContributorAdmin.Fail(404, "Contributor not found.");
+
+            // A hospital doctor's registration is verified once, in the CMS doctor list (NMC register check); the Health Wiki follows it.
+            if (c.Type == HealthWikiContributor.TypeHospitalDoctor)
+            {
+                await _staff.SyncHospitalDoctorsAsync(c.ContributorId, ct);
+                await _context.Entry(c).ReloadAsync(ct);
+                return c.Status == HealthWikiContributor.StatusVerified
+                    ? new ContributorAdminResponseModel { Success = true, StatusCode = 200, Contributor = ContributorInvites.ToAdminInfo(c) }
+                    : ContributorAdmin.Fail(409, "This is a hospital doctor. Verify their registration in the CMS doctor list (check the NMC register); it is picked up here automatically.");
+            }
             if (c.Status == HealthWikiContributor.StatusVerified) return ContributorAdmin.Fail(409, "Already verified.");
             if (c.Status != HealthWikiContributor.StatusPending)
                 return ContributorAdmin.Fail(409, c.Status == HealthWikiContributor.StatusInvited

@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 using EasyHMSAPI.Domain.Entities;
 
@@ -65,6 +67,18 @@ namespace EasyHMSAPI.Application.Services
         /// <summary>The "Medically reviewed by" badge: only a verified doctor, only on a MEDICAL article.</summary>
         public static bool ShowsReviewerBadge(string articleType, string? reviewerType, string? reviewerStatus) =>
             articleType == HealthArticle.TypeMedical && IsDoctorType(reviewerType) && reviewerStatus == HealthWikiContributor.StatusVerified;
+
+        public const int MaxVisitorKeyLength = 128;
+
+        /// <summary>
+        /// Keyed hash of a reader's anonymous key (a random id the Doctor Dekho site keeps for the visitor), so a "Helpful" can be counted
+        /// once per reader without storing the key, an IP address or anything that identifies the person.
+        /// </summary>
+        public static string HashVisitorKey(string visitorKey, Guid articleId, string secret)
+        {
+            using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret));
+            return Convert.ToHexString(hmac.ComputeHash(Encoding.UTF8.GetBytes($"visitor:{articleId:N}:{visitorKey}")));
+        }
 
         /// <summary>https only, so a stored image URL can never be plain http or a script URL.</summary>
         public static bool IsHttpsUrl(string? url) =>

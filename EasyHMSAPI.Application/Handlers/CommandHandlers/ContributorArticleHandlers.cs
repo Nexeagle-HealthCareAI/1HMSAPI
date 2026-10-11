@@ -197,117 +197,29 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     }
 
     /// <summary>
-    /// The assigned doctor's decision. Only the reviewer named on the article can decide, and only once it is with them.
-    /// APPROVE needs the accuracy confirmation; the article goes live at once if the doctor is VERIFIED, otherwise it waits
-    /// and goes live when the team verifies them. An approval of an EDIT to a live article needs a VERIFIED doctor.
-    /// REQUEST_CHANGES needs a comment of at least 10 characters and sends the article (or edit) back to the author.
-    /// Every decision is kept in HealthArticleReview with the name and registration as they were that day.
+    /// The assigned doctor's decision from the Doctor Dekho pages. The rules live in IHealthArticleReviewService (shared with the
+    /// EasyHMS staff review); this returns the article as the doctor sees it afterwards.
     /// </summary>
     public class ReviewContributorArticleHandler : IRequestHandler<ReviewContributorArticleRequestModel, ContributorArticleResponseModel>
     {
         private readonly AppDbContext _context;
+        private readonly IHealthArticleReviewService _reviews;
 
-        public ReviewContributorArticleHandler(AppDbContext context)
+        public ReviewContributorArticleHandler(AppDbContext context, IHealthArticleReviewService reviews)
         {
             _context = context;
+            _reviews = reviews;
         }
 
         public async Task<ContributorArticleResponseModel> Handle(ReviewContributorArticleRequestModel r, CancellationToken ct)
         {
-            var me = await _context.HealthWikiContributors.FirstOrDefaultAsync(c => c.ContributorId == r.ContributorId, ct);
-            if (me == null) return ContributorArticleResponseModel.Fail(404, "Profile not found.");
+            var result = await _reviews.ReviewAsync(r.ContributorId, r.Slug, r.Decision, r.Comment, r.AccuracyConfirmed, ct);
+            if (!result.Success) return ContributorArticleResponseModel.Fail(result.StatusCode, result.Message!);
 
-            var slug = r.Slug?.Trim().ToLowerInvariant();
-            var article = await _context.HealthArticles.FirstOrDefaultAsync(a => a.Slug == slug && a.ReviewerContributorId == me.ContributorId, ct);
-            if (article == null) return ContributorArticleResponseModel.Fail(404, "Article not found.");
-            if (!HealthArticleRules.IsDoctorType(me.Type)) return ContributorArticleResponseModel.Fail(403, "Only doctors can review.");
-
-            var decision = r.Decision?.Trim().ToUpperInvariant();
-            if (decision != ReviewContributorArticleRequestModel.Approve && decision != ReviewContributorArticleRequestModel.RequestChanges)
-                return ContributorArticleResponseModel.Fail(400, "decision must be APPROVE or REQUEST_CHANGES.");
-
-            var revision = await ContributorArticles.OpenRevision(_context, article.ArticleId, ct);
-            var reviewingEdit = article.Status == HealthArticle.StatusPublished && revision?.Status == HealthArticleRevision.StatusInReview;
-            var reviewingArticle = article.Status == HealthArticle.StatusInReview && article.ApprovedAt == null;
-            if (!reviewingEdit && !reviewingArticle)
-                return ContributorArticleResponseModel.Fail(409, "This article is not waiting for your review.");
-
-            var now = DateTime.UtcNow;
-            string? comment = null;
-
-            if (decision == ReviewContributorArticleRequestModel.RequestChanges)
-            {
-                comment = r.Comment?.Trim();
-                if (comment == null || comment.Length < HealthArticleRules.MinChangeCommentLength)
-                    return ContributorArticleResponseModel.Fail(400, "Add a short comment so the writer knows what to change.");
-                if (comment.Length > HealthArticleRules.MaxReasonLength)
-                    return ContributorArticleResponseModel.Fail(400, $"The comment is too long (max {HealthArticleRules.MaxReasonLength} characters).");
-
-                if (reviewingEdit)
-                {
-                    revision!.Status = HealthArticleRevision.StatusDraft;
-                    revision.ReviewerComment = comment;
-                    revision.UpdatedAt = now;
-                }
-                else
-                {
-                    article.Status = HealthArticle.StatusDraft;
-                    article.ReviewerComment = comment;
-                    article.ApprovedAt = null;
-                    article.UpdatedAt = now;
-                }
-            }
-            else
-            {
-                if (!r.AccuracyConfirmed)
-                    return ContributorArticleResponseModel.Fail(400, "Confirm that you have checked the article for medical accuracy.");
-
-                if (reviewingEdit)
-                {
-                    if (me.Status != HealthWikiContributor.StatusVerified)
-                        return ContributorArticleResponseModel.Fail(403, "You can approve edits to a live article after the team has verified your registration.");
-                    HealthArticlePublisher.ApplyRevision(_context, article, revision!, HealthWikiAudit.ActorContributor, me.FullName, now);
-                    article.ApprovedAt = now;
-                }
-                else
-                {
-                    article.ApprovedAt = now;
-                    article.ApprovedByName = me.FullName;
-                    // Goes live now when the doctor is verified; otherwise it waits and the verification publishes it.
-                    HealthArticlePublisher.TryPublish(_context, article, me, me.FullName, now);
-                    article.UpdatedAt = now;
-                }
-            }
-
-            _context.HealthArticleReviews.Add(new HealthArticleReview
-            {
-                ReviewId = Guid.NewGuid(),
-                ArticleId = article.ArticleId,
-                ReviewerContributorId = me.ContributorId,
-                Decision = decision == ReviewContributorArticleRequestModel.Approve ? "APPROVE" : "REQUEST_CHANGES",
-                Comment = comment,
-                AccuracyConfirmed = decision == ReviewContributorArticleRequestModel.Approve,
-                ReviewerNameSnapshot = me.FullName,
-                RegistrationSnapshot = ContributorPortalRules.RegistrationLine(me),
-                DecidedAt = now,
-            });
-            HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId,
-                decision == ReviewContributorArticleRequestModel.Approve ? "REVIEWER_APPROVED" : "REVIEWER_REQUESTED_CHANGES",
-                HealthWikiAudit.ActorContributor, me.FullName, comment);
-
-            try
-            {
-                await _context.SaveChangesAsync(ct);
-            }
-            catch (DbUpdateException)
-            {
-                return ContributorArticleResponseModel.Fail(409, "The article was changed at the same moment. Reload it and try again.");
-            }
-
-            var mine = await ContributorArticles.Reload(_context, me.ContributorId, article.Slug, ct);
+            var mine = await ContributorArticles.Reload(_context, r.ContributorId, result.Article!.Slug, ct);
             // After "request changes" the article is back with its author and no longer visible to the reviewer; say so plainly.
             return mine != null ? ContributorArticleResponseModel.Ok(mine)
-                : ContributorArticleResponseModel.Ok(ContributorPortalMapper.ToMyArticle(article, null, me.ContributorId, null, me.FullName, now));
+                : ContributorArticleResponseModel.Ok(ContributorPortalMapper.ToMyArticle(result.Article, null, r.ContributorId, null, result.ReviewerName, DateTime.UtcNow));
         }
     }
 }

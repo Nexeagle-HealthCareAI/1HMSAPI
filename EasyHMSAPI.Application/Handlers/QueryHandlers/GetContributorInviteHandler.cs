@@ -2,6 +2,7 @@ using EasyHMSAPI.Application.Handlers.CommandHandlers;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Application.Services;
+using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
@@ -53,14 +54,18 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
     public class GetContributorsAdminHandler : IRequestHandler<GetContributorsAdminRequestModel, GetContributorsAdminResponseModel>
     {
         private readonly AppDbContext _context;
+        private readonly IHealthWikiStaffService _staff;
 
-        public GetContributorsAdminHandler(AppDbContext context)
+        public GetContributorsAdminHandler(AppDbContext context, IHealthWikiStaffService staff)
         {
             _context = context;
+            _staff = staff;
         }
 
         public async Task<GetContributorsAdminResponseModel> Handle(GetContributorsAdminRequestModel request, CancellationToken ct)
         {
+            // Hospital doctors follow their Doctor profile, so the list shows who is verified right now.
+            await _staff.SyncHospitalDoctorsAsync(null, ct);
             var query = _context.HealthWikiContributors.AsNoTracking().Where(c => c.FullName != string.Empty);
             var status = request.Status?.Trim().ToUpperInvariant();
             if (!string.IsNullOrEmpty(status)) query = query.Where(c => c.Status == status);

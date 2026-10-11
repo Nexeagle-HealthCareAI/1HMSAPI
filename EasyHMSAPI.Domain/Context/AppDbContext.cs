@@ -239,6 +239,8 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<HealthArticleAccessLink> HealthArticleAccessLinks { get; set; }
         public DbSet<ContributorOtp> ContributorOtps { get; set; }
         public DbSet<HealthArticleReview> HealthArticleReviews { get; set; }
+        public DbSet<HealthArticleLike> HealthArticleLikes { get; set; }
+        public DbSet<HealthArticleStatDaily> HealthArticleStatDailies { get; set; }
         public DbSet<ContributorSession> ContributorSessions { get; set; }
 
         // ─── 1HR Suite — Hospital Workforce Management ────────────────────────
@@ -928,6 +930,21 @@ namespace EasyHMSAPI.Domain.Context
                 entity.ToTable("HealthArticleReview");
                 entity.HasKey(r => r.ReviewId);
                 entity.Property(r => r.DecidedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<HealthArticleLike>(entity =>
+            {
+                entity.ToTable("HealthArticleLike");
+                entity.HasKey(l => new { l.ArticleId, l.VisitorKeyHash });
+                entity.Property(l => l.VisitorKeyHash).HasColumnType("char(64)");
+                entity.Property(l => l.CreatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<HealthArticleStatDaily>(entity =>
+            {
+                entity.ToTable("HealthArticleStatDaily");
+                entity.HasKey(d => new { d.ArticleId, d.StatDate });
+                entity.Property(d => d.StatDate).HasColumnType("date");
             });
 
             modelBuilder.Entity<HealthArticleAccessLink>(entity =>

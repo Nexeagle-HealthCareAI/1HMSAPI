@@ -304,6 +304,45 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        public class ReactionBody
+        {
+            // An anonymous id the Doctor Dekho site keeps for the reader (a random value in a cookie). Never an IP address or a name.
+            public string? VisitorKey { get; set; }
+        }
+
+        // "Helpful" on a published article. One per reader; asking again changes nothing.
+        [HttpPost("health-articles/{id}/like")]
+        public async Task<IActionResult> LikeHealthArticle(string id, [FromBody] ReactionBody? body)
+        {
+            try
+            {
+                var res = await _mediator.Send(new LikeHealthArticleRequestModel { Slug = id, VisitorKey = body?.VisitorKey });
+                return res.Success ? Ok(new { changed = res.Changed, likes = res.Likes }) : StatusCode(res.StatusCode, new { message = res.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.LikeHealthArticle for id: {Id}", id);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
+        // Page view of a published article. One per reader per day. Fired by the page-view beacon, so it has the generous beacon limit.
+        [HttpPost("health-articles/{id}/view")]
+        [EnableRateLimiting("TrackVisitPolicy")]
+        public async Task<IActionResult> ViewHealthArticle(string id, [FromBody] ReactionBody? body)
+        {
+            try
+            {
+                var res = await _mediator.Send(new RecordHealthArticleViewRequestModel { Slug = id, VisitorKey = body?.VisitorKey });
+                return res.Success ? Ok(new { changed = res.Changed, views = res.Views }) : StatusCode(res.StatusCode, new { message = res.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.ViewHealthArticle for id: {Id}", id);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
         // Doctor's own WhatsApp-booking QR (NexEagle logo centered) -- rendered on their Doctor
         // Dekho profile page. Scanning it lands the patient straight into a booking flow for
         // THIS exact doctor (skips specialty/name search entirely) -- see the bot's DRBOOK

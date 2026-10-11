@@ -55,6 +55,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         Id = c.ContributorId, FullName = c.FullName, Type = c.Type, Status = c.Status, Speciality = c.Speciality,
                         Qualification = c.Qualification, RoleTitle = c.RoleTitle, Organisation = c.Organisation, PhotoUrl = c.PhotoUrl,
                         RegistrationNumber = c.RegistrationNumber, RegistrationCouncil = c.RegistrationCouncil,
+                        // A hospital doctor is verified in the CMS doctor list; read that flag live so the badge disappears the moment it is unmarked.
+                        DoctorRegistrationVerified = c.DoctorId != null && _context.Doctors.Any(d => d.DoctorID == c.DoctorId && d.IsRegistrationVerified),
                     })
                     .ToListAsync(cancellationToken)).ToDictionary(p => p.Id);
 
@@ -99,7 +101,11 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 Id = p.Id, FullName = p.FullName, Type = p.Type, Speciality = p.Speciality, Qualification = p.Qualification,
                 RoleTitle = p.RoleTitle, Organisation = p.Organisation, PhotoUrl = p.PhotoUrl,
                 RegistrationNumber = p.RegistrationNumber, RegistrationCouncil = p.RegistrationCouncil,
-                IsRegistrationVerified = HealthArticleRules.ShowsReviewerBadge(HealthArticle.TypeMedical, p.Type, p.Status),
+                IsRegistrationVerified = HealthArticleRules.ShowsReviewerBadge(HealthArticle.TypeMedical, p.Type,
+                    p.Type == HealthWikiContributor.TypeHospitalDoctor
+                        ? (p.DoctorRegistrationVerified && !string.IsNullOrWhiteSpace(p.RegistrationNumber) && !string.IsNullOrWhiteSpace(p.RegistrationCouncil)
+                            ? HealthWikiContributor.StatusVerified : HealthWikiContributor.StatusPending)
+                        : p.Status),
             };
         }
 
@@ -116,6 +122,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             public string? PhotoUrl { get; set; }
             public string? RegistrationNumber { get; set; }
             public string? RegistrationCouncil { get; set; }
+            public bool DoctorRegistrationVerified { get; set; }
         }
     }
 }

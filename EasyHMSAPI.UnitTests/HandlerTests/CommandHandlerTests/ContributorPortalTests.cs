@@ -72,7 +72,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 
         private Task<EasyHMSAPI.Application.ResponseModels.CommandResponseModels.ContributorArticleResponseModel> Review(
             HealthWikiContributor who, string slug, string decision, string? comment = null, bool accuracy = true) =>
-            new ReviewContributorArticleHandler(_context).Handle(new ReviewContributorArticleRequestModel
+            new ReviewContributorArticleHandler(_context, new HealthArticleReviewService(_context)).Handle(new ReviewContributorArticleRequestModel
             { ContributorId = who.ContributorId, Slug = slug, Decision = decision, Comment = comment, AccuracyConfirmed = accuracy }, Ct);
 
         private async Task<List<EasyHMSAPI.Application.ResponseModels.QueryResponseModels.PublicHealthArticleInfo>> PublicList() =>
@@ -433,7 +433,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var mine = (await new GetContributorArticlesHandler(_context).Handle(new GetContributorArticlesRequestModel { ContributorId = reviewer.ContributorId }, Ct)).Articles!;
             Assert.That(mine.Pending, Is.Empty, "nothing left to decide");
 
-            var verified = await new VerifyContributorHandler(_context).Handle(new VerifyContributorRequestModel { ContributorId = reviewer.ContributorId, ActorName = "Priya" }, Ct);
+            var verified = await new VerifyContributorHandler(_context, new HealthWikiStaffService(_context)).Handle(new VerifyContributorRequestModel { ContributorId = reviewer.ContributorId, ActorName = "Priya" }, Ct);
 
             Assert.That(verified.Success, Is.True, verified.Message);
             var live = (await PublicList()).Single();
@@ -532,7 +532,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(edit.Success, Is.True, edit.Message);
             Assert.That(_context.HealthArticles.Single().ApprovedAt, Is.Null);
 
-            await new VerifyContributorHandler(_context).Handle(new VerifyContributorRequestModel { ContributorId = reviewer.ContributorId }, Ct);
+            await new VerifyContributorHandler(_context, new HealthWikiStaffService(_context)).Handle(new VerifyContributorRequestModel { ContributorId = reviewer.ContributorId }, Ct);
             Assert.That(await PublicList(), Is.Empty, "verification does not publish text the doctor never approved");
         }
 
