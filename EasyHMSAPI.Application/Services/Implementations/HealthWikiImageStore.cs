@@ -9,8 +9,9 @@ using System.Diagnostics.CodeAnalysis;
 namespace EasyHMSAPI.Application.Services.Implementations
 {
     /// <summary>
-    /// The Health Wiki image bucket (HealthWiki:ImageBucket) on the same S3-compatible store and credentials as the rest of EasyHMS
-    /// (Storage:S3:*). Objects get a random key, are cached for a year (the key changes when the image does), and carry no ACL: the bucket
+    /// The Health Wiki image bucket (HealthWiki:ImageBucket) on the same S3-compatible store as the rest of EasyHMS (Storage:S3:ServiceUrl).
+    /// It prefers its own access key (HealthWiki:ImageAccessKey / ImageSecretKey), which should be allowed on this bucket only, so a fault
+    /// here can never reach patient files; without them it falls back to the shared Storage:S3 key. Objects get a random key, are cached for a year (the key changes when the image does), and carry no ACL: the bucket
     /// policy lets anyone read a single file, and nothing else.
     /// </summary>
     [ExcludeFromCodeCoverage]
@@ -23,8 +24,12 @@ namespace EasyHMSAPI.Application.Services.Implementations
         public HealthWikiImageStore(IConfiguration configuration)
         {
             var serviceUrl = configuration["Storage:S3:ServiceUrl"] ?? string.Empty;
-            var accessKey = configuration["Storage:S3:AccessKey"] ?? string.Empty;
-            var secretKey = configuration["Storage:S3:SecretKey"] ?? string.Empty;
+            // The Health Wiki's own key when both halves are set, otherwise the shared one.
+            var ownKey = Clean(configuration["HealthWiki:ImageAccessKey"]);
+            var ownSecret = Clean(configuration["HealthWiki:ImageSecretKey"]);
+            var useOwn = ownKey != null && ownSecret != null;
+            var accessKey = useOwn ? ownKey! : configuration["Storage:S3:AccessKey"] ?? string.Empty;
+            var secretKey = useOwn ? ownSecret! : configuration["Storage:S3:SecretKey"] ?? string.Empty;
             var region = configuration["Storage:S3:Region"] ?? "us-east-1";
             var forcePathStyle = !bool.TryParse(configuration["Storage:S3:ForcePathStyle"], out var fps) || fps;
             var sharedBucket = configuration["Storage:S3:Bucket"] ?? string.Empty;
