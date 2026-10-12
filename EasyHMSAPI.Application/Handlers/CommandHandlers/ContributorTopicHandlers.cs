@@ -34,21 +34,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
     public class GetContributorTopicsHandler : IRequestHandler<GetContributorTopicsRequestModel, GetContributorTopicsResponseModel>
     {
-        private readonly AppDbContext _context;
+        private readonly IHealthWikiTopicService _topics;
 
-        public GetContributorTopicsHandler(AppDbContext context)
+        public GetContributorTopicsHandler(IHealthWikiTopicService topics)
         {
-            _context = context;
+            _topics = topics;
         }
 
-        public async Task<GetContributorTopicsResponseModel> Handle(GetContributorTopicsRequestModel request, CancellationToken ct)
-        {
-            var topics = await _context.HealthWikiTopicRequests.AsNoTracking().Where(t => t.ContributorId == request.ContributorId)
-                .OrderByDescending(t => t.UpdatedAt).Take(200).ToListAsync(ct);
-            var result = new List<MyTopicInfo>();
-            foreach (var t in topics) result.Add(ContributorPortalMapper.ToMyTopic(t, await TopicRules.ArticleSlug(_context, t.ArticleId, ct)));
-            return GetContributorTopicsResponseModel.Ok(result);
-        }
+        public Task<GetContributorTopicsResponseModel> Handle(GetContributorTopicsRequestModel request, CancellationToken ct) => _topics.ListAsync(request.ContributorId, ct);
     }
 
     /// <summary>
@@ -58,89 +51,27 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     /// </summary>
     public class CreateContributorTopicHandler : IRequestHandler<CreateContributorTopicRequestModel, ContributorTopicResponseModel>
     {
-        private readonly AppDbContext _context;
+        private readonly IHealthWikiTopicService _topics;
 
-        public CreateContributorTopicHandler(AppDbContext context)
+        public CreateContributorTopicHandler(IHealthWikiTopicService topics)
         {
-            _context = context;
+            _topics = topics;
         }
 
-        public async Task<ContributorTopicResponseModel> Handle(CreateContributorTopicRequestModel r, CancellationToken ct)
-        {
-            var me = await _context.HealthWikiContributors.AsNoTracking().FirstOrDefaultAsync(c => c.ContributorId == r.ContributorId, ct);
-            if (me == null) return ContributorTopicResponseModel.Fail(404, "Profile not found.");
-            if (!ContributorPortalRules.IsProfileAccepted(me.Status))
-                return ContributorTopicResponseModel.Fail(403, "Your profile has not been accepted yet. Finish registering first.");
-
-            var title = TopicRules.Clean(r.Title);
-            var outline = TopicRules.Clean(r.Outline);
-            var why = TopicRules.Clean(r.WhyItMatters);
-            if (title == null || outline == null || why == null)
-                return ContributorTopicResponseModel.Fail(400, "Fill in the topic, the outline and why it matters.");
-            if (title.Length > TopicRules.MaxTitle) return ContributorTopicResponseModel.Fail(400, $"The topic is too long (max {TopicRules.MaxTitle} characters).");
-            var invalid = TopicRules.Validate(outline, why, r.ConditionSlug, r.References);
-            if (invalid != null) return ContributorTopicResponseModel.Fail(400, invalid);
-
-            var type = HealthArticleRules.NormalizeType(r.Type) ?? HealthArticle.TypeMedical;
-            if (!HealthArticleRules.CanAuthor(type, me.Type))
-                return ContributorTopicResponseModel.Fail(403, "You can suggest sector updates. Medical topics are for doctors.");
-
-            var open = await _context.HealthWikiTopicRequests.CountAsync(t => t.ContributorId == me.ContributorId
-                && (t.Status == HealthWikiTopicRequest.StatusSubmitted || t.Status == HealthWikiTopicRequest.StatusNeedsDetail), ct);
-            if (open >= ContributorPortalRules.MaxOpenTopics)
-                return ContributorTopicResponseModel.Fail(409, $"You already have {ContributorPortalRules.MaxOpenTopics} open requests. Wait for a decision before sending another.");
-
-            var now = DateTime.UtcNow;
-            var topic = new HealthWikiTopicRequest
-            {
-                TopicId = Guid.NewGuid(), ContributorId = me.ContributorId, Title = title, Type = type, Outline = outline, WhyItMatters = why,
-                ConditionSlug = TopicRules.Clean(r.ConditionSlug)?.ToLowerInvariant(), References = TopicRules.Clean(r.References),
-                Status = HealthWikiTopicRequest.StatusSubmitted, CreatedAt = now, UpdatedAt = now,
-            };
-            _context.HealthWikiTopicRequests.Add(topic);
-            HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityTopic, topic.TopicId, "SUBMITTED", HealthWikiAudit.ActorContributor, me.FullName, title);
-            await _context.SaveChangesAsync(ct);
-            return ContributorTopicResponseModel.Ok(ContributorPortalMapper.ToMyTopic(topic, null), 201);
-        }
+        public Task<ContributorTopicResponseModel> Handle(CreateContributorTopicRequestModel r, CancellationToken ct) => _topics.CreateAsync(r, ct);
     }
 
     /// <summary>The contributor answers "needs detail": the changed fields are saved and the request goes back to the team as SUBMITTED.</summary>
     public class AddContributorTopicDetailHandler : IRequestHandler<AddContributorTopicDetailRequestModel, ContributorTopicResponseModel>
     {
-        private readonly AppDbContext _context;
+        private readonly IHealthWikiTopicService _topics;
 
-        public AddContributorTopicDetailHandler(AppDbContext context)
+        public AddContributorTopicDetailHandler(IHealthWikiTopicService topics)
         {
-            _context = context;
+            _topics = topics;
         }
 
-        public async Task<ContributorTopicResponseModel> Handle(AddContributorTopicDetailRequestModel r, CancellationToken ct)
-        {
-            var topic = await _context.HealthWikiTopicRequests.FirstOrDefaultAsync(t => t.TopicId == r.TopicId && t.ContributorId == r.ContributorId, ct);
-            if (topic == null) return ContributorTopicResponseModel.Fail(404, "Topic not found.");
-            if (topic.Status != HealthWikiTopicRequest.StatusNeedsDetail)
-                return ContributorTopicResponseModel.Fail(409, "The team has not asked for more detail on this one.");
-
-            var outline = r.Provided.Contains("outline") ? TopicRules.Clean(r.Outline) : topic.Outline;
-            var why = r.Provided.Contains("whyItMatters") ? TopicRules.Clean(r.WhyItMatters) : topic.WhyItMatters;
-            var condition = r.Provided.Contains("conditionSlug") ? TopicRules.Clean(r.ConditionSlug)?.ToLowerInvariant() : topic.ConditionSlug;
-            var references = r.Provided.Contains("references") ? TopicRules.Clean(r.References) : topic.References;
-            if (outline == null || why == null) return ContributorTopicResponseModel.Fail(400, "The outline and why it matters cannot be empty.");
-            var invalid = TopicRules.Validate(outline, why, condition, references);
-            if (invalid != null) return ContributorTopicResponseModel.Fail(400, invalid);
-
-            topic.Outline = outline;
-            topic.WhyItMatters = why;
-            topic.ConditionSlug = condition;
-            topic.References = references;
-            topic.Status = HealthWikiTopicRequest.StatusSubmitted;
-            topic.DecisionNote = null;
-            topic.UpdatedAt = DateTime.UtcNow;
-            var name = await _context.HealthWikiContributors.Where(c => c.ContributorId == r.ContributorId).Select(c => c.FullName).FirstOrDefaultAsync(ct);
-            HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityTopic, topic.TopicId, "DETAIL_ADDED", HealthWikiAudit.ActorContributor, name);
-            await _context.SaveChangesAsync(ct);
-            return ContributorTopicResponseModel.Ok(ContributorPortalMapper.ToMyTopic(topic, await TopicRules.ArticleSlug(_context, topic.ArticleId, ct)));
-        }
+        public Task<ContributorTopicResponseModel> Handle(AddContributorTopicDetailRequestModel r, CancellationToken ct) => _topics.AddDetailAsync(r, ct);
     }
 
     public class GetTopicRequestsAdminHandler : IRequestHandler<GetTopicRequestsAdminRequestModel, GetTopicRequestsAdminResponseModel>
@@ -199,24 +130,57 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             {
                 case DecideTopicRequestModel.Accept:
                 {
-                    var author = await _context.HealthWikiContributors.AsNoTracking().FirstOrDefaultAsync(c => c.ContributorId == topic.ContributorId, ct);
-                    if (author == null || author.Status == HealthWikiContributor.StatusRejected)
+                    var suggester = await _context.HealthWikiContributors.AsNoTracking().FirstOrDefaultAsync(c => c.ContributorId == topic.ContributorId, ct);
+                    if (suggester == null || suggester.Status == HealthWikiContributor.StatusRejected)
                         return DecideTopicResponseModel.Fail(409, "This contributor can no longer write articles.");
-                    if (!HealthArticleRules.CanAuthor(topic.Type, author.Type))
+
+                    // Normally the person who suggested it writes it. A doctor who asked for a writer gets a draft written by the person the team
+                    // chooses (or the content team in the CMS) and becomes its reviewer.
+                    Guid? authorId = topic.ContributorId;
+                    Guid? reviewerId = null;
+                    if (topic.RequestWriter)
+                    {
+                        if (!HealthArticleRules.IsDoctorType(suggester.Type))
+                            return DecideTopicResponseModel.Fail(409, "Only a doctor can ask for a writer.");
+                        if (r.ContentTeam)
+                        {
+                            authorId = null;
+                        }
+                        else if (r.WriterContributorId.HasValue)
+                        {
+                            var writer = await _context.HealthWikiContributors.AsNoTracking().FirstOrDefaultAsync(c => c.ContributorId == r.WriterContributorId.Value, ct);
+                            if (writer == null) return DecideTopicResponseModel.Fail(404, "The writer was not found.");
+                            if (writer.Status == HealthWikiContributor.StatusRejected || writer.Status == HealthWikiContributor.StatusInvited)
+                                return DecideTopicResponseModel.Fail(409, "This person has not finished joining, or can no longer write articles.");
+                            if (!HealthArticleRules.CanAuthor(topic.Type, writer.Type))
+                                return DecideTopicResponseModel.Fail(409, "This person cannot write this type of article.");
+                            authorId = writer.ContributorId;
+                        }
+                        else
+                        {
+                            return DecideTopicResponseModel.Fail(400, "Choose who writes it, or choose the NexEagle content team.");
+                        }
+                        // A sector update has no reviewer; only a medical article is reviewed by the doctor who asked for it.
+                        if (topic.Type == HealthArticle.TypeMedical) reviewerId = suggester.ContributorId;
+                    }
+                    else if (!HealthArticleRules.CanAuthor(topic.Type, suggester.Type))
+                    {
                         return DecideTopicResponseModel.Fail(409, "This contributor cannot write this type of article.");
+                    }
 
                     articleSlug = await UniqueSlug(ContributorPortalRules.Slugify(topic.Title), ct);
                     var article = new HealthArticle
                     {
                         ArticleId = Guid.NewGuid(), Slug = articleSlug, Type = topic.Type, Title = topic.Title, Content = $"## {topic.Title}\n\n{topic.Outline}",
-                        RelatedConditionSlug = topic.ConditionSlug, References = topic.References, AuthorContributorId = topic.ContributorId,
+                        RelatedConditionSlug = topic.ConditionSlug, References = topic.References, AuthorContributorId = authorId, ReviewerContributorId = reviewerId,
                         Status = HealthArticle.StatusDraft, CreatedAt = now, UpdatedAt = now,
                     };
                     _context.HealthArticles.Add(article);
                     topic.ArticleId = article.ArticleId;
                     topic.Status = HealthWikiTopicRequest.StatusAccepted;
                     topic.DecisionNote = null;
-                    HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "CREATED", HealthWikiAudit.ActorCmsUser, actor, $"From the topic \"{topic.Title}\"");
+                    HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "CREATED", HealthWikiAudit.ActorCmsUser, actor,
+                        topic.RequestWriter ? $"From the topic \"{topic.Title}\", suggested by {suggester.FullName}, who asked for a writer" : $"From the topic \"{topic.Title}\"");
                     break;
                 }
                 case DecideTopicRequestModel.Decline:
@@ -250,7 +214,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             // Saved, so the contributor is told what the team decided (N10, N11 or N12).
             switch (topic.Status)
             {
-                case HealthWikiTopicRequest.StatusAccepted when slugForAnswer != null:
+                // The "accepted" message says a draft is waiting for the person to write. When a doctor asked for a writer that is not true for them:
+                // they are told when the article is ready for their review (N5).
+                case HealthWikiTopicRequest.StatusAccepted when slugForAnswer != null && !topic.RequestWriter:
                     await _notifier.TopicAcceptedAsync(topic, slugForAnswer, ct);
                     break;
                 case HealthWikiTopicRequest.StatusDeclined:

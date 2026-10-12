@@ -244,6 +244,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<HealthWikiNotification> HealthWikiNotifications { get; set; }
         public DbSet<HealthArticleStatDaily> HealthArticleStatDailies { get; set; }
         public DbSet<ContributorSession> ContributorSessions { get; set; }
+        public DbSet<ContributorHandoff> ContributorHandoffs { get; set; }
 
         // ─── 1HR Suite — Hospital Workforce Management ────────────────────────
         public DbSet<HrEmployee> HrEmployee { get; set; }
@@ -985,6 +986,16 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(o => o.ExpiresAt).HasColumnType("datetime2(3)");
                 entity.Property(o => o.ConsumedAt).HasColumnType("datetime2(3)");
                 entity.Property(o => o.CreatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<ContributorHandoff>(entity =>
+            {
+                entity.ToTable("ContributorHandoff");
+                entity.HasKey(h => h.HandoffId);
+                entity.Property(h => h.TokenHash).HasColumnType("char(64)");
+                entity.Property(h => h.ExpiresAt).HasColumnType("datetime2(3)");
+                entity.Property(h => h.UsedAt).HasColumnType("datetime2(3)");
+                entity.Property(h => h.CreatedAt).HasColumnType("datetime2(3)");
             });
 
             modelBuilder.Entity<ContributorSession>(entity =>

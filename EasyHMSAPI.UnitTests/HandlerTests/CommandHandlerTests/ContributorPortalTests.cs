@@ -584,7 +584,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         {
             var invited = Person(status: "INVITED", name: "Not yet");
             var doctor = Person();
-            var h = new CreateContributorTopicHandler(_context);
+            var h = new CreateContributorTopicHandler(new HealthWikiTopicService(_context));
 
             Assert.That((await h.Handle(Topic(invited.ContributorId), Ct)).StatusCode, Is.EqualTo(403));
             var noWhy = Topic(doctor.ContributorId); noWhy.WhyItMatters = " ";
@@ -598,7 +598,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public async Task Topic_AWriterSuggestsOnlySectorUpdates()
         {
             var writer = Person("WRITER", "VERIFIED", "W");
-            var h = new CreateContributorTopicHandler(_context);
+            var h = new CreateContributorTopicHandler(new HealthWikiTopicService(_context));
 
             Assert.That((await h.Handle(Topic(writer.ContributorId, type: "MEDICAL"), Ct)).StatusCode, Is.EqualTo(403));
             Assert.That((await h.Handle(Topic(writer.ContributorId, "Telemedicine rules", "SECTOR_UPDATE"), Ct)).StatusCode, Is.EqualTo(201));
@@ -608,7 +608,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public async Task Topic_AtMostFiveOpenAtATime()
         {
             var doctor = Person();
-            var h = new CreateContributorTopicHandler(_context);
+            var h = new CreateContributorTopicHandler(new HealthWikiTopicService(_context));
             for (var i = 0; i < 5; i++) Assert.That((await h.Handle(Topic(doctor.ContributorId, $"Topic {i}"), Ct)).Success, Is.True);
 
             var sixth = await h.Handle(Topic(doctor.ContributorId, "One more"), Ct);
@@ -623,7 +623,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public async Task Topic_CmsDecisions_Accept_Decline_AskDetail()
         {
             var doctor = Person();
-            var create = new CreateContributorTopicHandler(_context);
+            var create = new CreateContributorTopicHandler(new HealthWikiTopicService(_context));
             var decide = new DecideTopicHandler(_context, new RecordingNotifier());
             var accept = (await create.Handle(Topic(doctor.ContributorId, "Silent heart attack"), Ct)).Topic!;
             var decline = (await create.Handle(Topic(doctor.ContributorId, "Off topic"), Ct)).Topic!;
@@ -645,7 +645,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(draft.Content, Does.Contain("Symptoms that are easy to miss."));
             Assert.That((await decide.Handle(new DecideTopicRequestModel { TopicId = accept.Id, Action = "DECLINE", Note = "again" }, Ct)).StatusCode, Is.EqualTo(409), "decided is final");
 
-            var mine = (await new GetContributorTopicsHandler(_context).Handle(new GetContributorTopicsRequestModel { ContributorId = doctor.ContributorId }, Ct)).Topics!;
+            var mine = (await new GetContributorTopicsHandler(new HealthWikiTopicService(_context)).Handle(new GetContributorTopicsRequestModel { ContributorId = doctor.ContributorId }, Ct)).Topics!;
             Assert.That(mine.Single(t => t.Id == decline.Id).DecisionNote, Is.EqualTo("Out of scope."));
             Assert.That(mine.Single(t => t.Id == ask.Id).Status, Is.EqualTo("NEEDS_DETAIL"));
             Assert.That(mine.Single(t => t.Id == accept.Id).ArticleSlug, Is.EqualTo("silent-heart-attack"));
@@ -655,8 +655,8 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public async Task Topic_AddingDetail_OnlyWhenAskedFor_AndItGoesBackToSubmitted()
         {
             var doctor = Person();
-            var topic = (await new CreateContributorTopicHandler(_context).Handle(Topic(doctor.ContributorId), Ct)).Topic!;
-            var add = new AddContributorTopicDetailHandler(_context);
+            var topic = (await new CreateContributorTopicHandler(new HealthWikiTopicService(_context)).Handle(Topic(doctor.ContributorId), Ct)).Topic!;
+            var add = new AddContributorTopicDetailHandler(new HealthWikiTopicService(_context));
             var detail = new AddContributorTopicDetailRequestModel
             { ContributorId = doctor.ContributorId, TopicId = topic.Id, Outline = "Adults over 50.", Provided = new HashSet<string> { "outline" } };
 
@@ -678,7 +678,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public async Task Topic_WhenTheAuthorStartsWritingTheAcceptedDraft_ItBecomesArticleStarted()
         {
             var doctor = Person();
-            var topic = (await new CreateContributorTopicHandler(_context).Handle(Topic(doctor.ContributorId, "Silent heart attack"), Ct)).Topic!;
+            var topic = (await new CreateContributorTopicHandler(new HealthWikiTopicService(_context)).Handle(Topic(doctor.ContributorId, "Silent heart attack"), Ct)).Topic!;
             var accepted = (await new DecideTopicHandler(_context, new RecordingNotifier()).Handle(new DecideTopicRequestModel { TopicId = topic.Id, Action = "ACCEPT" }, Ct)).Topic!;
 
             var edit = await new SaveContributorArticleHandler(_context, new HealthArticleService(_context, new RecordingNotifier())).Handle(Draft(doctor.ContributorId, accepted.ArticleSlug, title: "Silent heart attack", content: "My first paragraph."), Ct);
@@ -691,7 +691,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public async Task TopicAdmin_ListFilterAndGet()
         {
             var doctor = Person();
-            var create = new CreateContributorTopicHandler(_context);
+            var create = new CreateContributorTopicHandler(new HealthWikiTopicService(_context));
             var a = (await create.Handle(Topic(doctor.ContributorId, "A"), Ct)).Topic!;
             await create.Handle(Topic(doctor.ContributorId, "B"), Ct);
             await new DecideTopicHandler(_context, new RecordingNotifier()).Handle(new DecideTopicRequestModel { TopicId = a.Id, Action = "DECLINE", Note = "no" }, Ct);

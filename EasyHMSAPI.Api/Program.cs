@@ -181,6 +181,8 @@ builder.Services.AddScoped<IHealthWikiStaffService, HealthWikiStaffService>();
 builder.Services.AddScoped<IHealthArticleStatsService, HealthArticleStatsService>();
 builder.Services.AddScoped<IHealthWikiNotifier, HealthWikiNotifier>();
 builder.Services.AddScoped<IHealthWikiMaintenanceService, HealthWikiMaintenanceService>();
+builder.Services.AddScoped<IHealthWikiTopicService, HealthWikiTopicService>();
+builder.Services.AddScoped<IHealthWikiHandoffService, HealthWikiHandoffService>();
 builder.Services.AddSingleton<IHealthWikiImageStore, HealthWikiImageStore>();
 builder.Services.AddScoped<IHealthWikiImageService, HealthWikiImageService>();
 builder.Services.AddScoped<IUsageLimitService, UsageLimitService>();

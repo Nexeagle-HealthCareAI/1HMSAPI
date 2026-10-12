@@ -28,6 +28,8 @@ namespace EasyHMSAPI.Domain.Entities
         public string? DecisionNote { get; set; }
         public string? DecidedByName { get; set; }
         public Guid? ArticleId { get; set; }
+        // A doctor asked for someone else to write it. The team picks the writer (or the content team) and the doctor becomes the reviewer.
+        public bool RequestWriter { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }

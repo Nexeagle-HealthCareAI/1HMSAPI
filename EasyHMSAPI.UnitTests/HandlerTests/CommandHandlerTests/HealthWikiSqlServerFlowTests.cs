@@ -128,7 +128,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(admin.HasPendingRevision, Is.True);
 
             // Topics, the CMS inbox and the tab counts.
-            var topic = await new CreateContributorTopicHandler(_db).Handle(new CreateContributorTopicRequestModel
+            var topic = await new CreateContributorTopicHandler(new HealthWikiTopicService(_db)).Handle(new CreateContributorTopicRequestModel
             { ContributorId = authorId, Title = "Topic " + tag, Type = "MEDICAL", Outline = "o", WhyItMatters = "w" }, Ct);
             Assert.That(topic.StatusCode, Is.EqualTo(201), topic.Message);
             var accepted = await new DecideTopicHandler(_db, new RecordingNotifier()).Handle(new DecideTopicRequestModel { TopicId = topic.Topic!.Id, Action = "ACCEPT", ActorName = "Priya" }, Ct);

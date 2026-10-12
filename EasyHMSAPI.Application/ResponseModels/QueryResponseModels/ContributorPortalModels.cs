@@ -75,6 +75,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string Status { get; set; } = null!;
         public string? DecisionNote { get; set; }
         public string? ArticleSlug { get; set; }
+        public bool RequestWriter { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }
@@ -95,6 +96,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         // Why it was declined, or what detail the team asked for.
         public string? DecisionReason { get; set; }
         public string? ArticleSlug { get; set; }
+        // The doctor who suggested it wants someone else to write it: on accepting, the team picks the writer.
+        public bool RequestWriter { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }

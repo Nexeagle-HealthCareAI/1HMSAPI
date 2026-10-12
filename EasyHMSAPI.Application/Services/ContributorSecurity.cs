@@ -18,6 +18,8 @@ namespace EasyHMSAPI.Application.Services
         public const int MaxOtpPerDay = 5;
         public static readonly TimeSpan SessionLifetime = TimeSpan.FromDays(7);
         public static readonly TimeSpan LinkLifetime = TimeSpan.FromDays(7);
+        // A hospital doctor passed from EasyHMS to Doctor Dekho: the code is used within seconds.
+        public static readonly TimeSpan HandoffLifetime = TimeSpan.FromSeconds(60);
 
         /// <summary>The 10-digit Indian mobile number, or null. Accepts +91 / 91 / 0 prefixes and separators.</summary>
         public static string? NormalizeMobile(string? input)

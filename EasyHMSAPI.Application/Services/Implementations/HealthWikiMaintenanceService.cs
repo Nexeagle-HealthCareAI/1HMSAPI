@@ -119,7 +119,10 @@ namespace EasyHMSAPI.Application.Services.Implementations
             var now = DateTime.UtcNow;
             var oldCodes = await _context.ContributorOtps.Where(o => o.CreatedAt < now.AddDays(-KeepOtpDays)).Take(Batch).ToListAsync(ct);
             _context.ContributorOtps.RemoveRange(oldCodes);
-            result.OtpsRemoved = oldCodes.Count;
+            // The one-time codes that pass a hospital doctor from EasyHMS to Doctor Dekho are sign-in records too (counted with the codes).
+            var oldHandoffs = await _context.ContributorHandoffs.Where(h => h.CreatedAt < now.AddDays(-KeepOtpDays)).Take(Batch).ToListAsync(ct);
+            _context.ContributorHandoffs.RemoveRange(oldHandoffs);
+            result.OtpsRemoved = oldCodes.Count + oldHandoffs.Count;
 
             var oldSessions = await _context.ContributorSessions
                 .Where(s => s.ExpiresAt < now.AddDays(-KeepSessionDays) || (s.RevokedAt != null && s.RevokedAt < now.AddDays(-KeepSessionDays)))

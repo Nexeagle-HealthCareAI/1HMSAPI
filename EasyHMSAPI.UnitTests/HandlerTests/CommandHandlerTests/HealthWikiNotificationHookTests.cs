@@ -361,7 +361,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public async Task EachTopicDecision_TellsTheContributor_N10_N11_N12()
         {
             var c = Person("Dr. Asha");
-            var create = new CreateContributorTopicHandler(_context);
+            var create = new CreateContributorTopicHandler(new HealthWikiTopicService(_context));
             var accept = (await create.Handle(new CreateContributorTopicRequestModel { ContributorId = c.ContributorId, Title = "Silent heart attack", Outline = "o", WhyItMatters = "w" }, Ct)).Topic!;
             var decline = (await create.Handle(new CreateContributorTopicRequestModel { ContributorId = c.ContributorId, Title = "Off topic", Outline = "o", WhyItMatters = "w" }, Ct)).Topic!;
             var ask = (await create.Handle(new CreateContributorTopicRequestModel { ContributorId = c.ContributorId, Title = "Vague", Outline = "o", WhyItMatters = "w" }, Ct)).Topic!;
@@ -381,7 +381,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public async Task ARefusedTopicDecision_TellsNobody()
         {
             var c = Person("Dr. Asha");
-            var topic = (await new CreateContributorTopicHandler(_context).Handle(new CreateContributorTopicRequestModel { ContributorId = c.ContributorId, Title = "T", Outline = "o", WhyItMatters = "w" }, Ct)).Topic!;
+            var topic = (await new CreateContributorTopicHandler(new HealthWikiTopicService(_context)).Handle(new CreateContributorTopicRequestModel { ContributorId = c.ContributorId, Title = "T", Outline = "o", WhyItMatters = "w" }, Ct)).Topic!;
 
             await new DecideTopicHandler(_context, _n).Handle(new DecideTopicRequestModel { TopicId = topic.Id, Action = "DECLINE" }, Ct); // no reason
 

@@ -101,6 +101,27 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        public class SsoBody
+        {
+            public string? Code { get; set; }
+        }
+
+        // A hospital doctor arriving from EasyHMS: the one-time code (made by the EasyHMS API for the signed-in doctor) becomes a session.
+        [HttpPost("sso/exchange")]
+        public async Task<IActionResult> SsoExchange([FromBody] SsoBody body)
+        {
+            try
+            {
+                var res = await _mediator.Send(new ContributorSsoExchangeRequestModel { Code = body?.Code });
+                return res.Success ? Ok(res) : StatusCode(res.StatusCode, new { message = res.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error exchanging a hand-off code");
+                return StatusCode(500, new { message = "Something went wrong. Try again." });
+            }
+        }
+
         [HttpPost("logout")]
         [ServiceFilter(typeof(ContributorSessionFilter))]
         public async Task<IActionResult> Logout()

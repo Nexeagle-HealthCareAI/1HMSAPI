@@ -76,6 +76,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? WhyItMatters { get; set; }
         public string? ConditionSlug { get; set; }
         public string? References { get; set; }
+        // A doctor asks for someone else to write it. Ignored for anyone who is not a doctor.
+        public bool RequestWriter { get; set; }
     }
 
     // Answer a "needs detail" request: only the fields sent are changed, and the request goes back to SUBMITTED.
@@ -102,5 +104,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string Action { get; set; } = null!;
         public string? Note { get; set; }
         public string? ActorName { get; set; }
+        // For ACCEPT of a topic whose doctor asked for a writer: who writes it. A contributor, or the NexEagle content team (writes in the CMS).
+        public Guid? WriterContributorId { get; set; }
+        public bool ContentTeam { get; set; }
     }
 }

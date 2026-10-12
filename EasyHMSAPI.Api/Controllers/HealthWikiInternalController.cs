@@ -203,21 +203,28 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
-        // Creates a draft for the contributor to write.
+        public class AcceptBody
+        {
+            public Guid? WriterContributorId { get; set; }
+            public bool ContentTeam { get; set; }
+        }
+
+        // Creates a draft for the contributor to write. When the doctor who suggested it asked for a writer, the body says who writes it
+        // (writerContributorId), or contentTeam=true for the NexEagle content team, who write it in the CMS; the doctor becomes the reviewer.
         [HttpPost("topic-requests/{id:guid}/accept")]
-        public Task<IActionResult> AcceptTopic(Guid id) => DecideTopic(id, DecideTopicRequestModel.Accept, null);
+        public Task<IActionResult> AcceptTopic(Guid id, [FromBody] AcceptBody? body) => DecideTopic(id, DecideTopicRequestModel.Accept, null, body);
 
         [HttpPost("topic-requests/{id:guid}/decline")]
-        public Task<IActionResult> DeclineTopic(Guid id, [FromBody] DeclineBody? body) => DecideTopic(id, DecideTopicRequestModel.Decline, body?.Reason);
+        public Task<IActionResult> DeclineTopic(Guid id, [FromBody] DeclineBody? body) => DecideTopic(id, DecideTopicRequestModel.Decline, body?.Reason, null);
 
         [HttpPost("topic-requests/{id:guid}/ask-detail")]
-        public Task<IActionResult> AskTopicDetail(Guid id, [FromBody] AskDetailBody? body) => DecideTopic(id, DecideTopicRequestModel.AskDetail, body?.Message);
+        public Task<IActionResult> AskTopicDetail(Guid id, [FromBody] AskDetailBody? body) => DecideTopic(id, DecideTopicRequestModel.AskDetail, body?.Message, null);
 
-        private async Task<IActionResult> DecideTopic(Guid id, string action, string? note)
+        private async Task<IActionResult> DecideTopic(Guid id, string action, string? note, AcceptBody? accept)
         {
             try
             {
-                var res = await _mediator.Send(new DecideTopicRequestModel { TopicId = id, Action = action, Note = note, ActorName = Actor() });
+                var res = await _mediator.Send(new DecideTopicRequestModel { TopicId = id, Action = action, Note = note, ActorName = Actor(), WriterContributorId = accept?.WriterContributorId, ContentTeam = accept?.ContentTeam ?? false });
                 return res.Success ? Ok(res.Topic) : StatusCode(res.StatusCode, new { message = res.Message });
             }
             catch (Exception ex)

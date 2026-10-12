@@ -68,14 +68,14 @@ namespace EasyHMSAPI.Application.Services
         {
             Id = t.TopicId, Title = t.Title, Type = t.Type, Outline = t.Outline, WhyItMatters = t.WhyItMatters ?? string.Empty,
             ConditionSlug = t.ConditionSlug, References = t.References, Status = t.Status, DecisionNote = t.DecisionNote,
-            ArticleSlug = articleSlug, CreatedAt = t.CreatedAt, UpdatedAt = t.UpdatedAt,
+            ArticleSlug = articleSlug, RequestWriter = t.RequestWriter, CreatedAt = t.CreatedAt, UpdatedAt = t.UpdatedAt,
         };
 
         public static TopicRequestAdminInfo ToAdminTopic(HealthWikiTopicRequest t, string? articleSlug) => new()
         {
             TopicId = t.TopicId, ContributorId = t.ContributorId, Title = t.Title, Type = t.Type, Outline = t.Outline,
             WhyItMatters = t.WhyItMatters ?? string.Empty, ConditionSlug = t.ConditionSlug, References = t.References, Status = t.Status,
-            DecisionReason = t.DecisionNote, ArticleSlug = articleSlug, CreatedAt = t.CreatedAt, UpdatedAt = t.UpdatedAt,
+            DecisionReason = t.DecisionNote, ArticleSlug = articleSlug, RequestWriter = t.RequestWriter, CreatedAt = t.CreatedAt, UpdatedAt = t.UpdatedAt,
         };
     }
 }
