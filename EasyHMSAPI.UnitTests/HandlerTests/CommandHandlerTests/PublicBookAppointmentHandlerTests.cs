@@ -430,5 +430,103 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                 "1234567890", It.IsAny<string>(), "Fallback Visitor", It.IsAny<string>(), It.IsAny<string>(),
                 "https://1hms-test.example.com/appointment-dashboard"), Times.Once);
         }
+
+        // ---------------------------------------------------------------- who must NOT be told, and not breaking the booking
+
+        private User SeedAdmin(string email, string phone, string role = "Admin", int? statusId = null)
+        {
+            var user = TestDataFactory.SeedUser(_context, email: email, phone: phone);
+            if (statusId.HasValue) user.UserStatusId = statusId.Value;
+            _context.HospitalUsers.Add(new HospitalUser { HospitalUserID = Guid.NewGuid(), HospitalID = _hospitalId, UserID = user.UserID });
+            var roleEntity = new Role { RoleID = Guid.NewGuid(), HospitalID = _hospitalId, RoleName = role };
+            _context.Roles.Add(roleEntity);
+            _context.UserRoles.Add(new UserRole { UserID = user.UserID, RoleID = roleEntity.RoleID });
+            _context.SaveChanges();
+            return user;
+        }
+
+        private PublicBookAppointmentRequestModel BookingFor(string patientName, string mobile) => new()
+        {
+            DoctorId = _doctor.DoctorID,
+            PreferredDate = DateTime.Today.AddDays(1),
+            Patient = new Patient { FullName = patientName, Mobile = mobile },
+        };
+
+        [Test]
+        public async Task Handle_NewBooking_DoesNotNotifyDeactivatedOrUnverifiedAdmins()
+        {
+            SeedAdmin("active.admin@example.com", "7771110001");
+            SeedAdmin("former.admin@example.com", "7771110002", statusId: (int)EasyHMSAPI.Data.Enums.UserStatusEnum.Revoked);
+            SeedAdmin("unverified.admin@example.com", "7771110003", statusId: (int)EasyHMSAPI.Data.Enums.UserStatusEnum.Inactive);
+
+            var response = await _handler.Handle(BookingFor("Privacy Visitor", "9998887790"), CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            _whatsAppMessagingServiceMock.Verify(w => w.SendDoctorNewOnlineAppointmentAlertAsync("7771110001", It.IsAny<string>(), "Privacy Visitor", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Once);
+            _whatsAppMessagingServiceMock.Verify(w => w.SendDoctorNewOnlineAppointmentAlertAsync("7771110002", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never, "a deactivated former admin must not receive patient details");
+            _whatsAppMessagingServiceMock.Verify(w => w.SendDoctorNewOnlineAppointmentAlertAsync("7771110003", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+            _emailServiceMock.Verify(e => e.SendInvitationEmailAsync("former.admin@example.com", It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+            _emailServiceMock.Verify(e => e.SendInvitationEmailAsync("unverified.admin@example.com", It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+        }
+
+        [Test]
+        public async Task Handle_BookingADeactivatedDoctor_IsRefused_AndNobodyIsNotified()
+        {
+            // A deactivated doctor is not bookable in the first place (the public directory excludes them), so no staff are alerted about a
+            // booking that never happened. (The notifier additionally skips an inactive treating doctor if one ever slips through a race.)
+            SeedAdmin("still.admin@example.com", "7771110004");
+            var doctorUser = await _context.Users.FirstAsync(u => u.UserID == _doctor.UserID);
+            doctorUser.UserStatusId = (int)EasyHMSAPI.Data.Enums.UserStatusEnum.Revoked;
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(BookingFor("Doctor Left Visitor", "9998887791"), CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            _whatsAppMessagingServiceMock.Verify(w => w.SendDoctorNewOnlineAppointmentAlertAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+            Assert.That(await _context.Alert.AnyAsync(), Is.False);
+        }
+
+        [Test]
+        public async Task Handle_NewBooking_WhenNotifyingStaffThrows_TheBookingStillSucceeds()
+        {
+            // Reading the web base URL happens inside the notification step; making it throw stands in for any unexpected failure there
+            // (a database error while looking up recipients, bad configuration ...). The appointment is already saved, so the patient must
+            // get a success, not an error that would make them book again.
+            var config = new Mock<IConfiguration>();
+            config.Setup(c => c["WebApp:BaseUrl"]).Throws(new InvalidOperationException("config exploded"));
+            var handler = new PublicBookAppointmentHandler(_context, _smsServiceMock.Object, _whatsAppMessagingServiceMock.Object, _emailServiceMock.Object,
+                new MemoryCache(new MemoryCacheOptions()), config.Object, new Mock<IMagicLinkService>().Object);
+
+            var response = await handler.Handle(BookingFor("Resilient Visitor", "9998887792"), CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            Assert.That(await _context.Appointments.AnyAsync(a => a.ApptId == response.AppointmentId), Is.True, "the appointment is saved");
+        }
+
+        [Test]
+        public async Task Handle_NewBooking_SendsToAllRecipientsConcurrently_NotOneAfterAnother()
+        {
+            for (var i = 1; i <= 3; i++) SeedAdmin($"admin{i}@example.com", $"777222000{i}");
+
+            var inFlight = 0;
+            var maxInFlight = 0;
+            _whatsAppMessagingServiceMock
+                .Setup(w => w.SendDoctorNewOnlineAppointmentAlertAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+                .Returns(async () =>
+                {
+                    var now = Interlocked.Increment(ref inFlight);
+                    int seen;
+                    while (now > (seen = Volatile.Read(ref maxInFlight)) && Interlocked.CompareExchange(ref maxInFlight, now, seen) != seen) { }
+                    await Task.Delay(300);
+                    Interlocked.Decrement(ref inFlight);
+                    return true;
+                });
+
+            var response = await _handler.Handle(BookingFor("Fast Visitor", "9998887793"), CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            _whatsAppMessagingServiceMock.Verify(w => w.SendDoctorNewOnlineAppointmentAlertAsync(It.IsAny<string>(), It.IsAny<string>(), "Fast Visitor", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Exactly(4), "the doctor and the three admins");
+            Assert.That(maxInFlight, Is.GreaterThanOrEqualTo(2), "sends must overlap; one after another would make the patient wait for the sum of all of them");
+        }
     }
 }

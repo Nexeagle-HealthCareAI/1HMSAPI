@@ -3,6 +3,7 @@ using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Constants;
+using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
@@ -153,7 +154,16 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
             }
 
-            await NotifyDoctorAsync(appointment, hospitalId, request.DoctorId, patient, cancellationToken);
+            // The appointment is already saved at this point, so nothing that goes wrong while alerting staff (a database error looking up
+            // recipients, a bad config read, ...) may turn the patient's successful booking into an error: they would only retry and book twice.
+            try
+            {
+                await NotifyDoctorAsync(appointment, hospitalId, request.DoctorId, patient, cancellationToken);
+            }
+            catch (Exception)
+            {
+                // Best-effort, like every individual channel inside NotifyDoctorAsync.
+            }
 
             return new PublicBookAppointmentResponseModel
             {
@@ -180,6 +190,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     d.User.UserID,
                     d.User.MobileNumber,
                     d.User.Email,
+                    d.User.UserStatusId,
                     DoctorName = d.User.UserProfiles.FirstOrDefault()!.FullName,
                 })
                 .FirstOrDefaultAsync(cancellationToken);
@@ -214,6 +225,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                  where hu.HospitalID == hospitalId
                                        && (r.HospitalID == hospitalId || r.IsSystemDefined)
                                        && u.UserID != doctorInfo.UserID
+                                       // Only people who can actually sign in. A deactivated (Revoked) former admin, or an account that never
+                                       // finished its OTP (Inactive), must not keep receiving patient names and addresses.
+                                       && u.UserStatusId == (int)UserStatusEnum.Active
                                  select new { u.UserID, u.MobileNumber, u.Email, RoleName = r.RoleName }
                                 ).ToListAsync(cancellationToken);
 
@@ -223,35 +237,49 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 .Select(g => g.First())
                 .ToList();
 
-            var doctorUrl = await BuildLoginUrlAsync(doctorInfo.UserID, doctorInfo.MobileNumber, doctorInfo.Email, hospitalId, landingPath, fallbackUrl, cancellationToken);
-            await SendAppointmentAlertAsync(doctorInfo.MobileNumber, doctorInfo.Email, treatingDoctorName, isTreatingDoctor: true, treatingDoctorName, patientName, maskedMobile, patientAddress, hospitalName, doctorUrl);
+            // A deactivated (or never-verified) treating doctor gets nothing, but the hospital's admins are still told.
+            var doctorCanBeNotified = doctorInfo.UserStatusId == (int)UserStatusEnum.Active;
+
+            // The external sends (WhatsApp + email) run CONCURRENTLY instead of one recipient after another, and are started before the in-app
+            // alerts are written, so the patient waits roughly for the slowest single send rather than the sum of all of them. The sign-in links
+            // are minted first, one at a time, because that uses the database context and a context must not be used from two tasks at once;
+            // the send tasks themselves only call the WhatsApp / email services.
+            var sends = new List<Task>();
+            if (doctorCanBeNotified)
+            {
+                var doctorUrl = await BuildLoginUrlAsync(doctorInfo.UserID, doctorInfo.MobileNumber, doctorInfo.Email, hospitalId, landingPath, fallbackUrl, cancellationToken);
+                sends.Add(SendAppointmentAlertAsync(doctorInfo.MobileNumber, doctorInfo.Email, treatingDoctorName, isTreatingDoctor: true, treatingDoctorName, patientName, maskedMobile, patientAddress, hospitalName, doctorUrl));
+            }
             foreach (var admin in adminUsers)
             {
                 var adminUrl = await BuildLoginUrlAsync(admin.UserID, admin.MobileNumber, admin.Email, hospitalId, landingPath, fallbackUrl, cancellationToken);
-                await SendAppointmentAlertAsync(admin.MobileNumber, admin.Email, "there", isTreatingDoctor: false, treatingDoctorName, patientName, maskedMobile, patientAddress, hospitalName, adminUrl);
+                sends.Add(SendAppointmentAlertAsync(admin.MobileNumber, admin.Email, "there", isTreatingDoctor: false, treatingDoctorName, patientName, maskedMobile, patientAddress, hospitalName, adminUrl));
             }
 
             try
             {
                 var now = DateTime.UtcNow;
                 var body = $"{patientName} ({maskedMobile}) requested an appointment with Dr. {treatingDoctorName} via Doctor Dekho.";
-                _context.Alert.Add(new Alert
+                if (doctorCanBeNotified)
                 {
-                    AlertId = Guid.NewGuid(),
-                    HospitalId = hospitalId,
-                    AlertCode = "ONLINE_APPOINTMENT_REQUEST",
-                    Severity = "INFO",
-                    Title = "New online appointment request",
-                    Body = body,
-                    PatientId = patient.PatientId,
-                    AudienceUserId = doctorInfo.UserID,
-                    Status = "ACTIVE",
-                    RaisedAt = now,
-                    SourceModule = "PublicBookAppointment",
-                    SourceRefId = appointment.ApptId.ToString(),
-                    DispatchInApp = true,
-                    CreatedAt = now,
-                });
+                    _context.Alert.Add(new Alert
+                    {
+                        AlertId = Guid.NewGuid(),
+                        HospitalId = hospitalId,
+                        AlertCode = "ONLINE_APPOINTMENT_REQUEST",
+                        Severity = "INFO",
+                        Title = "New online appointment request",
+                        Body = body,
+                        PatientId = patient.PatientId,
+                        AudienceUserId = doctorInfo.UserID,
+                        Status = "ACTIVE",
+                        RaisedAt = now,
+                        SourceModule = "PublicBookAppointment",
+                        SourceRefId = appointment.ApptId.ToString(),
+                        DispatchInApp = true,
+                        CreatedAt = now,
+                    });
+                }
                 // Separate role-targeted row (rather than one row per admin) — same AudienceRoles
                 // convention every other alert-raising handler uses for a group audience.
                 _context.Alert.Add(new Alert
@@ -277,7 +305,21 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             {
                 // Best-effort — never fail the booking because the in-app alert insert threw.
             }
+
+            // Wait for the sends, but never longer than a few seconds: a slow WhatsApp or SMTP provider must not hold the patient's response. Each
+            // send already swallows its own errors, so the only thing that can happen here is the wait timing out, in which case the stragglers
+            // simply finish on their own.
+            try
+            {
+                await Task.WhenAll(sends).WaitAsync(SendWaitLimit);
+            }
+            catch (Exception)
+            {
+                // timeout or an unexpected send failure: the booking is unaffected
+            }
         }
+
+        private static readonly TimeSpan SendWaitLimit = TimeSpan.FromSeconds(8);
 
         // A personal, single-use one-tap sign-in link for one recipient (see MagicLinkService) — tapping
         // it lands them signed-in on the appointment board instead of at a login form. It NEVER
