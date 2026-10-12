@@ -63,7 +63,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         private Task<EasyHMSAPI.Application.ResponseModels.CommandResponseModels.SaveHealthArticleResponseModel> Cms(SaveHealthArticleRequestModel r) => _articles.SaveAsync(r, Ct);
 
         private async Task Submit(HealthWikiContributor author, string slug) =>
-            Assert.That((await new SubmitContributorArticleHandler(_context, _n).Handle(new SubmitContributorArticleRequestModel { ContributorId = author.ContributorId, Slug = slug }, Ct)).Success, Is.True);
+            Assert.That((await new SubmitContributorArticleHandler(_context, _n).Handle(new SubmitContributorArticleRequestModel { SubmitConsent = true, ContributorId = author.ContributorId, Slug = slug }, Ct)).Success, Is.True);
 
         // ------------------------------------------------------------------------------------------ people
 

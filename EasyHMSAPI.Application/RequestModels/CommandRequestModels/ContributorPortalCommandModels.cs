@@ -50,6 +50,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     public class SubmitContributorArticleRequestModel : ContributorRequest, IRequest<ContributorArticleResponseModel>
     {
         public string Slug { get; set; } = null!;
+        // The author agreed that the reviewer may publish the article if it is right, and will tell them if it is not.
+        public bool SubmitConsent { get; set; }
     }
 
     // The assigned doctor's decision. APPROVE needs AccuracyConfirmed; REQUEST_CHANGES needs a comment of 10 or more characters.

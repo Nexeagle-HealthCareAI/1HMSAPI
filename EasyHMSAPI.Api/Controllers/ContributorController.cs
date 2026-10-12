@@ -149,6 +149,11 @@ namespace EasyHMSAPI.Api.Controllers
             public string? References { get; set; }
         }
 
+        public class SubmitBody
+        {
+            public bool Consent { get; set; }
+        }
+
         public class ReviewBody
         {
             public string? Decision { get; set; }
@@ -217,7 +222,7 @@ namespace EasyHMSAPI.Api.Controllers
 
         [HttpPost("articles/{slug}/submit")]
         [ServiceFilter(typeof(ContributorSessionFilter))]
-        public Task<IActionResult> SubmitArticle(string slug) => Reply(() => _mediator.Send(new SubmitContributorArticleRequestModel { ContributorId = Me(), Slug = slug }), r => Respond(r.Success, r.StatusCode, r.Message, r.Article), "submitting an article");
+        public Task<IActionResult> SubmitArticle(string slug, [FromBody] SubmitBody? body) => Reply(() => _mediator.Send(new SubmitContributorArticleRequestModel { ContributorId = Me(), Slug = slug, SubmitConsent = body?.Consent ?? false }), r => Respond(r.Success, r.StatusCode, r.Message, r.Article), "submitting an article");
 
         [HttpPost("articles/{slug}/review")]
         [ServiceFilter(typeof(ContributorSessionFilter))]

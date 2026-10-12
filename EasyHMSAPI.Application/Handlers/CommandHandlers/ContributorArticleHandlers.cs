@@ -147,8 +147,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         {
             var me = await _context.HealthWikiContributors.AsNoTracking().FirstOrDefaultAsync(c => c.ContributorId == r.ContributorId, ct);
             if (me == null) return ContributorArticleResponseModel.Fail(404, "Profile not found.");
-            if (me.Status != HealthWikiContributor.StatusVerified)
-                return ContributorArticleResponseModel.Fail(403, "You can submit articles after the team has checked your profile.");
+            // A filled-in profile the team has not rejected can send an article for review; it is the reviewer (or the CMS editor for a
+            // sector update) who decides whether it goes live, so the author's own profile check is not a gate here.
+            if (!ContributorPortalRules.IsProfileAccepted(me.Status))
+                return ContributorArticleResponseModel.Fail(403, me.Status == HealthWikiContributor.StatusRejected
+                    ? "This account cannot send articles."
+                    : "Finish your profile before you send an article for review.");
+            if (!r.SubmitConsent)
+                return ContributorArticleResponseModel.Fail(400, "Please confirm the consent to send the article for review.");
 
             var slug = r.Slug?.Trim().ToLowerInvariant();
             var article = await _context.HealthArticles.FirstOrDefaultAsync(a => a.Slug == slug && a.AuthorContributorId == me.ContributorId, ct);
@@ -181,7 +187,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
 
             HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "SUBMITTED", HealthWikiAudit.ActorContributor, me.FullName,
-                revision != null && article.Status == HealthArticle.StatusPublished ? "Edit of the published article" : null);
+                (revision != null && article.Status == HealthArticle.StatusPublished ? "Edit of the published article. " : "") + "Author agreed the reviewer may publish it if it is right.");
             try
             {
                 await _context.SaveChangesAsync(ct);

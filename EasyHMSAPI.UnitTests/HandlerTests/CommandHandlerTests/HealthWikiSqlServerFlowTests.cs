@@ -107,7 +107,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var slug = created.Article!.Slug;
             var assign = await new SaveHealthArticleHandler(new HealthArticleService(_db, new RecordingNotifier())).Handle(new SaveHealthArticleRequestModel { Slug = slug, ReviewerContributorId = reviewerId, ActorName = "Priya" }, Ct);
             Assert.That(assign.Success, Is.True, assign.Message);
-            Assert.That((await new SubmitContributorArticleHandler(_db, new RecordingNotifier()).Handle(new SubmitContributorArticleRequestModel { ContributorId = authorId, Slug = slug }, Ct)).Success, Is.True);
+            Assert.That((await new SubmitContributorArticleHandler(_db, new RecordingNotifier()).Handle(new SubmitContributorArticleRequestModel { SubmitConsent = true, ContributorId = authorId, Slug = slug }, Ct)).Success, Is.True);
 
             var pending = (await new GetContributorArticlesHandler(_db).Handle(new GetContributorArticlesRequestModel { ContributorId = reviewerId }, Ct)).Articles!;
             Assert.That(pending.Pending.Select(a => a.Slug), Does.Contain(slug));
@@ -182,7 +182,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             { ContributorId = author.ContributorId, Type = "MEDICAL", Title = "Hospital review " + tag, Content = "## Body" }, Ct);
             var slug = created.Article!.Slug;
             Assert.That((await new HealthArticleService(_db, new RecordingNotifier()).SaveAsync(new SaveHealthArticleRequestModel { Slug = slug, ReviewerContributorId = me.ContributorId }, Ct)).Success, Is.True);
-            Assert.That((await new SubmitContributorArticleHandler(_db, new RecordingNotifier()).Handle(new SubmitContributorArticleRequestModel { ContributorId = author.ContributorId, Slug = slug }, Ct)).Success, Is.True);
+            Assert.That((await new SubmitContributorArticleHandler(_db, new RecordingNotifier()).Handle(new SubmitContributorArticleRequestModel { SubmitConsent = true, ContributorId = author.ContributorId, Slug = slug }, Ct)).Success, Is.True);
 
             var inbox = await new GetHealthWikiInboxHandler(_db, staff).Handle(new GetHealthWikiInboxRequestModel { UserId = userId }, Ct);
             Assert.That(inbox.Pending.Select(p => p.Slug), Does.Contain(slug));
