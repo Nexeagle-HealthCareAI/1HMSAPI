@@ -148,6 +148,46 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task HospitalDoctor_WritesOnDoctorDekhoSignedIn_AndAsksForAWriter_OnSqlServer()
+        {
+            var tag = Guid.NewGuid().ToString("N")[..6];
+            var userId = Guid.NewGuid();
+            await _db.Database.ExecuteSqlRawAsync("ALTER TABLE dbo.Users NOCHECK CONSTRAINT ALL; ALTER TABLE dbo.UserProfiles NOCHECK CONSTRAINT ALL; ALTER TABLE dbo.Doctors NOCHECK CONSTRAINT ALL;");
+            await _db.Database.ExecuteSqlInterpolatedAsync($@"
+                INSERT dbo.Users(UserID, MobileNumber, UserStatusId) VALUES({userId}, {(8000000000L + Math.Abs(tag.GetHashCode() % 900000000)).ToString()}, 1);
+                INSERT dbo.UserProfiles(UserID, FullName, UserStatusId) VALUES({userId}, {"Dr. Hospital " + tag}, 1);
+                INSERT dbo.Doctors(DoctorID, HospitalID, UserID, LicenseNumber, Qualification, MedicalCouncil, RegistrationYear)
+                VALUES({Guid.NewGuid()}, {Guid.NewGuid()}, {userId}, {"H" + tag}, {"MBBS, MD"}, {"Delhi Medical Council"}, 2011);");
+            var staff = new HealthWikiStaffService(_db, new RecordingNotifier());
+            var me = await staff.EnsureContributorAsync(userId, Ct);
+
+            // "Write an article": a one-time code, swapped for a session, once
+            var handoff = new HealthWikiHandoffService(_db);
+            var url = await new CreateHealthWikiWriteHandoffHandler(staff, handoff, _config).Handle(new CreateHealthWikiWriteHandoffRequestModel { UserId = userId }, Ct);
+            Assert.That(url.Success, Is.True, url.Message);
+            var code = System.Web.HttpUtility.ParseQueryString(new Uri(url.Url!).Query)["code"];
+            var first = await new ContributorSsoExchangeHandler(handoff).Handle(new ContributorSsoExchangeRequestModel { Code = code }, Ct);
+            var second = await new ContributorSsoExchangeHandler(handoff).Handle(new ContributorSsoExchangeRequestModel { Code = code }, Ct);
+            Assert.That(first.Success, Is.True);
+            Assert.That(second.Success, Is.False);
+            Assert.That(_db.ContributorSessions.Any(x => x.ContributorId == me!.ContributorId), Is.True);
+
+            // a topic with a writer requested, accepted by the CMS for the content team: the doctor becomes the reviewer
+            var topics = new HealthWikiTopicService(_db);
+            var topic = await new CreateHealthWikiStaffTopicHandler(staff, topics).Handle(new CreateHealthWikiStaffTopicRequestModel
+            { UserId = userId, Title = "Salt and the heart " + tag, Type = "MEDICAL", Outline = "How much is too much.", WhyItMatters = "Patients ask.", RequestWriter = true }, Ct);
+            Assert.That(topic.Success, Is.True, topic.Message);
+            var notifier = new RecordingNotifier();
+            var accepted = await new DecideTopicHandler(_db, notifier).Handle(new DecideTopicRequestModel
+            { TopicId = topic.Topic!.Id, Action = DecideTopicRequestModel.Accept, ContentTeam = true, ActorName = "Editor" }, Ct);
+            Assert.That(accepted.Success, Is.True, accepted.Message);
+            var article = _db.HealthArticles.Single(a => a.Slug == accepted.Topic!.ArticleSlug);
+            Assert.That(article.AuthorContributorId, Is.Null);
+            Assert.That(article.ReviewerContributorId, Is.EqualTo(me!.ContributorId));
+            Assert.That(notifier.Of("N10"), Is.Empty);
+        }
+
+        [Test]
         public async Task HospitalDoctorReview_AndReaderCounters_OnSqlServer()
         {
             var tag = Guid.NewGuid().ToString("N")[..6];
