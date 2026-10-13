@@ -107,6 +107,53 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        [HttpGet("m2/readiness")]
+        public async Task<ActionResult<AbdmM2ReadinessResponseModel>> GetM2Readiness([FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
+            try
+            {
+                return Ok(await _mediator.Send(new GetAbdmM2ReadinessRequestModel { HospitalId = hospitalId }));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking ABDM M2 readiness for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while checking ABDM readiness." });
+            }
+        }
+
+        /// <summary>Integrator view: each outbound ABDM call with the callback that answered it.</summary>
+        [HttpGet("exchanges")]
+        public async Task<ActionResult<AbdmExchangeListResponseModel>> GetExchanges([FromQuery] Guid hospitalId, [FromQuery] int take = 100)
+        {
+            if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
+            try
+            {
+                return Ok(await _mediator.Send(new GetAbdmExchangesRequestModel { HospitalId = hospitalId, Take = take }));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching ABDM exchanges for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching ABDM activity." });
+            }
+        }
+
+        /// <summary>Requests ABDM made to us that answer nothing we sent, and whether we replied.</summary>
+        [HttpGet("inbound-requests")]
+        public async Task<ActionResult<AbdmInboundListResponseModel>> GetInboundRequests([FromQuery] Guid hospitalId, [FromQuery] int take = 100)
+        {
+            if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
+            try
+            {
+                return Ok(await _mediator.Send(new GetAbdmInboundRequestsRequestModel { HospitalId = hospitalId, Take = take }));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching ABDM inbound requests for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching ABDM requests." });
+            }
+        }
+
         [HttpGet("profile-shares")]
         public async Task<ActionResult<GetAbdmProfileSharesResponseModel>> GetProfileShares([FromQuery] Guid hospitalId, [FromQuery] string? counterId, [FromQuery] string? status)
         {
