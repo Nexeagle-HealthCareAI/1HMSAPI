@@ -205,6 +205,11 @@ builder.Services.AddHttpClient<EasyHMSAPI.Application.Services.Interfaces.IAbdmA
 builder.Services.AddSingleton<EasyHMSAPI.Application.Services.IAbhaLinkProofStore, EasyHMSAPI.Application.Services.AbhaLinkProofStore>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.IAbdmCallbackGuard, EasyHMSAPI.Application.Services.AbdmCallbackGuard>();
 builder.Services.AddHttpClient<EasyHMSAPI.Application.Services.Interfaces.IAbdmProfileShareService, EasyHMSAPI.Application.Services.Implementations.AbdmProfileShareService>(AbdmClient);
+// ABDM M2: HIE-CM calls recorded as exchanges, joined to their callbacks by REQUEST-ID.
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.IAbdmExchangeLog, EasyHMSAPI.Application.Services.AbdmExchangeLog>();
+builder.Services.AddHttpClient<EasyHMSAPI.Application.Services.Interfaces.IAbdmHieService, EasyHMSAPI.Application.Services.Implementations.AbdmHieService>(AbdmClient);
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.IAbdmLinkingService, EasyHMSAPI.Application.Services.AbdmLinkingService>();
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.IAbdmCallbackProcessor, EasyHMSAPI.Application.Services.AbdmCallbackProcessor>();
 // HR biometric attendance: stores device scans and rebuilds attendance from them.
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IBiometricPunchIngestionService, EasyHMSAPI.Application.Services.Implementations.BiometricPunchIngestionService>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IZktecoPushService, EasyHMSAPI.Application.Services.Implementations.ZktecoPushService>();

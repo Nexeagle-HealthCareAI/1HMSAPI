@@ -13,6 +13,7 @@ namespace EasyHMSAPI.Application.Services
         public byte[] Body { get; init; } = Array.Empty<byte>();
         public string? ContentType { get; init; }
         public string RequestId { get; init; } = string.Empty;
+        public int StatusCode { get; init; }
         public string BodyText => Encoding.UTF8.GetString(Body);
     }
 
@@ -51,9 +52,13 @@ namespace EasyHMSAPI.Application.Services
 
         /// <summary>Adds the three headers every ABDM call carries and returns the REQUEST-ID — a
         /// fresh one per call, so a failed call can be traced on both sides.</summary>
-        public static string AddStandardHeaders(HttpRequestMessage request, string cmId)
+        public static string AddStandardHeaders(HttpRequestMessage request, string cmId) =>
+            AddStandardHeaders(request, cmId, Guid.NewGuid().ToString());
+
+        /// <summary>As above with a REQUEST-ID chosen by the caller — M2 records the exchange under
+        /// this id before sending, so a callback that beats the HTTP response still finds it.</summary>
+        public static string AddStandardHeaders(HttpRequestMessage request, string cmId, string requestId)
         {
-            var requestId = Guid.NewGuid().ToString();
             request.Headers.Add("REQUEST-ID", requestId);
             request.Headers.Add("TIMESTAMP", FormatTimestamp(DateTime.UtcNow));
             request.Headers.Add("X-CM-ID", cmId);
@@ -155,7 +160,8 @@ namespace EasyHMSAPI.Application.Services
                     {
                         Body = bytes,
                         ContentType = response.Content.Headers.ContentType?.MediaType,
-                        RequestId = requestId
+                        RequestId = requestId,
+                        StatusCode = (int)response.StatusCode
                     };
                 }
 

@@ -71,6 +71,42 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // ---- M2: link OPD visits / IPD admissions to the patient's ABHA (care contexts) ----
+
+        /// <summary>Starts linking and returns at once; the care context's LinkStatus says where it
+        /// has got to (ABDM answers on callbacks, which may take a while or never come).</summary>
+        [HttpPost("care-contexts/link")]
+        public async Task<ActionResult<AbdmCareContextResponseModel>> LinkCareContext([FromBody] LinkAbdmCareContextRequestModel request)
+        {
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success) return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error starting ABDM care context link for {SourceType} {SourceId}.", request.SourceType, request.SourceId);
+                return StatusCode(500, new { Message = "An error occurred while starting the ABDM link." });
+            }
+        }
+
+        [HttpGet("care-contexts")]
+        public async Task<ActionResult<AbdmCareContextListResponseModel>> GetCareContexts([FromQuery] Guid hospitalId, [FromQuery] string? patientId)
+        {
+            if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
+            try
+            {
+                return Ok(await _mediator.Send(new GetAbdmCareContextsRequestModel { HospitalId = hospitalId, PatientId = patientId }));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching ABDM care contexts for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching ABDM links." });
+            }
+        }
+
         [HttpGet("profile-shares")]
         public async Task<ActionResult<GetAbdmProfileSharesResponseModel>> GetProfileShares([FromQuery] Guid hospitalId, [FromQuery] string? counterId, [FromQuery] string? status)
         {

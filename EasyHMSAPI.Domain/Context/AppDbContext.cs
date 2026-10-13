@@ -163,6 +163,10 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<AbdmProfileShare> AbdmProfileShares { get; set; }
         public DbSet<MagicLoginToken> MagicLoginTokens { get; set; }
         public DbSet<AbdmFacility> AbdmFacilities { get; set; }
+        public DbSet<AbdmExchange> AbdmExchanges { get; set; }
+        public DbSet<AbdmInbound> AbdmInbounds { get; set; }
+        public DbSet<AbdmCareContext> AbdmCareContexts { get; set; }
+        public DbSet<AbdmLinkToken> AbdmLinkTokens { get; set; }
         public DbSet<VitalReading> VitalReading { get; set; }
         public DbSet<FluidEntry> FluidEntry { get; set; }
         public DbSet<GlucoseReading> GlucoseReading { get; set; }
@@ -1196,6 +1200,45 @@ namespace EasyHMSAPI.Domain.Context
                 entity.ToTable("AbdmFacility");
                 entity.HasKey(f => f.HospitalId);
                 entity.Property(f => f.UpdatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<AbdmExchange>(entity =>
+            {
+                entity.ToTable("AbdmExchange");
+                entity.HasKey(e => e.ExchangeId);
+                entity.HasIndex(e => e.RequestId).IsUnique();
+                entity.Property(e => e.SentAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.AcceptedAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.AnsweredAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<AbdmInbound>(entity =>
+            {
+                entity.ToTable("AbdmInbound");
+                entity.HasKey(i => i.InboundId);
+                entity.Property(i => i.ReceivedAt).HasColumnType("datetime2(3)");
+                entity.Property(i => i.ProcessedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<AbdmCareContext>(entity =>
+            {
+                entity.ToTable("AbdmCareContext");
+                entity.HasKey(c => c.CareContextId);
+                entity.HasIndex(c => new { c.HospitalId, c.SourceType, c.SourceId }).IsUnique();
+                // The button and the token callback can both try to move the same row on; only
+                // the one whose expected status still holds wins, so a link is never sent twice.
+                entity.Property(c => c.LinkStatus).IsConcurrencyToken();
+                entity.Property(c => c.LinkedAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.UpdatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<AbdmLinkToken>(entity =>
+            {
+                entity.ToTable("AbdmLinkToken");
+                entity.HasKey(t => t.LinkTokenId);
+                entity.Property(t => t.ExpiresAt).HasColumnType("datetime2(3)");
+                entity.Property(t => t.ReceivedAt).HasColumnType("datetime2(3)");
             });
 
             modelBuilder.Entity<VitalReading>(entity =>
