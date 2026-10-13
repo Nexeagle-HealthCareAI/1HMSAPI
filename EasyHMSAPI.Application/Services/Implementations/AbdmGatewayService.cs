@@ -2,6 +2,7 @@ using EasyHMSAPI.Application.Services.Interfaces;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using System.Diagnostics.CodeAnalysis;
 using System.Net.Http.Headers;
 using System.Text;
@@ -24,15 +25,17 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
         private readonly HttpClient _httpClient;
         private readonly IMemoryCache _cache;
+        private readonly ILogger<AbdmGatewayService> _logger;
         private readonly string _clientId;
         private readonly string _clientSecret;
         private readonly string _gatewayBaseUrl;
         private readonly string _cmId;
 
-        public AbdmGatewayService(HttpClient httpClient, IMemoryCache cache, IConfiguration configuration, IHostEnvironment environment)
+        public AbdmGatewayService(HttpClient httpClient, IMemoryCache cache, IConfiguration configuration, IHostEnvironment environment, ILogger<AbdmGatewayService> logger)
         {
             _httpClient = httpClient;
             _cache = cache;
+            _logger = logger;
             var isProd = environment.IsProduction();
             // Per the integrator guide's session-token header table: "sbx" for Sandbox, "abdm" for Prod.
             _cmId = isProd ? "abdm" : "sbx";
@@ -71,14 +74,15 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 // REQUEST-ID/TIMESTAMP/X-CM-ID are all marked mandatory in the integrator guide's
                 // session-token header table — omitting them was causing ABDM to reject the request
                 // with a bare 401 rather than a descriptive validation error.
-                request.Headers.Add("REQUEST-ID", Guid.NewGuid().ToString());
-                request.Headers.Add("TIMESTAMP", DateTime.UtcNow.ToString("O"));
-                request.Headers.Add("X-CM-ID", _cmId);
+                var requestId = AbdmHttp.AddStandardHeaders(request, _cmId);
+                _logger.LogInformation("ABDM POST /v3/sessions REQUEST-ID {RequestId}", requestId);
 
-                var response = await _httpClient.SendAsync(request, cancellationToken);
+                // Deliberately not retried: this IS the credential check, and a refused one is
+                // backed off from, never looped.
+                using var response = await _httpClient.SendAsync(request, cancellationToken);
                 var body = await response.Content.ReadAsStringAsync(cancellationToken);
                 if (!response.IsSuccessStatusCode)
-                    throw new InvalidOperationException($"ABDM session token request failed ({(int)response.StatusCode}): {body}");
+                    throw AbdmHttp.ToException(_logger, "POST", "/v3/sessions", (int)response.StatusCode, body, requestId);
 
                 using var doc = JsonDocument.Parse(body);
                 var accessToken = doc.RootElement.TryGetProperty("accessToken", out var at) ? at.GetString() : null;
@@ -99,5 +103,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 FetchLock.Release();
             }
         }
+
+        public void InvalidateAccessToken() => _cache.Remove(CacheKey);
     }
 }

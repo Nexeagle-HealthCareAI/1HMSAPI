@@ -1,6 +1,7 @@
 using EasyHMSAPI.Application.Services.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using System.Diagnostics.CodeAnalysis;
 using System.Net.Http.Headers;
 using System.Text;
@@ -21,14 +22,16 @@ namespace EasyHMSAPI.Application.Services.Implementations
     {
         private readonly HttpClient _httpClient;
         private readonly IAbdmGatewayService _gatewayService;
+        private readonly ILogger<AbdmProfileShareService> _logger;
         private readonly string _gatewayBaseUrl;
         private readonly string _callbackBaseUrl;
         private readonly string _cmId;
 
-        public AbdmProfileShareService(HttpClient httpClient, IAbdmGatewayService gatewayService, IConfiguration configuration, IHostEnvironment environment)
+        public AbdmProfileShareService(HttpClient httpClient, IAbdmGatewayService gatewayService, IConfiguration configuration, IHostEnvironment environment, ILogger<AbdmProfileShareService> logger)
         {
             _httpClient = httpClient;
             _gatewayService = gatewayService;
+            _logger = logger;
             var isProd = environment.IsProduction();
             _cmId = isProd ? "abdm" : "sbx";
 
@@ -53,13 +56,9 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 response = new { requestId = callbackRequestId }
             };
 
-            using var request = await BuildRequestAsync(HttpMethod.Post, $"{_callbackBaseUrl}/v3/hip/patient/profile/on-share", payload, cancellationToken);
-            var response = await _httpClient.SendAsync(request, cancellationToken);
-            if (!response.IsSuccessStatusCode)
-            {
-                var body = await response.Content.ReadAsStringAsync(cancellationToken);
-                throw new InvalidOperationException($"ABDM on-share acknowledgement failed ({(int)response.StatusCode}): {body}");
-            }
+            await AbdmHttp.SendAsync(_httpClient, _gatewayService, _logger,
+                () => BuildRequestAsync(HttpMethod.Post, $"{_callbackBaseUrl}/v3/hip/patient/profile/on-share", payload, cancellationToken),
+                cancellationToken);
         }
 
         public async Task<string> RegisterBridgeUrlAsync(string bridgeUrl, CancellationToken cancellationToken)
@@ -67,11 +66,10 @@ namespace EasyHMSAPI.Application.Services.Implementations
             if (string.IsNullOrEmpty(_gatewayBaseUrl))
                 throw new InvalidOperationException("Abdm:GatewayBaseUrlProd must be configured before registering a bridge URL in Production.");
 
-            using var request = await BuildRequestAsync(new HttpMethod("PATCH"), $"{_gatewayBaseUrl}/v3/bridge/url", new { url = bridgeUrl }, cancellationToken);
-            var response = await _httpClient.SendAsync(request, cancellationToken);
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (!response.IsSuccessStatusCode)
-                throw new InvalidOperationException($"ABDM bridge URL registration failed ({(int)response.StatusCode}): {body}");
+            var response = await AbdmHttp.SendAsync(_httpClient, _gatewayService, _logger,
+                () => BuildRequestAsync(new HttpMethod("PATCH"), $"{_gatewayBaseUrl}/v3/bridge/url", new { url = bridgeUrl }, cancellationToken),
+                cancellationToken);
+            var body = response.BodyText;
             return string.IsNullOrWhiteSpace(body) ? "Registered." : body;
         }
 
@@ -83,9 +81,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
             };
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-            request.Headers.Add("REQUEST-ID", Guid.NewGuid().ToString());
-            request.Headers.Add("TIMESTAMP", DateTime.UtcNow.ToString("O"));
-            request.Headers.Add("X-CM-ID", _cmId);
+            AbdmHttp.AddStandardHeaders(request, _cmId);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             return request;
         }

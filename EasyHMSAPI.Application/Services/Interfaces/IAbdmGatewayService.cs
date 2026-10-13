@@ -5,5 +5,9 @@ namespace EasyHMSAPI.Application.Services.Interfaces
     public interface IAbdmGatewayService
     {
         Task<string> GetAccessTokenAsync(CancellationToken cancellationToken);
+
+        /// <summary>Drops the cached token so the next call fetches a fresh one — used after ABDM
+        /// answers 401, since it can revoke a token before its stated expiry.</summary>
+        void InvalidateAccessToken();
     }
 }

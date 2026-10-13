@@ -3,6 +3,7 @@ using EasyHMSAPI.Application.Services.Models;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using System.Diagnostics.CodeAnalysis;
 using System.Net.Http.Headers;
 using System.Text;
@@ -25,6 +26,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
         private readonly IAbdmGatewayService _gatewayService;
         private readonly IAbdmEncryptionService _encryptionService;
         private readonly IMemoryCache _cache;
+        private readonly ILogger<AbdmAbhaService> _logger;
         private readonly string _abhaBaseUrl;
         private readonly string _cmId;
         private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
@@ -35,12 +37,14 @@ namespace EasyHMSAPI.Application.Services.Implementations
             IAbdmEncryptionService encryptionService,
             IMemoryCache cache,
             IConfiguration configuration,
-            IHostEnvironment environment)
+            IHostEnvironment environment,
+            ILogger<AbdmAbhaService> logger)
         {
             _httpClient = httpClient;
             _gatewayService = gatewayService;
             _encryptionService = encryptionService;
             _cache = cache;
+            _logger = logger;
             var isProd = environment.IsProduction();
             // Per the integrator guide's header table: "sbx" for Sandbox, "abdm" for Prod.
             _cmId = isProd ? "abdm" : "sbx";
@@ -128,9 +132,12 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
         public async Task<AbdmAddressSuggestionsResult> GetAbhaAddressSuggestionsAsync(string txnId, CancellationToken cancellationToken)
         {
-            using var request = await BuildRequestAsync(HttpMethod.Get, "/enrollment/enrol/suggestion", null, cancellationToken);
-            request.Headers.Add("Transaction_Id", txnId);
-            var doc = await SendAsync(request, cancellationToken);
+            var doc = await SendAsync(async () =>
+            {
+                var request = await BuildRequestAsync(HttpMethod.Get, "/enrollment/enrol/suggestion", null, cancellationToken);
+                request.Headers.Add("Transaction_Id", txnId);
+                return request;
+            }, cancellationToken);
 
             var result = new AbdmAddressSuggestionsResult { TxnId = txnId };
             if (doc.RootElement.TryGetProperty("abhaAddressList", out var list) && list.ValueKind == JsonValueKind.Array)
@@ -257,8 +264,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
         public async Task<AbdmProfileResult> GetProfileAsync(string sessionTxnId, CancellationToken cancellationToken)
         {
-            using var request = await BuildRequestAsync(HttpMethod.Get, "/profile/account", null, cancellationToken, RequireXToken(sessionTxnId));
-            var doc = await SendAsync(request, cancellationToken);
+            var doc = await SendAsync(() => BuildRequestAsync(HttpMethod.Get, "/profile/account", null, cancellationToken, RequireXToken(sessionTxnId)), cancellationToken);
             var root = doc.RootElement;
             return new AbdmProfileResult
             {
@@ -276,14 +282,12 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
         public async Task<AbdmBinaryResult> GetQrCodeAsync(string sessionTxnId, CancellationToken cancellationToken)
         {
-            using var request = await BuildRequestAsync(HttpMethod.Get, "/profile/account/qrCode", null, cancellationToken, RequireXToken(sessionTxnId), acceptHeader: "*/*");
-            return await SendBinaryAsync(request, cancellationToken);
+            return await SendBinaryAsync(() => BuildRequestAsync(HttpMethod.Get, "/profile/account/qrCode", null, cancellationToken, RequireXToken(sessionTxnId), acceptHeader: "*/*"), cancellationToken);
         }
 
         public async Task<AbdmBinaryResult> GetAbhaCardAsync(string sessionTxnId, CancellationToken cancellationToken)
         {
-            using var request = await BuildRequestAsync(HttpMethod.Get, "/profile/account/abha-card", null, cancellationToken, RequireXToken(sessionTxnId), acceptHeader: "*/*");
-            return await SendBinaryAsync(request, cancellationToken);
+            return await SendBinaryAsync(() => BuildRequestAsync(HttpMethod.Get, "/profile/account/abha-card", null, cancellationToken, RequireXToken(sessionTxnId), acceptHeader: "*/*"), cancellationToken);
         }
 
         public async Task<AbdmFindAbhaSearchResult> FindAbhaSearchAsync(string value, string searchBy, CancellationToken cancellationToken)
@@ -420,21 +424,17 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
         // ---- HTTP plumbing -------------------------------------------------------------------
 
-        private async Task<JsonDocument> PostAsync(string path, object payload, CancellationToken cancellationToken)
-        {
-            var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-            using var request = await BuildRequestAsync(HttpMethod.Post, path, content, cancellationToken);
-            return await SendAsync(request, cancellationToken);
-        }
+        private Task<JsonDocument> PostAsync(string path, object payload, CancellationToken cancellationToken) =>
+            SendAsync(() => BuildRequestAsync(HttpMethod.Post, path, JsonBody(payload), cancellationToken), cancellationToken);
 
         /// <summary>POSTs to a profile-scoped endpoint that requires the ABHA holder's own
         /// (freshly OTP-verified) X-Token, not just the HIP gateway token.</summary>
-        private async Task<JsonDocument> PostAuthenticatedAsync(string path, object payload, string sessionTxnId, CancellationToken cancellationToken)
-        {
-            var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-            using var request = await BuildRequestAsync(HttpMethod.Post, path, content, cancellationToken, RequireXToken(sessionTxnId));
-            return await SendAsync(request, cancellationToken);
-        }
+        private Task<JsonDocument> PostAuthenticatedAsync(string path, object payload, string sessionTxnId, CancellationToken cancellationToken) =>
+            SendAsync(() => BuildRequestAsync(HttpMethod.Post, path, JsonBody(payload), cancellationToken, RequireXToken(sessionTxnId)), cancellationToken);
+
+        // A fresh content object per build: a sent HttpContent can't be reused by the 401 retry.
+        private static StringContent JsonBody(object payload) =>
+            new(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
 
         /// <summary>Looks up the cached X-Token for a session TxnId, or throws a clear
         /// "session expired" error the caller can surface as-is (the session/txn is only cached
@@ -451,9 +451,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
             var accessToken = await _gatewayService.GetAccessTokenAsync(cancellationToken);
             var request = new HttpRequestMessage(method, $"{_abhaBaseUrl}{path}") { Content = content };
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-            request.Headers.Add("REQUEST-ID", Guid.NewGuid().ToString());
-            request.Headers.Add("TIMESTAMP", DateTime.UtcNow.ToString("O"));
-            request.Headers.Add("X-CM-ID", _cmId);
+            AbdmHttp.AddStandardHeaders(request, _cmId);
             // Every X-token header table in the integrator guide shows the example value as
             // "Bearer X-token" — i.e. the header itself needs a Bearer prefix, not just the raw
             // token. Sending the bare token got "Invalid X-token" back on every X-token-gated call
@@ -464,31 +462,23 @@ namespace EasyHMSAPI.Application.Services.Implementations
             return request;
         }
 
-        private async Task<JsonDocument> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        private async Task<JsonDocument> SendAsync(Func<Task<HttpRequestMessage>> buildRequest, CancellationToken cancellationToken)
         {
-            var response = await _httpClient.SendAsync(request, cancellationToken);
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (!response.IsSuccessStatusCode)
-                throw new InvalidOperationException($"ABDM request to {request.RequestUri} failed ({(int)response.StatusCode}): {body}");
+            var response = await AbdmHttp.SendAsync(_httpClient, _gatewayService, _logger, buildRequest, cancellationToken);
+            var body = response.BodyText;
             return JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
         }
 
         /// <summary>Like <see cref="SendAsync"/> but for §10/§11's binary (image/PDF) responses —
         /// reads raw bytes instead of parsing JSON, passing the response's own Content-Type through
         /// unchanged so the caller doesn't have to guess between image/png and application/pdf.</summary>
-        private async Task<AbdmBinaryResult> SendBinaryAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        private async Task<AbdmBinaryResult> SendBinaryAsync(Func<Task<HttpRequestMessage>> buildRequest, CancellationToken cancellationToken)
         {
-            var response = await _httpClient.SendAsync(request, cancellationToken);
-            var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
-            if (!response.IsSuccessStatusCode)
-            {
-                var body = Encoding.UTF8.GetString(bytes);
-                throw new InvalidOperationException($"ABDM request to {request.RequestUri} failed ({(int)response.StatusCode}): {body}");
-            }
+            var response = await AbdmHttp.SendAsync(_httpClient, _gatewayService, _logger, buildRequest, cancellationToken);
             return new AbdmBinaryResult
             {
-                Content = bytes,
-                ContentType = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream"
+                Content = response.Body,
+                ContentType = response.ContentType ?? "application/octet-stream"
             };
         }
 

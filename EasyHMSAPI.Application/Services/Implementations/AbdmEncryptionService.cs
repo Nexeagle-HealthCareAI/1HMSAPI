@@ -2,41 +2,41 @@ using EasyHMSAPI.Application.Services.Interfaces;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using System.Diagnostics.CodeAnalysis;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using System.Text.Json;
 
 namespace EasyHMSAPI.Application.Services.Implementations
 {
     /// <summary>
-    /// Fetches ABDM's RSA public certificate (PEM, from the "CertUrl" configured under "Abdm") and
-    /// uses it to RSA-OAEP-SHA1-encrypt PII before it's sent to any ABHA V3 API, per the ABDM
-    /// integrator guide. Cached 6h; refetched early if the cached PEM fails to parse (unexpected
-    /// format / a transient bad response from CertUrl). Note that an actual certificate ROTATION
-    /// does NOT surface here — encrypting with a stale-but-syntactically-valid public key always
-    /// succeeds locally, the failure only shows up as an ABDM-side decrypt rejection (a non-2xx HTTP
-    /// response), which the 6h TTL bounds the blast radius of.
+    /// Fetches ABDM's public key (from the "CertUrl" configured under "Abdm") and encrypts PII with
+    /// the padding the certificate response names in "encryptionAlgorithm" before it's sent to any
+    /// ABHA V3 API. Cached 6h; refetched early if the cached key fails to load. An actual key
+    /// ROTATION does not surface here — encrypting with a stale-but-valid public key succeeds
+    /// locally and only fails as an ABDM-side decrypt rejection, which the 6h TTL bounds.
     /// </summary>
     [ExcludeFromCodeCoverage]
     public class AbdmEncryptionService : IAbdmEncryptionService
     {
-        private const string CacheKey = "Abdm:PublicCertPem";
+        private const string CacheKey = "Abdm:PublicKey";
         private static readonly SemaphoreSlim FetchLock = new(1, 1);
 
         private readonly HttpClient _httpClient;
         private readonly IAbdmGatewayService _gatewayService;
         private readonly IMemoryCache _cache;
+        private readonly ILogger<AbdmEncryptionService> _logger;
         private readonly string _certUrl;
         private readonly string _cmId;
 
-        public AbdmEncryptionService(HttpClient httpClient, IAbdmGatewayService gatewayService, IMemoryCache cache, IConfiguration configuration, IHostEnvironment environment)
+        public AbdmEncryptionService(HttpClient httpClient, IAbdmGatewayService gatewayService, IMemoryCache cache, IConfiguration configuration, IHostEnvironment environment, ILogger<AbdmEncryptionService> logger)
         {
             _httpClient = httpClient;
             _gatewayService = gatewayService;
             _cache = cache;
+            _logger = logger;
             var isProd = environment.IsProduction();
             _cmId = isProd ? "abdm" : "sbx";
             // "healthidsbx.abdm.gov.in/api/v1/auth/cert" was a stale pre-ABHA-rebrand (Health ID era)
@@ -52,33 +52,31 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
         public async Task<string> EncryptAsync(string plainText, CancellationToken cancellationToken)
         {
-            var pem = await GetPublicCertPemAsync(forceRefresh: false, cancellationToken);
+            var key = await GetPublicKeyAsync(forceRefresh: false, cancellationToken);
             try
             {
-                return Encrypt(plainText, pem);
+                return Encrypt(plainText, key);
             }
             catch (Exception ex) when (ex is CryptographicException or ArgumentException or FormatException)
             {
-                // The cached PEM failed to parse (unexpected format, or CertUrl briefly served a bad
+                // The cached key failed to load (unexpected format, or CertUrl briefly served a bad
                 // response) — refetch once and retry.
-                pem = await GetPublicCertPemAsync(forceRefresh: true, cancellationToken);
-                return Encrypt(plainText, pem);
+                key = await GetPublicKeyAsync(forceRefresh: true, cancellationToken);
+                return Encrypt(plainText, key);
             }
         }
 
-        private static string Encrypt(string plainText, string pem)
+        private static string Encrypt(string plainText, AbdmPublicKey key)
         {
-            using var rsa = ImportRsaPublicKey(pem);
-            var cipherBytes = rsa.Encrypt(Encoding.UTF8.GetBytes(plainText), RSAEncryptionPadding.OaepSHA1);
+            using var rsa = ImportRsaPublicKey(key.Pem);
+            var cipherBytes = rsa.Encrypt(Encoding.UTF8.GetBytes(plainText), key.Padding);
             return Convert.ToBase64String(cipherBytes);
         }
 
-        /// <summary>ABDM's cert endpoint can return either a bare RSA public key PEM ("PUBLIC KEY" /
-        /// "RSA PUBLIC KEY", which RSA.ImportFromPem understands directly) or a full X.509
-        /// certificate PEM ("CERTIFICATE", which it does NOT — ImportFromPem throws for unsupported
-        /// labels). Route certificate PEMs through X509Certificate2 to pull out the usable RSA public
-        /// key first; export/re-import so the returned RSA instance's lifetime isn't tied to the
-        /// certificate's.</summary>
+        /// <summary>The key arrives either as a bare RSA public key ("PUBLIC KEY", which
+        /// RSA.ImportFromPem understands directly) or a full X.509 certificate ("CERTIFICATE", which
+        /// it does NOT). Route certificates through X509Certificate2 to pull out the RSA key first;
+        /// export/re-import so the returned RSA instance's lifetime isn't tied to the certificate's.</summary>
         private static RSA ImportRsaPublicKey(string pem)
         {
             if (pem.Contains("BEGIN CERTIFICATE", StringComparison.Ordinal))
@@ -96,78 +94,48 @@ namespace EasyHMSAPI.Application.Services.Implementations
             return bareRsa;
         }
 
-        private async Task<string> GetPublicCertPemAsync(bool forceRefresh, CancellationToken cancellationToken)
+        private async Task<AbdmPublicKey> GetPublicKeyAsync(bool forceRefresh, CancellationToken cancellationToken)
         {
-            if (!forceRefresh && _cache.TryGetValue(CacheKey, out string? cachedPem) && !string.IsNullOrWhiteSpace(cachedPem))
-                return cachedPem;
+            if (!forceRefresh && _cache.TryGetValue(CacheKey, out AbdmPublicKey? cached) && cached != null)
+                return cached;
 
             await FetchLock.WaitAsync(cancellationToken);
             try
             {
-                if (!forceRefresh && _cache.TryGetValue(CacheKey, out string? pemAfterLock) && !string.IsNullOrWhiteSpace(pemAfterLock))
-                    return pemAfterLock;
+                if (!forceRefresh && _cache.TryGetValue(CacheKey, out AbdmPublicKey? afterLock) && afterLock != null)
+                    return afterLock;
 
                 // Despite the PDF documenting this as a plain unauthenticated GET, the sandbox
                 // rejects it with 401 without the same gateway Bearer token every other ABDM call
                 // carries — matching AbdmAbhaService.BuildRequestAsync's headers here too.
-                var accessToken = await _gatewayService.GetAccessTokenAsync(cancellationToken);
-                using var request = new HttpRequestMessage(HttpMethod.Get, _certUrl);
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-                request.Headers.Add("REQUEST-ID", Guid.NewGuid().ToString());
-                request.Headers.Add("TIMESTAMP", DateTime.UtcNow.ToString("O"));
-                request.Headers.Add("X-CM-ID", _cmId);
+                var response = await AbdmHttp.SendAsync(_httpClient, _gatewayService, _logger, async () =>
+                {
+                    var accessToken = await _gatewayService.GetAccessTokenAsync(cancellationToken);
+                    var request = new HttpRequestMessage(HttpMethod.Get, _certUrl);
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                    AbdmHttp.AddStandardHeaders(request, _cmId);
+                    return request;
+                }, cancellationToken);
 
-                using var response = await _httpClient.SendAsync(request, cancellationToken);
-                var body = await response.Content.ReadAsStringAsync(cancellationToken);
-                if (!response.IsSuccessStatusCode)
-                    throw new InvalidOperationException($"Failed to fetch ABDM public certificate ({(int)response.StatusCode}).");
+                AbdmPublicKey key;
+                try
+                {
+                    key = AbdmCertificate.Parse(response.BodyText);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    _logger.LogError("ABDM certificate refused for REQUEST-ID {RequestId}: {Reason}", response.RequestId, ex.Message);
+                    throw;
+                }
 
-                var pem = ExtractPem(body);
-                if (string.IsNullOrWhiteSpace(pem))
-                    throw new InvalidOperationException("ABDM public certificate response did not contain a PEM key.");
-
-                _cache.Set(CacheKey, pem, TimeSpan.FromHours(6));
-                return pem;
+                _logger.LogInformation("ABDM certificate loaded; encryptionAlgorithm {Algorithm}", key.Algorithm);
+                _cache.Set(CacheKey, key, TimeSpan.FromHours(6));
+                return key;
             }
             finally
             {
                 FetchLock.Release();
             }
-        }
-
-        /// <summary>The cert endpoint returns either a raw PEM string body or a JSON object with a
-        /// "publicKey"/"certificate" field — handle both. Sandbox's actual "publicKey" value is bare
-        /// base64 DER (SubjectPublicKeyInfo) with no "-----BEGIN"/"-----END" armor at all, despite
-        /// looking like a PEM body in the PDF's example — RSA.ImportFromPem rejects that outright, so
-        /// any bare-base64 result gets wrapped in PEM armor before being returned.</summary>
-        private static string ExtractPem(string body)
-        {
-            var trimmed = body.Trim();
-            if (trimmed.Contains("-----BEGIN", StringComparison.Ordinal) && !trimmed.StartsWith('{'))
-                return trimmed;
-
-            try
-            {
-                using var doc = JsonDocument.Parse(trimmed);
-                if (doc.RootElement.TryGetProperty("publicKey", out var pk) && pk.ValueKind == JsonValueKind.String)
-                    return WrapAsPemIfBare(pk.GetString() ?? string.Empty, "PUBLIC KEY");
-                if (doc.RootElement.TryGetProperty("certificate", out var cert) && cert.ValueKind == JsonValueKind.String)
-                    return WrapAsPemIfBare(cert.GetString() ?? string.Empty, "CERTIFICATE");
-            }
-            catch (JsonException)
-            {
-                // Not JSON — fall through and treat the whole trimmed body as the PEM.
-            }
-
-            return WrapAsPemIfBare(trimmed, "PUBLIC KEY");
-        }
-
-        private static string WrapAsPemIfBare(string value, string label)
-        {
-            if (string.IsNullOrWhiteSpace(value) || value.Contains("-----BEGIN", StringComparison.Ordinal))
-                return value;
-
-            return $"-----BEGIN {label}-----\n{value.Trim()}\n-----END {label}-----";
         }
     }
 }

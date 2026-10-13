@@ -196,12 +196,15 @@ builder.Services.AddScoped<ISubscriptionLimitHelper, SubscriptionLimitHelper>();
 builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.ExpiryAlertBackgroundService>();
 builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.HealthWikiMaintenanceBackgroundService>();
 // ABDM M1: ABHA creation (Aadhaar-OTP) + existing-ABHA login (Mobile/Aadhaar-OTP).
-builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmEncryptionService, EasyHMSAPI.Application.Services.Implementations.AbdmEncryptionService>();
-builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmGatewayService, EasyHMSAPI.Application.Services.Implementations.AbdmGatewayService>();
-builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmAbhaService, EasyHMSAPI.Application.Services.Implementations.AbdmAbhaService>();
+// Own client with a 30 s timeout: the default 100 s turned a dead ABDM endpoint into a 100 s hang
+// at the counter. 30 s still leaves room for Aadhaar OTP calls, which go through UIDAI.
+static void AbdmClient(HttpClient c) => c.Timeout = TimeSpan.FromSeconds(30);
+builder.Services.AddHttpClient<EasyHMSAPI.Application.Services.Interfaces.IAbdmEncryptionService, EasyHMSAPI.Application.Services.Implementations.AbdmEncryptionService>(AbdmClient);
+builder.Services.AddHttpClient<EasyHMSAPI.Application.Services.Interfaces.IAbdmGatewayService, EasyHMSAPI.Application.Services.Implementations.AbdmGatewayService>(AbdmClient);
+builder.Services.AddHttpClient<EasyHMSAPI.Application.Services.Interfaces.IAbdmAbhaService, EasyHMSAPI.Application.Services.Implementations.AbdmAbhaService>(AbdmClient);
 builder.Services.AddSingleton<EasyHMSAPI.Application.Services.IAbhaLinkProofStore, EasyHMSAPI.Application.Services.AbhaLinkProofStore>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.IAbdmCallbackGuard, EasyHMSAPI.Application.Services.AbdmCallbackGuard>();
-builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmProfileShareService, EasyHMSAPI.Application.Services.Implementations.AbdmProfileShareService>();
+builder.Services.AddHttpClient<EasyHMSAPI.Application.Services.Interfaces.IAbdmProfileShareService, EasyHMSAPI.Application.Services.Implementations.AbdmProfileShareService>(AbdmClient);
 // HR biometric attendance: stores device scans and rebuilds attendance from them.
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IBiometricPunchIngestionService, EasyHMSAPI.Application.Services.Implementations.BiometricPunchIngestionService>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IZktecoPushService, EasyHMSAPI.Application.Services.Implementations.ZktecoPushService>();
