@@ -62,5 +62,29 @@ namespace EasyHMSAPI.Application.Services.Implementations
             }
             return new HealthWikiHandoffSession { Token = token, ExpiresAt = expires };
         }
+
+        public async Task<HealthWikiContributor?> FindByVerifiedMobileAsync(string? mobile, CancellationToken ct)
+        {
+            var m = ContributorSecurity.NormalizeMobile(mobile);
+            if (m == null) return null;
+            var c = await _context.HealthWikiContributors.AsNoTracking().FirstOrDefaultAsync(x => x.Mobile == m, ct);
+            return c != null && ContributorPortalRules.IsProfileAccepted(c.Status) ? c : null;
+        }
+
+        public async Task<HealthWikiHandoffSession?> StartSessionByVerifiedMobileAsync(string? mobile, CancellationToken ct)
+        {
+            var c = await FindByVerifiedMobileAsync(mobile, ct);
+            if (c == null) return null;
+            var now = DateTime.UtcNow;
+            var token = ContributorSecurity.NewToken();
+            var expires = now + ContributorSecurity.SessionLifetime;
+            _context.ContributorSessions.Add(new ContributorSession
+            {
+                SessionId = Guid.NewGuid(), ContributorId = c.ContributorId, TokenHash = ContributorSecurity.HashToken(token),
+                ExpiresAt = expires, LastSeenAt = now, CreatedAt = now,
+            });
+            await _context.SaveChangesAsync(ct);
+            return new HealthWikiHandoffSession { Token = token, ExpiresAt = expires };
+        }
     }
 }

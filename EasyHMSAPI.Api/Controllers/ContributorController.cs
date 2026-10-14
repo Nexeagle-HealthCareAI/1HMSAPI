@@ -1,6 +1,7 @@
 using EasyHMSAPI.Api.Common;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
+using EasyHMSAPI.Application.Services.Interfaces;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -26,11 +27,13 @@ namespace EasyHMSAPI.Api.Controllers
     {
         private readonly IMediator _mediator;
         private readonly ILogger<ContributorController> _logger;
+        private readonly IPatientTokenValidator _patientTokenValidator;
 
-        public ContributorController(IMediator mediator, ILogger<ContributorController> logger)
+        public ContributorController(IMediator mediator, ILogger<ContributorController> logger, IPatientTokenValidator patientTokenValidator)
         {
             _mediator = mediator;
             _logger = logger;
+            _patientTokenValidator = patientTokenValidator;
         }
 
         public class OtpSendBody
@@ -118,6 +121,46 @@ namespace EasyHMSAPI.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error exchanging a hand-off code");
+                return StatusCode(500, new { message = "Something went wrong. Try again." });
+            }
+        }
+
+        // ---- from the patient's profile page on Doctor Dekho -------------------------------------------------------------
+        // The patient token (a WhatsApp-verified mobile) is validated here the same way PublicController does it, never through [Authorize], so a
+        // patient token can never act as a staff session. The mobile is taken from the token, never from the request.
+
+        // Is this signed-in patient also a contributor? Answers {isContributor:false} for everyone else.
+        [HttpGet("profile-tag")]
+        public async Task<IActionResult> ProfileTag(CancellationToken ct)
+        {
+            var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), ct);
+            if (!auth.IsValid || auth.Mobile == null) return Unauthorized(new { message = auth.Reason ?? "Please log in again." });
+            try
+            {
+                var res = await _mediator.Send(new GetContributorProfileTagRequestModel { Mobile = auth.Mobile }, ct);
+                return Ok(new { isContributor = res.IsContributor, role = res.Role, status = res.Status, fullName = res.FullName });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error reading the contributor tag for a profile");
+                return StatusCode(500, new { message = "Something went wrong. Try again." });
+            }
+        }
+
+        // Open the contributor area without a second code: the number was just proven by the patient sign-in.
+        [HttpPost("session-from-patient")]
+        public async Task<IActionResult> SessionFromPatient(CancellationToken ct)
+        {
+            var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), ct);
+            if (!auth.IsValid || auth.Mobile == null) return Unauthorized(new { message = auth.Reason ?? "Please log in again." });
+            try
+            {
+                var res = await _mediator.Send(new StartContributorSessionFromPatientRequestModel { Mobile = auth.Mobile }, ct);
+                return res.Success ? Ok(res) : StatusCode(res.StatusCode, new { message = res.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error opening the contributor area from a patient profile");
                 return StatusCode(500, new { message = "Something went wrong. Try again." });
             }
         }

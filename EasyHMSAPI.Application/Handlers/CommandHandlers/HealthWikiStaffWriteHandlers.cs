@@ -124,4 +124,41 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }, ct);
         }
     }
+
+    /// <summary>The contributor tag for the signed-in patient's profile page.</summary>
+    public class GetContributorProfileTagHandler : IRequestHandler<GetContributorProfileTagRequestModel, ContributorProfileTagResponseModel>
+    {
+        private readonly IHealthWikiHandoffService _people;
+
+        public GetContributorProfileTagHandler(IHealthWikiHandoffService people)
+        {
+            _people = people;
+        }
+
+        public async Task<ContributorProfileTagResponseModel> Handle(GetContributorProfileTagRequestModel request, CancellationToken ct)
+        {
+            var c = await _people.FindByVerifiedMobileAsync(request.Mobile, ct);
+            return c == null
+                ? new ContributorProfileTagResponseModel { IsContributor = false }
+                : new ContributorProfileTagResponseModel { IsContributor = true, Role = c.Type, Status = c.Status, FullName = c.FullName };
+        }
+    }
+
+    public class StartContributorSessionFromPatientHandler : IRequestHandler<StartContributorSessionFromPatientRequestModel, ContributorOtpVerifyResponseModel>
+    {
+        private readonly IHealthWikiHandoffService _people;
+
+        public StartContributorSessionFromPatientHandler(IHealthWikiHandoffService people)
+        {
+            _people = people;
+        }
+
+        public async Task<ContributorOtpVerifyResponseModel> Handle(StartContributorSessionFromPatientRequestModel request, CancellationToken ct)
+        {
+            var session = await _people.StartSessionByVerifiedMobileAsync(request.Mobile, ct);
+            return session == null
+                ? new ContributorOtpVerifyResponseModel { Success = false, StatusCode = 404, Message = "You have not joined the Health Wiki as a contributor yet." }
+                : new ContributorOtpVerifyResponseModel { Success = true, StatusCode = 200, SessionToken = session.Token, SessionExpiresAt = session.ExpiresAt, NeedsRegistration = false };
+        }
+    }
 }

@@ -1,4 +1,5 @@
 using EasyHMSAPI.Application.Services.Models;
+using EasyHMSAPI.Domain.Entities;
 
 namespace EasyHMSAPI.Application.Services.Interfaces
 {
@@ -13,5 +14,15 @@ namespace EasyHMSAPI.Application.Services.Interfaces
 
         /// <summary>Exchanges the code for a session. A code works once, within a minute; every failure reads the same.</summary>
         Task<HealthWikiHandoffSession?> ExchangeAsync(string? code, CancellationToken cancellationToken);
+
+        /// <summary>
+        /// The contributor who owns a mobile number that was just proven on Doctor Dekho by a patient sign-in (a WhatsApp code). Only someone
+        /// who finished joining (pending or verified) counts; a person who has not joined, or was rejected, is not found.
+        /// </summary>
+        Task<HealthWikiContributor?> FindByVerifiedMobileAsync(string? mobile, CancellationToken cancellationToken);
+
+        /// <summary>A contributor session for that person, so the profile page can open the contributor area without asking for a second code
+        /// for the same number. Null when there is no such contributor.</summary>
+        Task<HealthWikiHandoffSession?> StartSessionByVerifiedMobileAsync(string? mobile, CancellationToken cancellationToken);
     }
 }
