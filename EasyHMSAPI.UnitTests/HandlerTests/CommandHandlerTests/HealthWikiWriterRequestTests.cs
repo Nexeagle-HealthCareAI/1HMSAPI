@@ -342,6 +342,31 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(await svc.FindByVerifiedMobileAsync("abc", Ct), Is.Null);
         }
 
+        [TestCase("INVITED", true)]
+        [TestCase("PENDING", true)]
+        [TestCase("VERIFIED", true)]
+        [TestCase("REJECTED", false)]
+        public async Task TheProfilePage_ShowsATag_ForAnyContributorWhoWasNotRejected_IncludingAnInvitedOneWhoHasNotFinished(string status, bool found)
+        {
+            var person = Person("INDEPENDENT_DOCTOR", status, "Aquib (test)");
+            var tag = await new GetContributorProfileTagHandler(new HealthWikiHandoffService(_context))
+                .Handle(new GetContributorProfileTagRequestModel { Mobile = person.Mobile }, Ct);
+
+            Assert.That(tag.IsContributor, Is.EqualTo(found));
+            if (found) Assert.That((tag.Status, tag.FullName), Is.EqualTo((status, "Aquib (test)")));
+        }
+
+        [Test]
+        public async Task AnInvitedPersonWithNoNameYet_HasNoNameInTheTag_SoThePageKeepsItsOwn()
+        {
+            var person = Person("WRITER", "INVITED", "");
+            var tag = await new GetContributorProfileTagHandler(new HealthWikiHandoffService(_context))
+                .Handle(new GetContributorProfileTagRequestModel { Mobile = person.Mobile }, Ct);
+
+            Assert.That(tag.IsContributor, Is.True);
+            Assert.That(tag.FullName, Is.Null);
+        }
+
         [Test]
         public async Task TheProfileTag_SaysWhoTheyAre_WithoutTheirNumber()
         {

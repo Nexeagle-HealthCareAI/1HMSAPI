@@ -12,7 +12,7 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public bool IsContributor { get; set; }
         // INDEPENDENT_DOCTOR | HEALTH_WORKER | WRITER
         public string? Role { get; set; }
-        // PENDING | VERIFIED
+        // INVITED (not finished) | PENDING | VERIFIED
         public string? Status { get; set; }
         public string? FullName { get; set; }
     }

@@ -137,10 +137,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
         public async Task<ContributorProfileTagResponseModel> Handle(GetContributorProfileTagRequestModel request, CancellationToken ct)
         {
-            var c = await _people.FindByVerifiedMobileAsync(request.Mobile, ct);
+            var c = await _people.FindForProfileAsync(request.Mobile, ct);
             return c == null
                 ? new ContributorProfileTagResponseModel { IsContributor = false }
-                : new ContributorProfileTagResponseModel { IsContributor = true, Role = c.Type, Status = c.Status, FullName = c.FullName };
+                : new ContributorProfileTagResponseModel { IsContributor = true, Role = c.Type, Status = c.Status, FullName = string.IsNullOrWhiteSpace(c.FullName) ? null : c.FullName };
         }
     }
 

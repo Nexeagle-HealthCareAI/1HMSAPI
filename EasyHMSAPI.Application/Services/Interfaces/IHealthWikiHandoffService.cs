@@ -21,6 +21,10 @@ namespace EasyHMSAPI.Application.Services.Interfaces
         /// </summary>
         Task<HealthWikiContributor?> FindByVerifiedMobileAsync(string? mobile, CancellationToken cancellationToken);
 
+        /// <summary>The same, for showing a tag on the person's own profile page: someone the team invited who has not finished their profile is
+        /// included (so the page can ask them to finish). A rejected contributor is not.</summary>
+        Task<HealthWikiContributor?> FindForProfileAsync(string? mobile, CancellationToken cancellationToken);
+
         /// <summary>A contributor session for that person, so the profile page can open the contributor area without asking for a second code
         /// for the same number. Null when there is no such contributor.</summary>
         Task<HealthWikiHandoffSession?> StartSessionByVerifiedMobileAsync(string? mobile, CancellationToken cancellationToken);

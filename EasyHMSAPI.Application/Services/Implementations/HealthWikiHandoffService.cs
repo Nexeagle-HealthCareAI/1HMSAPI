@@ -71,6 +71,14 @@ namespace EasyHMSAPI.Application.Services.Implementations
             return c != null && ContributorPortalRules.IsProfileAccepted(c.Status) ? c : null;
         }
 
+        public async Task<HealthWikiContributor?> FindForProfileAsync(string? mobile, CancellationToken ct)
+        {
+            var m = ContributorSecurity.NormalizeMobile(mobile);
+            if (m == null) return null;
+            var c = await _context.HealthWikiContributors.AsNoTracking().FirstOrDefaultAsync(x => x.Mobile == m, ct);
+            return c != null && c.Status != HealthWikiContributor.StatusRejected ? c : null;
+        }
+
         public async Task<HealthWikiHandoffSession?> StartSessionByVerifiedMobileAsync(string? mobile, CancellationToken ct)
         {
             var c = await FindByVerifiedMobileAsync(mobile, ct);
