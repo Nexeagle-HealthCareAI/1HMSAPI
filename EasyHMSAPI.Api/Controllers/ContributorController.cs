@@ -22,7 +22,10 @@ namespace EasyHMSAPI.Api.Controllers
     [Route("contributor")]
     [AllowAnonymous]
     [SkipHospitalAccessCheck]
-    [EnableRateLimiting("ContributorAuthPolicy")]
+    // Everything after sign-in sits behind the session and gets the normal per-address ceiling. Only the calls anyone can make without a session
+    // (the invitation, the codes, the hand-off, opening a session from a patient login) get the strict ContributorAuthPolicy, on the action itself.
+    // A page makes several calls at once, and the Doctor Dekho server may be the address the API sees, so the strict ceiling must not cover them.
+    [EnableRateLimiting("PerIpPolicy")]
     public class ContributorController : ControllerBase
     {
         private readonly IMediator _mediator;
@@ -50,6 +53,7 @@ namespace EasyHMSAPI.Api.Controllers
             public string? Role { get; set; }
         }
 
+        [EnableRateLimiting("ContributorAuthPolicy")]
         [HttpGet("invite/{token}")]
         public async Task<IActionResult> Invite(string token)
         {
@@ -66,6 +70,7 @@ namespace EasyHMSAPI.Api.Controllers
         }
 
         // "Join as a contributor" without an invitation: the same code step as sign-in.
+        [EnableRateLimiting("ContributorAuthPolicy")]
         [HttpPost("enrol")]
         [HttpPost("otp/send")]
         public async Task<IActionResult> SendOtp([FromBody] OtpSendBody body)
@@ -86,6 +91,7 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        [EnableRateLimiting("ContributorAuthPolicy")]
         [HttpPost("otp/verify")]
         public async Task<IActionResult> VerifyOtp([FromBody] OtpVerifyBody body)
         {
@@ -110,6 +116,7 @@ namespace EasyHMSAPI.Api.Controllers
         }
 
         // A hospital doctor arriving from EasyHMS: the one-time code (made by the EasyHMS API for the signed-in doctor) becomes a session.
+        [EnableRateLimiting("ContributorAuthPolicy")]
         [HttpPost("sso/exchange")]
         public async Task<IActionResult> SsoExchange([FromBody] SsoBody body)
         {
@@ -154,6 +161,7 @@ namespace EasyHMSAPI.Api.Controllers
 
         // Open the contributor area without a second code: the number was just proven by the patient sign-in. Body { role } joins a patient who
         // is not a contributor yet as that role.
+        [EnableRateLimiting("ContributorAuthPolicy")]
         [HttpPost("session-from-patient")]
         public async Task<IActionResult> SessionFromPatient([FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SessionFromPatientBody? body, CancellationToken ct)
         {
