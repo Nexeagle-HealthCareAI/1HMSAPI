@@ -14,5 +14,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? Email { get; set; }
         public string? GuardianName { get; set; }
         public string? GuardianRelation { get; set; }
+        // ACCOUNT (saved by the patient on Doctor Dekho) | BOOKING (from the latest hospital registration) | NONE
+        public string Source { get; set; } = "NONE";
+        public int StatusCode { get; set; } = 200;
     }
 }

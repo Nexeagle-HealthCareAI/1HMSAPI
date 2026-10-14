@@ -155,10 +155,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
         public async Task<ContributorOtpVerifyResponseModel> Handle(StartContributorSessionFromPatientRequestModel request, CancellationToken ct)
         {
-            var session = await _people.StartSessionByVerifiedMobileAsync(request.Mobile, ct);
-            return session == null
+            var signedIn = await _people.SignInPatientAsync(request.Mobile, request.Role, ct);
+            return signedIn == null
                 ? new ContributorOtpVerifyResponseModel { Success = false, StatusCode = 404, Message = "You have not joined the Health Wiki as a contributor yet." }
-                : new ContributorOtpVerifyResponseModel { Success = true, StatusCode = 200, SessionToken = session.Token, SessionExpiresAt = session.ExpiresAt, NeedsRegistration = false };
+                : new ContributorOtpVerifyResponseModel
+                {
+                    Success = true, StatusCode = 200, SessionToken = signedIn.Session.Token, SessionExpiresAt = signedIn.Session.ExpiresAt, NeedsRegistration = signedIn.NeedsRegistration,
+                };
         }
     }
 }

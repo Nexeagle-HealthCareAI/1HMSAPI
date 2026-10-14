@@ -147,15 +147,21 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
-        // Open the contributor area without a second code: the number was just proven by the patient sign-in.
+        public class SessionFromPatientBody
+        {
+            public string? Role { get; set; }
+        }
+
+        // Open the contributor area without a second code: the number was just proven by the patient sign-in. Body { role } joins a patient who
+        // is not a contributor yet as that role.
         [HttpPost("session-from-patient")]
-        public async Task<IActionResult> SessionFromPatient(CancellationToken ct)
+        public async Task<IActionResult> SessionFromPatient([FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SessionFromPatientBody? body, CancellationToken ct)
         {
             var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), ct);
             if (!auth.IsValid || auth.Mobile == null) return Unauthorized(new { message = auth.Reason ?? "Please log in again." });
             try
             {
-                var res = await _mediator.Send(new StartContributorSessionFromPatientRequestModel { Mobile = auth.Mobile }, ct);
+                var res = await _mediator.Send(new StartContributorSessionFromPatientRequestModel { Mobile = auth.Mobile, Role = body?.Role }, ct);
                 return res.Success ? Ok(res) : StatusCode(res.StatusCode, new { message = res.Message });
             }
             catch (Exception ex)

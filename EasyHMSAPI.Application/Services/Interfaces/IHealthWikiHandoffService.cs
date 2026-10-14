@@ -25,8 +25,12 @@ namespace EasyHMSAPI.Application.Services.Interfaces
         /// included (so the page can ask them to finish). A rejected contributor is not.</summary>
         Task<HealthWikiContributor?> FindForProfileAsync(string? mobile, CancellationToken cancellationToken);
 
-        /// <summary>A contributor session for that person, so the profile page can open the contributor area without asking for a second code
-        /// for the same number. Null when there is no such contributor.</summary>
-        Task<HealthWikiHandoffSession?> StartSessionByVerifiedMobileAsync(string? mobile, CancellationToken cancellationToken);
+        /// <summary>
+        /// A contributor session for a signed-in patient, so Health Wiki never asks for a second code for the same number. The number is the one
+        /// the patient sign-in already proved. Someone who is already a contributor (even one the team invited and who has not finished) gets a
+        /// session for their row; someone who is not gets a new row only when they say which role they are joining as (joinAs). Null when there is
+        /// no such contributor and no role was given, or when the contributor was rejected.
+        /// </summary>
+        Task<HealthWikiPatientSignIn?> SignInPatientAsync(string? mobile, string? joinAs, CancellationToken cancellationToken);
     }
 }

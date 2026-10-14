@@ -66,5 +66,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     public class StartContributorSessionFromPatientRequestModel : IRequest<ContributorOtpVerifyResponseModel>
     {
         public string? Mobile { get; set; }
+        // Only to join as a new contributor: INDEPENDENT_DOCTOR, HEALTH_WORKER or WRITER. Ignored for someone who already is one.
+        public string? Role { get; set; }
     }
 }

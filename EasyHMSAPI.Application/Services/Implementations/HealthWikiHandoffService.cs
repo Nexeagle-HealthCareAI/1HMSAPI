@@ -79,11 +79,34 @@ namespace EasyHMSAPI.Application.Services.Implementations
             return c != null && c.Status != HealthWikiContributor.StatusRejected ? c : null;
         }
 
-        public async Task<HealthWikiHandoffSession?> StartSessionByVerifiedMobileAsync(string? mobile, CancellationToken ct)
+        private static readonly string[] JoinRoles =
         {
-            var c = await FindByVerifiedMobileAsync(mobile, ct);
-            if (c == null) return null;
+            HealthWikiContributor.TypeIndependentDoctor, HealthWikiContributor.TypeHealthWorker, HealthWikiContributor.TypeWriter,
+        };
+
+        public async Task<HealthWikiPatientSignIn?> SignInPatientAsync(string? mobile, string? joinAs, CancellationToken ct)
+        {
+            var m = ContributorSecurity.NormalizeMobile(mobile);
+            if (m == null) return null;
+
             var now = DateTime.UtcNow;
+            var c = await _context.HealthWikiContributors.FirstOrDefaultAsync(x => x.Mobile == m, ct);
+            if (c == null)
+            {
+                var role = joinAs?.Trim().ToUpperInvariant();
+                if (role == null || !JoinRoles.Contains(role)) return null;
+                c = new HealthWikiContributor
+                {
+                    ContributorId = Guid.NewGuid(), Type = role, FullName = string.Empty, Mobile = m, Status = HealthWikiContributor.StatusInvited,
+                    EnrolmentSource = "SELF_ENROLLED", CreatedAt = now, UpdatedAt = now,
+                };
+                _context.HealthWikiContributors.Add(c);
+            }
+            else if (c.Status == HealthWikiContributor.StatusRejected)
+            {
+                return null;
+            }
+
             var token = ContributorSecurity.NewToken();
             var expires = now + ContributorSecurity.SessionLifetime;
             _context.ContributorSessions.Add(new ContributorSession
@@ -91,8 +114,20 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 SessionId = Guid.NewGuid(), ContributorId = c.ContributorId, TokenHash = ContributorSecurity.HashToken(token),
                 ExpiresAt = expires, LastSeenAt = now, CreatedAt = now,
             });
-            await _context.SaveChangesAsync(ct);
-            return new HealthWikiHandoffSession { Token = token, ExpiresAt = expires };
+            try
+            {
+                await _context.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException)
+            {
+                // The same number joined twice at once: the other request made the row.
+                return null;
+            }
+            return new HealthWikiPatientSignIn
+            {
+                Session = new HealthWikiHandoffSession { Token = token, ExpiresAt = expires },
+                NeedsRegistration = string.IsNullOrWhiteSpace(c.FullName) || c.Status == HealthWikiContributor.StatusInvited,
+            };
         }
     }
 }
