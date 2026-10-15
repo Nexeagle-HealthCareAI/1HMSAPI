@@ -1,0 +1,4 @@
+<?xml version="1.0"?>
+<TestSequence>
+  <Test Name="EasyHMSAPI.UnitTests.CommonTests.PermissionAuthorizationFilterTests.ResolveGrantedPermissionsAsync_CachesWithinTheTtl_SoARevocationDuringTheWindowIsntSeenYet" DisplayName="ResolveGrantedPermissionsAsync_CachesWithinTheTtl_SoARevocationDuringTheWindowIsntSeenYet" Source="C:\Users\mtnoo\OneDrive\Desktop\EasyHMS\easyHMSAPI\EasyHMSAPI.UnitTests\bin\Debug\net8.0\EasyHMSAPI.UnitTests.dll" Completed="False" />
+</TestSequence>
