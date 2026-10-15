@@ -317,5 +317,152 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(created.StatusCode, Is.EqualTo(403));
             Assert.That(list.StatusCode, Is.EqualTo(403));
         }
+
+        // ---- the contributor tag and one-click entry from a patient's profile
+
+        [TestCase("PENDING", true)]
+        [TestCase("VERIFIED", true)]
+        [TestCase("INVITED", false)]
+        [TestCase("REJECTED", false)]
+        public async Task OnlyAContributorWhoFinishedJoining_IsFoundByTheirVerifiedMobile(string status, bool found)
+        {
+            var person = Person("WRITER", status);
+            var svc = new HealthWikiHandoffService(_context);
+
+            Assert.That((await svc.FindByVerifiedMobileAsync(person.Mobile, Ct) != null), Is.EqualTo(found));
+            Assert.That((await svc.FindByVerifiedMobileAsync("+91 " + person.Mobile, Ct) != null), Is.EqualTo(found), "a number with a country code finds the same person");
+        }
+
+        [Test]
+        public async Task ANumberThatIsNotAContributor_OrIsMissing_IsNotFound()
+        {
+            var svc = new HealthWikiHandoffService(_context);
+            Assert.That(await svc.FindByVerifiedMobileAsync("9000000000", Ct), Is.Null);
+            Assert.That(await svc.FindByVerifiedMobileAsync(null, Ct), Is.Null);
+            Assert.That(await svc.FindByVerifiedMobileAsync("abc", Ct), Is.Null);
+        }
+
+        [TestCase("INVITED", true)]
+        [TestCase("PENDING", true)]
+        [TestCase("VERIFIED", true)]
+        [TestCase("REJECTED", false)]
+        public async Task TheProfilePage_ShowsATag_ForAnyContributorWhoWasNotRejected_IncludingAnInvitedOneWhoHasNotFinished(string status, bool found)
+        {
+            var person = Person("INDEPENDENT_DOCTOR", status, "Aquib (test)");
+            var tag = await new GetContributorProfileTagHandler(new HealthWikiHandoffService(_context))
+                .Handle(new GetContributorProfileTagRequestModel { Mobile = person.Mobile }, Ct);
+
+            Assert.That(tag.IsContributor, Is.EqualTo(found));
+            if (found) Assert.That((tag.Status, tag.FullName), Is.EqualTo((status, "Aquib (test)")));
+        }
+
+        [Test]
+        public async Task AnInvitedPersonWithNoNameYet_HasNoNameInTheTag_SoThePageKeepsItsOwn()
+        {
+            var person = Person("WRITER", "INVITED", "");
+            var tag = await new GetContributorProfileTagHandler(new HealthWikiHandoffService(_context))
+                .Handle(new GetContributorProfileTagRequestModel { Mobile = person.Mobile }, Ct);
+
+            Assert.That(tag.IsContributor, Is.True);
+            Assert.That(tag.FullName, Is.Null);
+        }
+
+        [Test]
+        public async Task TheProfileTag_SaysWhoTheyAre_WithoutTheirNumber()
+        {
+            var doctor = Person("INDEPENDENT_DOCTOR", "VERIFIED", "Dr. Asha");
+            var handler = new GetContributorProfileTagHandler(new HealthWikiHandoffService(_context));
+
+            var yes = await handler.Handle(new GetContributorProfileTagRequestModel { Mobile = doctor.Mobile }, Ct);
+            var no = await handler.Handle(new GetContributorProfileTagRequestModel { Mobile = "9000000001" }, Ct);
+
+            Assert.That(yes.IsContributor, Is.True);
+            Assert.That((yes.Role, yes.Status, yes.FullName), Is.EqualTo(("INDEPENDENT_DOCTOR", "VERIFIED", "Dr. Asha")));
+            Assert.That(no.IsContributor, Is.False);
+            Assert.That(no.Role, Is.Null);
+        }
+
+        [Test]
+        public async Task TheProfilePage_OpensTheContributorArea_WithoutASecondCode_AndOnlyForAContributor()
+        {
+            var writer = Person("WRITER", "PENDING");
+            var handler = new StartContributorSessionFromPatientHandler(new HealthWikiHandoffService(_context));
+
+            var ok = await handler.Handle(new StartContributorSessionFromPatientRequestModel { Mobile = writer.Mobile }, Ct);
+            var none = await handler.Handle(new StartContributorSessionFromPatientRequestModel { Mobile = "9000000002" }, Ct);
+
+            Assert.That(ok.Success, Is.True);
+            Assert.That(ok.NeedsRegistration, Is.False);
+            var session = _context.ContributorSessions.Single();
+            Assert.That(session.ContributorId, Is.EqualTo(writer.ContributorId));
+            Assert.That(session.TokenHash, Is.Not.EqualTo(ok.SessionToken), "only a hash is kept");
+            Assert.That(none.Success, Is.False);
+            Assert.That(none.StatusCode, Is.EqualTo(404));
+        }
+
+        // ---- a signed-in patient never gets a second code from the Health Wiki
+
+        private Task<Application.ResponseModels.CommandResponseModels.ContributorOtpVerifyResponseModel> SignInPatient(string mobile, string? role = null) =>
+            new StartContributorSessionFromPatientHandler(new HealthWikiHandoffService(_context)).Handle(new StartContributorSessionFromPatientRequestModel { Mobile = mobile, Role = role }, Ct);
+
+        [TestCase("VERIFIED", false)]
+        [TestCase("PENDING", false)]
+        [TestCase("INVITED", true)]
+        public async Task AnExistingContributor_GetsASession_AndOnlyAnUnfinishedProfileHasToRegister(string status, bool needsRegistration)
+        {
+            var person = Person("INDEPENDENT_DOCTOR", status, status == "INVITED" ? "Aquib (test)" : "Dr. Asha");
+
+            var res = await SignInPatient(person.Mobile);
+
+            Assert.That(res.Success, Is.True, res.Message);
+            Assert.That(res.NeedsRegistration, Is.EqualTo(needsRegistration));
+            Assert.That(_context.ContributorSessions.Single().ContributorId, Is.EqualTo(person.ContributorId));
+        }
+
+        [Test]
+        public async Task ASelfInvitedPersonWithNoNameYet_HasToRegister()
+        {
+            var person = Person("WRITER", "INVITED", "");
+            Assert.That((await SignInPatient(person.Mobile)).NeedsRegistration, Is.True);
+        }
+
+        [Test]
+        public async Task APatientWhoIsNotAContributor_JoinsAsTheRoleTheyChose_WithNoCode()
+        {
+            var res = await SignInPatient("9000000010", "writer");
+
+            Assert.That(res.Success, Is.True, res.Message);
+            Assert.That(res.NeedsRegistration, Is.True);
+            var made = _context.HealthWikiContributors.Single(c => c.Mobile == "9000000010");
+            Assert.That((made.Type, made.Status, made.EnrolmentSource), Is.EqualTo(("WRITER", "INVITED", "SELF_ENROLLED")));
+            Assert.That(_context.ContributorSessions.Single().ContributorId, Is.EqualTo(made.ContributorId));
+        }
+
+        [TestCase(null)]
+        [TestCase("")]
+        [TestCase("HOSPITAL_DOCTOR")]
+        [TestCase("STAFF")]
+        [TestCase("admin")]
+        public async Task WithoutAValidRole_ANewPersonIsNotMadeAContributor(string? role)
+        {
+            var res = await SignInPatient("9000000011", role);
+
+            Assert.That(res.Success, Is.False);
+            Assert.That(res.StatusCode, Is.EqualTo(404));
+            Assert.That(_context.HealthWikiContributors.Any(), Is.False);
+            Assert.That(_context.ContributorSessions.Any(), Is.False);
+        }
+
+        [Test]
+        public async Task ARoleIsIgnoredForSomeoneWhoAlreadyIsAContributor_AndARejectedOneGetsNothing()
+        {
+            var doctor = Person("INDEPENDENT_DOCTOR", "VERIFIED");
+            var rejected = Person("WRITER", "REJECTED");
+
+            Assert.That((await SignInPatient(doctor.Mobile, "WRITER")).Success, Is.True);
+            Assert.That(_context.HealthWikiContributors.Single(c => c.ContributorId == doctor.ContributorId).Type, Is.EqualTo("INDEPENDENT_DOCTOR"));
+            Assert.That((await SignInPatient(rejected.Mobile, "WRITER")).Success, Is.False);
+            Assert.That(_context.ContributorSessions.Count(), Is.EqualTo(1));
+        }
     }
 }

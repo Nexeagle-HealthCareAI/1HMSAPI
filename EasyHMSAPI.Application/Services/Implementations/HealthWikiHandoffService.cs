@@ -62,5 +62,72 @@ namespace EasyHMSAPI.Application.Services.Implementations
             }
             return new HealthWikiHandoffSession { Token = token, ExpiresAt = expires };
         }
+
+        public async Task<HealthWikiContributor?> FindByVerifiedMobileAsync(string? mobile, CancellationToken ct)
+        {
+            var m = ContributorSecurity.NormalizeMobile(mobile);
+            if (m == null) return null;
+            var c = await _context.HealthWikiContributors.AsNoTracking().FirstOrDefaultAsync(x => x.Mobile == m, ct);
+            return c != null && ContributorPortalRules.IsProfileAccepted(c.Status) ? c : null;
+        }
+
+        public async Task<HealthWikiContributor?> FindForProfileAsync(string? mobile, CancellationToken ct)
+        {
+            var m = ContributorSecurity.NormalizeMobile(mobile);
+            if (m == null) return null;
+            var c = await _context.HealthWikiContributors.AsNoTracking().FirstOrDefaultAsync(x => x.Mobile == m, ct);
+            return c != null && c.Status != HealthWikiContributor.StatusRejected ? c : null;
+        }
+
+        private static readonly string[] JoinRoles =
+        {
+            HealthWikiContributor.TypeIndependentDoctor, HealthWikiContributor.TypeHealthWorker, HealthWikiContributor.TypeWriter,
+        };
+
+        public async Task<HealthWikiPatientSignIn?> SignInPatientAsync(string? mobile, string? joinAs, CancellationToken ct)
+        {
+            var m = ContributorSecurity.NormalizeMobile(mobile);
+            if (m == null) return null;
+
+            var now = DateTime.UtcNow;
+            var c = await _context.HealthWikiContributors.FirstOrDefaultAsync(x => x.Mobile == m, ct);
+            if (c == null)
+            {
+                var role = joinAs?.Trim().ToUpperInvariant();
+                if (role == null || !JoinRoles.Contains(role)) return null;
+                c = new HealthWikiContributor
+                {
+                    ContributorId = Guid.NewGuid(), Type = role, FullName = string.Empty, Mobile = m, Status = HealthWikiContributor.StatusInvited,
+                    EnrolmentSource = "SELF_ENROLLED", CreatedAt = now, UpdatedAt = now,
+                };
+                _context.HealthWikiContributors.Add(c);
+            }
+            else if (c.Status == HealthWikiContributor.StatusRejected)
+            {
+                return null;
+            }
+
+            var token = ContributorSecurity.NewToken();
+            var expires = now + ContributorSecurity.SessionLifetime;
+            _context.ContributorSessions.Add(new ContributorSession
+            {
+                SessionId = Guid.NewGuid(), ContributorId = c.ContributorId, TokenHash = ContributorSecurity.HashToken(token),
+                ExpiresAt = expires, LastSeenAt = now, CreatedAt = now,
+            });
+            try
+            {
+                await _context.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException)
+            {
+                // The same number joined twice at once: the other request made the row.
+                return null;
+            }
+            return new HealthWikiPatientSignIn
+            {
+                Session = new HealthWikiHandoffSession { Token = token, ExpiresAt = expires },
+                NeedsRegistration = string.IsNullOrWhiteSpace(c.FullName) || c.Status == HealthWikiContributor.StatusInvited,
+            };
+        }
     }
 }

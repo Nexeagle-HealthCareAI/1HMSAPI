@@ -13,6 +13,9 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public int? RetryAfterSeconds { get; set; }
         // Same meaning as Success, named as the Doctor Dekho pages expect.
         public bool Sent => Success;
+        // The code itself, for the Doctor Dekho page to show on screen. Only on a Development server that has HealthWiki:ShowOtpOnScreen=true, so testers
+        // need no working WhatsApp number. Always null anywhere else.
+        public string? DevCode { get; set; }
     }
 
     [ExcludeFromCodeCoverage]

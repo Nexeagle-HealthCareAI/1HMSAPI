@@ -1,6 +1,7 @@
 using EasyHMSAPI.Api.Common;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
+using EasyHMSAPI.Application.Services.Interfaces;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -21,16 +22,21 @@ namespace EasyHMSAPI.Api.Controllers
     [Route("contributor")]
     [AllowAnonymous]
     [SkipHospitalAccessCheck]
-    [EnableRateLimiting("ContributorAuthPolicy")]
+    // Everything after sign-in sits behind the session and gets the normal per-address ceiling. Only the calls anyone can make without a session
+    // (the invitation, the codes, the hand-off, opening a session from a patient login) get the strict ContributorAuthPolicy, on the action itself.
+    // A page makes several calls at once, and the Doctor Dekho server may be the address the API sees, so the strict ceiling must not cover them.
+    [EnableRateLimiting("PerIpPolicy")]
     public class ContributorController : ControllerBase
     {
         private readonly IMediator _mediator;
         private readonly ILogger<ContributorController> _logger;
+        private readonly IPatientTokenValidator _patientTokenValidator;
 
-        public ContributorController(IMediator mediator, ILogger<ContributorController> logger)
+        public ContributorController(IMediator mediator, ILogger<ContributorController> logger, IPatientTokenValidator patientTokenValidator)
         {
             _mediator = mediator;
             _logger = logger;
+            _patientTokenValidator = patientTokenValidator;
         }
 
         public class OtpSendBody
@@ -47,6 +53,7 @@ namespace EasyHMSAPI.Api.Controllers
             public string? Role { get; set; }
         }
 
+        [EnableRateLimiting("ContributorAuthPolicy")]
         [HttpGet("invite/{token}")]
         public async Task<IActionResult> Invite(string token)
         {
@@ -63,6 +70,7 @@ namespace EasyHMSAPI.Api.Controllers
         }
 
         // "Join as a contributor" without an invitation: the same code step as sign-in.
+        [EnableRateLimiting("ContributorAuthPolicy")]
         [HttpPost("enrol")]
         [HttpPost("otp/send")]
         public async Task<IActionResult> SendOtp([FromBody] OtpSendBody body)
@@ -83,6 +91,7 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        [EnableRateLimiting("ContributorAuthPolicy")]
         [HttpPost("otp/verify")]
         public async Task<IActionResult> VerifyOtp([FromBody] OtpVerifyBody body)
         {
@@ -107,6 +116,7 @@ namespace EasyHMSAPI.Api.Controllers
         }
 
         // A hospital doctor arriving from EasyHMS: the one-time code (made by the EasyHMS API for the signed-in doctor) becomes a session.
+        [EnableRateLimiting("ContributorAuthPolicy")]
         [HttpPost("sso/exchange")]
         public async Task<IActionResult> SsoExchange([FromBody] SsoBody body)
         {
@@ -118,6 +128,53 @@ namespace EasyHMSAPI.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error exchanging a hand-off code");
+                return StatusCode(500, new { message = "Something went wrong. Try again." });
+            }
+        }
+
+        // ---- from the patient's profile page on Doctor Dekho -------------------------------------------------------------
+        // The patient token (a WhatsApp-verified mobile) is validated here the same way PublicController does it, never through [Authorize], so a
+        // patient token can never act as a staff session. The mobile is taken from the token, never from the request.
+
+        // Is this signed-in patient also a contributor? Answers {isContributor:false} for everyone else.
+        [HttpGet("profile-tag")]
+        public async Task<IActionResult> ProfileTag(CancellationToken ct)
+        {
+            var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), ct);
+            if (!auth.IsValid || auth.Mobile == null) return Unauthorized(new { message = auth.Reason ?? "Please log in again." });
+            try
+            {
+                var res = await _mediator.Send(new GetContributorProfileTagRequestModel { Mobile = auth.Mobile }, ct);
+                return Ok(new { isContributor = res.IsContributor, role = res.Role, status = res.Status, fullName = res.FullName });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error reading the contributor tag for a profile");
+                return StatusCode(500, new { message = "Something went wrong. Try again." });
+            }
+        }
+
+        public class SessionFromPatientBody
+        {
+            public string? Role { get; set; }
+        }
+
+        // Open the contributor area without a second code: the number was just proven by the patient sign-in. Body { role } joins a patient who
+        // is not a contributor yet as that role.
+        [EnableRateLimiting("ContributorAuthPolicy")]
+        [HttpPost("session-from-patient")]
+        public async Task<IActionResult> SessionFromPatient([FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SessionFromPatientBody? body, CancellationToken ct)
+        {
+            var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), ct);
+            if (!auth.IsValid || auth.Mobile == null) return Unauthorized(new { message = auth.Reason ?? "Please log in again." });
+            try
+            {
+                var res = await _mediator.Send(new StartContributorSessionFromPatientRequestModel { Mobile = auth.Mobile, Role = body?.Role }, ct);
+                return res.Success ? Ok(res) : StatusCode(res.StatusCode, new { message = res.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error opening the contributor area from a patient profile");
                 return StatusCode(500, new { message = "Something went wrong. Try again." });
             }
         }

@@ -53,4 +53,20 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         // Names of the fields that were in the request, so a field left out stays as it is.
         public HashSet<string> Provided { get; set; } = new();
     }
+
+    // On the Doctor Dekho profile page: is the signed-in patient also a Health Wiki contributor? Mobile comes from the verified patient token, never from the request.
+    [ExcludeFromCodeCoverage]
+    public class GetContributorProfileTagRequestModel : IRequest<ContributorProfileTagResponseModel>
+    {
+        public string? Mobile { get; set; }
+    }
+
+    // Open the contributor area from the profile page without a second code (same number, already proven).
+    [ExcludeFromCodeCoverage]
+    public class StartContributorSessionFromPatientRequestModel : IRequest<ContributorOtpVerifyResponseModel>
+    {
+        public string? Mobile { get; set; }
+        // Only to join as a new contributor: INDEPENDENT_DOCTOR, HEALTH_WORKER or WRITER. Ignored for someone who already is one.
+        public string? Role { get; set; }
+    }
 }

@@ -661,6 +661,29 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // The patient saves their own details. Written to their own account profile, never to a hospital's registration. Same manual-JWT validation.
+        [HttpPut("patients/me")]
+        public async Task<ActionResult<GetPublicPatientProfileResponseModel>> UpdateMyPatientProfile([FromBody] UpdatePublicPatientProfileRequestModel request, CancellationToken cancellationToken)
+        {
+            var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
+            if (!auth.IsValid || auth.Mobile == null)
+            {
+                return Unauthorized(new { Message = auth.Reason ?? "Please log in again." });
+            }
+
+            try
+            {
+                request.Mobile = auth.Mobile;
+                var response = await _mediator.Send(request, cancellationToken);
+                return response.Success ? Ok(response) : StatusCode(response.StatusCode, new { message = response.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.UpdateMyPatientProfile");
+                return StatusCode(500, new { Message = "An error occurred while saving your details." });
+            }
+        }
+
         // Health Locker — patient-initiated uploads independent of any appointment, keyed purely
         // by the OTP-verified Mobile (see PatientHealthLockerDocument). Same manual-JWT validation
         // as GetMyAppointments/GetMyPatientProfile.

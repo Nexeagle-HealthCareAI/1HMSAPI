@@ -98,10 +98,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             await _context.SaveChangesAsync(ct);
 
             var sent = await _whatsApp.SendOtpAsync(mobile, code);
+            // On a development server the tester can have the code shown on the page, so a number that cannot get WhatsApp does not block the test.
+            if (ShowOtpOnScreen(_configuration)) return new ContributorOtpSendResponseModel { Success = true, StatusCode = 200, DevCode = code };
             return sent
                 ? new ContributorOtpSendResponseModel { Success = true, StatusCode = 200 }
                 : Fail(502, "We could not send the code on WhatsApp. Please try again in a minute.");
         }
+
+        /// <summary>True only when the setting is on AND this is a Development server, so a setting copied to production by mistake still shows nothing.</summary>
+        internal static bool ShowOtpOnScreen(IConfiguration configuration) =>
+            string.Equals(configuration["HealthWiki:ShowOtpOnScreen"], "true", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(configuration["ASPNETCORE_ENVIRONMENT"], "Development", StringComparison.OrdinalIgnoreCase);
 
         internal static string? OtpSecret(IConfiguration configuration)
         {
