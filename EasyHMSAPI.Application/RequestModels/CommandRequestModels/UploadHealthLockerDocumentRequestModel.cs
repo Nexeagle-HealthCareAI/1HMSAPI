@@ -22,5 +22,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? DocumentType { get; set; }
         public string? Notes { get; set; }
         public Guid? ApptId { get; set; }
+        // One of the account's family members; empty = the account holder. Checked against the owner's mobile.
+        public Guid? MemberId { get; set; }
     }
 }

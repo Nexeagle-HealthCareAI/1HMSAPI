@@ -10,5 +10,7 @@ namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
     public class GetHealthLockerDocumentsRequestModel : IRequest<GetHealthLockerDocumentsResponseModel>
     {
         public string Mobile { get; set; } = string.Empty;
+        // Whose records: a family member of this account, or empty for the account holder's own.
+        public Guid? MemberId { get; set; }
     }
 }

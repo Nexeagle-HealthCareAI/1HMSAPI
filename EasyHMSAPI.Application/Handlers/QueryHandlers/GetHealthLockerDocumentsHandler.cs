@@ -24,12 +24,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
         public async Task<GetHealthLockerDocumentsResponseModel> Handle(GetHealthLockerDocumentsRequestModel request, CancellationToken cancellationToken)
         {
             var documents = await _context.PatientHealthLockerDocuments
-                .Where(d => d.Mobile == request.Mobile)
+                .Where(d => d.Mobile == request.Mobile && d.MemberId == request.MemberId)
                 .OrderByDescending(d => d.UploadedAt)
                 .Select(d => new HealthLockerDocumentItem
                 {
                     DocumentId = d.DocumentId,
                     ApptId = d.ApptId,
+                    MemberId = d.MemberId,
                     DocumentType = d.DocumentType,
                     FileName = d.FileName,
                     StorageUrl = d.StorageUrl,

@@ -90,8 +90,8 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That((await Read()).FullName, Is.EqualTo("Aquib Khan"));
         }
 
-        [TestCase(null, "Enter your full name.")]
-        [TestCase("   ", "Enter your full name.")]
+        [TestCase(null, "Enter your first name.")]
+        [TestCase("   ", "Enter your first name.")]
         [TestCase("A", "too short")]
         public async Task ANameIsRequired(string? name, string expected)
         {

@@ -13,7 +13,12 @@ namespace EasyHMSAPI.Domain.Entities
     {
         [Key]
         public string Mobile { get; set; } = null!;
+        // FullName is always first + last (kept for the callers that only know one name field).
         public string FullName { get; set; } = null!;
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
+        // A+ | A- | B+ | B- | AB+ | AB- | O+ | O-
+        public string? BloodGroup { get; set; }
         public short? Age { get; set; }
         // Y | M | D
         public string? AgeUnit { get; set; }

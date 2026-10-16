@@ -8,6 +8,9 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public bool Success { get; set; }
         public string Message { get; set; } = string.Empty;
         public string? FullName { get; set; }
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
+        public string? BloodGroup { get; set; }
         public int? Age { get; set; }
         public string? AgeUnit { get; set; }
         public string? Sex { get; set; }

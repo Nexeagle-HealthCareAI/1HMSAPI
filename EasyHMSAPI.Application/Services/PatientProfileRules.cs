@@ -8,6 +8,49 @@ namespace EasyHMSAPI.Application.Services
         public const int MaxName = 200, MaxEmail = 200, MaxGuardianName = 200, MaxRelation = 50, MaxAge = 120;
         public static readonly string[] Sexes = { "Male", "Female", "Other" };
         public static readonly string[] AgeUnits = { "Y", "M", "D" };
+        public static readonly string[] BloodGroups = { "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-" };
+        public const int MaxPartOfName = 100, MaxFamilyMembers = 10, MaxAllergies = 500;
+
+        /// <summary>"o+", "O +" and "O POSITIVE" are all O+; empty is none; anything else is not a blood group we store ("?").</summary>
+        public static string? NormalizeBloodGroup(string? v)
+        {
+            var t = Clean(v)?.ToUpperInvariant().Replace(" ", "");
+            if (t == null) return null;
+            t = t.Replace("POSITIVE", "+").Replace("NEGATIVE", "-");
+            return BloodGroups.Contains(t) ? t : "?";
+        }
+
+        /// <summary>First and last name, from either the two parts or (older callers) one full name, whose first word is the first name.</summary>
+        public static (string? First, string? Last) SplitName(string? first, string? last, string? fullName)
+        {
+            var f = Clean(first);
+            var l = Clean(last);
+            if (f != null) return (f, l);
+            var full = Clean(fullName);
+            if (full == null) return (null, l);
+            var i = full.IndexOf(' ');
+            return i < 0 ? (full, l) : (full[..i], l ?? Clean(full[(i + 1)..]));
+        }
+
+        public static string JoinName(string first, string? last) => string.IsNullOrEmpty(last) ? first : $"{first} {last}";
+
+        /// <summary>The first problem with a family member's details, or null.</summary>
+        public static string? ValidateMember(string? first, string? last, string? relation, int? age, string? ageUnit, string? sex, string? bloodGroup, string? allergies)
+        {
+            var f = Clean(first);
+            if (f == null) return "Enter the first name.";
+            if (f.Length > MaxPartOfName || (Clean(last)?.Length ?? 0) > MaxPartOfName) return $"A name is too long (max {MaxPartOfName} characters).";
+            var rel = Clean(relation);
+            if (rel == null) return "Choose how this person is related to you.";
+            if (rel.Length > MaxRelation) return $"The relation is too long (max {MaxRelation} characters).";
+            if (age.HasValue && (age < 0 || age > MaxAge)) return $"Age must be between 0 and {MaxAge}.";
+            var unit = Clean(ageUnit)?.ToUpperInvariant();
+            if (unit != null && !AgeUnits.Contains(unit)) return "Age unit must be years, months or days.";
+            if (NormalizeSex(sex) == "?") return "Choose Male, Female or Other.";
+            if (NormalizeBloodGroup(bloodGroup) == "?") return "Choose a valid blood group.";
+            if ((Clean(allergies)?.Length ?? 0) > MaxAllergies) return $"Allergies are too long (max {MaxAllergies} characters).";
+            return null;
+        }
 
         public static string? Clean(string? v)
         {
@@ -30,6 +73,16 @@ namespace EasyHMSAPI.Application.Services
             if (email.Length > MaxEmail || email.Contains(' ')) return false;
             try { return new MailAddress(email).Address == email && email.Contains('.', StringComparison.Ordinal); }
             catch (FormatException) { return false; }
+        }
+
+        /// <summary>Own details: the two name parts (or one full name for older callers) plus blood group.</summary>
+        public static string? ValidateProfile(string? first, string? last, string? fullName, int? age, string? ageUnit, string? sex, string? email, string? bloodGroup, string? guardianName, string? guardianRelation)
+        {
+            var (f, l) = SplitName(first, last, fullName);
+            if (f == null) return "Enter your first name.";
+            if (f.Length > MaxPartOfName || (l?.Length ?? 0) > MaxPartOfName) return $"A name is too long (max {MaxPartOfName} characters).";
+            if (NormalizeBloodGroup(bloodGroup) == "?") return "Choose a valid blood group.";
+            return Validate(JoinName(f, l), age, ageUnit, sex, email, guardianName, guardianRelation);
         }
 
         /// <summary>The first problem with what was sent, or null.</summary>

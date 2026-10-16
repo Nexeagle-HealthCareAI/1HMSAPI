@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -42,6 +43,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             {
                 Success = true,
                 FullName = patient.FullName,
+                FirstName = PatientProfileRules.SplitName(null, null, patient.FullName).First,
+                LastName = PatientProfileRules.SplitName(null, null, patient.FullName).Last,
                 Age = patient.Age,
                 AgeUnit = patient.AgeUnit,
                 Sex = patient.Sex,
@@ -54,7 +57,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
         internal static GetPublicPatientProfileResponseModel FromAccount(EasyHMSAPI.Domain.Entities.PatientAccountProfile own) => new()
         {
-            Success = true, FullName = own.FullName, Age = own.Age, AgeUnit = own.AgeUnit, Sex = own.Sex, Email = own.Email,
+            Success = true, FullName = own.FullName, FirstName = own.FirstName, LastName = own.LastName, BloodGroup = own.BloodGroup, Age = own.Age, AgeUnit = own.AgeUnit, Sex = own.Sex, Email = own.Email,
             GuardianName = own.GuardianName, GuardianRelation = own.GuardianRelation, Source = "ACCOUNT",
         };
     }

@@ -17,6 +17,8 @@ namespace EasyHMSAPI.Domain.Entities
         public Guid DocumentId { get; set; }
         public string Mobile { get; set; } = string.Empty;
         public Guid? ApptId { get; set; }
+        // The family member this record belongs to; null = the account holder.
+        public Guid? MemberId { get; set; }
 
         public string? DocumentType { get; set; }
         public string? FileName { get; set; }

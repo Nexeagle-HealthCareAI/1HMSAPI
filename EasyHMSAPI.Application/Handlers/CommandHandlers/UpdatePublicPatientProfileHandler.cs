@@ -24,7 +24,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             if (string.IsNullOrWhiteSpace(r.Mobile))
                 return new GetPublicPatientProfileResponseModel { Success = false, StatusCode = 401, Message = "Please log in again." };
 
-            var problem = PatientProfileRules.Validate(r.FullName, r.Age, r.AgeUnit, r.Sex, r.Email, r.GuardianName, r.GuardianRelation);
+            var problem = PatientProfileRules.ValidateProfile(r.FirstName, r.LastName, r.FullName, r.Age, r.AgeUnit, r.Sex, r.Email, r.BloodGroup, r.GuardianName, r.GuardianRelation);
             if (problem != null) return new GetPublicPatientProfileResponseModel { Success = false, StatusCode = 400, Message = problem };
 
             var age = r.Age.HasValue ? (short?)r.Age.Value : null;
@@ -36,7 +36,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 row = new PatientAccountProfile { Mobile = r.Mobile };
                 _context.PatientAccountProfiles.Add(row);
             }
-            row.FullName = PatientProfileRules.Clean(r.FullName)!;
+            var (first, last) = PatientProfileRules.SplitName(r.FirstName, r.LastName, r.FullName);
+            row.FirstName = first;
+            row.LastName = last;
+            row.FullName = PatientProfileRules.JoinName(first!, last);
+            row.BloodGroup = PatientProfileRules.NormalizeBloodGroup(r.BloodGroup);
             row.Age = age;
             row.AgeUnit = unit;
             row.Sex = PatientProfileRules.NormalizeSex(r.Sex);

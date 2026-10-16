@@ -15,6 +15,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
     {
         public Guid DocumentId { get; set; }
         public Guid? ApptId { get; set; }
+        public Guid? MemberId { get; set; }
         public string? DocumentType { get; set; }
         public string? FileName { get; set; }
         public string? StorageUrl { get; set; }

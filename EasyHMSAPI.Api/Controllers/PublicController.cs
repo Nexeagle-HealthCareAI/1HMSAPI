@@ -684,6 +684,67 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Family members — people the patient looks after, so their records can be kept and opened in one place. Same manual-JWT validation; every
+        // lookup is scoped to the verified mobile, so another account's member is just "not found".
+        [HttpGet("patients/me/family")]
+        public async Task<ActionResult<PatientFamilyMembersResponseModel>> GetMyFamilyMembers(CancellationToken cancellationToken)
+        {
+            var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
+            if (!auth.IsValid || auth.Mobile == null) return Unauthorized(new { Message = auth.Reason ?? "Please log in again." });
+            try
+            {
+                return Ok(await _mediator.Send(new GetPatientFamilyMembersRequestModel { Mobile = auth.Mobile }, cancellationToken));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetMyFamilyMembers");
+                return StatusCode(500, new { Message = "An error occurred while fetching your family members." });
+            }
+        }
+
+        [HttpPost("patients/me/family")]
+        public Task<ActionResult<PatientFamilyMembersResponseModel>> AddMyFamilyMember([FromBody] SavePatientFamilyMemberRequestModel request, CancellationToken cancellationToken)
+            => SaveFamilyMember(request, null, cancellationToken);
+
+        [HttpPut("patients/me/family/{memberId:guid}")]
+        public Task<ActionResult<PatientFamilyMembersResponseModel>> UpdateMyFamilyMember(Guid memberId, [FromBody] SavePatientFamilyMemberRequestModel request, CancellationToken cancellationToken)
+            => SaveFamilyMember(request, memberId, cancellationToken);
+
+        private async Task<ActionResult<PatientFamilyMembersResponseModel>> SaveFamilyMember(SavePatientFamilyMemberRequestModel request, Guid? memberId, CancellationToken cancellationToken)
+        {
+            var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
+            if (!auth.IsValid || auth.Mobile == null) return Unauthorized(new { Message = auth.Reason ?? "Please log in again." });
+            try
+            {
+                request.Mobile = auth.Mobile;
+                request.MemberId = memberId;
+                var response = await _mediator.Send(request, cancellationToken);
+                return response.Success ? Ok(response) : StatusCode(response.StatusCode, new { message = response.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.SaveFamilyMember");
+                return StatusCode(500, new { Message = "An error occurred while saving the family member." });
+            }
+        }
+
+        [HttpDelete("patients/me/family/{memberId:guid}")]
+        public async Task<ActionResult<PatientFamilyMembersResponseModel>> DeleteMyFamilyMember(Guid memberId, CancellationToken cancellationToken)
+        {
+            var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
+            if (!auth.IsValid || auth.Mobile == null) return Unauthorized(new { Message = auth.Reason ?? "Please log in again." });
+            try
+            {
+                var response = await _mediator.Send(new DeletePatientFamilyMemberRequestModel { Mobile = auth.Mobile, MemberId = memberId }, cancellationToken);
+                return response.Success ? Ok(response) : StatusCode(response.StatusCode, new { message = response.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.DeleteMyFamilyMember");
+                return StatusCode(500, new { Message = "An error occurred while removing the family member." });
+            }
+        }
+
         // Health Locker — patient-initiated uploads independent of any appointment, keyed purely
         // by the OTP-verified Mobile (see PatientHealthLockerDocument). Same manual-JWT validation
         // as GetMyAppointments/GetMyPatientProfile.
@@ -711,7 +772,7 @@ namespace EasyHMSAPI.Api.Controllers
         }
 
         [HttpGet("patients/me/documents")]
-        public async Task<ActionResult<GetHealthLockerDocumentsResponseModel>> GetHealthLockerDocuments(CancellationToken cancellationToken)
+        public async Task<ActionResult<GetHealthLockerDocumentsResponseModel>> GetHealthLockerDocuments([FromQuery] Guid? memberId, CancellationToken cancellationToken)
         {
             var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
             if (!auth.IsValid || auth.Mobile == null)
@@ -721,7 +782,7 @@ namespace EasyHMSAPI.Api.Controllers
 
             try
             {
-                var response = await _mediator.Send(new GetHealthLockerDocumentsRequestModel { Mobile = auth.Mobile });
+                var response = await _mediator.Send(new GetHealthLockerDocumentsRequestModel { Mobile = auth.Mobile, MemberId = memberId });
                 return Ok(response);
             }
             catch (Exception ex)

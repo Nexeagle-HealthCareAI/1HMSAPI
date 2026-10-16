@@ -46,6 +46,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
             }
 
+            // A family member's record must go to a member of THIS account, never someone else's.
+            if (request.MemberId.HasValue &&
+                !await _context.PatientFamilyMembers.AnyAsync(m => m.MemberId == request.MemberId.Value && m.OwnerMobile == request.Mobile, cancellationToken))
+            {
+                response.Message = "Family member not found.";
+                return response;
+            }
+
             var newDocumentId = Guid.NewGuid();
             var uploadResult = await _blobStorageService.UploadAsync(newDocumentId.ToString(), request.File, _containerName, cancellationToken);
 
@@ -65,6 +73,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 DocumentId = newDocumentId,
                 Mobile = request.Mobile,
                 ApptId = request.ApptId,
+                MemberId = request.MemberId,
                 DocumentType = request.DocumentType,
                 StorageUrl = fileUrl,
                 FileName = !string.IsNullOrEmpty(blobName) ? blobName : request.FileName,
