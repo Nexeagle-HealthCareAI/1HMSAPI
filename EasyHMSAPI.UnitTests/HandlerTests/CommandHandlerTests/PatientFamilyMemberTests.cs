@@ -150,6 +150,49 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task LockerAllView_ListsEveryonesRecords_WithTheirVisitDetails()
+        {
+            var id = (await Save()).Member!.MemberId;
+            _context.PatientHealthLockerDocuments.AddRange(
+                new PatientHealthLockerDocument { DocumentId = Guid.NewGuid(), Mobile = Mine, FileName = "mine.pdf" },
+                new PatientHealthLockerDocument { DocumentId = Guid.NewGuid(), Mobile = Mine, MemberId = id, FileName = "ayaan.pdf", ExternalDoctorName = "Dr Rao", ExternalClinicName = "Rao Clinic", ExternalLocation = "Lucknow", VisitDate = new DateTime(2026, 9, 1) },
+                new PatientHealthLockerDocument { DocumentId = Guid.NewGuid(), Mobile = Other, FileName = "stranger.pdf" });
+            await _context.SaveChangesAsync();
+            var handler = new GetHealthLockerDocumentsHandler(_context, _blob.Object, new ConfigurationBuilder().Build());
+
+            var all = await handler.Handle(new GetHealthLockerDocumentsRequestModel { Mobile = Mine, All = true }, Ct);
+
+            Assert.That(all.Documents.Select(d => d.FileName), Is.EquivalentTo(new[] { "mine.pdf", "ayaan.pdf" }));
+            var tagged = all.Documents.Single(d => d.FileName == "ayaan.pdf");
+            Assert.That((tagged.MemberId, tagged.ExternalDoctorName, tagged.ExternalClinicName, tagged.ExternalLocation, tagged.VisitDate),
+                Is.EqualTo((id, "Dr Rao", "Rao Clinic", "Lucknow", (DateTime?)new DateTime(2026, 9, 1))));
+        }
+
+        [TestCase(true, "Dr Rao", null, "Choose a visit from your appointments, or add a doctor yourself, not both.")]
+        [TestCase(false, null, "Rao Clinic", "Enter the doctor's name.")]
+        [TestCase(false, "Dr Rao", null, null)]
+        [TestCase(true, null, null, null)]
+        public void VisitIsAnAppointmentOrATypedInDoctor(bool withAppt, string? doctor, string? clinic, string? expected) =>
+            Assert.That(PatientProfileRules.ValidateVisit(withAppt ? Guid.NewGuid() : null, doctor, clinic, null, null), Is.EqualTo(expected));
+
+        [Test]
+        public void AVisitCannotBeInTheFuture() =>
+            Assert.That(PatientProfileRules.ValidateVisit(null, "Dr Rao", null, null, DateTime.UtcNow.AddDays(30)), Is.EqualTo("The visit date cannot be in the future."));
+
+        [Test]
+        public async Task UploadWithBothAnAppointmentAndATypedInDoctor_IsRefusedBeforeAnythingIsStored()
+        {
+            var handler = new UploadHealthLockerDocumentHandler(_context, _blob.Object, new ConfigurationBuilder().Build());
+            var file = new Moq.Mock<Microsoft.AspNetCore.Http.IFormFile>().Object;
+
+            var r = await handler.Handle(new UploadHealthLockerDocumentRequestModel { Mobile = Mine, File = file, FileName = "a.pdf", ApptId = Guid.NewGuid(), ExternalDoctorName = "Dr Rao" }, Ct);
+
+            Assert.That(r.Success, Is.False);
+            Assert.That(r.Message, Does.Contain("not both"));
+            _blob.Verify(b => b.UploadAsync(It.IsAny<string>(), It.IsAny<Microsoft.AspNetCore.Http.IFormFile>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Test]
         public async Task ProfileKeepsFirstAndLastNameAndBloodGroup_AndStillAcceptsAFullName()
         {
             var handler = new UpdatePublicPatientProfileHandler(_context);

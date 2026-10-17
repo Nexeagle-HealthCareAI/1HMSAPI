@@ -24,13 +24,17 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
         public async Task<GetHealthLockerDocumentsResponseModel> Handle(GetHealthLockerDocumentsRequestModel request, CancellationToken cancellationToken)
         {
             var documents = await _context.PatientHealthLockerDocuments
-                .Where(d => d.Mobile == request.Mobile && d.MemberId == request.MemberId)
+                .Where(d => d.Mobile == request.Mobile && (request.All || d.MemberId == request.MemberId))
                 .OrderByDescending(d => d.UploadedAt)
                 .Select(d => new HealthLockerDocumentItem
                 {
                     DocumentId = d.DocumentId,
                     ApptId = d.ApptId,
                     MemberId = d.MemberId,
+                    VisitDate = d.VisitDate,
+                    ExternalDoctorName = d.ExternalDoctorName,
+                    ExternalClinicName = d.ExternalClinicName,
+                    ExternalLocation = d.ExternalLocation,
                     DocumentType = d.DocumentType,
                     FileName = d.FileName,
                     StorageUrl = d.StorageUrl,
@@ -38,6 +42,28 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     UploadedAt = d.UploadedAt,
                 })
                 .ToListAsync(cancellationToken);
+
+            // For a record tied to an appointment in the system: who and where, and the visit date if they did not give one.
+            var apptIds = documents.Where(d => d.ApptId.HasValue).Select(d => d.ApptId!.Value).Distinct().ToList();
+            if (apptIds.Count > 0)
+            {
+                var appts = await _context.Appointments.Where(a => apptIds.Contains(a.ApptId))
+                    .Select(a => new { a.ApptId, a.HospitalId, a.DoctorId, a.ApptDate }).ToListAsync(cancellationToken);
+                var hospitalIds = appts.Select(a => a.HospitalId).Distinct().ToList();
+                var doctorIds = appts.Select(a => a.DoctorId).Distinct().ToList();
+                var hospitals = await _context.Hospitals.Where(h => hospitalIds.Contains(h.HospitalID)).ToDictionaryAsync(h => h.HospitalID, h => h.Name, cancellationToken);
+                var doctors = await _context.Doctors.Where(x => doctorIds.Contains(x.DoctorID))
+                    .Select(x => new { x.DoctorID, Name = x.User.UserProfiles.FirstOrDefault()!.FullName })
+                    .ToDictionaryAsync(x => x.DoctorID, x => x.Name, cancellationToken);
+                foreach (var doc in documents.Where(d => d.ApptId.HasValue))
+                {
+                    var a = appts.FirstOrDefault(x => x.ApptId == doc.ApptId);
+                    if (a == null) continue;
+                    doc.DoctorName = doctors.GetValueOrDefault(a.DoctorId);
+                    doc.HospitalName = hospitals.GetValueOrDefault(a.HospitalId);
+                    doc.VisitDate ??= a.ApptDate.Date;
+                }
+            }
 
             // Re-sign each URL from its stored object key — S3/MinIO presigned URLs expire within
             // 7 days (see docs/STORAGE-MINIO.md). Unlike PrescriptionAttachments, "healthlocker"

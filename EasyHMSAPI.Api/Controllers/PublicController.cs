@@ -772,7 +772,7 @@ namespace EasyHMSAPI.Api.Controllers
         }
 
         [HttpGet("patients/me/documents")]
-        public async Task<ActionResult<GetHealthLockerDocumentsResponseModel>> GetHealthLockerDocuments([FromQuery] Guid? memberId, CancellationToken cancellationToken)
+        public async Task<ActionResult<GetHealthLockerDocumentsResponseModel>> GetHealthLockerDocuments([FromQuery] Guid? memberId, [FromQuery] bool all, CancellationToken cancellationToken)
         {
             var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
             if (!auth.IsValid || auth.Mobile == null)
@@ -782,7 +782,7 @@ namespace EasyHMSAPI.Api.Controllers
 
             try
             {
-                var response = await _mediator.Send(new GetHealthLockerDocumentsRequestModel { Mobile = auth.Mobile, MemberId = memberId });
+                var response = await _mediator.Send(new GetHealthLockerDocumentsRequestModel { Mobile = auth.Mobile, MemberId = memberId, All = all });
                 return Ok(response);
             }
             catch (Exception ex)

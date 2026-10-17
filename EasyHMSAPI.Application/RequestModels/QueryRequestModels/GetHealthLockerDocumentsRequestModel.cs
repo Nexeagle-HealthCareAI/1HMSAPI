@@ -12,5 +12,7 @@ namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
         public string Mobile { get; set; } = string.Empty;
         // Whose records: a family member of this account, or empty for the account holder's own.
         public Guid? MemberId { get; set; }
+        // Everyone's records on the account (the holder's and every family member's); MemberId is then ignored.
+        public bool All { get; set; }
     }
 }

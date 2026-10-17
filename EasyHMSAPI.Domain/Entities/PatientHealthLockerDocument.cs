@@ -20,6 +20,12 @@ namespace EasyHMSAPI.Domain.Entities
         // The family member this record belongs to; null = the account holder.
         public Guid? MemberId { get; set; }
 
+        // Which doctor visit the record is from: an appointment in the system (ApptId), or a doctor the patient typed in who is not in it.
+        public DateTime? VisitDate { get; set; }
+        public string? ExternalDoctorName { get; set; }
+        public string? ExternalClinicName { get; set; }
+        public string? ExternalLocation { get; set; }
+
         public string? DocumentType { get; set; }
         public string? FileName { get; set; }
         public string? StorageUrl { get; set; }

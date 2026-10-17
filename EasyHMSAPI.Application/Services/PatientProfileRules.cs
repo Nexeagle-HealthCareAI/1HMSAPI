@@ -34,6 +34,20 @@ namespace EasyHMSAPI.Application.Services
 
         public static string JoinName(string first, string? last) => string.IsNullOrEmpty(last) ? first : $"{first} {last}";
 
+        public const int MaxDoctorName = 200, MaxLocation = 300;
+
+        /// <summary>The first problem with the visit a record is tied to, or null. A system appointment and a typed-in doctor are one or the other.</summary>
+        public static string? ValidateVisit(Guid? apptId, string? doctor, string? clinic, string? location, DateTime? visitDate)
+        {
+            var hasOwn = Clean(doctor) != null || Clean(clinic) != null || Clean(location) != null;
+            if (apptId.HasValue && hasOwn) return "Choose a visit from your appointments, or add a doctor yourself, not both.";
+            if (hasOwn && Clean(doctor) == null) return "Enter the doctor's name.";
+            if ((Clean(doctor)?.Length ?? 0) > MaxDoctorName || (Clean(clinic)?.Length ?? 0) > MaxDoctorName) return $"The doctor or clinic name is too long (max {MaxDoctorName} characters).";
+            if ((Clean(location)?.Length ?? 0) > MaxLocation) return $"The location is too long (max {MaxLocation} characters).";
+            if (visitDate.HasValue && visitDate.Value.Date > DateTime.UtcNow.Date.AddDays(1)) return "The visit date cannot be in the future.";
+            return null;
+        }
+
         /// <summary>The first problem with a family member's details, or null.</summary>
         public static string? ValidateMember(string? first, string? last, string? relation, int? age, string? ageUnit, string? sex, string? bloodGroup, string? allergies)
         {

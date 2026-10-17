@@ -1,6 +1,7 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
@@ -25,6 +26,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         public async Task<UploadHealthLockerDocumentResponseModel> Handle(UploadHealthLockerDocumentRequestModel request, CancellationToken cancellationToken)
         {
             var response = new UploadHealthLockerDocumentResponseModel();
+
+            var visitProblem = PatientProfileRules.ValidateVisit(request.ApptId, request.ExternalDoctorName, request.ExternalClinicName, request.ExternalLocation, request.VisitDate);
+            if (visitProblem != null)
+            {
+                response.Message = visitProblem;
+                return response;
+            }
 
             // Optional tag to a past appointment — only allowed when it's genuinely this patient's
             // own (same ownership check GetPublicAppointmentDocumentsHandler uses), otherwise reject
@@ -74,6 +82,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 Mobile = request.Mobile,
                 ApptId = request.ApptId,
                 MemberId = request.MemberId,
+                VisitDate = request.VisitDate?.Date,
+                ExternalDoctorName = PatientProfileRules.Clean(request.ExternalDoctorName),
+                ExternalClinicName = PatientProfileRules.Clean(request.ExternalClinicName),
+                ExternalLocation = PatientProfileRules.Clean(request.ExternalLocation),
                 DocumentType = request.DocumentType,
                 StorageUrl = fileUrl,
                 FileName = !string.IsNullOrEmpty(blobName) ? blobName : request.FileName,

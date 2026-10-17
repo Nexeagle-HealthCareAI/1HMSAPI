@@ -24,5 +24,10 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public Guid? ApptId { get; set; }
         // One of the account's family members; empty = the account holder. Checked against the owner's mobile.
         public Guid? MemberId { get; set; }
+        // For a visit to a doctor who is not in our system: who, where, and when. Not allowed together with ApptId.
+        public string? ExternalDoctorName { get; set; }
+        public string? ExternalClinicName { get; set; }
+        public string? ExternalLocation { get; set; }
+        public DateTime? VisitDate { get; set; }
     }
 }
