@@ -5,6 +5,7 @@ using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
@@ -29,6 +30,23 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         public async Task<TrackVisitResponseModel> Handle(TrackVisitRequestModel request, CancellationToken cancellationToken)
         {
             var geo = await _geoIpLookupService.LookupAsync(request.IpAddress, cancellationToken);
+            var sessionId = Truncate(request.SessionId, 64);
+
+            // Bots execute JavaScript too; flag them so reports count people only. Once one page view
+            // of a session is flagged, the rest of that session is as well.
+            var isAutomated = TrafficClassifier.IsAutomatedUserAgent(request.UserAgent) || geo?.IsHosting == true;
+            if (!isAutomated && sessionId != null)
+            {
+                try
+                {
+                    isAutomated = await _context.WebsiteVisits.AsNoTracking()
+                        .AnyAsync(v => v.SessionId == sessionId && v.IsAutomated, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Automated-session lookup failed; recording the visit as a person");
+                }
+            }
 
             var visit = new WebsiteVisit
             {
@@ -44,7 +62,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 UtmMedium = Truncate(request.UtmMedium, 100),
                 UtmCampaign = Truncate(request.UtmCampaign, 100),
                 UserAgent = Truncate(request.UserAgent, 500),
-                SessionId = Truncate(request.SessionId, 64),
+                SessionId = sessionId,
+                IsAutomated = isAutomated,
+                Site = TrafficClassifier.NormalizeSite(request.Site),
             };
 
             try

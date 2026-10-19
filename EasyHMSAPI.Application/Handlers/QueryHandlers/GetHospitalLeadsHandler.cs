@@ -33,7 +33,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             // Date-window-scoped, but not Source/LeadType-scoped -- see the response model's own
             // comment for why (these breakdowns must stay meaningful once the table is filtered).
             var windowQuery = _context.HospitalLeads.AsNoTracking()
-                .Where(l => l.HospitalId == request.HospitalId);
+                .Where(l => l.HospitalId == request.HospitalId && !l.IsAutomated);   // crawlers are not leads
             if (request.DateFrom.HasValue)
                 windowQuery = windowQuery.Where(l => l.OccurredAt >= request.DateFrom.Value);
             if (request.DateTo.HasValue)

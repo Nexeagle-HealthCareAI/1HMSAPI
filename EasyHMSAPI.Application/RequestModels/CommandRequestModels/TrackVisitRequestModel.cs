@@ -19,6 +19,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? UtmCampaign { get; set; }
         public string? UserAgent { get; set; }
         public string? SessionId { get; set; }
+        // Set by the sending website's own /api/track route: "doctordekho" | "nexeagle".
+        public string? Site { get; set; }
 
         // Resolved server-side (PublicController) via TrustedProxyIpResolver — never trusted from
         // the client body.

@@ -38,5 +38,8 @@ namespace EasyHMSAPI.Domain.Entities
         public string? City { get; set; }
 
         public DateTime OccurredAt { get; set; } = DateTime.UtcNow;
+
+        // Bot / data-centre traffic (see TrafficClassifier); excluded from reports and lead lists.
+        public bool IsAutomated { get; set; }
     }
 }
