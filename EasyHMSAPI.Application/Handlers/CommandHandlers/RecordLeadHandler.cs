@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Common;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
@@ -68,7 +69,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 Mobile = Truncate(request.Mobile, 20),
                 PatientName = Truncate(request.PatientName, 200),
                 SessionId = Truncate(request.SessionId, 64),
-                IpAddress = request.IpAddress,
+                IpAddress = TrackingPrivacy.TruncateIp(request.IpAddress),   // truncated after the geo lookup
                 Country = geo?.Country,
                 Region = geo?.Region,
                 City = geo?.City,

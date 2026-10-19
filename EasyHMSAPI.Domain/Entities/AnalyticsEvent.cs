@@ -16,11 +16,16 @@ namespace EasyHMSAPI.Domain.Entities
         public DateTime OccurredAt { get; set; } = DateTime.UtcNow;
 
         public string? SessionId { get; set; }
+        // Masked copy only ("98XXXXXX10"), never the full number - see Application/Common/TrackingPrivacy.
         public string? Mobile { get; set; }
+        // HMAC-SHA256 of the normalized number (Tracking:MobileHashKey): groups and finds a number
+        // without storing it. Null when no key is configured.
+        public string? MobileHash { get; set; }
         public Guid? DoctorId { get; set; }
         // Frontend-only category slug (e.g. "cardiology") — not MedicalSpecialities.SpecialityId.
         public string? SpecialtyId { get; set; }
 
+        // Truncated (IPv4 /24, IPv6 /48) before storage.
         public string? IpAddress { get; set; }
         public string? Country { get; set; }
         public string? Region { get; set; }

@@ -187,7 +187,20 @@ builder.Services.AddSingleton<IHealthWikiImageStore, HealthWikiImageStore>();
 builder.Services.AddScoped<IHealthWikiImageService, HealthWikiImageService>();
 builder.Services.AddScoped<IUsageLimitService, UsageLimitService>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IPatientTokenValidator, EasyHMSAPI.Application.Services.Implementations.PatientTokenValidator>();
-builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IGeoIpLookupService, EasyHMSAPI.Application.Services.Implementations.IpApiGeoLookupService>();
+// Visitor region lookup: the self-hosted GeoLite2 file when Tracking:GeoLite2CityDbPath points at
+// one; otherwise ip-api.com stays as the stop-gap (decided 2026-10-19) until the file is set up.
+var geoLite2Path = builder.Configuration["Tracking:GeoLite2CityDbPath"];
+if (!string.IsNullOrWhiteSpace(geoLite2Path) && File.Exists(geoLite2Path))
+{
+    builder.Services.AddSingleton<EasyHMSAPI.Application.Services.Interfaces.IGeoIpLookupService>(sp =>
+        new EasyHMSAPI.Application.Services.Implementations.GeoLite2LookupService(
+            geoLite2Path,
+            sp.GetRequiredService<ILogger<EasyHMSAPI.Application.Services.Implementations.GeoLite2LookupService>>()));
+}
+else
+{
+    builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IGeoIpLookupService, EasyHMSAPI.Application.Services.Implementations.IpApiGeoLookupService>();
+}
 builder.Services.AddScoped<IVoiceRxService, VoiceRxService>();
 builder.Services.AddScoped<IDoctorValidationHelper, DoctorValidationHelper>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IWhatsAppQueueNotifier, EasyHMSAPI.Application.Services.WhatsAppQueueNotifier>();
@@ -195,6 +208,8 @@ builder.Services.AddScoped<ISubscriptionLimitHelper, SubscriptionLimitHelper>();
 // Pharmacy Phase 3b: daily 90/60/30-day batch-expiry digest — the only scheduled job in the API.
 builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.ExpiryAlertBackgroundService>();
 builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.HealthWikiMaintenanceBackgroundService>();
+// Daily deletion of old website-tracking rows; switch on/off via JobSettings "TrackingDataRetention".
+builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.TrackingRetentionBackgroundService>();
 // ABDM M1: ABHA creation (Aadhaar-OTP) + existing-ABHA login (Mobile/Aadhaar-OTP).
 // Own client with a 30 s timeout: the default 100 s turned a dead ABDM endpoint into a 100 s hang
 // at the counter. 30 s still leaves room for Aadhaar OTP calls, which go through UIDAI.

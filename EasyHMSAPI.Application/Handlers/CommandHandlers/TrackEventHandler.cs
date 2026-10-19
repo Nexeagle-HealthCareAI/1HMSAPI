@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Common;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
@@ -5,6 +6,7 @@ using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
@@ -29,12 +31,15 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         private readonly AppDbContext _context;
         private readonly IGeoIpLookupService _geoIpLookupService;
         private readonly ILogger<TrackEventHandler> _logger;
+        private readonly string? _mobileHashKey;
 
-        public TrackEventHandler(AppDbContext context, IGeoIpLookupService geoIpLookupService, ILogger<TrackEventHandler> logger)
+        public TrackEventHandler(AppDbContext context, IGeoIpLookupService geoIpLookupService, ILogger<TrackEventHandler> logger,
+            IConfiguration configuration)
         {
             _context = context;
             _geoIpLookupService = geoIpLookupService;
             _logger = logger;
+            _mobileHashKey = configuration["Tracking:MobileHashKey"];
         }
 
         public async Task<TrackEventResponseModel> Handle(TrackEventRequestModel request, CancellationToken cancellationToken)
@@ -50,10 +55,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 EventType = request.EventType,
                 OccurredAt = DateTime.UtcNow,
                 SessionId = Truncate(request.SessionId, 64),
-                Mobile = Truncate(request.Mobile, 20),
+                // Never the full number: a masked copy for display plus a keyed hash for grouping/search.
+                Mobile = TrackingPrivacy.MaskMobile(TrackingPrivacy.NormalizeMobile(request.Mobile)),
+                MobileHash = TrackingPrivacy.HashMobile(TrackingPrivacy.NormalizeMobile(request.Mobile), _mobileHashKey),
                 DoctorId = request.DoctorId,
                 SpecialtyId = Truncate(request.SpecialtyId, 100),
-                IpAddress = request.IpAddress,
+                IpAddress = TrackingPrivacy.TruncateIp(request.IpAddress),   // geo above used the full IP
                 Country = geo?.Country,
                 Region = geo?.Region,
                 City = geo?.City,

@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Common;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
@@ -33,7 +34,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             {
                 VisitId = Guid.NewGuid(),
                 VisitedAt = DateTime.UtcNow,
-                IpAddress = request.IpAddress,
+                IpAddress = TrackingPrivacy.TruncateIp(request.IpAddress),   // truncated after the geo lookup
                 Country = geo?.Country,
                 Region = geo?.Region,
                 City = geo?.City,
