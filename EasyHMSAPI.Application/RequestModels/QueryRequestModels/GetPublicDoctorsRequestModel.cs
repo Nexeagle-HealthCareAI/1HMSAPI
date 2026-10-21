@@ -38,5 +38,10 @@ namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
         // listing -- a doctor's own profile page can only exist for a doctor that already
         // passes those, so there is nothing to bypass here (unlike HospitalId above).
         public Guid? DoctorId { get; set; }
+
+        // When set, narrows to exactly these doctors -- used by SearchPublicDoctorsHandler (Vita's
+        // MCP doctor search) to enrich the handful of doctors it has already picked and ranked, in
+        // one call instead of one per doctor. Same eligibility gates as DoctorId above.
+        public List<Guid>? DoctorIds { get; set; }
     }
 }
