@@ -81,6 +81,9 @@
 #                           route (articles, contributors, topic requests). Unset = those endpoints
 #                           reject every call (fail closed, 503); public reads are unaffected.
 #                           The same value goes into the CMS API's own secrets.
+#     DEV_MCP_SERVICE_KEYS / PROD_MCP_SERVICE_KEYS Mcp:ServiceKeys — comma-separated keys for POST /mcp
+#                           (Vita's read-only doctor tools), one per caller, sent as X-Service-Key.
+#                           Unset = /mcp answers 503 to everything (fail closed); nothing else is affected.
 #     DEV_HEALTHWIKI_BUCKET / PROD_HEALTHWIKI_BUCKET (variables, optional)
 #                           HealthWiki:ImageBucket — the bucket for Health Wiki article images, apart from
 #                           the patient-file bucket. Defaults nexeagle-healthwiki-dev / -prod. It uses the
@@ -237,6 +240,7 @@ jobs:
           CMS_SERVICE_KEY: ${{ secrets.CMS_SERVICE_KEY }}
           CMS_BASE_URL:    ${{ vars.CMS_BASE_URL || 'http://151.185.45.77:5002' }}
           PROXY_SECRET:    ${{ secrets.INTERNAL_PROXY_SECRET }}
+          MCP_SERVICE_KEYS: ${{ secrets.DEV_MCP_SERVICE_KEYS }}
           HEALTH_ARTICLES_KEY: ${{ secrets.INTERNAL_HEALTH_ARTICLES_KEY }}
           HEALTHWIKI_BASE_URL: ${{ vars.DEV_DOCTORDEKHO_URL || 'https://doctordekho-dev.nexeagle.com' }}
           HEALTHWIKI_IMAGE_BUCKET: ${{ vars.DEV_HEALTHWIKI_BUCKET || 'nexeagle-healthwiki-dev' }}
@@ -249,7 +253,7 @@ jobs:
           password: ${{ secrets.DEV_SSH_PASSWORD }}
           port: 22
           command_timeout: 10m
-          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,JWT_ISSUER,JWT_AUDIENCE,OTP_PEPPER,SMTP_PW,TWILIO_SID,TWILIO_TOKEN,TWILIO_PHONE,WHATSAPP_TOKEN,WHATSAPP_ENABLED,WHATSAPP_API_URL,OPENAI_KEY,DEEPGRAM_KEY,GROQ_KEY,ABDM_CLIENT_ID,ABDM_CLIENT_SECRET,INVITATION_URL,STORAGE_PROVIDER,S3_SERVICE_URL,S3_ACCESS_KEY,S3_SECRET_KEY,S3_BUCKET,S3_PREFIX,CMS_SERVICE_KEY,CMS_BASE_URL,PROXY_SECRET,HEALTH_ARTICLES_KEY,HEALTHWIKI_BASE_URL,HEALTHWIKI_IMAGE_BUCKET,HEALTHWIKI_S3_ACCESS_KEY,HEALTHWIKI_S3_SECRET_KEY,WHATSAPP_BOT_BASE_URL
+          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,JWT_ISSUER,JWT_AUDIENCE,OTP_PEPPER,SMTP_PW,TWILIO_SID,TWILIO_TOKEN,TWILIO_PHONE,WHATSAPP_TOKEN,WHATSAPP_ENABLED,WHATSAPP_API_URL,OPENAI_KEY,DEEPGRAM_KEY,GROQ_KEY,ABDM_CLIENT_ID,ABDM_CLIENT_SECRET,INVITATION_URL,STORAGE_PROVIDER,S3_SERVICE_URL,S3_ACCESS_KEY,S3_SECRET_KEY,S3_BUCKET,S3_PREFIX,CMS_SERVICE_KEY,CMS_BASE_URL,PROXY_SECRET,HEALTH_ARTICLES_KEY,HEALTHWIKI_BASE_URL,HEALTHWIKI_IMAGE_BUCKET,HEALTHWIKI_S3_ACCESS_KEY,HEALTHWIKI_S3_SECRET_KEY,WHATSAPP_BOT_BASE_URL,MCP_SERVICE_KEYS
           script: |
             set -e
             : "${DB_CONN:?DEV_DB_CONNECTION is empty}"
@@ -290,6 +294,7 @@ jobs:
             add 'Cms__BaseUrl'                           "$CMS_BASE_URL"
             add 'Internal__ProxyForwardingSecret'        "$PROXY_SECRET"
             add 'Internal__HealthArticlesKey'            "$HEALTH_ARTICLES_KEY"
+            add 'Mcp__ServiceKeys'                       "$MCP_SERVICE_KEYS"
             add 'HealthWiki__ContributorBaseUrl'         "$HEALTHWIKI_BASE_URL"
             # Dev only: the sign-in code is also shown on the Doctor Dekho page (and only works while ASPNETCORE_ENVIRONMENT is Development).
             add 'HealthWiki__ShowOtpOnScreen'            "true"
@@ -379,6 +384,7 @@ jobs:
           CMS_SERVICE_KEY: ${{ secrets.CMS_SERVICE_KEY }}
           CMS_BASE_URL:    ${{ vars.CMS_BASE_URL || 'http://151.185.45.67:5002' }}
           PROXY_SECRET:    ${{ secrets.INTERNAL_PROXY_SECRET }}
+          MCP_SERVICE_KEYS: ${{ secrets.PROD_MCP_SERVICE_KEYS }}
           HEALTH_ARTICLES_KEY: ${{ secrets.INTERNAL_HEALTH_ARTICLES_KEY }}
           HEALTHWIKI_BASE_URL: ${{ vars.PROD_DOCTORDEKHO_URL || 'https://doctordekho.nexeagle.com' }}
           HEALTHWIKI_IMAGE_BUCKET: ${{ vars.PROD_HEALTHWIKI_BUCKET || 'nexeagle-healthwiki-prod' }}
@@ -425,6 +431,7 @@ jobs:
           add 'Cms__BaseUrl'                           "$CMS_BASE_URL"
           add 'Internal__ProxyForwardingSecret'        "$PROXY_SECRET"
           add 'Internal__HealthArticlesKey'            "$HEALTH_ARTICLES_KEY"
+          add 'Mcp__ServiceKeys'                       "$MCP_SERVICE_KEYS"
           add 'HealthWiki__ContributorBaseUrl'         "$HEALTHWIKI_BASE_URL"
           add 'HealthWiki__ImageBucket'                "$HEALTHWIKI_IMAGE_BUCKET"
           add 'HealthWiki__ImageAccessKey'             "$HEALTHWIKI_S3_ACCESS_KEY"
