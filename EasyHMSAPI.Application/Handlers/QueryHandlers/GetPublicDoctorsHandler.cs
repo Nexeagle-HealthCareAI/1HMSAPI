@@ -63,7 +63,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             // One cache entry per filter combo now (not one whole-platform entry) — see
             // PublicDirectoryCacheKeys.PublicDoctorsList. Presigned photo URLs are valid for 24h
             // (Storage:S3:UrlExpiryHours), so a 60s-stale cache entry never serves an expired one.
-            var cacheKey = PublicDirectoryCacheKeys.PublicDoctorsList(page, pageSize, request.City, request.State, request.SpecialtyCategory, request.Search, request.HospitalId, request.DoctorId);
+            var cacheKey = PublicDirectoryCacheKeys.PublicDoctorsList(page, pageSize, request.City, request.State, request.SpecialtyCategory, request.Search, request.HospitalId, request.DoctorId, request.DoctorIds);
             if (_cache.TryGetValue(cacheKey, out GetPublicDoctorsResponseModel? cached) && cached != null)
             {
                 return cached;
@@ -161,6 +161,12 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             if (request.DoctorId.HasValue)
             {
                 filteredQuery = filteredQuery.Where(x => x.d.DoctorID == request.DoctorId.Value);
+            }
+
+            if (request.DoctorIds is { Count: > 0 })
+            {
+                var wantedIds = request.DoctorIds;
+                filteredQuery = filteredQuery.Where(x => wantedIds.Contains(x.d.DoctorID));
             }
 
             if (!string.IsNullOrWhiteSpace(request.SpecialtyCategory))

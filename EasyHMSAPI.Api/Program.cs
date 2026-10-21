@@ -205,6 +205,13 @@ builder.Services.AddScoped<IVoiceRxService, VoiceRxService>();
 builder.Services.AddScoped<IDoctorValidationHelper, DoctorValidationHelper>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IWhatsAppQueueNotifier, EasyHMSAPI.Application.Services.WhatsAppQueueNotifier>();
 builder.Services.AddScoped<ISubscriptionLimitHelper, SubscriptionLimitHelper>();
+
+// MCP server for Vita (NLP router): read-only doctor tools at POST /mcp, gated by
+// McpServiceKeyMiddleware below. Stateless: the tools never call back to the client, so no
+// session affinity is needed and any API instance can answer any request.
+builder.Services.AddMcpServer()
+    .WithHttpTransport(options => options.Stateless = true)
+    .WithTools<EasyHMSAPI.Api.Mcp.DoctorTools>();
 // Pharmacy Phase 3b: daily 90/60/30-day batch-expiry digest — the only scheduled job in the API.
 builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.ExpiryAlertBackgroundService>();
 builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.HealthWikiMaintenanceBackgroundService>();
@@ -351,6 +358,20 @@ builder.Services.AddRateLimiter(options =>
 
      // Page-view beacons — fires on every page load, so this needs a much more generous ceiling
      // than the booking/auth policies above (a visitor browsing normally shouldn't get throttled).
+     // Vita's MCP doctor lookups: a few calls per chat turn from a handful of router instances,
+     // so the limit is per caller IP and generous; it only exists to cap a runaway client.
+     options.AddPolicy("McpPolicy", context =>
+         RateLimitPartition.GetFixedWindowLimiter(
+         partitionKey: EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(context, proxyForwardingSecret),
+         factory: key => new FixedWindowRateLimiterOptions
+         {
+             PermitLimit = 600,
+             Window = TimeSpan.FromMinutes(1),
+             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+             QueueLimit = 0
+         })
+     );
+
      options.AddPolicy("TrackVisitPolicy", context =>
          RateLimitPartition.GetFixedWindowLimiter(
          partitionKey: EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(context, proxyForwardingSecret),
@@ -405,7 +426,13 @@ app.UseCors("FrontendCors");
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseWhen(
+    context => context.Request.Path.StartsWithSegments("/mcp"),
+    branch => branch.UseMiddleware<EasyHMSAPI.Api.Mcp.McpServiceKeyMiddleware>());
 app.MapControllers();
+app.MapMcp("/mcp")
+    .RequireRateLimiting("McpPolicy")
+    .ExcludeFromDescription();
 
 // Simple redirect for root
 app.MapGet("/", context =>
