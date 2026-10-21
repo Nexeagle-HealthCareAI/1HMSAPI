@@ -73,6 +73,8 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<PatientHealthLockerDocument> PatientHealthLockerDocuments { get; set; }
         public DbSet<PatientAccountProfile> PatientAccountProfiles { get; set; }
         public DbSet<PatientFamilyMember> PatientFamilyMembers { get; set; }
+        public DbSet<PatientAppProfile> PatientAppProfiles { get; set; }
+        public DbSet<PatientAppDevice> PatientAppDevices { get; set; }
         public DbSet<UserProfile> UserProfiles { get; set; }
         public DbSet<Role> Roles { get; set; }
         public DbSet<RolePermission> RolePermissions { get; set; }
@@ -1572,6 +1574,29 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(e => e.MemberId).HasDefaultValueSql("newsequentialid()");
                 entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
                 entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+            });
+
+            modelBuilder.Entity<PatientAppProfile>(entity =>
+            {
+                entity.ToTable("PatientAppProfiles");
+                entity.HasKey(e => e.Mobile);
+                entity.Property(e => e.HomeLatitude).HasColumnType("decimal(9,6)");
+                entity.Property(e => e.HomeLongitude).HasColumnType("decimal(9,6)");
+                entity.Property(e => e.LastBookedAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.RemindersOptInAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.OnboardingCompletedAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+                entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+            });
+
+            modelBuilder.Entity<PatientAppDevice>(entity =>
+            {
+                entity.ToTable("PatientAppDevices");
+                entity.HasKey(e => e.DeviceId);
+                entity.Property(e => e.DeviceId).HasDefaultValueSql("newsequentialid()");
+                entity.HasIndex(e => new { e.Mobile, e.InstallationId }).IsUnique();
+                entity.Property(e => e.FirstSeenAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+                entity.Property(e => e.LastSeenAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
             });
 
             modelBuilder.Entity<AnalyticsEvent>(entity =>
