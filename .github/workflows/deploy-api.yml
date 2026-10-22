@@ -298,6 +298,8 @@ jobs:
             add 'HealthWiki__ContributorBaseUrl'         "$HEALTHWIKI_BASE_URL"
             # Dev only: the sign-in code is also shown on the Doctor Dekho page (and only works while ASPNETCORE_ENVIRONMENT is Development).
             add 'HealthWiki__ShowOtpOnScreen'            "true"
+            # Dev only, remove before the dev API is promoted: the patient login/booking OTP is returned to the page instead of sent on WhatsApp.
+            add 'PatientAuth__ShowOtpOnScreen'           "true"
             add 'HealthWiki__ImageBucket'                "$HEALTHWIKI_IMAGE_BUCKET"
             add 'HealthWiki__ImageAccessKey'             "$HEALTHWIKI_S3_ACCESS_KEY"
             add 'HealthWiki__ImageSecretKey'             "$HEALTHWIKI_S3_SECRET_KEY"

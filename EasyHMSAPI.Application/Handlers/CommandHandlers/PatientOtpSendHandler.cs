@@ -5,6 +5,7 @@ using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 
@@ -25,9 +26,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         private readonly AppDbContext _context;
         private readonly IWhatsAppMessagingService _whatsAppMessagingService;
         private readonly IMaskingService _maskingService;
+        private readonly IConfiguration _configuration;
 
-        public PatientOtpSendHandler(AppDbContext context, IWhatsAppMessagingService whatsAppMessagingService, IMaskingService maskingService)
+        public PatientOtpSendHandler(AppDbContext context, IWhatsAppMessagingService whatsAppMessagingService, IMaskingService maskingService, IConfiguration configuration)
         {
+            _configuration = configuration;
             _context = context;
             _whatsAppMessagingService = whatsAppMessagingService;
             _maskingService = maskingService;
@@ -71,7 +74,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             var otpInt = RandomNumberGenerator.GetInt32(100000, 1000000);
             var newOtp = otpInt.ToString();
 
-            await _whatsAppMessagingService.SendOtpAsync(mobile, newOtp);
+            // On a development server the code is handed back to the page instead of being sent, so testing does not depend on WhatsApp
+            // (and does not send messages from the production number). Anywhere else this is false and the code goes out on WhatsApp as before.
+            var showOnScreen = ShowOtpOnScreen(_configuration);
+            if (!showOnScreen) await _whatsAppMessagingService.SendOtpAsync(mobile, newOtp);
 
             auth.Otp = _maskingService.Mask(newOtp);
             auth.OtpSentAt = now;
@@ -83,7 +89,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             auth.UpdatedAt = now;
             await _context.SaveChangesAsync(cancellationToken);
 
-            return new PatientOtpSendResponseModel { Success = true, Message = "An OTP has been sent via WhatsApp. It expires in 3 minutes." };
+            return new PatientOtpSendResponseModel
+            {
+                Success = true,
+                Message = showOnScreen ? "Development server: the OTP is shown on the page. It expires in 3 minutes." : "An OTP has been sent via WhatsApp. It expires in 3 minutes.",
+                DevCode = showOnScreen ? newOtp : null,
+            };
         }
+
+        /// <summary>True only when the setting is on AND this is a Development server, so a setting copied to production by mistake still shows nothing.</summary>
+        internal static bool ShowOtpOnScreen(IConfiguration configuration) =>
+            string.Equals(configuration["PatientAuth:ShowOtpOnScreen"], "true", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(configuration["ASPNETCORE_ENVIRONMENT"], "Development", StringComparison.OrdinalIgnoreCase);
     }
 }
