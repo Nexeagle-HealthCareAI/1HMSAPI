@@ -66,7 +66,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 auth.OtpWindowStartAt = now;
                 auth.OtpSendCount = 0;
             }
-            if (auth.OtpSendCount >= MaxSendsPerWindow)
+            // The daily cap protects WhatsApp spend and unwanted messages. On a development server with the code shown on the page nothing is
+            // sent, so the cap would only get in a tester's way (the per-IP limit still applies).
+            var showOnScreen = ShowOtpOnScreen(_configuration);
+            if (auth.OtpSendCount >= MaxSendsPerWindow && !showOnScreen)
             {
                 return new PatientOtpSendResponseModel { Success = false, Message = "Too many OTP requests for this number. Please try again later." };
             }
@@ -76,7 +79,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
             // On a development server the code is handed back to the page instead of being sent, so testing does not depend on WhatsApp
             // (and does not send messages from the production number). Anywhere else this is false and the code goes out on WhatsApp as before.
-            var showOnScreen = ShowOtpOnScreen(_configuration);
             if (!showOnScreen) await _whatsAppMessagingService.SendOtpAsync(mobile, newOtp);
 
             auth.Otp = _maskingService.Mask(newOtp);

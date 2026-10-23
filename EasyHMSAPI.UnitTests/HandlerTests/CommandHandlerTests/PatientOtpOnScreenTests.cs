@@ -79,6 +79,27 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task DailyCap_IsNotAppliedOnScreenInDevelopment_ButStillAppliesWhenWhatsAppIsUsed()
+        {
+            var screen = Handler("true", "Development");
+            for (var i = 0; i < 7; i++)
+            {
+                // step past the 30 s cooldown between sends
+                var row = _context.PublicPatientAuths.Find("9876543210");
+                if (row != null) { row.OtpSentAt = System.DateTime.UtcNow.AddMinutes(-5); await _context.SaveChangesAsync(); }
+                var r = await screen.Handle(new PatientOtpSendRequestModel { MobileNumber = "9876543210" }, Ct);
+                Assert.That(r.Success, Is.True, $"send {i + 1}: {r.Message}");
+            }
+
+            _context.PublicPatientAuths.Find("9876543210")!.OtpSentAt = System.DateTime.UtcNow.AddMinutes(-5);
+            await _context.SaveChangesAsync();
+            var prod = Handler("true", "Production");
+            var blocked = await prod.Handle(new PatientOtpSendRequestModel { MobileNumber = "9876543210" }, Ct);
+            Assert.That(blocked.Success, Is.False);
+            Assert.That(blocked.Message, Does.Contain("Too many OTP requests"));
+        }
+
+        [Test]
         public void DevCodeIsNotWrittenToJsonWhenAbsent() =>
             Assert.That(System.Text.Json.JsonSerializer.Serialize(new EasyHMSAPI.Application.ResponseModels.CommandResponseModels.PatientOtpSendResponseModel { Success = true }), Does.Not.Contain("DevCode").IgnoreCase);
     }
