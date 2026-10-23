@@ -193,6 +193,36 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task Upload_KeepsTheRealFileName_WhenTheStoreAnswersOnlyAUrl()
+        {
+            // For this container the store answers just the signed URL (no "name|url"); that long URL must not become the file name.
+            var longUrl = "https://store.example/healthlocker/" + new string('a', 600) + "?X-Amz-Signature=" + new string('b', 64);
+            _blob.Setup(b => b.UploadAsync(It.IsAny<string>(), It.IsAny<Microsoft.AspNetCore.Http.IFormFile>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(longUrl);
+            var handler = new UploadHealthLockerDocumentHandler(_context, _blob.Object, new ConfigurationBuilder().Build());
+            var file = new Moq.Mock<Microsoft.AspNetCore.Http.IFormFile>().Object;
+
+            var r = await handler.Handle(new UploadHealthLockerDocumentRequestModel { Mobile = Mine, File = file, FileName = "blood-report.pdf", DocumentType = "Lab Report" }, Ct);
+
+            Assert.That(r.Success, Is.True, r.Message);
+            var saved = _context.PatientHealthLockerDocuments.Single();
+            Assert.That(saved.FileName, Is.EqualTo("blood-report.pdf"));
+            Assert.That(saved.StorageUrl, Is.EqualTo(longUrl));
+        }
+
+        [Test]
+        public async Task Upload_StillUsesTheName_WhenTheStoreAnswersNameAndUrl()
+        {
+            _blob.Setup(b => b.UploadAsync(It.IsAny<string>(), It.IsAny<Microsoft.AspNetCore.Http.IFormFile>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync("stored-name.pdf|https://store.example/x");
+            var handler = new UploadHealthLockerDocumentHandler(_context, _blob.Object, new ConfigurationBuilder().Build());
+            var file = new Moq.Mock<Microsoft.AspNetCore.Http.IFormFile>().Object;
+
+            await handler.Handle(new UploadHealthLockerDocumentRequestModel { Mobile = Mine, File = file, FileName = "original.pdf" }, Ct);
+
+            var saved = _context.PatientHealthLockerDocuments.Single();
+            Assert.That((saved.FileName, saved.StorageUrl), Is.EqualTo(("stored-name.pdf", "https://store.example/x")));
+        }
+
+        [Test]
         public async Task ProfileKeepsFirstAndLastNameAndBloodGroup_AndStillAcceptsAFullName()
         {
             var handler = new UpdatePublicPatientProfileHandler(_context);

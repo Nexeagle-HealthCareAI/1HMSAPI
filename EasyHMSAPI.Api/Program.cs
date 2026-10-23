@@ -271,6 +271,16 @@ var proxyForwardingSecret = builder.Configuration["Internal:ProxyForwardingSecre
 
 builder.Services.AddRateLimiter(options =>
 {
+     // A request over the limit is "429 Too Many Requests" with a Retry-After, not the framework's default 503 ("the service is down"),
+     // so a page can tell a person to slow down and callers can tell a limit from an outage.
+     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+     options.OnRejected = async (rejected, cancellationToken) =>
+     {
+         if (rejected.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+             rejected.HttpContext.Response.Headers.RetryAfter = ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+         rejected.HttpContext.Response.ContentType = "application/json";
+         await rejected.HttpContext.Response.WriteAsync("{\"message\":\"Too many requests. Please wait a moment and try again.\"}", cancellationToken);
+     };
      options.AddPolicy("PerIpPolicy", context =>
          RateLimitPartition.GetFixedWindowLimiter(
          partitionKey: EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(context, proxyForwardingSecret),
