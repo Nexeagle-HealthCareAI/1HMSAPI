@@ -19,5 +19,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string Status { get; set; } = string.Empty;
         /// <summary>Raw backend status code, in case a caller wants to branch on it directly.</summary>
         public string StatusCode { get; set; } = string.Empty;
+        /// <summary>When someone at the hospital first saw or acted on the request (UTC); null if nobody has yet.</summary>
+        public DateTime? HospitalSeenAt { get; set; }
     }
 }

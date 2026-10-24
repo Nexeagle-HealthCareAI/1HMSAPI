@@ -42,7 +42,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             var appts = await _context.Appointments
                 .Where(a => a.PatientId != null && patientIds.Contains(a.PatientId))
                 .OrderByDescending(a => a.ApptDate).ThenByDescending(a => a.StartAt)
-                .Select(a => new { a.ApptId, a.HospitalId, a.DoctorId, a.ApptDate, a.StartAt, a.CurrentStatusCode })
+                .Select(a => new { a.ApptId, a.HospitalId, a.DoctorId, a.ApptDate, a.StartAt, a.CurrentStatusCode, a.HospitalSeenAt })
                 .ToListAsync(cancellationToken);
 
             var hospitalIds = appts.Select(a => a.HospitalId).Distinct().ToList();
@@ -65,6 +65,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 StartAt = a.StartAt,
                 Status = PublicAppointmentStatusLabels.ToPatientLabel(a.CurrentStatusCode),
                 StatusCode = a.CurrentStatusCode ?? string.Empty,
+                HospitalSeenAt = a.HospitalSeenAt,
             }).ToList();
 
             return new GetPublicAppointmentsByMobileResponseModel { Success = true, Mobile = request.Mobile, Appointments = summaries };

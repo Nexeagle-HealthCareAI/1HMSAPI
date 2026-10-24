@@ -326,11 +326,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 var specializations = specializationsByDoctor.TryGetValue(r.DoctorID, out var specs) ? specs : new List<string>();
                 var fee = feeLookup.TryGetValue((r.DoctorID, hospitalId), out var feeAmount) ? feeAmount : (decimal?)null;
                 var discountActive = DoctorMarketingHelpers.IsDiscountActive(r.DiscountPercent, r.DiscountStartAt, r.DiscountEndAt, nowUtc);
+                var todayOverrides = overridesByDoctor.TryGetValue(r.DoctorID, out var doctorOverrides) ? doctorOverrides : Array.Empty<DoctorShiftOverride>();
                 var isAvailableToday = DoctorAvailabilityResolver.IsAvailable(
                     todayIst,
                     timeOffsByDoctor.TryGetValue(r.DoctorID, out var doctorTimeOffs) ? doctorTimeOffs : Array.Empty<DoctorTimeOff>(),
-                    overridesByDoctor.TryGetValue(r.DoctorID, out var doctorOverrides) ? doctorOverrides : Array.Empty<DoctorShiftOverride>(),
+                    todayOverrides,
                     activeTemplates);
+                var todayHours = isAvailableToday ? DoctorAvailabilityResolver.ResolveShifts(todayOverrides, activeTemplates) : new List<PublicShiftInfo>();
 
                 doctors.Add(new PublicDoctorInfo
                 {
@@ -368,6 +370,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     RegistrationNumber = string.IsNullOrWhiteSpace(r.LicenseNumber) ? null : r.LicenseNumber.Trim(),
                     RegistrationCouncil = string.IsNullOrWhiteSpace(r.MedicalCouncil) ? null : r.MedicalCouncil.Trim(),
                     IsAvailableToday = isAvailableToday,
+                    TodayHours = todayHours,
                     IsOnlineNow = r.IsOnlineNow,
                 });
             }

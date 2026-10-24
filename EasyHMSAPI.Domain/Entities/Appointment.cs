@@ -44,5 +44,11 @@ namespace EasyHMSAPI.Domain.Entities
         // appointment's own contact mobile (PatientRegistration.Mobile) — a logged-in visitor can
         // book for a dependent whose mobile differs from their own verified session.
         public string? BookedByMobile { get; set; }
+
+        // When hospital staff first looked at / acted on this request (UTC), and who, if known. Set once,
+        // never cleared. Lets the patient see an honest "Hospital has seen it" step between "Sent" and the
+        // confirmation call. NULL for requests nobody at the hospital has opened yet.
+        public DateTime? HospitalSeenAt { get; set; }
+        public Guid? HospitalSeenByUserId { get; set; }
     }
 }

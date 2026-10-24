@@ -62,6 +62,11 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         // GetPublicDoctorAvailabilityHandler (see DoctorAvailabilityResolver), resolved for
         // today's date and batched per page so the directory grid never needs a per-card call.
         public bool IsAvailableToday { get; set; }
+        /// <summary>
+        /// Today's working hours in India time (IST), from the same TimeOff &gt; Override &gt; Template rules as
+        /// IsAvailableToday. Empty when the doctor isn't available today. Lets the app say "Open now · till 8 pm".
+        /// </summary>
+        public List<PublicShiftInfo> TodayHours { get; set; } = new();
         // Manual "online now" toggle (Doctor.IsOnlineNow) — a doctor/staff-set signal, separate
         // from IsAvailableToday's schedule-derived status. Drives a distinct "Online now" badge.
         public bool IsOnlineNow { get; set; }

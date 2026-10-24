@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Domain.Context;
@@ -30,6 +31,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 alert.AcknowledgedBy = request.LoggedInUserName;
                 alert.AcknowledgedByUserId = request.LoggedInUserId;
                 alert.AcknowledgeNote = request.AcknowledgeNote;
+
+                // Acknowledging the "new online booking" alert means someone at the hospital has seen the request.
+                if (alert.AlertCode == AppointmentSeen.OnlineRequestAlertCode && Guid.TryParse(alert.SourceRefId, out var apptId))
+                {
+                    var appt = await _context.Appointments.FirstOrDefaultAsync(a => a.ApptId == apptId && a.HospitalId == alert.HospitalId, cancellationToken);
+                    if (appt != null) AppointmentSeen.Mark(appt, request.LoggedInUserId);
+                }
 
                 await _context.SaveChangesAsync(cancellationToken);
 
