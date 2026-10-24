@@ -21,6 +21,7 @@ namespace EasyHMSAPI.Application.Services
             article.Status = HealthArticle.StatusPublished;
             article.PublishedAt ??= now;
             article.ReviewerComment = null;
+            article.HoldForReview = false;
             article.UpdatedAt = now;
             HealthWikiAuditLog.Add(context, HealthWikiAudit.EntityArticle, article.ArticleId, "PUBLISHED", HealthWikiAudit.ActorSystem, actorName,
                 $"Live after {reviewer.FullName}'s approval");

@@ -264,7 +264,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task Edit_OnlyTheAuthor_AndNotWhileItIsWithTheReviewer()
         {
-            var author = Person(name: "Author");
+            var author = Person(status: "PENDING", name: "Author");
             var other = Person(name: "Other");
             var reviewer = Person(name: "Reviewer");
             var slug = await NewDraft(author);
@@ -283,7 +283,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task Edit_OfALiveArticle_KeepsTheLiveVersionOnline_UntilTheEditIsApproved()
         {
-            var author = Person(name: "Author"); var reviewer = Person(name: "Reviewer");
+            var author = Person(status: "PENDING", name: "Author"); var reviewer = Person(name: "Reviewer");
             var slug = await InReview(author, reviewer);
             await Review(reviewer, slug, "APPROVE");
             Assert.That((await PublicList()).Single().Title, Is.EqualTo("Living with High Blood Pressure"));
@@ -335,7 +335,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task Submit_WithoutTheConsent_IsRefused_AndTheArticleStaysADraft()
         {
-            var author = Person(name: "Author");
+            var author = Person(status: "PENDING", name: "Author");
             var slug = await NewDraft(author);
 
             var res = await new SubmitContributorArticleHandler(_context, new RecordingNotifier())
@@ -348,7 +348,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task Submit_RecordsThatTheAuthorAgreedTheReviewerMayPublish()
         {
-            var author = Person(name: "Author");
+            var author = Person(status: "PENDING", name: "Author");
             var slug = await NewDraft(author);
 
             await new SubmitContributorArticleHandler(_context, new RecordingNotifier())
@@ -360,7 +360,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task Submit_AMedicalArticleCanWaitForTheTeamToAssignADoctor()
         {
-            var author = Person(name: "Author");
+            var author = Person(status: "PENDING", name: "Author");
             var slug = await NewDraft(author);
 
             var res = await new SubmitContributorArticleHandler(_context, new RecordingNotifier()).Handle(new SubmitContributorArticleRequestModel { SubmitConsent = true, ContributorId = author.ContributorId, Slug = slug }, Ct);
@@ -374,7 +374,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task Submit_OnlyADraft_AndOnlyByItsAuthor()
         {
-            var author = Person(name: "Author"); var other = Person(name: "Other");
+            var author = Person(status: "PENDING", name: "Author"); var other = Person(name: "Other");
             var slug = await NewDraft(author);
             var h = new SubmitContributorArticleHandler(_context, new RecordingNotifier());
 
@@ -388,7 +388,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task Lists_GroupByMyRole_AndHideOthersDrafts()
         {
-            var author = Person(name: "Author"); var reviewer = Person(name: "Reviewer");
+            var author = Person(status: "PENDING", name: "Author"); var reviewer = Person(name: "Reviewer");
             var draft = await NewDraft(author, title: "Still writing");
             var review = await InReview(author, reviewer);
             _context.HealthArticles.Single(a => a.Slug == draft).ReviewerContributorId = reviewer.ContributorId; // reviewer assigned, but still a draft
@@ -412,7 +412,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task Get_AStrangerCannotReadAnArticle()
         {
-            var author = Person(name: "Author"); var stranger = Person(name: "Stranger");
+            var author = Person(status: "PENDING", name: "Author"); var stranger = Person(name: "Stranger");
             var slug = await NewDraft(author);
             var res = await new GetContributorArticleHandler(_context).Handle(new GetContributorArticleRequestModel { ContributorId = stranger.ContributorId, Slug = slug }, Ct);
             Assert.That(res.StatusCode, Is.EqualTo(404));
@@ -423,7 +423,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task Review_Approve_ByAVerifiedDoctor_PublishesAtOnce_AndKeepsTheDecision()
         {
-            var author = Person(name: "Author"); var reviewer = Person(name: "Dr. Imran Qureshi");
+            var author = Person(status: "PENDING", name: "Author"); var reviewer = Person(name: "Dr. Imran Qureshi");
             var slug = await InReview(author, reviewer);
 
             var res = await Review(reviewer, slug, "approve");
@@ -443,7 +443,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task Review_Approve_NeedsTheAccuracyConfirmation()
         {
-            var author = Person(name: "Author"); var reviewer = Person(name: "Reviewer");
+            var author = Person(status: "PENDING", name: "Author"); var reviewer = Person(name: "Reviewer");
             var slug = await InReview(author, reviewer);
 
             var res = await Review(reviewer, slug, "APPROVE", accuracy: false);
@@ -456,7 +456,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task Review_ByAnUnverifiedDoctor_WaitsAndGoesLiveWhenTheTeamVerifiesThem()
         {
-            var author = Person(name: "Author"); var reviewer = Person(status: "PENDING", name: "Dr. New");
+            var author = Person(status: "PENDING", name: "Author"); var reviewer = Person(status: "PENDING", name: "Dr. New");
             var slug = await InReview(author, reviewer);
 
             var res = await Review(reviewer, slug, "APPROVE");
@@ -480,7 +480,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task Review_RequestChanges_NeedsARealComment_AndSendsItBackToTheAuthor()
         {
-            var author = Person(name: "Author"); var reviewer = Person(name: "Reviewer");
+            var author = Person(status: "PENDING", name: "Author"); var reviewer = Person(name: "Reviewer");
             var slug = await InReview(author, reviewer);
 
             var tooShort = await Review(reviewer, slug, "REQUEST_CHANGES", "fix it");
@@ -498,7 +498,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task Review_OnlyTheAssignedDoctor_OnlyWhileItIsWithThem()
         {
-            var author = Person(name: "Author"); var reviewer = Person(name: "Reviewer"); var other = Person(name: "Other Dr");
+            var author = Person(status: "PENDING", name: "Author"); var reviewer = Person(name: "Reviewer"); var other = Person(name: "Other Dr");
             var slug = await InReview(author, reviewer);
 
             Assert.That((await Review(other, slug, "APPROVE")).StatusCode, Is.EqualTo(404), "not their article");
@@ -511,7 +511,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task Review_AnEditToALiveArticle_NeedsAVerifiedDoctor()
         {
-            var author = Person(name: "Author"); var reviewer = Person(name: "Reviewer");
+            var author = Person(status: "PENDING", name: "Author"); var reviewer = Person(name: "Reviewer");
             var slug = await InReview(author, reviewer);
             await Review(reviewer, slug, "APPROVE");
             await new SaveContributorArticleHandler(_context, new HealthArticleService(_context, new RecordingNotifier())).Handle(Draft(author.ContributorId, slug, title: "Edited"), Ct);
@@ -528,7 +528,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task Review_RequestChangesOnAnEdit_LeavesTheLiveVersionOnline()
         {
-            var author = Person(name: "Author"); var reviewer = Person(name: "Reviewer");
+            var author = Person(status: "PENDING", name: "Author"); var reviewer = Person(name: "Reviewer");
             var slug = await InReview(author, reviewer);
             await Review(reviewer, slug, "APPROVE");
             await new SaveContributorArticleHandler(_context, new HealthArticleService(_context, new RecordingNotifier())).Handle(Draft(author.ContributorId, slug, title: "Edited"), Ct);
@@ -546,7 +546,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task TheAuthorCannotBeTheirOwnReviewer()
         {
-            var author = Person(name: "Author");
+            var author = Person(status: "PENDING", name: "Author");
             var slug = await NewDraft(author);
 
             var res = await new SaveHealthArticleHandler(new HealthArticleService(_context, new RecordingNotifier())).Handle(new SaveHealthArticleRequestModel
@@ -559,7 +559,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task EditingTheTextAfterApproval_VoidsTheApproval_SoItCannotGoLiveOnIt()
         {
-            var author = Person(name: "Author"); var reviewer = Person(status: "PENDING", name: "Dr. New");
+            var author = Person(status: "PENDING", name: "Author"); var reviewer = Person(status: "PENDING", name: "Dr. New");
             var slug = await InReview(author, reviewer);
             await Review(reviewer, slug, "APPROVE"); // approved, waiting for verification
             Assert.That(_context.HealthArticles.Single().ApprovedAt, Is.Not.Null);

@@ -28,6 +28,7 @@ namespace EasyHMSAPI.Application.Services
                 PublishedAt = a.PublishedAt,
                 UpdatedAt = openRevision?.UpdatedAt ?? a.UpdatedAt,
                 HasPendingRevision = openRevision != null,
+                HoldForReview = a.HoldForReview,
                 RevisionStatus = openRevision?.Status,
                 ViewCount = a.ViewCount,
                 LikeCount = a.LikeCount,

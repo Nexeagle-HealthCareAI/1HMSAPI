@@ -239,6 +239,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
                     }
                     article.PublishedAt ??= now;
                     article.ReviewerComment = null;
+                    article.HoldForReview = false;
                 }
 
                 if (target != HealthArticle.StatusPublished) article.PublishedAt = null;

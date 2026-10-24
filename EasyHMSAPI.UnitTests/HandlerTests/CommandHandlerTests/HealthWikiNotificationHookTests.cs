@@ -90,7 +90,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task Verifying_ADoctorWhoHadApprovedAnArticleEarly_AlsoTellsTheAuthorAndReviewer_N8()
         {
-            var author = Person("Priya"); var reviewer = Person("Dr. New", status: "PENDING");
+            var author = Person("Priya", status: "PENDING"); var reviewer = Person("Dr. New", status: "PENDING");
             var slug = await Draft(author);
             await Cms(new SaveHealthArticleRequestModel { Slug = slug, ReviewerContributorId = reviewer.ContributorId, Status = "IN_REVIEW" });
             await _reviews.ReviewAsync(reviewer.ContributorId, slug, "APPROVE", null, true, Ct); // approved, but not verified yet, so not live
@@ -148,7 +148,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task SubmittingAMedicalArticleThatHasADoctor_TellsTheDoctor_N5()
         {
-            var author = Person("Priya"); var doctor = Person("Dr. Meera");
+            var author = Person("Priya", status: "PENDING"); var doctor = Person("Dr. Meera");
             var slug = await Draft(author);
             _context.HealthArticles.Single().ReviewerContributorId = doctor.ContributorId;
             await _context.SaveChangesAsync();
@@ -164,7 +164,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task WithoutADoctorYet_NobodyIsTold_UntilTheTeamAssignsOne()
         {
-            var author = Person("Priya"); var doctor = Person("Dr. Meera");
+            var author = Person("Priya", status: "PENDING"); var doctor = Person("Dr. Meera");
             var slug = await Draft(author);
 
             await Submit(author, slug);
@@ -177,7 +177,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task ChangingTheDoctorWhileItWaits_TellsTheNewOne_AndASectorUpdateTellsNoDoctor()
         {
-            var author = Person("Priya"); var first = Person("Dr. One"); var second = Person("Dr. Two");
+            var author = Person("Priya", status: "PENDING"); var first = Person("Dr. One"); var second = Person("Dr. Two");
             var slug = await Draft(author);
             await Cms(new SaveHealthArticleRequestModel { Slug = slug, ReviewerContributorId = first.ContributorId, Status = "IN_REVIEW" });
             Assert.That(_n.Of("N5").Single().Person, Is.EqualTo(first.ContributorId));
@@ -194,7 +194,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task SavingWithoutAnyChange_OrAFailedSave_TellsNobody()
         {
-            var author = Person("Priya"); var doctor = Person("Dr. Meera");
+            var author = Person("Priya", status: "PENDING"); var doctor = Person("Dr. Meera");
             var slug = await Draft(author);
             await Cms(new SaveHealthArticleRequestModel { Slug = slug, ReviewerContributorId = doctor.ContributorId, Status = "IN_REVIEW" });
             _n.Calls.Clear();
@@ -209,7 +209,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task AnEditToALiveArticleSentForReview_TellsTheDoctor_WithTheNewTitle()
         {
-            var author = Person("Priya"); var doctor = Person("Dr. Meera");
+            var author = Person("Priya", status: "PENDING"); var doctor = Person("Dr. Meera");
             var slug = await Draft(author, title: "Old title");
             await Cms(new SaveHealthArticleRequestModel { Slug = slug, ReviewerContributorId = doctor.ContributorId, Status = "IN_REVIEW" });
             await _reviews.ReviewAsync(doctor.ContributorId, slug, "APPROVE", null, true, Ct); // live
@@ -227,7 +227,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task ADoctorAskingForChanges_TellsTheAuthor_N7_WithTheirOwnWords()
         {
-            var author = Person("Priya"); var doctor = Person("Dr. Meera Nair");
+            var author = Person("Priya", status: "PENDING"); var doctor = Person("Dr. Meera Nair");
             var slug = await Draft(author);
             await Cms(new SaveHealthArticleRequestModel { Slug = slug, ReviewerContributorId = doctor.ContributorId, Status = "IN_REVIEW" });
             _n.Calls.Clear();
@@ -243,7 +243,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task ApprovalByAVerifiedDoctor_TellsTheAuthorAndTheDoctor_N8()
         {
-            var author = Person("Priya"); var doctor = Person("Dr. Meera Nair");
+            var author = Person("Priya", status: "PENDING"); var doctor = Person("Dr. Meera Nair");
             var slug = await Draft(author);
             await Cms(new SaveHealthArticleRequestModel { Slug = slug, ReviewerContributorId = doctor.ContributorId, Status = "IN_REVIEW" });
             _n.Calls.Clear();
@@ -257,7 +257,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task ApprovalByADoctorStillBeingVerified_TellsNobodyYet_BecauseItIsNotLive()
         {
-            var author = Person("Priya"); var doctor = Person("Dr. New", status: "PENDING");
+            var author = Person("Priya", status: "PENDING"); var doctor = Person("Dr. New", status: "PENDING");
             var slug = await Draft(author);
             await Cms(new SaveHealthArticleRequestModel { Slug = slug, ReviewerContributorId = doctor.ContributorId, Status = "IN_REVIEW" });
             _n.Calls.Clear();
@@ -271,7 +271,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task ARefusedDecision_TellsNobody()
         {
-            var author = Person("Priya"); var doctor = Person("Dr. Meera");
+            var author = Person("Priya", status: "PENDING"); var doctor = Person("Dr. Meera");
             var slug = await Draft(author);
             await Cms(new SaveHealthArticleRequestModel { Slug = slug, ReviewerContributorId = doctor.ContributorId, Status = "IN_REVIEW" });
             _n.Calls.Clear();
@@ -291,7 +291,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             _context.UserProfiles.Add(new UserProfile { UserProfileID = Guid.NewGuid(), UserID = userId, FullName = "Dr. Hospital" });
             await _context.SaveChangesAsync();
             var hospitalDoctor = (await _staff.EnsureContributorAsync(userId, Ct))!;
-            var author = Person("Priya");
+            var author = Person("Priya", status: "PENDING");
             var slug = await Draft(author);
             await Cms(new SaveHealthArticleRequestModel { Slug = slug, ReviewerContributorId = hospitalDoctor.ContributorId, Status = "IN_REVIEW" });
             await _reviews.ReviewAsync(hospitalDoctor.ContributorId, slug, "APPROVE", null, true, Ct); // approved, registration not yet marked by the CMS
@@ -329,7 +329,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task TakingAnArticleDown_TellsTheAuthorAndTheDoctor_N14_WithTheReason_ButNeedsAReason()
         {
-            var author = Person("Priya"); var doctor = Person("Dr. Meera");
+            var author = Person("Priya", status: "PENDING"); var doctor = Person("Dr. Meera");
             var slug = await Draft(author);
             await Cms(new SaveHealthArticleRequestModel { Slug = slug, ReviewerContributorId = doctor.ContributorId, Status = "IN_REVIEW" });
             await _reviews.ReviewAsync(doctor.ContributorId, slug, "APPROVE", null, true, Ct);

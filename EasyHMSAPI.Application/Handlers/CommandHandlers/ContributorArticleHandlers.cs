@@ -161,8 +161,37 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             if (article == null) return ContributorArticleResponseModel.Fail(404, "Article not found.");
             var revision = await ContributorArticles.OpenRevision(_context, article.ArticleId, ct);
             var now = DateTime.UtcNow;
+            // A verified doctor publishes their own article (MEDICAL or SECTOR_UPDATE) with no review, unless the team pulled it back to review.
+            var selfPublish = HealthArticleRules.CanSelfPublish(me.Type, me.Status) && !article.HoldForReview;
+            var selfEdit = false;
 
-            if (article.Status == HealthArticle.StatusDraft)
+            if (article.Status == HealthArticle.StatusDraft && selfPublish)
+            {
+                var problem = HealthArticleRules.ValidateContent(ArticleContent.From(article));
+                if (problem != null) return ContributorArticleResponseModel.Fail(400, FriendlyProblem(problem));
+                article.Status = HealthArticle.StatusPublished;
+                article.PublishedAt ??= now;
+                article.SubmittedAt = now;
+                article.ApprovedAt = now;
+                article.ApprovedByName = me.FullName;
+                article.ReviewerComment = null;
+                // Nobody else reviewed it, so no reviewer is named and the "Medically reviewed by" badge is not shown.
+                article.ReviewerContributorId = null;
+                article.UpdatedAt = now;
+            }
+            else if (article.Status == HealthArticle.StatusPublished && selfPublish && revision?.Status == HealthArticleRevision.StatusDraft)
+            {
+                var problem = HealthArticleRules.ValidateContent(ArticleContent.From(revision));
+                if (problem != null) return ContributorArticleResponseModel.Fail(400, FriendlyProblem(problem));
+                HealthArticlePublisher.ApplyRevision(_context, article, revision, HealthWikiAudit.ActorContributor, me.FullName, now);
+                selfEdit = true;
+                article.SubmittedAt = now;
+                article.ApprovedAt = now;
+                article.ApprovedByName = me.FullName;
+                article.ReviewerComment = null;
+                revision = null;
+            }
+            else if (article.Status == HealthArticle.StatusDraft)
             {
                 var problem = HealthArticleRules.ValidateContent(ArticleContent.From(article));
                 if (problem != null) return ContributorArticleResponseModel.Fail(400, FriendlyProblem(problem));
@@ -186,7 +215,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 return ContributorArticleResponseModel.Fail(409, "Only a draft can be submitted.");
             }
 
-            HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "SUBMITTED", HealthWikiAudit.ActorContributor, me.FullName,
+            var publishedNow = selfPublish && article.Status == HealthArticle.StatusPublished;
+            if (publishedNow)
+                HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "SELF_PUBLISHED", HealthWikiAudit.ActorContributor, me.FullName,
+                    (selfEdit ? "Edit of the published article. " : "") + "Published by the verified doctor who wrote it, without a review.");
+            else
+                HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "SUBMITTED", HealthWikiAudit.ActorContributor, me.FullName,
                 (revision != null && article.Status == HealthArticle.StatusPublished ? "Edit of the published article. " : "") + "Author agreed the reviewer may publish it if it is right.");
             try
             {

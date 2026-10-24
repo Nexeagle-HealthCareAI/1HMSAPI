@@ -60,6 +60,13 @@ namespace EasyHMSAPI.Application.Services
             || IsDoctorType(contributorType)
             || contributorType == HealthWikiContributor.TypeStaff;
 
+        /// <summary>
+        /// A doctor the team has verified publishes their own articles, MEDICAL or SECTOR_UPDATE, with no review. Everyone else's
+        /// article goes through a reviewer or a CMS editor. The edit still goes into the history, and the team can pull it back.
+        /// </summary>
+        public static bool CanSelfPublish(string contributorType, string contributorStatus) =>
+            IsDoctorType(contributorType) && contributorStatus == HealthWikiContributor.StatusVerified;
+
         /// <summary>Only a doctor can review, and only a MEDICAL article has a reviewer.</summary>
         public static bool CanReview(string contributorType, string contributorStatus) =>
             IsDoctorType(contributorType) && contributorStatus != HealthWikiContributor.StatusRejected;

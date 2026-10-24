@@ -125,6 +125,10 @@ namespace EasyHMSAPI.Api.Controllers
         [HttpPost("{slug}/unpublish")]
         public Task<IActionResult> Unpublish(string slug, [FromBody] ReasonBody body) => Decide(slug, DecideHealthArticleRequestModel.Unpublish, body?.Reason);
 
+        // Take a live article offline and put it back in review.
+        [HttpPost("{slug}/pull-back")]
+        public Task<IActionResult> PullBack(string slug, [FromBody] ReasonBody body) => Decide(slug, DecideHealthArticleRequestModel.PullBack, body?.Reason);
+
         private string Actor() => Request.Headers["X-Actor"].ToString();
 
         private async Task<IActionResult> Decide(string slug, string action, string? reason)

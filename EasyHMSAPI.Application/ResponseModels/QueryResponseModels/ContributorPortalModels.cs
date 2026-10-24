@@ -50,6 +50,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public DateTime UpdatedAt { get; set; }
         // A live article with an edit waiting. Readers still see the live text.
         public bool HasPendingRevision { get; set; }
+        // Pulled back to review by the team: the author cannot publish it again on their own.
+        public bool HoldForReview { get; set; }
         public string? RevisionStatus { get; set; }
     }
 

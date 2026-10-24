@@ -12,7 +12,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
     /// <summary>
     /// A CMS editor's decision on an article: APPROVE (sector updates only), WITHDRAW (send back for changes)
-    /// or UNPUBLISH (take a live article offline). A MEDICAL article is approved by its doctor reviewer through the
+    /// UNPUBLISH (take a live article offline) or PULL_BACK (take it offline and put it back in review). A MEDICAL article is approved by its doctor reviewer through the
     /// review endpoints, never here. What is live changes only on APPROVE of a pending edit or on UNPUBLISH.
     /// </summary>
     public class DecideHealthArticleHandler : IRequestHandler<DecideHealthArticleRequestModel, SaveHealthArticleResponseModel>
@@ -75,6 +75,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         article.ApprovedAt = now;
                         article.ApprovedByName = actor;
                         article.ReviewerComment = null;
+                        article.HoldForReview = false;
                         article.UpdatedAt = now;
                         HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "APPROVED", HealthWikiAudit.ActorCmsUser, actor);
                     }
@@ -128,8 +129,31 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "UNPUBLISHED", HealthWikiAudit.ActorCmsUser, actor, reason);
                     break;
 
+                case DecideHealthArticleRequestModel.PullBack:
+                    if (string.IsNullOrEmpty(reason)) return Fail(400, "A reason is required to pull an article back to review.");
+                    if (reason.Length > HealthArticleRules.MaxReasonLength) return Fail(400, $"reason is max {HealthArticleRules.MaxReasonLength} chars.");
+                    if (article.Status != HealthArticle.StatusPublished) return Fail(409, "The article is not published.");
+                    // Offline at once and back in the review queue. The edit in progress (if any) becomes the text under review.
+                    article.Status = HealthArticle.StatusInReview;
+                    article.PublishedAt = null;
+                    article.ApprovedAt = null;
+                    article.HoldForReview = true;
+                    article.SubmittedAt = now;
+                    article.ReviewerComment = reason;
+                    article.UpdatedAt = now;
+                    if (revision != null)
+                    {
+                        ArticleContent.From(revision).CopyTo(article);
+                        revision.Status = HealthArticleRevision.StatusApplied;
+                        revision.ResolvedAt = now;
+                        revision.UpdatedAt = now;
+                        revision = null;
+                    }
+                    HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "PULLED_BACK", HealthWikiAudit.ActorCmsUser, actor, reason);
+                    break;
+
                 default:
-                    return Fail(400, "action must be APPROVE, WITHDRAW or UNPUBLISH.");
+                    return Fail(400, "action must be APPROVE, WITHDRAW, UNPUBLISH or PULL_BACK.");
             }
 
             try
@@ -153,6 +177,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     break;
                 case DecideHealthArticleRequestModel.Unpublish:
                     await _notifier.ArticleRemovedAsync(about, article.AuthorContributorId, article.ReviewerContributorId, reason!, cancellationToken);
+                    break;
+                case DecideHealthArticleRequestModel.PullBack:
+                    await _notifier.ArticleRemovedAsync(about, article.AuthorContributorId, article.ReviewerContributorId, "Pulled back for review: " + reason, cancellationToken);
                     break;
             }
 

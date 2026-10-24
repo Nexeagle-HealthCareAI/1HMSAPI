@@ -26,6 +26,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public DateTime UpdatedAt { get; set; }
         // A published article with an edit waiting for approval. The live text is unchanged until it is approved.
         public bool HasPendingRevision { get; set; }
+        // Pulled back to review by the team: the author cannot publish it again on their own.
+        public bool HoldForReview { get; set; }
         // DRAFT | IN_REVIEW, null when there is no open edit.
         public string? RevisionStatus { get; set; }
         public long ViewCount { get; set; }

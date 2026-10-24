@@ -60,6 +60,7 @@ namespace EasyHMSAPI.Application.Services
                 PublishedAt = a.PublishedAt,
                 UpdatedAt = revision?.UpdatedAt ?? a.UpdatedAt,
                 HasPendingRevision = revision != null,
+                HoldForReview = a.HoldForReview,
                 RevisionStatus = revision?.Status,
             };
         }

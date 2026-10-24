@@ -41,6 +41,9 @@ namespace EasyHMSAPI.Domain.Entities
         // The reviewer approved (a MEDICAL article is published only after this and a VERIFIED reviewer).
         public DateTime? ApprovedAt { get; set; }
         public string? ApprovedByName { get; set; }
+        // A CMS editor pulled the live article back to review. Until a reviewer (MEDICAL) or an editor (SECTOR_UPDATE) approves it, the
+        // author cannot publish it on their own again.
+        public bool HoldForReview { get; set; }
         public long ViewCount { get; set; }
         public long LikeCount { get; set; }
         // DEPRECATED: replaced by the contributor ids above. Kept only so the old column mapping stays valid until a later migration drops them.
