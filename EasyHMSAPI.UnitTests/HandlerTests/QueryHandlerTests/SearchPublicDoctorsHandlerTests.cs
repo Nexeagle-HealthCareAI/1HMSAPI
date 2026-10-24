@@ -70,7 +70,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         }
 
         private Doctor SeedDoctor(Hospital hospital, string name, string qualification = "MBBS", int experience = 5,
-            string? departmentName = null, string languagesJson = "[\"Hindi\",\"English\"]")
+            string? departmentName = null, string languagesJson = "[\"Hindi\",\"English\"]", string? gender = null)
         {
             var user = TestDataFactory.SeedUser(_context, email: $"{Guid.NewGuid():N}@d.test", phone: Guid.NewGuid().ToString("N")[..10]);
             var doctor = TestDataFactory.SeedDoctor(_context, user, isPubliclyListed: true);
@@ -94,6 +94,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
                 UserID = user.UserID,
                 UserStatusId = user.UserStatusId,
                 FullName = name,
+                Gender = gender,
                 UpdatedAt = DateTime.UtcNow,
             });
             _context.SaveChanges();
@@ -268,6 +269,137 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         {
             var km = SearchPublicDoctorsHandler.HaversineKm(22.5726, 88.3639, 22.5958, 88.2636);
             Assert.That(km, Is.InRange(9.5, 11.0));
+        }
+
+        // ------------------------------------------------------------ Vita Phase 1 filters
+        [Test]
+        public async Task Gender_FindsLadyDoctorsOnly_AndUnknownGenderNeverMatches()
+        {
+            var h = SeedHospital();
+            var neha = SeedDoctor(h, "Dr. Neha Sharma", gender: "Female");
+            SeedDoctor(h, "Dr. Amit Das", gender: "Male");
+            SeedDoctor(h, "Dr. No Gender");
+            var anita = SeedDoctor(h, "Dr. Anita Sen", gender: "F");
+
+            var result = await Search(new SearchPublicDoctorsRequestModel { City = "Kolkata", Degree = "MBBS", Gender = "female" });
+
+            Assert.That(result.Doctors.Select(d => d.Doctor.DoctorId), Is.EquivalentTo(new[] { neha.DoctorID, anita.DoctorID }));
+            Assert.That(result.Total, Is.EqualTo(2));
+            var none = await Search(new SearchPublicDoctorsRequestModel { Degree = "MBBS", Gender = "other" });
+            Assert.That(none.Total, Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task Offset_PagesThroughTheSameRanking()
+        {
+            var h = SeedHospital();
+            var a = SeedDoctor(h, "Dr. A", experience: 30);
+            var b = SeedDoctor(h, "Dr. B", experience: 20);
+            var c = SeedDoctor(h, "Dr. C", experience: 10);
+
+            var first = await Search(new SearchPublicDoctorsRequestModel { Degree = "MBBS", Limit = 2 });
+            var second = await Search(new SearchPublicDoctorsRequestModel { Degree = "MBBS", Limit = 2, Offset = 2 });
+            var past = await Search(new SearchPublicDoctorsRequestModel { Degree = "MBBS", Limit = 2, Offset = 4 });
+
+            Assert.That(first.Doctors.Select(d => d.Doctor.DoctorId), Is.EqualTo(new[] { a.DoctorID, b.DoctorID }));
+            Assert.That(second.Doctors.Select(d => d.Doctor.DoctorId), Is.EqualTo(new[] { c.DoctorID }));
+            Assert.That(first.Total, Is.EqualTo(3));
+            Assert.That(second.Total, Is.EqualTo(3));
+            Assert.That(past.Doctors, Is.Empty);
+            Assert.That(past.Total, Is.EqualTo(3));
+        }
+
+        [Test]
+        public async Task OnlyAtHospital_ListsThatHospitalsDoctorsOnly()
+        {
+            var sadar = SeedHospital(city: "Purnia");
+            var other = SeedHospital(city: "Purnia");
+            var mine = SeedDoctor(sadar, "Dr. Sadar One");
+            SeedDoctor(other, "Dr. Elsewhere");
+
+            var only = await Search(new SearchPublicDoctorsRequestModel { HospitalId = sadar.HospitalID, OnlyAtHospital = true });
+            var first = await Search(new SearchPublicDoctorsRequestModel { HospitalId = sadar.HospitalID });
+
+            Assert.That(only.Doctors.Select(d => d.Doctor.DoctorId), Is.EqualTo(new[] { mine.DoctorID }));
+            Assert.That(first.Doctors.Count, Is.EqualTo(2));
+            Assert.That(first.Doctors[0].Doctor.DoctorId, Is.EqualTo(mine.DoctorID));
+        }
+
+        [Test]
+        public async Task AvailableToday_LeavesOutDoctorsOnLeaveToday()
+        {
+            var h = SeedHospital();
+            var working = SeedDoctor(h, "Dr. Working");
+            var onLeave = SeedDoctor(h, "Dr. On Leave");
+            _context.DoctorShiftTemplates.Add(new DoctorShiftTemplate
+            {
+                TemplateID = Guid.NewGuid(), ShiftName = "Morning", StartTime = new TimeSpan(9, 0, 0), EndTime = new TimeSpan(13, 0, 0), IsActive = true,
+            });
+            var todayIst = DateTime.UtcNow.AddMinutes(330).Date;
+            _context.DoctorTimeOffs.Add(new DoctorTimeOff
+            {
+                TimeOffID = Guid.NewGuid(), DoctorID = onLeave.DoctorID, HospitalId = h.HospitalID,
+                FromDate = todayIst.AddDays(-1), ToDate = todayIst.AddDays(1), Reason = "personal",
+            });
+            _context.SaveChanges();
+
+            var result = await Search(new SearchPublicDoctorsRequestModel { Degree = "MBBS", AvailableToday = true });
+
+            Assert.That(result.Doctors.Select(d => d.Doctor.DoctorId), Is.EqualTo(new[] { working.DoctorID }));
+            Assert.That(result.Total, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void GenderKey_ReadsCommonSpellings()
+        {
+            Assert.That(PublicDoctorPool.GenderKey("Female"), Is.EqualTo("F"));
+            Assert.That(PublicDoctorPool.GenderKey(" f "), Is.EqualTo("F"));
+            Assert.That(PublicDoctorPool.GenderKey("lady"), Is.EqualTo("F"));
+            Assert.That(PublicDoctorPool.GenderKey("MALE"), Is.EqualTo("M"));
+            Assert.That(PublicDoctorPool.GenderKey("other"), Is.Null);
+            Assert.That(PublicDoctorPool.GenderKey(null), Is.Null);
+        }
+
+        // ------------------------------------------------------------ search_hospitals
+        private Task<SearchPublicHospitalsResponseModel> SearchHospitals(SearchPublicHospitalsRequestModel request) =>
+            new SearchPublicHospitalsHandler(_context, new MemoryCache(new MemoryCacheOptions())).Handle(request, CancellationToken.None);
+
+        private Hospital NamedHospital(string name, string city, double? lat = null, double? lng = null, bool listed = true, bool withDoctor = true)
+        {
+            var h = SeedHospital(city: city, lat: lat, lng: lng, listed: listed);
+            h.Name = name;
+            h.Contact = "06454-222222";
+            _context.SaveChanges();
+            if (withDoctor) SeedDoctor(h, $"Dr. {name} One");
+            return h;
+        }
+
+        [Test]
+        public async Task Hospitals_NameWithCityInTheQuery_IsSpellingTolerant()
+        {
+            var sadar = NamedHospital("Sadar Hospital", "Purnia");
+            NamedHospital("Sadar Hospital", "Katihar");
+            NamedHospital("Max Care Hospital", "Purnia");
+
+            var result = await SearchHospitals(new SearchPublicHospitalsRequestModel { Query = "sadar haspatal purnea" });
+
+            Assert.That(result.Hospitals.Select(h => h.HospitalId).First(), Is.EqualTo(sadar.HospitalID));
+            Assert.That(result.Hospitals[0].DoctorCount, Is.EqualTo(1));
+            Assert.That(result.Hospitals[0].Contact, Is.EqualTo("06454-222222"));
+            Assert.That(HospitalNameMatcher.Score("sadar hospital purnia", "Sadar Hospital", "Purnia"), Is.EqualTo(1.0));
+        }
+
+        [Test]
+        public async Task Hospitals_NearMe_UsesTheRadius_AndSkipsUnlistedHospitalsWithoutDoctors()
+        {
+            var near = NamedHospital("Salt Lake Care", "Kolkata", lat: SaltLakeLat, lng: SaltLakeLng);
+            NamedHospital("Far Away", "Kolkata", lat: SaltLakeLat + 1.0, lng: SaltLakeLng);
+            NamedHospital("Hidden", "Kolkata", lat: SaltLakeLat, lng: SaltLakeLng, listed: false, withDoctor: false);
+
+            var result = await SearchHospitals(new SearchPublicHospitalsRequestModel { Latitude = SaltLakeLat, Longitude = SaltLakeLng });
+
+            Assert.That(result.Hospitals.Select(h => h.HospitalId), Is.EqualTo(new[] { near.HospitalID }));
+            Assert.That(result.Hospitals[0].DistanceKm, Is.EqualTo(0));
         }
     }
 }

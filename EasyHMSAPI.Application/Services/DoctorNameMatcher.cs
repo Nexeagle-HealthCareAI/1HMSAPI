@@ -64,7 +64,7 @@ namespace EasyHMSAPI.Application.Services
             }
         }
 
-        private static double TokenSimilarity(string a, string b)
+        internal static double TokenSimilarity(string a, string b)
         {
             if (a == b) return 1;
             // "bane" -> "banerjee", "chakra" -> "chakraborty": a typed short form of a long surname.

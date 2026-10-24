@@ -59,6 +59,38 @@ namespace EasyHMSAPI.Api.Mcp
 
     public sealed record McpDoctorNameList(IReadOnlyList<McpDoctorName> Doctors);
 
+    public sealed record McpHospitalMatch(
+        Guid HospitalId,
+        string? Name,
+        string? Address,
+        string? City,
+        string? State,
+        string? Pincode,
+        [property: Description("Hospital front-desk number")] string? Contact,
+        double? Lat,
+        double? Lng,
+        [property: Description("km from the requested lat/lng; null when no location was sent")] double? DistanceKm,
+        [property: Description("0..1 name similarity; null when no name was searched")] double? NameMatchScore,
+        [property: Description("Doctors of this hospital live on Doctor Dekho; list them with search_doctors(hospitalId, onlyAtHospital=true)")] int DoctorCount);
+
+    public sealed record McpHospitalSearchResult(
+        IReadOnlyList<McpHospitalMatch> Hospitals,
+        [property: Description("Matches before limit was applied")] int Total);
+
+    public sealed record McpShift(string? Name, [property: Description("HH:mm, IST")] string? Start, [property: Description("HH:mm, IST")] string? End);
+
+    public sealed record McpAvailabilityDay(
+        [property: Description("yyyy-MM-dd (IST)")] string Date,
+        [property: Description("Doctor is scheduled to work this day (not on leave)")] bool IsAvailable,
+        IReadOnlyList<McpShift> Shifts);
+
+    public sealed record McpDoctorAvailability(
+        bool Found,
+        Guid DoctorId,
+        IReadOnlyList<McpAvailabilityDay> Days,
+        [property: Description("First day in the range the doctor works; null when none")] string? NextAvailableDate,
+        [property: Description("1HMS has no bookable time slots for public requests: the hospital confirms the exact time")] string Note);
+
     internal static class McpMapping
     {
         public static McpDoctor ToMcp(this PublicDoctorInfo d, string? profileUrlTemplate,

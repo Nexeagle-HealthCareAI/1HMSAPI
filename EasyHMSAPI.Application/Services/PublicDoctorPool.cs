@@ -37,6 +37,8 @@ namespace EasyHMSAPI.Application.Services
             // the same fallback GetPublicDoctors' SpecialtyCategory filter applies.
             public string? Category { get; init; }
             public bool IsFeatured { get; init; }
+            // UserProfile.Gender as entered ("Male", "Female", "M", "F" ...); see GenderKey.
+            public string? Gender { get; init; }
             public Guid HospitalId { get; init; }
             public string? HospitalCity { get; init; }
             public double? HospitalLatitude { get; init; }
@@ -111,7 +113,7 @@ namespace EasyHMSAPI.Application.Services
                 select new
                 {
                     d.DoctorID, up.FullName, d.Qualification, d.ExperienceYears, d.LanguagesJson,
-                    d.PrimaryMedicalSpecialityId, d.PrimaryDepartmentID, d.IsFeatured,
+                    d.PrimaryMedicalSpecialityId, d.PrimaryDepartmentID, d.IsFeatured, up.Gender,
                 }).ToListAsync(cancellationToken);
 
             var specialityIds = rows.Where(r => r.PrimaryMedicalSpecialityId.HasValue).Select(r => r.PrimaryMedicalSpecialityId!.Value).Distinct().ToList();
@@ -153,6 +155,7 @@ namespace EasyHMSAPI.Application.Services
                     Languages = ParseLanguages(r.LanguagesJson),
                     Category = category,
                     IsFeatured = r.IsFeatured,
+                    Gender = r.Gender,
                     HospitalId = hospitalId,
                     HospitalCity = hospital?.City,
                     HospitalLatitude = hospital?.Latitude is decimal lat ? (double)lat : null,
@@ -162,6 +165,16 @@ namespace EasyHMSAPI.Application.Services
             }
 
             return Store(cache, cacheKey, entries);
+        }
+
+        // "Female" / "female" / "F" / "lady" / "woman" -> "F"; "Male" / "M" / "man" -> "M"; else null.
+        public static string? GenderKey(string? value)
+        {
+            var v = value?.Trim().ToLowerInvariant();
+            if (string.IsNullOrEmpty(v)) return null;
+            if (v is "f" or "female" or "lady" or "woman" or "women" or "mahila") return "F";
+            if (v is "m" or "male" or "man" or "men" or "gents") return "M";
+            return null;
         }
 
         private static IReadOnlyList<Entry> Store(IMemoryCache cache, string key, List<Entry> entries)
