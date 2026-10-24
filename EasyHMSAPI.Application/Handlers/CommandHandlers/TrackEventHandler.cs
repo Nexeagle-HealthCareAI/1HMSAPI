@@ -27,6 +27,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             AppConstants.AnalyticsEventType_SearchPerformed,
             AppConstants.AnalyticsEventType_DoctorProfileViewed,
             AppConstants.AnalyticsEventType_BookingStepReached,
+            AppConstants.AnalyticsEventType_ChatWidgetOpened,
+            AppConstants.AnalyticsEventType_ChatWhatsAppHandoff,
+            AppConstants.AnalyticsEventType_VitaFeedback,
         };
 
         private readonly AppDbContext _context;
