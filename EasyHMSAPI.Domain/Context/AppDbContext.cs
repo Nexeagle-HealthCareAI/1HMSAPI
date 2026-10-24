@@ -73,6 +73,8 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<PatientHealthLockerDocument> PatientHealthLockerDocuments { get; set; }
         public DbSet<PatientAccountProfile> PatientAccountProfiles { get; set; }
         public DbSet<PatientFamilyMember> PatientFamilyMembers { get; set; }
+        public DbSet<HospitalEmergencySetting> HospitalEmergencySettings { get; set; }
+        public DbSet<EmergencyAlert> EmergencyAlerts { get; set; }
         public DbSet<PatientAppProfile> PatientAppProfiles { get; set; }
         public DbSet<PatientAppDevice> PatientAppDevices { get; set; }
         public DbSet<UserProfile> UserProfiles { get; set; }
@@ -1574,6 +1576,31 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(e => e.MemberId).HasDefaultValueSql("newsequentialid()");
                 entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
                 entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+            });
+
+            modelBuilder.Entity<HospitalEmergencySetting>(entity =>
+            {
+                entity.ToTable("HospitalEmergencySettings");
+                entity.HasKey(e => e.SettingId);
+                entity.Property(e => e.SettingId).HasDefaultValueSql("newsequentialid()");
+                entity.Property(e => e.Latitude).HasColumnType("decimal(9,6)");
+                entity.Property(e => e.Longitude).HasColumnType("decimal(9,6)");
+                entity.Property(e => e.OpenTime).HasColumnType("time(0)");
+                entity.Property(e => e.CloseTime).HasColumnType("time(0)");
+                entity.Property(e => e.TermsAcceptedAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.VerifiedAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+                entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+                entity.HasOne(e => e.Hospital).WithMany().HasForeignKey(e => e.HospitalId);
+            });
+
+            modelBuilder.Entity<EmergencyAlert>(entity =>
+            {
+                entity.ToTable("EmergencyAlerts");
+                entity.HasKey(e => e.EmergencyAlertId);
+                entity.Property(e => e.EmergencyAlertId).HasDefaultValueSql("newsequentialid()");
+                entity.Property(e => e.DistanceKm).HasColumnType("decimal(7,2)");
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
             });
 
             modelBuilder.Entity<PatientAppProfile>(entity =>
