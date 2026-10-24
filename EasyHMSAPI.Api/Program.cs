@@ -307,6 +307,21 @@ builder.Services.AddRateLimiter(options =>
          })
      );
 
+     // Emergency takeover alerts (Vita): each one sends WhatsApp messages to up to five hospitals, so far tighter than booking. A real
+     // patient's emergency raises one alert (repeats in the same chat session are answered from the first one) and maybe one shared
+     // number; this stops one visitor from paging hospitals over and over.
+     options.AddPolicy("EmergencyAlertPolicy", context =>
+         RateLimitPartition.GetFixedWindowLimiter(
+         partitionKey: EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(context, proxyForwardingSecret),
+         factory: key => new FixedWindowRateLimiterOptions
+         {
+             PermitLimit = 4,
+             Window = TimeSpan.FromMinutes(10),
+             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+             QueueLimit = 0
+         })
+     );
+
      // Patient WhatsApp-OTP login (Doctor Dekho) — tighter per-IP ceiling than PublicBookingPolicy.
      // This is on top of, not instead of, the per-mobile-number cooldown/daily-cap enforced inside
      // PatientOtpSendHandler itself: this policy stops one IP from hammering many different numbers,
