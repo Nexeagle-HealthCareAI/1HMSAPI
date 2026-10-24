@@ -79,7 +79,16 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
             // On a development server the code is handed back to the page instead of being sent, so testing does not depend on WhatsApp
             // (and does not send messages from the production number). Anywhere else this is false and the code goes out on WhatsApp as before.
-            if (!showOnScreen) await _whatsAppMessagingService.SendOtpAsync(mobile, newOtp);
+            // Only report success when Meta accepted the message. The result used to be ignored, so a refused send (expired access
+            // token, template problem, number not on WhatsApp) still answered "OTP sent" and the patient waited for a code that never
+            // came. A failed send stores nothing, starts no cooldown and uses none of the daily allowance; the reason is in the API log
+            // as "WhatsApp SendOtpAsync failed for …".
+            if (!showOnScreen && !await _whatsAppMessagingService.SendOtpAsync(mobile, newOtp))
+            {
+                var entry = _context.Entry(auth);
+                if (entry.State == EntityState.Added) entry.State = EntityState.Detached;   // a first-time number keeps no row
+                return new PatientOtpSendResponseModel { Success = false, Message = "We couldn't send the code on WhatsApp right now. Please check the number is on WhatsApp and try again in a minute." };
+            }
 
             auth.Otp = _maskingService.Mask(newOtp);
             auth.OtpSentAt = now;

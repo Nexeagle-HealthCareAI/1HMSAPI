@@ -24,6 +24,8 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         {
             _context = InMemoryDbContextFactory.CreateContext();
             _whatsApp = new Mock<IWhatsAppMessagingService>();
+            // WhatsApp accepts the message; a refused send is covered in PatientOtpSendTests.
+            _whatsApp.Setup(w => w.SendOtpAsync(It.IsAny<string>(), It.IsAny<string>())).ReturnsAsync(true);
         }
 
         [TearDown]
