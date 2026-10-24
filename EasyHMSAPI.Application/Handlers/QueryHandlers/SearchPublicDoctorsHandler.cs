@@ -2,7 +2,9 @@ using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Domain.Entities;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace EasyHMSAPI.Application.Handlers.QueryHandlers
@@ -18,11 +20,16 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
     /// a name was asked; then distance when a location was sent; then experience; then
     /// available-today; then featured and name as stable tie-breaks. Without a location this gives
     /// the agreed order hospital -> experience -> earliest availability.
+    ///
+    /// Further filters: OnlyAtHospital (with HospitalId: that hospital's doctors only), Gender,
+    /// AvailableToday (working today, IST). Offset skips ranked doctors for "Show more doctors";
+    /// Total always counts every match, so the caller knows whether more remain.
     /// </summary>
     public class SearchPublicDoctorsHandler : IRequestHandler<SearchPublicDoctorsRequestModel, SearchPublicDoctorsResponseModel>
     {
         public const double DefaultRadiusKm = 5;
         public const int MaxLimit = 10;
+        public const int MaxOffset = 90;
 
         private readonly AppDbContext _context;
         private readonly IMemoryCache _cache;
@@ -78,7 +85,24 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 filtered = filtered.Where(e => e.Languages.Any(l => string.Equals(l?.Trim(), language, StringComparison.OrdinalIgnoreCase)));
             }
 
+            if (request.OnlyAtHospital && request.HospitalId.HasValue)
+                filtered = filtered.Where(e => e.AtOwnHospital);
+
+            if (!string.IsNullOrWhiteSpace(request.Gender))
+            {
+                var wanted = PublicDoctorPool.GenderKey(request.Gender);
+                filtered = wanted == null
+                    ? Enumerable.Empty<PublicDoctorPool.Entry>()          // an unknown value matches nobody, never everybody
+                    : filtered.Where(e => PublicDoctorPool.GenderKey(e.Gender) == wanted);
+            }
+
             var candidates = filtered.Select(e => new Candidate { Entry = e }).ToList();
+
+            if (request.AvailableToday && candidates.Count > 0)
+            {
+                var working = await WorkingTodayAsync(candidates.Select(c => c.Entry).ToList(), cancellationToken);
+                candidates = candidates.Where(c => working.Contains(c.Entry.DoctorId)).ToList();
+            }
 
             if (hasPoint)
             {
@@ -108,7 +132,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 return new SearchPublicDoctorsResponseModel { Success = true, Total = 0 };
 
             var sort = (request.Sort ?? "relevance").Trim().ToLowerInvariant();
-            var top = Order(candidates, request, sort, hasQuery, hasPoint, withAvailability: false).Take(limit).ToList();
+            var offset = Math.Clamp(request.Offset, 0, MaxOffset);
+            var top = Order(candidates, request, sort, hasQuery, hasPoint, withAvailability: false).Skip(offset).Take(limit).ToList();
+            if (top.Count == 0)
+                return new SearchPublicDoctorsResponseModel { Success = true, Total = total };
 
             await EnrichAsync(top, request.HospitalId, cancellationToken);
             top = top.Where(c => c.Info != null).ToList();
@@ -153,6 +180,36 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             return ordered
                 .ThenByDescending(c => c.Entry.IsFeatured)
                 .ThenBy(c => c.Entry.FullName, StringComparer.OrdinalIgnoreCase);
+        }
+
+        // Doctors working today (IST) -- the TimeOff > Override > Template precedence of
+        // DoctorAvailabilityResolver, batched, with each doctor's leave and overrides counted only at
+        // the canonical hospital the pool picked (as GetPublicDoctorsHandler does for its badge).
+        private async Task<HashSet<Guid>> WorkingTodayAsync(List<PublicDoctorPool.Entry> entries, CancellationToken cancellationToken)
+        {
+            var todayIst = DateTime.UtcNow.AddMinutes(330).Date;
+            var ids = entries.Select(e => e.DoctorId).Distinct().ToList();
+            var hospitalOf = entries.GroupBy(e => e.DoctorId).ToDictionary(g => g.Key, g => g.First().HospitalId);
+
+            var timeOffs = await _context.DoctorTimeOffs.AsNoTracking()
+                .Where(to => ids.Contains(to.DoctorID) && todayIst >= to.FromDate.Date && todayIst <= to.ToDate.Date)
+                .ToListAsync(cancellationToken);
+            var overrides = await _context.DoctorShiftOverrides.AsNoTracking()
+                .Where(o => ids.Contains(o.DoctorID) && o.StartDate <= todayIst && (!o.EndDate.HasValue || o.EndDate >= todayIst))
+                .ToListAsync(cancellationToken);
+            var templates = await _context.DoctorShiftTemplates.AsNoTracking().Where(t => t.IsActive).ToListAsync(cancellationToken);
+
+            var offByDoctor = timeOffs.Where(t => hospitalOf[t.DoctorID] == t.HospitalId)
+                .GroupBy(t => t.DoctorID).ToDictionary(g => g.Key, g => (IReadOnlyCollection<DoctorTimeOff>)g.ToList());
+            var overridesByDoctor = overrides.Where(o => hospitalOf[o.DoctorID] == o.HospitalId)
+                .GroupBy(o => o.DoctorID).ToDictionary(g => g.Key, g => (IReadOnlyCollection<DoctorShiftOverride>)g.ToList());
+
+            return ids.Where(id => DoctorAvailabilityResolver.IsAvailable(
+                    todayIst,
+                    offByDoctor.TryGetValue(id, out var off) ? off : Array.Empty<DoctorTimeOff>(),
+                    overridesByDoctor.TryGetValue(id, out var ov) ? ov : Array.Empty<DoctorShiftOverride>(),
+                    templates))
+                .ToHashSet();
         }
 
         // Full public records for the chosen doctors, in at most two calls: the caller's own

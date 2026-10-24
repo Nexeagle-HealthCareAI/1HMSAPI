@@ -37,10 +37,25 @@ namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
         // own doctors are included even when the hospital itself has not opted into the marketplace.
         public Guid? HospitalId { get; set; }
 
+        // With HospitalId: only that hospital's doctors (a patient asked for "Sadar Hospital Purnia"),
+        // instead of that hospital first and other doctors after.
+        public bool OnlyAtHospital { get; set; }
+
+        // "female" / "male" (also "f", "m", "lady", "woman") -- a patient asking for a lady doctor.
+        // Matched against UserProfile.Gender; doctors with no gender recorded never match.
+        public string? Gender { get; set; }
+
+        // Only doctors working today (IST): the same TimeOff > Override > Template rule the
+        // directory's "Available today" badge uses.
+        public bool AvailableToday { get; set; }
+
         // relevance (default) | distance | experience
         public string? Sort { get; set; }
 
         // 1..10, default 5.
         public int Limit { get; set; } = 5;
+
+        // Skip this many ranked doctors first ("Show more doctors"); 0..90.
+        public int Offset { get; set; }
     }
 }
