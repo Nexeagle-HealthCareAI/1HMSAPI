@@ -19,6 +19,10 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public TimeSpan? PreferredTime { get; set; }
         public string? Reason { get; set; }
 
+        // The language the patient booked in (en / hi / hinglish). The WhatsApp confirmation, reminders and the after-visit message
+        // use it (Vita vision, Phase 4). Optional; English when absent.
+        public string? Language { get; set; }
+
         // Booking-attribution metadata — where the visitor came from. ReferrerUrl/UtmCampaign are
         // only knowable client-side (document.referrer, landing-page query string), so the Nexeagle
         // frontend supplies them. IpAddress is resolved server-side from the request connection

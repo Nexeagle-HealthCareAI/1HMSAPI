@@ -48,6 +48,14 @@ namespace EasyHMSAPI.Domain.Entities
         // When hospital staff first looked at / acted on this request (UTC), and who, if known. Set once,
         // never cleared. Lets the patient see an honest "Hospital has seen it" step between "Sent" and the
         // confirmation call. NULL for requests nobody at the hospital has opened yet.
+        // Vita vision Phase 4 (after booking): the language the patient booked in (en / hi / hinglish; null = English), and when each
+        // after-booking WhatsApp message went out (each is sent once). 1HMSDatabase alter_appointments_visit_messages.sql.
+        public string? PatientLanguage { get; set; }
+        public DateTime? ConfirmationSentAt { get; set; }
+        public DateTime? MorningReminderSentAt { get; set; }
+        public DateTime? BeforeVisitReminderSentAt { get; set; }
+        public DateTime? AfterVisitSentAt { get; set; }
+
         public DateTime? HospitalSeenAt { get; set; }
         public Guid? HospitalSeenByUserId { get; set; }
     }
