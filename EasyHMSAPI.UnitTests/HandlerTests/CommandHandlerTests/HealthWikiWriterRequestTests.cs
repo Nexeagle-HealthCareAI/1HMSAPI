@@ -110,6 +110,47 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task ADoctorsTopic_TheTeamWritesIt_TheDoctorReviewsIt_AndBeingVerifiedItGoesLive()
+        {
+            var doctor = Person("INDEPENDENT_DOCTOR", name: "Dr. Asha");
+            var topic = await Suggest(doctor, false);
+            Assert.That((await Accept(topic, contentTeam: true)).Success, Is.True);
+            var slug = _context.HealthArticles.Single().Slug;
+
+            // the team writes it in the CMS (no contributor is the author) and sends it for review
+            var written = await new HealthArticleService(_context, _notifier).SaveAsync(new SaveHealthArticleRequestModel
+            {
+                Slug = slug, Content = "## Managing blood pressure at home\n\nWalk daily.", Status = "IN_REVIEW", ActorName = "Editor",
+            }, Ct);
+            Assert.That(written.Success, Is.True, written.Message);
+            Assert.That(_context.HealthArticles.Single().Status, Is.EqualTo("IN_REVIEW"));
+            Assert.That(_notifier.Of("N5").Count(), Is.EqualTo(1), "the doctor is asked to review");
+
+            // the doctor reviews and approves: verified, so it is live at once
+            var review = await new HealthArticleReviewService(_context, _notifier).ReviewAsync(doctor.ContributorId, slug, "APPROVE", null, true, Ct);
+            Assert.That(review.Success, Is.True, review.Message);
+            var article = _context.HealthArticles.Single();
+            Assert.That(article.Status, Is.EqualTo("PUBLISHED"));
+            Assert.That(article.ReviewerContributorId, Is.EqualTo(doctor.ContributorId));
+            Assert.That(article.AuthorContributorId, Is.Null);
+        }
+
+        [Test]
+        public async Task ADoctorWhoIsNotVerifiedYet_ApprovesButItWaitsForTheTeamToVerifyThem()
+        {
+            var doctor = Person("INDEPENDENT_DOCTOR", "PENDING", "Dr. New");
+            var topic = await Suggest(doctor, false);
+            await Accept(topic, contentTeam: true);
+            var slug = _context.HealthArticles.Single().Slug;
+            await new HealthArticleService(_context, _notifier).SaveAsync(new SaveHealthArticleRequestModel { Slug = slug, Content = "## Text", Status = "IN_REVIEW", ActorName = "Editor" }, Ct);
+
+            var review = await new HealthArticleReviewService(_context, _notifier).ReviewAsync(doctor.ContributorId, slug, "APPROVE", null, true, Ct);
+
+            Assert.That(review.Success, Is.True, review.Message);
+            Assert.That(_context.HealthArticles.Single().Status, Is.EqualTo("IN_REVIEW"));
+        }
+
+        [Test]
         public async Task AChosenDoctorCanWriteIt_AndTheSuggestingDoctorReviews()
         {
             var asks = Person("INDEPENDENT_DOCTOR", name: "Dr. Asha");
