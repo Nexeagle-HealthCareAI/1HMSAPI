@@ -76,7 +76,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? WhyItMatters { get; set; }
         public string? ConditionSlug { get; set; }
         public string? References { get; set; }
-        // A doctor asks for someone else to write it. Ignored for anyone who is not a doctor.
+        // Ignored: a doctor's topic is always written by the team and reviewed by that doctor; anyone else writes their own.
         public bool RequestWriter { get; set; }
     }
 

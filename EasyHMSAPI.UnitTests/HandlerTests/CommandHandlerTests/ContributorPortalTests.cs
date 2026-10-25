@@ -622,12 +622,12 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task Topic_CmsDecisions_Accept_Decline_AskDetail()
         {
-            var doctor = Person();
+            var doctor = Person("WRITER");
             var create = new CreateContributorTopicHandler(new HealthWikiTopicService(_context));
             var decide = new DecideTopicHandler(_context, new RecordingNotifier());
-            var accept = (await create.Handle(Topic(doctor.ContributorId, "Silent heart attack"), Ct)).Topic!;
-            var decline = (await create.Handle(Topic(doctor.ContributorId, "Off topic"), Ct)).Topic!;
-            var ask = (await create.Handle(Topic(doctor.ContributorId, "Vague one"), Ct)).Topic!;
+            var accept = (await create.Handle(Topic(doctor.ContributorId, "Silent heart attack", "SECTOR_UPDATE"), Ct)).Topic!;
+            var decline = (await create.Handle(Topic(doctor.ContributorId, "Off topic", "SECTOR_UPDATE"), Ct)).Topic!;
+            var ask = (await create.Handle(Topic(doctor.ContributorId, "Vague one", "SECTOR_UPDATE"), Ct)).Topic!;
 
             Assert.That((await decide.Handle(new DecideTopicRequestModel { TopicId = decline.Id, Action = "DECLINE" }, Ct)).StatusCode, Is.EqualTo(400), "a reason is required");
             Assert.That((await decide.Handle(new DecideTopicRequestModel { TopicId = ask.Id, Action = "ASK_DETAIL", Note = " " }, Ct)).StatusCode, Is.EqualTo(400));
@@ -677,11 +677,11 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task Topic_WhenTheAuthorStartsWritingTheAcceptedDraft_ItBecomesArticleStarted()
         {
-            var doctor = Person();
-            var topic = (await new CreateContributorTopicHandler(new HealthWikiTopicService(_context)).Handle(Topic(doctor.ContributorId, "Silent heart attack"), Ct)).Topic!;
+            var doctor = Person("WRITER");
+            var topic = (await new CreateContributorTopicHandler(new HealthWikiTopicService(_context)).Handle(Topic(doctor.ContributorId, "Silent heart attack", "SECTOR_UPDATE"), Ct)).Topic!;
             var accepted = (await new DecideTopicHandler(_context, new RecordingNotifier()).Handle(new DecideTopicRequestModel { TopicId = topic.Id, Action = "ACCEPT" }, Ct)).Topic!;
 
-            var edit = await new SaveContributorArticleHandler(_context, new HealthArticleService(_context, new RecordingNotifier())).Handle(Draft(doctor.ContributorId, accepted.ArticleSlug, title: "Silent heart attack", content: "My first paragraph."), Ct);
+            var edit = await new SaveContributorArticleHandler(_context, new HealthArticleService(_context, new RecordingNotifier())).Handle(Draft(doctor.ContributorId, accepted.ArticleSlug, "SECTOR_UPDATE", title: "Silent heart attack", content: "My first paragraph."), Ct);
 
             Assert.That(edit.Success, Is.True, edit.Message);
             Assert.That(_context.HealthWikiTopicRequests.Single().Status, Is.EqualTo("ARTICLE_STARTED"));

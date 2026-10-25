@@ -194,6 +194,75 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task PullUp_PutsAPulledBackArticleBackLive_WithNoReview_AndTheHistoryNamesTheEditor()
+        {
+            var doctor = Person();
+            var slug = await NewDraft(doctor);
+            await Submit(doctor, slug);
+            await Decide(slug, DecideHealthArticleRequestModel.PullBack, "Checking a claim");
+            Assert.That(_context.HealthArticles.Single().Status, Is.EqualTo("IN_REVIEW"));
+
+            Assert.That((await Decide(slug, DecideHealthArticleRequestModel.PullUp, " ")).StatusCode, Is.EqualTo(400), "a reason is needed");
+            var up = await Decide(slug, DecideHealthArticleRequestModel.PullUp, "Claim checked, all fine");
+
+            Assert.That(up.Success, Is.True, up.Message);
+            var a = _context.HealthArticles.Single();
+            Assert.That(a.Status, Is.EqualTo("PUBLISHED"));
+            Assert.That(a.HoldForReview, Is.False);
+            Assert.That(a.ApprovedByName, Is.EqualTo("Editor"));
+            Assert.That(_context.HealthWikiAudits.Any(x => x.EntityId == a.ArticleId && x.Action == "PUT_BACK_LIVE" && x.Detail == "Claim checked, all fine"), Is.True);
+        }
+
+        [Test]
+        public async Task PullUp_AlsoBringsBackAnArticleTheTeamTookDown_ButNotOneThatIsAlreadyLive()
+        {
+            var doctor = Person();
+            var slug = await NewDraft(doctor);
+            await Submit(doctor, slug);
+            Assert.That((await Decide(slug, DecideHealthArticleRequestModel.PullUp, "x")).StatusCode, Is.EqualTo(409), "already live");
+
+            await Decide(slug, DecideHealthArticleRequestModel.Unpublish, "Wrong");
+            Assert.That(_context.HealthArticles.Single().HoldForReview, Is.True);
+            await Submit(doctor, slug);
+            Assert.That(_context.HealthArticles.Single().Status, Is.EqualTo("IN_REVIEW"), "the doctor cannot put it back alone");
+            Assert.That((await Decide(slug, DecideHealthArticleRequestModel.PullUp, "Fixed")).Success, Is.True);
+            Assert.That(_context.HealthArticles.Single().Status, Is.EqualTo("PUBLISHED"));
+        }
+
+        [Test]
+        public async Task APulledBackEditInProgress_DropsTheReviewerWhoNeverSawIt()
+        {
+            var author = Person(status: "PENDING"); var reviewer = Person(name: "Dr. Reviewer");
+            var slug = await NewDraft(author);
+            var art = _context.HealthArticles.Single(); art.ReviewerContributorId = reviewer.ContributorId; await _context.SaveChangesAsync();
+            await Submit(author, slug);
+            art = _context.HealthArticles.Single(); art.Status = "PUBLISHED"; art.ApprovedAt = DateTime.UtcNow; art.PublishedAt = DateTime.UtcNow; await _context.SaveChangesAsync();
+            await NewDraft(author, "MEDICAL", "Edited text", slug);
+
+            await Decide(slug, DecideHealthArticleRequestModel.PullBack, "check");
+
+            Assert.That(_context.HealthArticles.Single().ReviewerContributorId, Is.Null);
+        }
+
+        [Test]
+        public async Task ADoctorsTopic_IsWrittenByTheTeam_AndReviewedByThatDoctor()
+        {
+            var doctor = Person(); var worker = Person("HEALTH_WORKER", name: "Asha");
+            var svc = new HealthWikiTopicService(_context);
+            var mine = await svc.CreateAsync(new CreateContributorTopicRequestModel { ContributorId = doctor.ContributorId, Title = "Heat stroke", Outline = "o", WhyItMatters = "w", Type = "MEDICAL", RequestWriter = false }, Ct);
+            var theirs = await svc.CreateAsync(new CreateContributorTopicRequestModel { ContributorId = worker.ContributorId, Title = "Camps", Outline = "o", WhyItMatters = "w", Type = "SECTOR_UPDATE" }, Ct);
+
+            Assert.That(mine.Topic!.RequestWriter, Is.True, "a doctor's topic always goes to the team");
+            Assert.That(theirs.Topic!.RequestWriter, Is.False, "a health worker writes their own");
+
+            var accept = await new DecideTopicHandler(_context, _notifier).Handle(new DecideTopicRequestModel { TopicId = mine.Topic.Id, Action = DecideTopicRequestModel.Accept, ContentTeam = true, ActorName = "Editor" }, Ct);
+            Assert.That(accept.Success, Is.True, accept.Message);
+            var art = _context.HealthArticles.Single();
+            Assert.That(art.AuthorContributorId, Is.Null, "the content team writes it");
+            Assert.That(art.ReviewerContributorId, Is.EqualTo(doctor.ContributorId), "the doctor who asked reviews it");
+        }
+
+        [Test]
         public async Task Unpublish_StillWorksOnASelfPublishedArticle()
         {
             var doctor = Person();

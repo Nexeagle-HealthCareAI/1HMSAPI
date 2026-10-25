@@ -58,8 +58,9 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 TopicId = Guid.NewGuid(), ContributorId = me.ContributorId, Title = title, Type = type, Outline = outline, WhyItMatters = why,
                 ConditionSlug = TopicRules.Clean(r.ConditionSlug)?.ToLowerInvariant(), References = TopicRules.Clean(r.References),
                 Status = HealthWikiTopicRequest.StatusSubmitted, CreatedAt = now, UpdatedAt = now,
-                // Only a doctor can ask for someone else to write it.
-                RequestWriter = r.RequestWriter && HealthArticleRules.IsDoctorType(me.Type),
+                // A doctor's topic is written by the NexEagle team (or a writer the team chooses) and reviewed by that doctor. A doctor who wants
+                // to write an article themselves just writes it (a verified doctor publishes it directly), so this is not a choice.
+                RequestWriter = HealthArticleRules.IsDoctorType(me.Type),
             };
             _context.HealthWikiTopicRequests.Add(topic);
             HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityTopic, topic.TopicId, "SUBMITTED", HealthWikiAudit.ActorContributor, me.FullName, title);

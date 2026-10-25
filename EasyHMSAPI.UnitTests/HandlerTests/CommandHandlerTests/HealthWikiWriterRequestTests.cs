@@ -152,16 +152,21 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
-        public async Task ATopicThatDidNotAskForAWriter_StillGoesToTheSuggester_AndTheyAreTold()
+        public async Task AWritersTopic_GoesToTheWriter_AndTheyAreTold_ButADoctorsTopicAlwaysGoesToTheTeam()
         {
-            var doctor = Person("INDEPENDENT_DOCTOR");
-            var topic = await Suggest(doctor, false);
+            var writer = Person("WRITER");
+            var topic = await Suggest(writer, false, "SECTOR_UPDATE");
 
             var res = await Accept(topic);
 
             Assert.That(res.Success, Is.True, res.Message);
-            Assert.That(_context.HealthArticles.Single().AuthorContributorId, Is.EqualTo(doctor.ContributorId));
+            Assert.That(_context.HealthArticles.Single().AuthorContributorId, Is.EqualTo(writer.ContributorId));
             Assert.That(_notifier.Of("N10").Count(), Is.EqualTo(1));
+
+            var doctor = Person("INDEPENDENT_DOCTOR", name: "Dr. Asked");
+            var doctorsTopic = await Suggest(doctor, false);
+            Assert.That(_context.HealthWikiTopicRequests.Single(t => t.TopicId == doctorsTopic).RequestWriter, Is.True, "even when the box was not ticked");
+            Assert.That((await Accept(doctorsTopic)).StatusCode, Is.EqualTo(400), "the team must choose who writes it");
         }
 
         // ---- hand-off from EasyHMS

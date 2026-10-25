@@ -115,11 +115,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     article.Status = HealthArticle.StatusDraft;
                     article.PublishedAt = null;
                     article.ApprovedAt = null; // a medical article needs its reviewer's approval again before it can go live
+                    article.HoldForReview = true; // taken down by the team: only the team (or a reviewer) puts it back live
                     article.ReviewerComment = reason;
                     article.UpdatedAt = now;
                     if (revision != null)
                     {
-                        // The article is offline, so the edit in progress becomes its draft text.
+                        // The article is offline, so the edit in progress becomes its draft text. Nobody reviewed that text.
+                        if (article.Type == HealthArticle.TypeMedical) article.ReviewerContributorId = null;
                         ArticleContent.From(revision).CopyTo(article);
                         revision.Status = HealthArticleRevision.StatusApplied;
                         revision.ResolvedAt = now;
@@ -143,6 +145,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     article.UpdatedAt = now;
                     if (revision != null)
                     {
+                        // Nobody reviewed the edit in progress, so a reviewer named for the live text must not stand behind it.
+                        if (article.Type == HealthArticle.TypeMedical) article.ReviewerContributorId = null;
                         ArticleContent.From(revision).CopyTo(article);
                         revision.Status = HealthArticleRevision.StatusApplied;
                         revision.ResolvedAt = now;
@@ -152,8 +156,28 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "PULLED_BACK", HealthWikiAudit.ActorCmsUser, actor, reason);
                     break;
 
+                case DecideHealthArticleRequestModel.PullUp:
+                    // The team puts back live an article it took offline or pulled back, without another review. It is recorded under the editor's name.
+                    if (string.IsNullOrEmpty(reason)) return Fail(400, "A reason is required to put an article back live.");
+                    if (reason.Length > HealthArticleRules.MaxReasonLength) return Fail(400, $"reason is max {HealthArticleRules.MaxReasonLength} chars.");
+                    if (!article.HoldForReview || article.Status == HealthArticle.StatusPublished)
+                        return Fail(409, "Only an article the team took offline or pulled back can be put back live this way.");
+                    {
+                        var problem = HealthArticleRules.ValidateContent(ArticleContent.From(article));
+                        if (problem != null) return Fail(400, problem);
+                    }
+                    article.Status = HealthArticle.StatusPublished;
+                    article.PublishedAt ??= now;
+                    article.ApprovedAt = now;
+                    article.ApprovedByName = actor;
+                    article.HoldForReview = false;
+                    article.ReviewerComment = null;
+                    article.UpdatedAt = now;
+                    HealthWikiAuditLog.Add(_context, HealthWikiAudit.EntityArticle, article.ArticleId, "PUT_BACK_LIVE", HealthWikiAudit.ActorCmsUser, actor, reason);
+                    break;
+
                 default:
-                    return Fail(400, "action must be APPROVE, WITHDRAW, UNPUBLISH or PULL_BACK.");
+                    return Fail(400, "action must be APPROVE, WITHDRAW, UNPUBLISH, PULL_BACK or PULL_UP.");
             }
 
             try
@@ -177,6 +201,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     break;
                 case DecideHealthArticleRequestModel.Unpublish:
                     await _notifier.ArticleRemovedAsync(about, article.AuthorContributorId, article.ReviewerContributorId, reason!, cancellationToken);
+                    break;
+                case DecideHealthArticleRequestModel.PullUp:
+                    await _notifier.PublishedAsync(about, article.AuthorContributorId, article.Type == HealthArticle.TypeMedical ? article.ReviewerContributorId : null, cancellationToken);
                     break;
                 case DecideHealthArticleRequestModel.PullBack:
                     await _notifier.ArticleRemovedAsync(about, article.AuthorContributorId, article.ReviewerContributorId, "Pulled back for review: " + reason, cancellationToken);
