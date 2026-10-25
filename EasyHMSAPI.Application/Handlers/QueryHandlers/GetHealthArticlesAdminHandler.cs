@@ -41,10 +41,11 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .Where(r => ids.Contains(r.ArticleId) && (r.Status == HealthArticleRevision.StatusDraft || r.Status == HealthArticleRevision.StatusInReview))
                 .ToListAsync(cancellationToken);
             var byArticle = open.ToDictionary(r => r.ArticleId);
+            var suggesters = await HealthArticleOrigin.SuggestersOf(_context, ids, cancellationToken);
 
             return new GetHealthArticlesAdminResponseModel
             {
-                Articles = articles.Select(a => HealthArticleAdminMapper.ToInfo(a, byArticle.GetValueOrDefault(a.ArticleId))).ToList(),
+                Articles = articles.Select(a => HealthArticleAdminMapper.ToInfo(a, byArticle.GetValueOrDefault(a.ArticleId), suggesters.TryGetValue(a.ArticleId, out var s) ? s : null)).ToList(),
             };
         }
     }

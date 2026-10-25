@@ -28,6 +28,9 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public bool HasPendingRevision { get; set; }
         // Pulled back to review by the team: the author cannot publish it again on their own.
         public bool HoldForReview { get; set; }
+        // The person whose topic this article was written for, so the editor knows who the default reviewer is and why. Not public.
+        public Guid? SuggestedByContributorId { get; set; }
+        public string? SuggestedByName { get; set; }
         // DRAFT | IN_REVIEW, null when there is no open edit.
         public string? RevisionStatus { get; set; }
         public long ViewCount { get; set; }

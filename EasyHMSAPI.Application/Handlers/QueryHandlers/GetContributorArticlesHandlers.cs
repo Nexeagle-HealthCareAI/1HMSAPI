@@ -27,6 +27,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             var names = await context.HealthWikiContributors.AsNoTracking().Where(c => peopleIds.Contains(c.ContributorId))
                 .ToDictionaryAsync(c => c.ContributorId, c => c.FullName, ct);
 
+            var suggesters = await HealthArticleOrigin.SuggestersOf(context, ids, ct);
             var now = DateTime.UtcNow;
             string? Name(Guid? id) => id.HasValue && names.TryGetValue(id.Value, out var n) ? n : null;
 
@@ -41,7 +42,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     var visible = a.Status != HealthArticle.StatusDraft || revision?.Status == HealthArticleRevision.StatusInReview;
                     if (!visible) continue;
                 }
-                result.Add(ContributorPortalMapper.ToMyArticle(a, revision, me, Name(a.AuthorContributorId), Name(a.ReviewerContributorId), now));
+                var info = ContributorPortalMapper.ToMyArticle(a, revision, me, Name(a.AuthorContributorId), Name(a.ReviewerContributorId), now);
+                // The reviewer is told whose topic it was, and whether it was their own.
+                if (!isAuthor && suggesters.TryGetValue(a.ArticleId, out var by)) { info.SuggestedBy = by.Name; info.SuggestedByMe = by.Id == me; }
+                result.Add(info);
             }
             return result;
         }

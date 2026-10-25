@@ -44,6 +44,10 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public int? WaitingDays { get; set; }
         // The reviewer approved, but their registration is not verified yet, so the article is not live.
         public bool AwaitingVerification { get; set; }
+        // Set for the reviewer when the article was written for a topic someone else suggested: "this topic was suggested by Dr. X".
+        public string? SuggestedBy { get; set; }
+        // The reviewer is the person who suggested the topic.
+        public bool SuggestedByMe { get; set; }
         public long? Views { get; set; }
         public long? Likes { get; set; }
         public DateTime? PublishedAt { get; set; }

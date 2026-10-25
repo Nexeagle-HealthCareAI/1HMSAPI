@@ -3,6 +3,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.CommandHandlers;
+using EasyHMSAPI.Application.Handlers.QueryHandlers;
+using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.Services.Implementations;
@@ -148,6 +150,37 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 
             Assert.That(review.Success, Is.True, review.Message);
             Assert.That(_context.HealthArticles.Single().Status, Is.EqualTo("IN_REVIEW"));
+        }
+
+        [Test]
+        public async Task TheReviewerIsToldWhoseTopicItWas_AndTheCmsSeesIt_AnotherDoctorCanReviewInstead()
+        {
+            var asks = Person("INDEPENDENT_DOCTOR", name: "Dr. Asha");
+            var other = Person("INDEPENDENT_DOCTOR", name: "Dr. Ravi");
+            var topic = await Suggest(asks, false);
+            await Accept(topic, contentTeam: true);
+            var article = _context.HealthArticles.Single();
+            var save = new HealthArticleService(_context, _notifier);
+            await save.SaveAsync(new SaveHealthArticleRequestModel { Slug = article.Slug, Content = "## Text", Status = "IN_REVIEW", ActorName = "Editor" }, Ct);
+
+            var mine = (await new GetContributorArticlesHandler(_context).Handle(new GetContributorArticlesRequestModel { ContributorId = asks.ContributorId }, Ct)).Articles!;
+            Assert.That(mine.Pending.Single().SuggestedBy, Is.EqualTo("Dr. Asha"));
+            Assert.That(mine.Pending.Single().SuggestedByMe, Is.True);
+
+            // the CMS picks another verified doctor: nothing stops it, and that doctor is told the topic was Dr. Asha's
+            var reassigned = await save.SaveAsync(new SaveHealthArticleRequestModel { Slug = article.Slug, ReviewerContributorId = other.ContributorId, ActorName = "Editor" }, Ct);
+            Assert.That(reassigned.Success, Is.True, reassigned.Message);
+            var theirs = (await new GetContributorArticlesHandler(_context).Handle(new GetContributorArticlesRequestModel { ContributorId = other.ContributorId }, Ct)).Articles!;
+            Assert.That(theirs.Pending.Single().SuggestedBy, Is.EqualTo("Dr. Asha"));
+            Assert.That(theirs.Pending.Single().SuggestedByMe, Is.False);
+
+            var admin = (await new GetHealthArticlesAdminHandler(_context).Handle(new GetHealthArticlesAdminRequestModel { Slug = article.Slug }, Ct)).Articles.Single();
+            Assert.That(admin.SuggestedByName, Is.EqualTo("Dr. Asha"));
+            Assert.That(admin.SuggestedByContributorId, Is.EqualTo(asks.ContributorId));
+
+            // the public page never carries it
+            var pub = await new GetPublicHealthArticlesHandler(_context).Handle(new GetPublicHealthArticlesRequestModel(), Ct);
+            Assert.That(pub.Articles, Is.Empty, "still in review, so not public at all");
         }
 
         [Test]
