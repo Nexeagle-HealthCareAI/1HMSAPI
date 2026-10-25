@@ -217,6 +217,8 @@ builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.ExpiryAlertB
 builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.HealthWikiMaintenanceBackgroundService>();
 // Daily deletion of old website-tracking rows; switch on/off via JobSettings "TrackingDataRetention".
 builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.TrackingRetentionBackgroundService>();
+// Visit reminders and the after-visit message (Vita vision, Phase 4); off until the JobSettings row 'VisitMessages' is switched on.
+builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.VisitMessagesBackgroundService>();
 // ABDM M1: ABHA creation (Aadhaar-OTP) + existing-ABHA login (Mobile/Aadhaar-OTP).
 // Own client with a 30 s timeout: the default 100 s turned a dead ABDM endpoint into a 100 s hang
 // at the counter. 30 s still leaves room for Aadhaar OTP calls, which go through UIDAI.

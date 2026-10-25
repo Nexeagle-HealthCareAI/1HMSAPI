@@ -3,6 +3,12 @@ namespace EasyHMSAPI.Application.Services.Interfaces
 {
     public interface IWhatsAppMessagingService
     {
+        /// <summary>A template with NAMED body variables in a given language ("en", "hi") plus dynamic URL buttons: each entry in
+        /// buttonUrlSuffixes fills the {{1}} at the end of that button's URL (index 0, 1, ...). Used by the visit messages
+        /// (confirmation, reminders, after the visit). Refused while WhatsApp:IsEnabled is off or until Meta approves the template.</summary>
+        Task<WhatsAppSendResult> SendTemplateWithButtonsAsync(string mobileNumber, string templateName, string languageCode,
+            IReadOnlyList<KeyValuePair<string, string>> parameters, IReadOnlyList<string> buttonUrlSuffixes);
+
         Task<bool> SendOtpAsync(string mobileNumber, string otp);
         Task<bool> SendInvitationAsync(string mobileNumber, string hospitalName, string role, string registrationUrl);
         Task<bool> SendLoginDetailsAsync(string mobileNumber, string hospitalName, string loginId, string password);

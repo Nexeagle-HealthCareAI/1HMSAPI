@@ -95,6 +95,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 BookingReferrerUrl = request.ReferrerUrl,
                 BookingUtmCampaign = request.UtmCampaign,
                 BookedByMobile = request.VerifiedMobile,
+                PatientLanguage = VisitMessages.CleanLanguage(request.Language),
                 Reason = request.Reason ?? string.Empty,
                 StatusHistoryJson = $"[{{\"status\":\"{AppConstants.AppointmentStatus_PreAppointment}\",\"timestamp\":\"{DateTime.UtcNow:o}\"}}]",
                 LastStatusCodeAt = DateTime.UtcNow,
@@ -139,6 +140,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         .Select(d => d.User.UserProfiles.FirstOrDefault()!.FullName)
                         .FirstOrDefaultAsync(cancellationToken);
 
+                    // The fuller visit confirmation (Vita vision, Phase 4): booking ID, fee, landmark, directions and visit-page buttons,
+                    // in the patient's language. Until Meta approves visit_confirmation_*, WhatsApp refuses it and the older template below
+                    // goes out instead, as before.
+                    var visit = await VisitMessages.LoadAsync(_context, appointment, cancellationToken);
+                    var sent = await VisitMessages.SendAsync(_whatsAppMessagingService, VisitMessages.Confirmation, appointment, visit);
+                    if (sent.Accepted)
+                    {
+                        isReminderSent = true;
+                        VisitMessages.MarkHandled(appointment, VisitMessages.Confirmation, DateTime.UtcNow);
+                        await _context.SaveChangesAsync(cancellationToken);
+                    }
+                    else
                     isReminderSent = await _whatsAppMessagingService.SendAppointmentConfirmationAsync(
                         patient.Mobile,
                         patient.FullName ?? string.Empty,
