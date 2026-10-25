@@ -58,5 +58,10 @@ namespace EasyHMSAPI.Application.Services.Interfaces
         /// <summary>Same send as <see cref="SendHealthWikiTemplateAsync"/>, but also returns the message id WhatsApp gave it, so a later delivery
         /// status (delivered, read, failed) can be matched to the message.</summary>
         Task<WhatsAppSendResult> SendHealthWikiTemplateTrackedAsync(string mobileNumber, string templateName, IReadOnlyList<KeyValuePair<string, string>> parameters);
+
+        /// <summary>Any approved template with NAMED body variables (same send as the Health Wiki ones), returning WhatsApp's message id.
+        /// Used by the emergency takeover ("emergency_nearby_alert", "emergency_patient_number"). Returns Refused while WhatsApp:IsEnabled
+        /// is off or until Meta approves the template.</summary>
+        Task<WhatsAppSendResult> SendNamedTemplateTrackedAsync(string mobileNumber, string templateName, IReadOnlyList<KeyValuePair<string, string>> parameters);
     }
 }

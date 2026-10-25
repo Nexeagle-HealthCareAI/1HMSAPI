@@ -563,6 +563,9 @@ namespace EasyHMSAPI.Application.Services.Implementations
             return SendForResultAsync($"{nameof(SendHealthWikiTemplateAsync)}:{templateName}", to, payload);
         }
 
+        public Task<WhatsAppSendResult> SendNamedTemplateTrackedAsync(string mobileNumber, string templateName, IReadOnlyList<KeyValuePair<string, string>> parameters)
+            => SendHealthWikiTemplateTrackedAsync(mobileNumber, templateName, parameters);
+
         // Normalizes a mobile number to E.164 style (no leading '+') as required by the Meta
         // Cloud API. Strips non-digits, removes a leading '0', and prepends the configured
         // country code if not already present. Example: "9876543210" → "919876543210".
