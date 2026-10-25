@@ -263,6 +263,20 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task PullUp_OfATeamWrittenMedicalArticleWithNoReviewer_AsksForOneInsteadOfFailingInTheDatabase()
+        {
+            var art = new HealthArticle { ArticleId = Guid.NewGuid(), Slug = "team-written", Type = "MEDICAL", Title = "T", Content = "c", Status = "IN_REVIEW", HoldForReview = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+            _context.HealthArticles.Add(art);
+            await _context.SaveChangesAsync();
+
+            var res = await Decide("team-written", DecideHealthArticleRequestModel.PullUp, "ok");
+
+            Assert.That(res.StatusCode, Is.EqualTo(400));
+            Assert.That(res.Message, Does.Contain("reviewer"));
+            Assert.That(_context.HealthArticles.Single().Status, Is.EqualTo("IN_REVIEW"));
+        }
+
+        [Test]
         public async Task Unpublish_StillWorksOnASelfPublishedArticle()
         {
             var doctor = Person();

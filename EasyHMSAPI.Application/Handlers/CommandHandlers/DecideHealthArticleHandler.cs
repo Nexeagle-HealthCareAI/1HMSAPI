@@ -166,6 +166,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         var problem = HealthArticleRules.ValidateContent(ArticleContent.From(article));
                         if (problem != null) return Fail(400, problem);
                     }
+                    // A live medical article names a reviewer or an author (the database enforces it). A team-written one has neither once its
+                    // reviewer was dropped, so one has to be chosen first.
+                    if (article.Type == HealthArticle.TypeMedical && !article.ReviewerContributorId.HasValue && !article.AuthorContributorId.HasValue)
+                        return Fail(400, "Choose a doctor reviewer for this medical article before putting it back live.");
                     article.Status = HealthArticle.StatusPublished;
                     article.PublishedAt ??= now;
                     article.ApprovedAt = now;

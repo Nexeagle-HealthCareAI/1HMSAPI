@@ -320,5 +320,53 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             await upkeep.RunAsync(Ct);
             Assert.That(_db.HealthWikiNotifications.Count(x => x.EntityId == article.ArticleId && x.Code == "N6"), Is.EqualTo(1));
         }
+
+        [Test]
+        public async Task ASelfPublishedMedicalArticle_PullBack_AndPutBackLive_OnSqlServer()
+        {
+            // the in-memory provider has no CHECK constraints: a live medical article must name a reviewer or an author (migration 10)
+            var tag = Guid.NewGuid().ToString("N")[..6];
+            var mobile = (9100000000 + Math.Abs(tag.GetHashCode() % 800000000)).ToString();
+            var doctor = new HealthWikiContributor
+            {
+                ContributorId = Guid.NewGuid(), Type = "INDEPENDENT_DOCTOR", FullName = "Dr. Self " + tag, Mobile = mobile, Status = "VERIFIED",
+                Qualification = "MBBS", Speciality = "Physician", RegistrationNumber = "12345", RegistrationCouncil = "Delhi Medical Council",
+                EnrolmentSource = "SELF_ENROLLED", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+            };
+            _db.HealthWikiContributors.Add(doctor);
+            await _db.SaveChangesAsync();
+
+            var notifier = new RecordingNotifier();
+            var save = new SaveContributorArticleHandler(_db, new HealthArticleService(_db, notifier));
+            var submit = new SubmitContributorArticleHandler(_db, notifier);
+            var decide = new DecideHealthArticleHandler(_db, notifier);
+
+            var created = await save.Handle(new SaveContributorArticleRequestModel { ContributorId = doctor.ContributorId, Type = "MEDICAL", Title = "Self published " + tag, Description = "d", Content = "## Text" }, Ct);
+            Assert.That(created.Success, Is.True, created.Message);
+            var slug = created.Article!.Slug;
+
+            var published = await submit.Handle(new SubmitContributorArticleRequestModel { ContributorId = doctor.ContributorId, Slug = slug, SubmitConsent = true }, Ct);
+            Assert.That(published.Success, Is.True, published.Message);
+            Assert.That(published.Article!.Status, Is.EqualTo("PUBLISHED"));
+            _db.ChangeTracker.Clear();
+            Assert.That(_db.HealthArticles.Single(a => a.Slug == slug).ReviewerContributorId, Is.Null);
+
+            // an edit of the live article goes live at once
+            await save.Handle(new SaveContributorArticleRequestModel { ContributorId = doctor.ContributorId, Slug = slug, Type = "MEDICAL", Title = "Self published " + tag + " (edited)", Description = "d", Content = "## Text 2" }, Ct);
+            var edited = await submit.Handle(new SubmitContributorArticleRequestModel { ContributorId = doctor.ContributorId, Slug = slug, SubmitConsent = true }, Ct);
+            Assert.That(edited.Success, Is.True, edited.Message);
+            _db.ChangeTracker.Clear();
+            Assert.That(_db.HealthArticles.Single(a => a.Slug == slug).Title, Does.EndWith("(edited)"));
+
+            // the team pulls it back, then puts it back live: the author is still named, so the constraint holds
+            var back = await decide.Handle(new DecideHealthArticleRequestModel { Slug = slug, Action = DecideHealthArticleRequestModel.PullBack, Reason = "check", ActorName = "Priya" }, Ct);
+            Assert.That(back.Success, Is.True, back.Message);
+            var up = await decide.Handle(new DecideHealthArticleRequestModel { Slug = slug, Action = DecideHealthArticleRequestModel.PullUp, Reason = "checked", ActorName = "Priya" }, Ct);
+            Assert.That(up.Success, Is.True, up.Message);
+            _db.ChangeTracker.Clear();
+            var row = _db.HealthArticles.Single(a => a.Slug == slug);
+            Assert.That(row.Status, Is.EqualTo("PUBLISHED"));
+            Assert.That(row.HoldForReview, Is.False);
+        }
     }
 }
