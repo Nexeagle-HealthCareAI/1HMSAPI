@@ -578,6 +578,45 @@ namespace EasyHMSAPI.Application.Services.Implementations
             return digits;
         }
 
+        public Task<WhatsAppSendResult> SendTemplateWithButtonsAsync(string mobileNumber, string templateName, string languageCode,
+            IReadOnlyList<KeyValuePair<string, string>> parameters, IReadOnlyList<string> buttonUrlSuffixes)
+        {
+            if (!IsEnabled)
+            {
+                _logger.LogInformation("WhatsApp is disabled (WhatsApp:IsEnabled); skipping {Template} for {Mobile}", templateName, MaskMobile(mobileNumber));
+                return Task.FromResult(WhatsAppSendResult.Refused);
+            }
+            var to = NormalizeToE164(mobileNumber);
+            var components = new List<object>
+            {
+                new
+                {
+                    type = "body",
+                    parameters = parameters
+                        .Select(p => (object)new { type = "text", text = SanitizeTemplateParam(p.Value, 300), parameter_name = p.Key })
+                        .ToArray(),
+                },
+            };
+            for (var i = 0; i < buttonUrlSuffixes.Count; i++)
+            {
+                components.Add(new
+                {
+                    type = "button",
+                    sub_type = "url",
+                    index = i.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    parameters = new object[] { new { type = "text", text = buttonUrlSuffixes[i] } },
+                });
+            }
+            var payload = new
+            {
+                messaging_product = "whatsapp",
+                to,
+                type = "template",
+                template = new { name = templateName, language = new { code = string.IsNullOrWhiteSpace(languageCode) ? "en" : languageCode }, components = components.ToArray() },
+            };
+            return SendForResultAsync($"{nameof(SendTemplateWithButtonsAsync)}:{templateName}", to, payload);
+        }
+
         // Meta rejects a template send (#132018) when a parameter contains a newline, a tab or 4+
         // consecutive spaces, and rejects an empty one. Patient-typed fields (name, address) are free
         // text, so they are flattened to single-spaced one-liners before being sent.
