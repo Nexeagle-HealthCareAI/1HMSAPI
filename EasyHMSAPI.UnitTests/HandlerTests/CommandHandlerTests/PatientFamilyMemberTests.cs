@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Linq;
 using System.Threading;
@@ -91,8 +92,13 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task AccountCannotHoldMoreThanTheLimit()
         {
-            for (var i = 0; i < PatientProfileRules.MaxFamilyMembers; i++) Assert.That((await Save()).Success, Is.True);
-            var extra = await Save();
+            // Different names: the same person added again within minutes counts as a retry, not a new member.
+            for (var i = 0; i < PatientProfileRules.MaxFamilyMembers; i++)
+            {
+                var n = i;
+                Assert.That((await Save(r => r.FirstName = "Ayaan" + (char)('a' + n))).Success, Is.True);
+            }
+            var extra = await Save(r => r.FirstName = "Zara");
             Assert.That(extra.Success, Is.False);
             Assert.That(await Save(mobile: Other), Has.Property("Success").True);
         }
@@ -232,6 +238,21 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That((a.FullName, a.FirstName, a.LastName, a.BloodGroup, a.GuardianName), Is.EqualTo(("Aquib Khan", "Aquib", "Khan", "AB-", "Abx")));
             Assert.That((b.FirstName, b.LastName, b.FullName), Is.EqualTo(("Zara", "Bano Ali", "Zara Bano Ali")));
             Assert.That((await handler.Handle(new UpdatePublicPatientProfileRequestModel { Mobile = Mine, FirstName = "A", BloodGroup = "Z" }, Ct)).Success, Is.False);
+        }
+
+        [Test]
+        public async Task SamePersonAddedAgainWithinMinutes_IsARetry_NotADuplicate()
+        {
+            var first = await Save();
+            var retry = await Save(r => r.FirstName = "ayaan");   // same person, typed again after a timeout
+
+            Assert.That(retry.Success, Is.True);
+            Assert.That(retry.Member!.MemberId, Is.EqualTo(first.Member!.MemberId));
+            Assert.That(await _context.PatientFamilyMembers.CountAsync(m => m.OwnerMobile == Mine), Is.EqualTo(1));
+
+            // A different relation is a different person.
+            await Save(r => r.Relation = "Daughter");
+            Assert.That(await _context.PatientFamilyMembers.CountAsync(m => m.OwnerMobile == Mine), Is.EqualTo(2));
         }
     }
 }

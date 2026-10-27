@@ -33,6 +33,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 row = await _context.PatientFamilyMembers.FirstOrDefaultAsync(m => m.MemberId == r.MemberId.Value && m.OwnerMobile == r.Mobile, ct);
                 if (row == null) return Fail(404, "Family member not found.");
             }
+            else if (await RecentSameMember(r, ct) is { } repeat)
+            {
+                // The same person added again within a few minutes is a retry after a slow or dropped answer (the first
+                // save went through but the phone never heard back). Update that row instead of creating a duplicate.
+                row = repeat;
+            }
             else
             {
                 if (await _context.PatientFamilyMembers.CountAsync(m => m.OwnerMobile == r.Mobile, ct) >= PatientProfileRules.MaxFamilyMembers)
@@ -60,6 +66,22 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 Message = r.MemberId.HasValue ? "Saved." : "Family member added.",
                 Member = GetPatientFamilyMembersHandler.ToItem(row, count),
             };
+        }
+
+        private static readonly TimeSpan RetryWindow = TimeSpan.FromMinutes(10);
+
+        private async Task<PatientFamilyMember?> RecentSameMember(SavePatientFamilyMemberRequestModel r, CancellationToken ct)
+        {
+            var first = PatientProfileRules.Clean(r.FirstName);
+            var relation = PatientProfileRules.Clean(r.Relation);
+            if (first == null || relation == null) return null;
+            var since = DateTime.UtcNow - RetryWindow;
+            var recent = await _context.PatientFamilyMembers
+                .Where(m => m.OwnerMobile == r.Mobile && m.CreatedAt >= since)
+                .ToListAsync(ct);
+            return recent.FirstOrDefault(m =>
+                string.Equals(m.FirstName, first, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(m.Relation, relation, StringComparison.OrdinalIgnoreCase));
         }
 
         private static PatientFamilyMembersResponseModel Fail(int status, string message) => new() { Success = false, StatusCode = status, Message = message };

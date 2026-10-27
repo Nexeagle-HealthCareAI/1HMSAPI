@@ -42,7 +42,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             var appts = await _context.Appointments
                 .Where(a => a.PatientId != null && patientIds.Contains(a.PatientId))
                 .OrderByDescending(a => a.ApptDate).ThenByDescending(a => a.StartAt)
-                .Select(a => new { a.ApptId, a.HospitalId, a.DoctorId, a.ApptDate, a.StartAt, a.CurrentStatusCode, a.HospitalSeenAt })
+                .Select(a => new { a.ApptId, a.HospitalId, a.DoctorId, a.PatientId, a.ApptDate, a.StartAt, a.CurrentStatusCode, a.HospitalSeenAt })
                 .ToListAsync(cancellationToken);
 
             var hospitalIds = appts.Select(a => a.HospitalId).Distinct().ToList();
@@ -56,6 +56,14 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .Select(d => new { d.DoctorID, Name = d.User.UserProfiles.FirstOrDefault()!.FullName })
                 .ToDictionaryAsync(d => d.DoctorID, d => d.Name, cancellationToken);
 
+            // Whose visit each one is (the account holder or a family member booked under the same mobile).
+            var patientNames = (await _context.PatientRegistrations
+                    .Where(p => p.PatientId != null && patientIds.Contains(p.PatientId) && p.FullName != null)
+                    .Select(p => new { p.PatientId, p.FullName })
+                    .ToListAsync(cancellationToken))
+                .GroupBy(p => p.PatientId!)
+                .ToDictionary(g => g.Key, g => g.First().FullName!.Trim());
+
             var summaries = appts.Select(a => new PublicAppointmentSummary
             {
                 AppointmentId = a.ApptId,
@@ -66,6 +74,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 Status = PublicAppointmentStatusLabels.ToPatientLabel(a.CurrentStatusCode),
                 StatusCode = a.CurrentStatusCode ?? string.Empty,
                 HospitalSeenAt = a.HospitalSeenAt,
+                PatientName = a.PatientId != null && patientNames.TryGetValue(a.PatientId, out var pn) && pn.Length > 0 ? pn : null,
             }).ToList();
 
             return new GetPublicAppointmentsByMobileResponseModel { Success = true, Mobile = request.Mobile, Appointments = summaries };

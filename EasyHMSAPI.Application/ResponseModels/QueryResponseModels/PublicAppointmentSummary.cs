@@ -21,5 +21,12 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string StatusCode { get; set; } = string.Empty;
         /// <summary>When someone at the hospital first saw or acted on the request (UTC); null if nobody has yet.</summary>
         public DateTime? HospitalSeenAt { get; set; }
+        /// <summary>
+        /// Who the visit is for. Filled ONLY in the signed-in patient's own list (GET public/appointments/mine), so a family
+        /// with several bookings can tell them apart. Never set by the ID-only guest lookup (see the note at the top), and
+        /// left out of the JSON when null.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? PatientName { get; set; }
     }
 }
