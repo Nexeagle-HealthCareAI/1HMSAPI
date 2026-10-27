@@ -94,4 +94,52 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             return found == null ? GetContributorArticleResponseModel.Fail(404, "Article not found.") : GetContributorArticleResponseModel.Ok(found);
         }
     }
+
+    /// <summary>
+    /// What happened to an article, for the doctor who wrote it or reviews it. Team actions show as "NexEagle team"; WhatsApp delivery
+    /// notes are left out; a note is shown only where it is a reason written for the doctor.
+    /// </summary>
+    public class GetContributorArticleHistoryHandler : IRequestHandler<GetContributorArticleHistoryRequestModel, GetContributorArticleHistoryResponseModel>
+    {
+        private const string TeamName = "NexEagle team";
+        private readonly AppDbContext _context;
+
+        public GetContributorArticleHistoryHandler(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        public async Task<GetContributorArticleHistoryResponseModel> Handle(GetContributorArticleHistoryRequestModel request, CancellationToken ct)
+        {
+            var slug = request.Slug?.Trim().ToLowerInvariant();
+            // Same access as reading the article: someone else's article reads the same as one that does not exist.
+            var mine = (await ContributorArticleLoader.Load(_context, request.ContributorId, slug, ct)).FirstOrDefault();
+            if (mine == null) return GetContributorArticleHistoryResponseModel.Fail(404, "Article not found.");
+            var articleId = await _context.HealthArticles.AsNoTracking().Where(a => a.Slug == slug).Select(a => a.ArticleId).FirstAsync(ct);
+            var myName = await _context.HealthWikiContributors.AsNoTracking().Where(c => c.ContributorId == request.ContributorId).Select(c => c.FullName).FirstOrDefaultAsync(ct);
+
+            var rows = await _context.HealthWikiAudits.AsNoTracking()
+                .Where(h => h.EntityType == HealthWikiAudit.EntityArticle && h.EntityId == articleId)
+                .OrderByDescending(h => h.CreatedAt).ThenByDescending(h => h.AuditId)
+                .ToListAsync(ct);
+
+            var entries = new List<ContributorArticleHistoryEntry>();
+            foreach (var h in rows)
+            {
+                var label = HealthWikiAuditLog.DoctorLabel(h.Action);
+                if (label == null) continue;
+                var isPerson = h.ActorType == HealthWikiAudit.ActorContributor || h.ActorType == HealthWikiAudit.ActorDoctorStaff;
+                entries.Add(new ContributorArticleHistoryEntry
+                {
+                    At = h.CreatedAt,
+                    Kind = h.Action,
+                    Action = label,
+                    Actor = isPerson && !string.IsNullOrWhiteSpace(h.ActorName) ? h.ActorName! : TeamName,
+                    ByMe = isPerson && myName != null && string.Equals(h.ActorName, myName, StringComparison.OrdinalIgnoreCase),
+                    Detail = HealthWikiAuditLog.DoctorSeesDetail(h.Action) && !string.IsNullOrWhiteSpace(h.Detail) ? h.Detail : null,
+                });
+            }
+            return GetContributorArticleHistoryResponseModel.Ok(entries);
+        }
+    }
 }

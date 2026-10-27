@@ -290,6 +290,10 @@ namespace EasyHMSAPI.Api.Controllers
         [ServiceFilter(typeof(ContributorSessionFilter))]
         public Task<IActionResult> Article(string slug) => Reply(() => _mediator.Send(new GetContributorArticleRequestModel { ContributorId = Me(), Slug = slug }), r => Respond(r.Success, r.StatusCode, r.Message, r.Article), "reading a contributor's article");
 
+        [HttpGet("articles/{slug}/history")]
+        [ServiceFilter(typeof(ContributorSessionFilter))]
+        public Task<IActionResult> ArticleHistory(string slug) => Reply(() => _mediator.Send(new GetContributorArticleHistoryRequestModel { ContributorId = Me(), Slug = slug }), r => Respond(r.Success, r.StatusCode, r.Message, r.Entries), "reading an article's history");
+
         [HttpPost("articles")]
         [ServiceFilter(typeof(ContributorSessionFilter))]
         public Task<IActionResult> CreateArticle([FromBody] ArticleBody body) => Reply(() => _mediator.Send(ToSave(null, body)), r => Respond(r.Success, r.StatusCode, r.Message, r.Article), "creating an article");

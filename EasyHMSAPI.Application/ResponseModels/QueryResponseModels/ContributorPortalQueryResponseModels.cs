@@ -40,6 +40,32 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
     }
 
     [ExcludeFromCodeCoverage]
+    public class ContributorArticleHistoryEntry
+    {
+        public DateTime At { get; set; }
+        // The action code, so the page can pick an icon and colour.
+        public string Kind { get; set; } = null!;
+        public string Action { get; set; } = null!;
+        // The person's name, or "NexEagle team".
+        public string Actor { get; set; } = null!;
+        public bool ByMe { get; set; }
+        // A reason or comment written for the doctor, only on the actions that carry one.
+        public string? Detail { get; set; }
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class GetContributorArticleHistoryResponseModel
+    {
+        public bool Success { get; set; }
+        public int StatusCode { get; set; } = 200;
+        public string? Message { get; set; }
+        public List<ContributorArticleHistoryEntry> Entries { get; set; } = new();
+
+        public static GetContributorArticleHistoryResponseModel Ok(List<ContributorArticleHistoryEntry> entries) => new() { Success = true, StatusCode = 200, Entries = entries };
+        public static GetContributorArticleHistoryResponseModel Fail(int status, string message) => new() { Success = false, StatusCode = status, Message = message };
+    }
+
+    [ExcludeFromCodeCoverage]
     public class GetContributorTopicsResponseModel
     {
         public bool Success { get; set; }

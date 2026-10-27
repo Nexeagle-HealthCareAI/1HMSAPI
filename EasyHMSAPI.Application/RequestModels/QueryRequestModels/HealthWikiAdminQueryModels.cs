@@ -19,6 +19,14 @@ namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
         public string Slug { get; set; } = null!;
     }
 
+    // The history of one article, for the doctor who wrote it or reviews it.
+    [ExcludeFromCodeCoverage]
+    public class GetContributorArticleHistoryRequestModel : IRequest<GetContributorArticleHistoryResponseModel>
+    {
+        public Guid ContributorId { get; set; }
+        public string? Slug { get; set; }
+    }
+
     [ExcludeFromCodeCoverage]
     public class GetHealthWikiConditionsRequestModel : IRequest<GetHealthWikiConditionsResponseModel> { }
 

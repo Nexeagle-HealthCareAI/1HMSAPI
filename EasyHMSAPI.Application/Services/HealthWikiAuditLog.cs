@@ -41,6 +41,9 @@ namespace EasyHMSAPI.Application.Services
             "REVISION_APPLIED" => "Approved an edit, now live",
             "SENT_BACK" => "Sent back for changes",
             "UNPUBLISHED" => "Taken offline",
+            "SELF_PUBLISHED" => "Published by the verified doctor, without a review",
+            "PULLED_BACK" => "Pulled back to review",
+            "PUT_BACK_LIVE" => "Put back live without a review",
             "REVIEWER_ASSIGNED" => "Assigned a reviewer",
             "REVIEWER_APPROVED" => "Reviewer approved",
             "REVIEWER_REQUESTED_CHANGES" => "Reviewer asked for changes",
@@ -49,5 +52,31 @@ namespace EasyHMSAPI.Application.Services
             "NOTIFY_SKIPPED" => "Not told on WhatsApp",
             _ => action,
         };
+
+        /// <summary>
+        /// Wording a doctor sees on their own article (null = not shown to the doctor: WhatsApp delivery notes, and every save of a draft).
+        /// </summary>
+        public static string? DoctorLabel(string action) => action switch
+        {
+            "CREATED" => "Draft started",
+            "REVISION_SAVED" => "Edit saved, not live yet",
+            "SUBMITTED" => "Sent for review",
+            "SELF_PUBLISHED" => "Published, no review needed",
+            "PUBLISHED" => "Published",
+            "APPROVED" => "Approved and published",
+            "REVISION_APPLIED" => "Edit is now live",
+            "SENT_BACK" => "Sent back for changes",
+            "UNPUBLISHED" => "Taken offline",
+            "PULLED_BACK" => "Pulled back to review",
+            "PUT_BACK_LIVE" => "Put back live",
+            "REVIEWER_ASSIGNED" => "A reviewer was assigned",
+            "REVIEWER_APPROVED" => "Reviewer approved",
+            "REVIEWER_REQUESTED_CHANGES" => "Reviewer asked for changes",
+            _ => null,
+        };
+
+        /// <summary>The note on these actions is a reason or comment written for the doctor. On the others it is internal wording.</summary>
+        public static bool DoctorSeesDetail(string action) =>
+            action is "SENT_BACK" or "UNPUBLISHED" or "PULLED_BACK" or "PUT_BACK_LIVE" or "REVIEWER_REQUESTED_CHANGES";
     }
 }
