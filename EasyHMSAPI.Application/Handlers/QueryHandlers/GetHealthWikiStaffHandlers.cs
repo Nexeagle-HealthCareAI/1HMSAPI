@@ -30,13 +30,16 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             if (me == null) return GetHealthWikiInboxResponseModel.Fail(403, "Only doctors can use the Health Wiki.");
             if (me.Status == HealthWikiContributor.StatusRejected) return GetHealthWikiInboxResponseModel.Fail(403, "Your Health Wiki access has been removed.");
 
-            var mine = (await ContributorArticleLoader.Load(_context, me.ContributorId, null, ct)).Where(a => a.MyRole == ContributorPortalMapper.RoleReviewer).ToList();
+            var all = await ContributorArticleLoader.Load(_context, me.ContributorId, null, ct);
+            // Waiting for review: only what is with me as reviewer. Published: also the articles I wrote, since a verified doctor
+            // publishes their own with no reviewer, and those would otherwise never show here.
+            var mine = all.Where(a => a.MyRole == ContributorPortalMapper.RoleReviewer).ToList();
             return new GetHealthWikiInboxResponseModel
             {
                 Success = true,
                 Pending = mine.Where(a => !a.AwaitingVerification && (a.Status == HealthArticle.StatusInReview || a.RevisionStatus == HealthArticleRevision.StatusInReview))
                               .OrderByDescending(a => a.WaitingDays ?? 0).Select(ToItem).ToList(),
-                Published = mine.Where(a => a.Status == HealthArticle.StatusPublished).OrderByDescending(a => a.UpdatedAt).Select(ToItem).ToList(),
+                Published = all.Where(a => a.Status == HealthArticle.StatusPublished).OrderByDescending(a => a.UpdatedAt).Select(ToItem).ToList(),
             };
         }
 

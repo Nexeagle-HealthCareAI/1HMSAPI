@@ -85,6 +85,24 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         private GetHealthWikiStaffArticleHandler Detail => new(_context, _staff);
         private ReviewHealthWikiArticleHandler Review => new(_staff, new HealthArticleReviewService(_context, new RecordingNotifier()));
 
+        [Test]
+        public async Task TheInbox_ListsMyOwnPublishedArticleUnderPublished_ButNotAsWaitingForMyReview()
+        {
+            var d = AddDoctor();
+            var me = (await _staff.EnsureContributorAsync(d.UserID, Ct))!;
+            _context.HealthArticles.Add(new HealthArticle
+            {
+                ArticleId = Guid.NewGuid(), Slug = "my-own-article", Title = "My own article", Description = "d", Content = "## Hello", Type = "MEDICAL", Status = "PUBLISHED",
+                AuthorContributorId = me.ContributorId, ReviewerContributorId = null, PublishedAt = DateTime.UtcNow, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+            });
+            await _context.SaveChangesAsync();
+
+            var inbox = await Inbox.Handle(new GetHealthWikiInboxRequestModel { UserId = d.UserID }, Ct);
+
+            Assert.That(inbox.Published.Select(a => a.Slug), Is.EqualTo(new[] { "my-own-article" }));
+            Assert.That(inbox.Pending, Is.Empty);
+        }
+
         // ------------------------------------------------------------------------------------------ hospital doctor as contributor
 
         [Test]
