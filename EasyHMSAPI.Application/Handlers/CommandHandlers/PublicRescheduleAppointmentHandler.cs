@@ -5,6 +5,7 @@ using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -112,13 +113,43 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 await AppointmentTypeResolver.VoidConsultChargeIfNowFreeAsync(
                     _context, appt.ApptId, previousAppointmentType, typeResult, "SYSTEM", cancellationToken);
 
-                appt.CurrentStatusCode = AppConstants.AppointmentStatus_Future;
+                // A Doctor Dekho booking is a REQUEST the hospital confirms by phone. When the patient moves it to another day
+                // the hospital hasn't agreed to that day yet, so it goes back to a request (and back to "not seen yet"), and the
+                // hospital gets the same "online appointment request" alert a new booking raises. Live-reported: the app showed
+                // the visit as Confirmed right after the patient changed the date. Visits booked inside the hospital keep the
+                // old behaviour.
+                var isOnlineRequest = appt.BookingSource == AppConstants.BookingSource_NexeaglePublic;
+                var newStatus = isOnlineRequest ? AppConstants.AppointmentStatus_PreAppointment : AppConstants.AppointmentStatus_Future;
+                appt.CurrentStatusCode = newStatus;
                 appt.LastStatusCodeAt = DateTime.UtcNow;
+                if (isOnlineRequest)
+                {
+                    appt.HospitalSeenAt = null;
+                    appt.HospitalSeenByUserId = null;
+                    var now = DateTime.UtcNow;
+                    _context.Alert.Add(new Alert
+                    {
+                        AlertId = Guid.NewGuid(),
+                        HospitalId = appt.HospitalId,
+                        AlertCode = AppointmentSeen.OnlineRequestAlertCode,
+                        Severity = "INFO",
+                        Title = "Online appointment request moved to a new date",
+                        Body = $"{patient.FullName} asked to move their Doctor Dekho request to {appt.ApptDate:dd MMM yyyy}. Please call to confirm.",
+                        PatientId = patient.PatientId,
+                        AudienceRoles = "Admin,AdminDoctor",
+                        Status = "ACTIVE",
+                        RaisedAt = now,
+                        SourceModule = "PublicRescheduleAppointment",
+                        SourceRefId = appt.ApptId.ToString(),
+                        DispatchInApp = true,
+                        CreatedAt = now,
+                    });
+                }
 
                 var history = string.IsNullOrEmpty(appt.StatusHistoryJson)
                     ? new List<object>()
                     : System.Text.Json.JsonSerializer.Deserialize<List<object>>(appt.StatusHistoryJson) ?? new List<object>();
-                history.Add(new { status = AppConstants.AppointmentStatus_Future, timestamp = DateTime.UtcNow.ToString("o"), reason = request.Reason });
+                history.Add(new { status = newStatus, timestamp = DateTime.UtcNow.ToString("o"), reason = request.Reason });
                 appt.StatusHistoryJson = System.Text.Json.JsonSerializer.Serialize(history);
 
                 _context.Appointments.Update(appt);
@@ -142,7 +173,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 if (!string.IsNullOrWhiteSpace(patient.Mobile))
                 {
-                    var smsMsg = $"Dear {patient.FullName}, your appointment has been rescheduled to {appt.ApptDate:yyyy-MM-dd} at {appt.StartAt:HH:mm}.";
+                    var smsMsg = isOnlineRequest
+                        ? $"Dear {patient.FullName}, your request has been moved to {appt.ApptDate:yyyy-MM-dd}. The hospital will call to confirm."
+                        : $"Dear {patient.FullName}, your appointment has been rescheduled to {appt.ApptDate:yyyy-MM-dd} at {appt.StartAt:HH:mm}.";
                     var isSmsSent = await _smsService.SendInvitationSmsAsync(patient.Mobile, smsMsg);
                     _logger.LogInformation("Public-rescheduled appointment {AppointmentId}, SMS sent: {IsSmsSent}", appt.ApptId, isSmsSent);
                 }
@@ -150,7 +183,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 return new PublicRescheduleAppointmentResponseModel
                 {
                     ApptId = appt.ApptId,
-                    FinalStatus = AppConstants.AppointmentStatus_Future,
+                    FinalStatus = newStatus,
                     Token = token,
                     Success = true,
                     Message = "Appointment rescheduled successfully."

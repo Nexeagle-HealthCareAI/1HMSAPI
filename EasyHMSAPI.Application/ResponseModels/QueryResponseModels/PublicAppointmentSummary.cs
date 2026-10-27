@@ -11,6 +11,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
     public class PublicAppointmentSummary
     {
         public Guid AppointmentId { get; set; }
+        /// <summary>The doctor's public id (the same id the doctor list uses), so the app can open their page and route.</summary>
+        public Guid DoctorId { get; set; }
         public string DoctorName { get; set; } = string.Empty;
         public string HospitalName { get; set; } = string.Empty;
         public DateTime ApptDate { get; set; }

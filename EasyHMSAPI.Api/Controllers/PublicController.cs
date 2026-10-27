@@ -684,6 +684,26 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // "Delete account" in the Doctor Dekho app. Same manual-JWT validation; everything is keyed by the verified mobile, never the body.
+        // 200 when everything is gone (and every session is ended); 503 when some record files couldn't be removed yet — the rest is
+        // already gone and the call can be repeated with the same session.
+        [HttpDelete("patients/me")]
+        public async Task<ActionResult<DeletePatientAccountResponseModel>> DeleteMyAccount(CancellationToken cancellationToken)
+        {
+            var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
+            if (!auth.IsValid || auth.Mobile == null) return Unauthorized(new { Message = auth.Reason ?? "Please log in again." });
+            try
+            {
+                var response = await _mediator.Send(new DeletePatientAccountRequestModel { Mobile = auth.Mobile }, cancellationToken);
+                return response.Success ? Ok(response) : StatusCode(503, response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.DeleteMyAccount");
+                return StatusCode(500, new { Message = "Your account could not be deleted right now. Please try again." });
+            }
+        }
+
         // Family members — people the patient looks after, so their records can be kept and opened in one place. Same manual-JWT validation; every
         // lookup is scoped to the verified mobile, so another account's member is just "not found".
         [HttpGet("patients/me/family")]

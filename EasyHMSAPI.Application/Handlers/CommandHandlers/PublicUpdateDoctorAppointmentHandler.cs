@@ -152,6 +152,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     Appointment = new PublicAppointmentSummary
                     {
                         AppointmentId = appt.ApptId,
+                        DoctorId = appt.DoctorId,
                         DoctorName = doctorName,
                         HospitalName = hospitalName ?? "Hospital",
                         ApptDate = appt.ApptDate,

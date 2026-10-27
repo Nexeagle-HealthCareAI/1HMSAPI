@@ -49,6 +49,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 Appointment = new PublicAppointmentSummary
                 {
                     AppointmentId = appt.ApptId,
+                    DoctorId = appt.DoctorId,
                     DoctorName = doctorName ?? "Doctor",
                     HospitalName = hospitalName ?? "Hospital",
                     ApptDate = appt.ApptDate,

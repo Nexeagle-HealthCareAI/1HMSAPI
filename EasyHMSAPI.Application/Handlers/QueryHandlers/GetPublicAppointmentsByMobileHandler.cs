@@ -67,6 +67,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             var summaries = appts.Select(a => new PublicAppointmentSummary
             {
                 AppointmentId = a.ApptId,
+                DoctorId = a.DoctorId,
                 DoctorName = doctorNames.TryGetValue(a.DoctorId, out var dn) ? dn ?? "Doctor" : "Doctor",
                 HospitalName = hospitalNames.TryGetValue(a.HospitalId, out var hn) ? hn ?? "Hospital" : "Hospital",
                 ApptDate = a.ApptDate,

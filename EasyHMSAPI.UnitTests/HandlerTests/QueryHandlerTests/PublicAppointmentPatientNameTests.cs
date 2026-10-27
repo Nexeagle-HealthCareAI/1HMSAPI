@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.QueryHandlers;
@@ -62,6 +63,17 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
             Assert.That(res.Success, Is.True);
             Assert.That(res.Appointments.Find(a => a.AppointmentId == mine)!.PatientName, Is.EqualTo("Priya Kumari"));
             Assert.That(res.Appointments.Find(a => a.AppointmentId == maa)!.PatientName, Is.EqualTo("Sunita Devi"));
+        }
+
+        [Test]
+        public async Task SignedInList_CarriesTheDoctorId()
+        {
+            var id = Seed("PTID00000104", "Priya Kumari");
+            var doctorId = _context.Appointments.Single(a => a.ApptId == id).DoctorId;
+
+            var res = await new GetPublicAppointmentsByMobileHandler(_context).Handle(new GetPublicAppointmentsByMobileRequestModel { Mobile = Mobile }, CancellationToken.None);
+
+            Assert.That(res.Appointments.Find(a => a.AppointmentId == id)!.DoctorId, Is.EqualTo(doctorId));
         }
 
         [Test]
