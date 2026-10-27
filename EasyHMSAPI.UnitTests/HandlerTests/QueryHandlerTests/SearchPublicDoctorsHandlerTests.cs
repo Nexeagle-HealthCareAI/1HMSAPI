@@ -240,36 +240,6 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
 
             Assert.That(result.Doctors.Select(d => d.FullName), Is.EqualTo(new[] { "Dr. Kolkata One" }));
         }
-    }
-
-    [TestFixture]
-    public class DoctorSearchHelpersTests
-    {
-        [TestCase("dr sarma", "Dr. Neha Sharma", true)]
-        [TestCase("Sharma ji", "Dr. Neha Sharma", true)]
-        [TestCase("bane", "Dr. Anil Banerjee", true)]
-        [TestCase("anita sen", "Dr. Anita Sen", true)]
-        [TestCase("ghosh", "Dr. Neha Sharma", false)]
-        [TestCase("dr", "Dr. Neha Sharma", false)]
-        public void NameMatcher(string query, string name, bool expected)
-        {
-            Assert.That(DoctorNameMatcher.IsMatch(query, name), Is.EqualTo(expected));
-        }
-
-        [Test]
-        public void DegreeTokens_SplitsDottedAndBracketedQualifications()
-        {
-            var tokens = SearchPublicDoctorsHandler.DegreeTokens("M.B.B.S., M.D. (Medicine), DM-Cardiology");
-            Assert.That(tokens, Is.SupersetOf(new[] { "MBBS", "MD", "MEDICINE", "DM", "CARDIOLOGY" }));
-            Assert.That(tokens, Does.Not.Contain("MDS"));
-        }
-
-        [Test]
-        public void Haversine_KolkataToHowrah_IsAboutTenKm()
-        {
-            var km = SearchPublicDoctorsHandler.HaversineKm(22.5726, 88.3639, 22.5958, 88.2636);
-            Assert.That(km, Is.InRange(9.5, 11.0));
-        }
 
         // ------------------------------------------------------------ Vita Phase 1 filters
         [Test]
@@ -400,6 +370,36 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
 
             Assert.That(result.Hospitals.Select(h => h.HospitalId), Is.EqualTo(new[] { near.HospitalID }));
             Assert.That(result.Hospitals[0].DistanceKm, Is.EqualTo(0));
+        }
+    }
+
+    [TestFixture]
+    public class DoctorSearchHelpersTests
+    {
+        [TestCase("dr sarma", "Dr. Neha Sharma", true)]
+        [TestCase("Sharma ji", "Dr. Neha Sharma", true)]
+        [TestCase("bane", "Dr. Anil Banerjee", true)]
+        [TestCase("anita sen", "Dr. Anita Sen", true)]
+        [TestCase("ghosh", "Dr. Neha Sharma", false)]
+        [TestCase("dr", "Dr. Neha Sharma", false)]
+        public void NameMatcher(string query, string name, bool expected)
+        {
+            Assert.That(DoctorNameMatcher.IsMatch(query, name), Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void DegreeTokens_SplitsDottedAndBracketedQualifications()
+        {
+            var tokens = SearchPublicDoctorsHandler.DegreeTokens("M.B.B.S., M.D. (Medicine), DM-Cardiology");
+            Assert.That(tokens, Is.SupersetOf(new[] { "MBBS", "MD", "MEDICINE", "DM", "CARDIOLOGY" }));
+            Assert.That(tokens, Does.Not.Contain("MDS"));
+        }
+
+        [Test]
+        public void Haversine_KolkataToHowrah_IsAboutTenKm()
+        {
+            var km = SearchPublicDoctorsHandler.HaversineKm(22.5726, 88.3639, 22.5958, 88.2636);
+            Assert.That(km, Is.InRange(9.5, 11.0));
         }
     }
 }
