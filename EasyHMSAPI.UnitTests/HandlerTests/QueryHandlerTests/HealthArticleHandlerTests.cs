@@ -157,13 +157,13 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         }
 
         [Test]
-        public async Task Create_CoverNeedsHttpsAndAltText()
+        public async Task Create_CoverNeedsHttps_ButNotAltText()
         {
             var noAlt = NewArticle("a"); noAlt.CoverImageUrl = "https://cdn.example.com/a.jpg";
             var http = NewArticle("b"); http.CoverImageUrl = "http://cdn.example.com/a.jpg"; http.CoverImageAlt = "x";
             var ok = NewArticle("c"); ok.CoverImageUrl = "https://cdn.example.com/a.jpg"; ok.CoverImageAlt = "A blood pressure monitor";
 
-            Assert.That((await _save.Handle(noAlt, CancellationToken.None)).StatusCode, Is.EqualTo(400));
+            Assert.That((await _save.Handle(noAlt, CancellationToken.None)).StatusCode, Is.EqualTo(201), "alt text is optional");
             Assert.That((await _save.Handle(http, CancellationToken.None)).StatusCode, Is.EqualTo(400));
             Assert.That((await _save.Handle(ok, CancellationToken.None)).StatusCode, Is.EqualTo(201));
         }

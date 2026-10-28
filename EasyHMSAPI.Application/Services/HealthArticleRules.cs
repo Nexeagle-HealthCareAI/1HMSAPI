@@ -107,11 +107,8 @@ namespace EasyHMSAPI.Application.Services
                 return $"disclosure is max {MaxDisclosureLength} chars.";
             if (c.References != null && c.References.Length > MaxReferencesLength)
                 return $"references is max {MaxReferencesLength} chars.";
-            if (c.CoverImageUrl != null)
-            {
-                if (!IsHttpsUrl(c.CoverImageUrl)) return "coverImageUrl must be an https URL.";
-                if (string.IsNullOrWhiteSpace(c.CoverImageAlt)) return "A cover image needs alt text (coverImageAlt).";
-            }
+            // Alt text is optional: the form asks for it, but a cover without it is saved, and the page then describes it with the article title.
+            if (c.CoverImageUrl != null && !IsHttpsUrl(c.CoverImageUrl)) return "coverImageUrl must be an https URL.";
             if (c.CoverImageAlt != null && c.CoverImageAlt.Length > MaxImageAltLength)
                 return $"coverImageAlt is max {MaxImageAltLength} chars.";
             return null;
