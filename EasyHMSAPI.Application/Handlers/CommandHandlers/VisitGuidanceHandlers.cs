@@ -148,6 +148,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 Token = token,
                 FollowUpDate = c.FollowUpDate?.ToString("yyyy-MM-dd"),
                 Language = a.PatientLanguage,
+                Journey = Journeys.ToPublic(await _db.AppointmentJourneys.AsNoTracking().FirstOrDefaultAsync(j => j.ApptId == a.ApptId, ct),
+                                            DateTime.UtcNow),
             };
             return new PublicVisitResponseModel { Success = true, Visit = visit };
         }
@@ -198,10 +200,35 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (sent.Accepted) result.Sent++;
                 else result.NotSent++;
             }
+            await LeaveRemindersAsync(r.NowUtc, result, ct);
             await _db.SaveChangesAsync(ct);
             if (result.Sent + result.NotSent + result.Skipped > 0)
                 _logger.LogInformation("Visit messages: {Sent} sent, {NotSent} not sent, {Skipped} skipped", result.Sent, result.NotSent, result.Skipped);
             return result;
+        }
+
+        /// <summary>"Time to leave": journeys whose leave time has come, sent once, within half an hour of it (later: marked and
+        /// skipped, the moment has passed). Only for open Doctor Dekho bookings still planned (not already on the way).</summary>
+        private async Task LeaveRemindersAsync(DateTime nowUtc, RunVisitMessagesResponseModel result, CancellationToken ct)
+        {
+            var nowIst = VisitMessages.ToIst(nowUtc);
+            var due = await _db.AppointmentJourneys
+                .Where(j => j.LeaveReminderSentAt == null && j.Status == Journeys.Planned && j.PlannedLeaveAt != null && j.PlannedLeaveAt <= nowIst)
+                .OrderBy(j => j.PlannedLeaveAt).Take(200).ToListAsync(ct);
+            foreach (var j in due)
+            {
+                j.LeaveReminderSentAt = nowUtc;
+                var a = await _db.Appointments.FirstOrDefaultAsync(x => x.ApptId == j.ApptId, ct);
+                if (a == null || !Journeys.IsPublic(a) || !VisitMessages.IsOpen(a) || nowIst - j.PlannedLeaveAt!.Value > Journeys.LeaveWindow)
+                {
+                    result.Skipped++;
+                    continue;
+                }
+                var context = await VisitMessages.LoadAsync(_db, a, ct);
+                var sent = await VisitMessages.SendAsync(_whatsApp, VisitMessages.Leave, a, context);
+                if (sent.Accepted) result.Sent++;
+                else result.NotSent++;
+            }
         }
     }
 }

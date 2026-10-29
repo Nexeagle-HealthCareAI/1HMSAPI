@@ -74,6 +74,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<PatientAccountProfile> PatientAccountProfiles { get; set; }
         public DbSet<PatientFamilyMember> PatientFamilyMembers { get; set; }
         public DbSet<HospitalVisitGuide> HospitalVisitGuides { get; set; }
+        public DbSet<AppointmentJourney> AppointmentJourneys { get; set; }
         public DbSet<HospitalEmergencySetting> HospitalEmergencySettings { get; set; }
         public DbSet<EmergencyAlert> EmergencyAlerts { get; set; }
         public DbSet<PatientAppProfile> PatientAppProfiles { get; set; }
@@ -1608,6 +1609,17 @@ namespace EasyHMSAPI.Domain.Context
             {
                 entity.ToTable("HospitalVisitGuides");
                 entity.HasKey(e => e.HospitalId);
+                entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+            });
+
+            modelBuilder.Entity<AppointmentJourney>(entity =>
+            {
+                entity.ToTable("AppointmentJourneys");
+                entity.HasKey(e => e.ApptId);
+                entity.Property(e => e.DistanceKm).HasColumnType("decimal(6,1)");
+                foreach (var col in new[] { "PlannedLeaveAt", "StartedAt", "EtaAt", "ArrivedAt", "LeaveReminderSentAt" })
+                    entity.Property(col).HasColumnType("datetime2(3)");
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
                 entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
             });
 

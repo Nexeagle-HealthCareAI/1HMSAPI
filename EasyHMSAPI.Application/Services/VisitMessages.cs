@@ -14,6 +14,7 @@ namespace EasyHMSAPI.Application.Services
     ///   morning        on the morning of the visit (from 07:30 India time)
     ///   soon           about two hours before the time, when the booking has one
     ///   after          two hours after the doctor marks the visit complete: rate the doctor, book the follow-up the doctor asked for
+    ///   leave          at the time the patient said they would set off (Vita "takes you there"), with the navigation link
     ///
     /// Each template has two URL buttons (base URL fixed in Meta, the end filled per message): "Start navigation"
     /// (https://www.google.com/maps/dir/?api=1&amp;destination={{1}}) and "Visit details" (Doctor Dekho /appointments/visit/{{1}}, where the
@@ -25,6 +26,9 @@ namespace EasyHMSAPI.Application.Services
     public static class VisitMessages
     {
         public const string Confirmation = "visit_confirmation", Morning = "visit_reminder_morning", Soon = "visit_reminder_soon", After = "visit_after";
+        /// <summary>"Time to leave" at the leave time the patient gave Vita (AppointmentJourneys.PlannedLeaveAt). Same variables and
+        /// buttons as the reminders: patient_name, doctor_name, hospital_name, when, directions; Start navigation + Visit details.</summary>
+        public const string Leave = "visit_leave_now";
         public static readonly TimeSpan IstOffset = TimeSpan.FromHours(5.5);
         public static readonly TimeSpan MorningAt = new(7, 30, 0);
         public static readonly TimeSpan SoonBefore = TimeSpan.FromHours(2);
