@@ -20,7 +20,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     {
         private static readonly Regex MobileRegex = new("^[0-9]{10}$", RegexOptions.Compiled);
         private const int ResendCooldownSeconds = 30;
-        private const int MaxSendsPerWindow = 5;
+        private const int DefaultMaxSendsPerWindow = 5;
         private static readonly TimeSpan SendWindow = TimeSpan.FromHours(24);
 
         private readonly AppDbContext _context;
@@ -68,10 +68,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
             // The daily cap protects WhatsApp spend and unwanted messages. On a development server with the code shown on the page nothing is
             // sent, so the cap would only get in a tester's way (the per-IP limit still applies).
+            // Only codes that were never used count: a successful sign-in resets the count (PatientOtpVerifyHandler), so someone
+            // who signs in, signs out and signs in again is never blocked. Tester numbers listed in PatientAuth:UnlimitedOtpMobiles
+            // skip the cap (the 30 s cooldown and the per-IP limit still apply). PatientAuth:MaxOtpSendsPerDay changes the cap.
             var showOnScreen = ShowOtpOnScreen(_configuration);
-            if (auth.OtpSendCount >= MaxSendsPerWindow && !showOnScreen)
+            if (auth.OtpSendCount >= MaxSendsPerWindow(_configuration) && !showOnScreen && !IsUnlimited(_configuration, mobile))
             {
-                return new PatientOtpSendResponseModel { Success = false, Message = "Too many OTP requests for this number. Please try again later." };
+                var retryAt = auth.OtpWindowStartAt!.Value + SendWindow;
+                return new PatientOtpSendResponseModel
+                {
+                    Success = false,
+                    Message = $"Too many OTP requests for this number. You can ask for a new code after {IndiaTime(retryAt, now)}.",
+                    RetryAfterSeconds = (int)Math.Ceiling((retryAt - now).TotalSeconds),
+                };
             }
 
             var otpInt = RandomNumberGenerator.GetInt32(100000, 1000000);
@@ -106,6 +115,24 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 Message = showOnScreen ? "Development server: the OTP is shown on the page. It expires in 3 minutes." : "An OTP has been sent via WhatsApp. It expires in 3 minutes.",
                 DevCode = showOnScreen ? newOtp : null,
             };
+        }
+
+        internal static int MaxSendsPerWindow(IConfiguration configuration) =>
+            int.TryParse(configuration["PatientAuth:MaxOtpSendsPerDay"], out var n) && n > 0 ? n : DefaultMaxSendsPerWindow;
+
+        /// <summary>Tester numbers (comma-separated 10-digit mobiles in PatientAuth:UnlimitedOtpMobiles) that skip the daily cap.</summary>
+        internal static bool IsUnlimited(IConfiguration configuration, string mobile) =>
+            (configuration["PatientAuth:UnlimitedOtpMobiles"] ?? string.Empty)
+                .Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                .Any(m => m.Trim() == mobile);
+
+        /// <summary>"9:40 PM" or "tomorrow 9:40 PM", in India time (patients are in India whatever the server's zone).</summary>
+        public static string IndiaTime(DateTime utc, DateTime nowUtc)
+        {
+            var ist = utc.AddMinutes(330);
+            var today = nowUtc.AddMinutes(330).Date;
+            var time = ist.ToString("h:mm tt", System.Globalization.CultureInfo.InvariantCulture);
+            return ist.Date == today ? time : ist.Date == today.AddDays(1) ? $"tomorrow {time}" : $"{ist:d MMM} {time}";
         }
 
         /// <summary>True only when the setting is on AND this is a Development server, so a setting copied to production by mistake still shows nothing.</summary>

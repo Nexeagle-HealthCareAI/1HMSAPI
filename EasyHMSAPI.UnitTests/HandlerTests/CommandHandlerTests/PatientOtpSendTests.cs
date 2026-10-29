@@ -88,5 +88,73 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(r.Success, Is.False);
             _whatsApp.Verify(w => w.SendOtpAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
         }
+
+        // ── daily cap ────────────────────────────────────────────────────────────────────────────────
+
+        private Task<PatientOtpSendResponseModel> SendWith(Dictionary<string, string?> settings)
+        {
+            settings["ASPNETCORE_ENVIRONMENT"] = "Production";
+            var cfg = new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
+            return new PatientOtpSendHandler(_context, _whatsApp.Object, _masking.Object, cfg)
+                .Handle(new PatientOtpSendRequestModel { MobileNumber = Mobile }, Ct);
+        }
+
+        private async Task UseUpTheDay(int sends)
+        {
+            _context.PublicPatientAuths.Add(new EasyHMSAPI.Domain.Entities.PublicPatientAuth
+            {
+                Mobile = Mobile,
+                CreatedAt = System.DateTime.UtcNow.AddHours(-3),
+                OtpWindowStartAt = System.DateTime.UtcNow.AddHours(-3),
+                OtpSendCount = sends,
+                OtpSentAt = System.DateTime.UtcNow.AddMinutes(-5),
+            });
+            await _context.SaveChangesAsync();
+        }
+
+        [Test]
+        public async Task CapReached_SaysWhenToTryAgain()
+        {
+            _whatsApp.Setup(w => w.SendOtpAsync(Mobile, It.IsAny<string>())).ReturnsAsync(true);
+            await UseUpTheDay(5);
+
+            var r = await SendWith(new Dictionary<string, string?>());
+
+            Assert.That(r.Success, Is.False);
+            Assert.That(r.Message, Does.StartWith("Too many OTP requests"));
+            Assert.That(r.Message, Does.Contain("You can ask for a new code after"));
+            Assert.That(r.RetryAfterSeconds, Is.InRange(20 * 3600, 21 * 3600 + 60));
+            _whatsApp.Verify(w => w.SendOtpAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+        }
+
+        [Test]
+        public async Task TesterNumber_SkipsTheCap()
+        {
+            _whatsApp.Setup(w => w.SendOtpAsync(Mobile, It.IsAny<string>())).ReturnsAsync(true);
+            await UseUpTheDay(5);
+
+            var r = await SendWith(new Dictionary<string, string?> { ["PatientAuth:UnlimitedOtpMobiles"] = "9000000000, " + Mobile });
+
+            Assert.That(r.Success, Is.True, r.Message);
+        }
+
+        [Test]
+        public async Task CapCanBeRaisedInSettings()
+        {
+            _whatsApp.Setup(w => w.SendOtpAsync(Mobile, It.IsAny<string>())).ReturnsAsync(true);
+            await UseUpTheDay(5);
+
+            var r = await SendWith(new Dictionary<string, string?> { ["PatientAuth:MaxOtpSendsPerDay"] = "10" });
+
+            Assert.That(r.Success, Is.True, r.Message);
+        }
+
+        [Test]
+        public void IndiaTime_ReadsAsTodayOrTomorrow()
+        {
+            var now = new System.DateTime(2026, 10, 24, 15, 0, 0, System.DateTimeKind.Utc);           // 8:30 PM IST
+            Assert.That(PatientOtpSendHandler.IndiaTime(now.AddHours(1), now), Is.EqualTo("9:30 PM"));
+            Assert.That(PatientOtpSendHandler.IndiaTime(now.AddHours(10), now), Is.EqualTo("tomorrow 6:30 AM"));
+        }
     }
 }

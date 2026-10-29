@@ -300,6 +300,9 @@ jobs:
             add 'HealthWiki__ShowOtpOnScreen'            "true"
             # Patient login/booking OTP: sent on WhatsApp on dev too, from the same (production) WhatsApp number and template as prod.
             # To show it on the page again instead (nothing sent), add back: add 'PatientAuth__ShowOtpOnScreen' "true"
+            # Tester numbers that skip the patient OTP daily cap (comma-separated 10-digit mobiles). Set the repository variable
+            # PATIENT_OTP_TESTER_MOBILES under Settings → Secrets and variables → Actions → Variables; empty = no exceptions.
+            add 'PatientAuth__UnlimitedOtpMobiles'       "${{ vars.PATIENT_OTP_TESTER_MOBILES }}"
             add 'HealthWiki__ImageBucket'                "$HEALTHWIKI_IMAGE_BUCKET"
             add 'HealthWiki__ImageAccessKey'             "$HEALTHWIKI_S3_ACCESS_KEY"
             add 'HealthWiki__ImageSecretKey'             "$HEALTHWIKI_S3_SECRET_KEY"

@@ -72,6 +72,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 auth.FailedAttempts = 0;
                 auth.LastLoginAt = now;
                 auth.LoginCount += 1;
+                // The daily send cap is for codes nobody uses (spam, cost). Once a code is used, start the count again.
+                auth.OtpSendCount = 0;
+                auth.OtpWindowStartAt = null;
                 auth.UpdatedAt = now;
                 await _context.SaveChangesAsync(cancellationToken);
 

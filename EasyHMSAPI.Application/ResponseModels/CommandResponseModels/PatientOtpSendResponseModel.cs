@@ -11,5 +11,8 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         // Only ever set on a Development server with PatientAuth:ShowOtpOnScreen on, so a tester need not wait for WhatsApp. Absent everywhere else.
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? DevCode { get; set; }
+        // Set only when the daily cap is reached: seconds until this number can ask for a code again.
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? RetryAfterSeconds { get; set; }
     }
 }
