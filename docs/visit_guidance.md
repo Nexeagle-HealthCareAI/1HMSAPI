@@ -8,6 +8,7 @@
 | Morning reminder | visit day, from 07:30 IST; not if booked that morning | `visit_reminder_morning_*` |
 | Soon | about 2 h before the time (only when the booking has a time); not if booked later than that | `visit_reminder_soon_*` |
 | After the visit | 2 h after the visit is marked COMPLETED, between 08:00 and 21:30 IST | `visit_after_*` |
+| Time to leave | at the leave time the patient gave Vita (`AppointmentJourneys.PlannedLeaveAt`), until 30 min after it; not when already on the way | `visit_leave_now_*` |
 
 Each goes once (`Appointments.ConfirmationSentAt`, `MorningReminderSentAt`, `BeforeVisitReminderSentAt`, `AfterVisitSentAt`), also when
 WhatsApp refused it. The job runs every 5 minutes and is switched on from the CMS Night Jobs panel (`JobSettings` row `VisitMessages`,
@@ -42,6 +43,11 @@ Buttons (same in every template except `visit_after_*`, which has only the secon
 > hinglish: {{patient_name}}, {{doctor_name}} ke saath aapki visit {{when}} par hai, {{hospital_name}}. {{directions}}. Pahunch kar "Visit ki jaankari" se check in karein.
 > hi: {{patient_name}}, {{doctor_name}} के साथ आपकी विज़िट {{when}} पर है, {{hospital_name}}। {{directions}}। पहुँचकर "विज़िट की जानकारी" से चेक-इन करें।
 
+**visit_leave_now_*** (patient_name, doctor_name, hospital_name, when, directions) - same two buttons
+> en: {{patient_name}}, it's time to leave for {{doctor_name}} at {{hospital_name}} ({{when}}). {{directions}}. Tap Start navigation for the way; reply to Vita if you'll be late.
+> hinglish: {{patient_name}}, {{hospital_name}} mein {{doctor_name}} ({{when}}) ke liye nikalne ka samay ho gaya. {{directions}}. Rasta ke liye "Rasta dekhein" dabayein; late ho to Vita ko batayein.
+> hi: {{patient_name}}, {{hospital_name}} में {{doctor_name}} ({{when}}) के लिए निकलने का समय हो गया। {{directions}}। रास्ते के लिए "रास्ता देखें" दबाएँ; देर हो तो Vita को बताएँ।
+
 **visit_after_*** (patient_name, doctor_name)
 > en: Hope you are feeling better, {{patient_name}}. How was your visit with {{doctor_name}}? Rate it, or book the follow-up the doctor asked for.
 > hinglish: Ummeed hai aap behtar mehsoos kar rahe hain, {{patient_name}}. {{doctor_name}} ke saath visit kaisi rahi? Rating dein, ya doctor ka bataya follow-up book karein.
@@ -53,3 +59,18 @@ Buttons (same in every template except `visit_after_*`, which has only the secon
 - `GET/PUT /hospitals/{hospitalId}/visit-guide` (1HMS portal; members read, `admin_panel` admins save).
 - `GET /public/appointments/{id}/visit`: where and when, guide, map link, fee, `canCheckIn`, `token` (number, position, expected wait),
   `followUpDate`. Check-in itself is the existing `POST /public/tokens` (appointment id + the patient's location, geofenced).
+
+## Journey: getting the patient there (Vita "takes you there")
+Table `AppointmentJourneys` (one row per appointment). No live location is sent or kept: only the travel mode, the leave time, the
+expected arrival and the distance left. Reception sees a journey only when the patient agreed (`ShareWithHospital`).
+
+- `PUT /public/appointments/{id}/journey` `{travelMode: drive|auto_cab|transit|walk, leaveAt: "08:15" | "2026-10-26T08:15", shareWithHospital}`:
+  fields left out keep their value. The leave time is hospital time, on the appointment day or the day before, before the appointment.
+  A new leave time gets its own "time to leave" message.
+- `POST /public/appointments/{id}/journey/progress` `{status: on_the_way|late|arrived|cancelled, etaMinutes, distanceKm, lateByMinutes}`:
+  on_the_way sets `startedAt` once and `etaAt = now + etaMinutes`; an ETA more than 5 minutes past the appointment time turns it `late`
+  with `lateByMinutes` worked out; `late` with only `lateByMinutes` sets the arrival to the appointment time plus that; `arrived` is final
+  (later updates are ignored, except cancel). Only within a day of the appointment.
+- `GET /public/appointments/{id}/visit` carries `journey` (with `etaMinutes` from now while on the way).
+- `GET /appointments/patient-appointment-details` (the appointment board) carries `journeyStatus`, `journeyTravelMode`,
+  `journeyPlannedLeaveAt`, `journeyEtaAt`, `journeyLateByMinutes`, `journeyDistanceKm`, `journeyUpdatedAt` for shared journeys.

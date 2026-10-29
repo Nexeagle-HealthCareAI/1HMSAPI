@@ -69,6 +69,34 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public PublicVisitToken? Token { get; set; }
         public string? FollowUpDate { get; set; }
         public string? Language { get; set; }
+        /// <summary>How the patient is getting there and, once they set off, their expected arrival (Vita "takes you there").</summary>
+        public PublicJourney? Journey { get; set; }
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class PublicJourney
+    {
+        public string? TravelMode { get; set; }
+        /// <summary>Hospital wall-clock time, "yyyy-MM-ddTHH:mm".</summary>
+        public string? PlannedLeaveAt { get; set; }
+        public bool ShareWithHospital { get; set; }
+        public string Status { get; set; } = "planned";
+        public DateTime? StartedAt { get; set; }
+        public DateTime? EtaAt { get; set; }
+        /// <summary>Minutes to arrival from now, while on the way.</summary>
+        public int? EtaMinutes { get; set; }
+        public decimal? DistanceKm { get; set; }
+        public int? LateByMinutes { get; set; }
+        public DateTime? ArrivedAt { get; set; }
+        public bool LeaveReminderSent { get; set; }
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class PublicJourneyResponseModel
+    {
+        public bool Success { get; set; }
+        public string? Message { get; set; }
+        public PublicJourney? Journey { get; set; }
     }
 
     [ExcludeFromCodeCoverage]

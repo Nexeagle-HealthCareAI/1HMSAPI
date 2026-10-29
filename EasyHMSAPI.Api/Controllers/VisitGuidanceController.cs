@@ -96,5 +96,38 @@ namespace EasyHMSAPI.Api.Controllers
                 return StatusCode(500, new { Message = "An error occurred while reading the visit." });
             }
         }
+
+        /// <summary>Vita "takes you there": how the patient is coming, when they leave, and whether reception may see their ETA.</summary>
+        [HttpPut("appointments/{appointmentId:guid}/journey")]
+        public async Task<ActionResult<PublicJourneyResponseModel>> SaveJourney(Guid appointmentId, [FromBody] SavePublicJourneyRequestModel request, CancellationToken ct)
+        {
+            request.AppointmentId = appointmentId;
+            request.NowUtc = DateTime.UtcNow;
+            return await Journey(() => _mediator.Send(request, ct), appointmentId);
+        }
+
+        /// <summary>On the way (ETA minutes, distance left), late, arrived or cancelled. No location is sent or kept.</summary>
+        [HttpPost("appointments/{appointmentId:guid}/journey/progress")]
+        public async Task<ActionResult<PublicJourneyResponseModel>> JourneyProgress(Guid appointmentId, [FromBody] UpdatePublicJourneyRequestModel request, CancellationToken ct)
+        {
+            request.AppointmentId = appointmentId;
+            request.NowUtc = DateTime.UtcNow;
+            return await Journey(() => _mediator.Send(request, ct), appointmentId);
+        }
+
+        private async Task<ActionResult<PublicJourneyResponseModel>> Journey(Func<Task<PublicJourneyResponseModel>> run, Guid appointmentId)
+        {
+            try
+            {
+                var r = await run();
+                if (r.Success) return Ok(r);
+                return r.Message == "Appointment not found." ? NotFound(r) : BadRequest(r);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating the journey for {AppointmentId}", appointmentId);
+                return StatusCode(500, new { Message = "An error occurred while saving the journey." });
+            }
+        }
     }
 }
