@@ -1,0 +1,26 @@
+# Vita manifest for the 1HMS API (ASP.NET Core 8 + MediatR + EF Core). Copy to 1HMSAPI/vita.yaml.
+# Source root defaults to the directory holding this file.
+app: 1hms
+repo: 1HMSAPI
+kind: dotnet-api
+skills: [repo-native, api-contract, differential, db-guard, authz-fuzz, clinical-invariants, svc-contract, prod-sanity]
+targets:
+  pr:   { health: /health, snapshot: baseline-v1 }
+  dev:  { url: https://1hms-dev-api.nexeagle.com, health: /health, container: easyhms-api-dev }
+  prod: { url: https://1hms-api.nexeagle.com, health: /health, mode: read-only, container: easyhms-api-prod, port: 5001,
+          sandbox_hospital: "${VITA_SANDBOX_HOSPITAL_ID:-}" }
+contracts:
+  openapi: /swagger/v1/swagger.json
+  db: { repo: 1HMSDatabase, name: EasyHMSDatabase, container: sqlserver, history_table: __MigrationHistory }
+  auth: { kind: jwt, login: /auth/user/login, roles: [Admin, Doctor, AdminDoctor, Receptionist, Nurse, Accountant] }
+  tenancy: { key: hospitalId, isolation_table: HospitalUsers }
+externals: [twilio, meta-whatsapp, abdm, openai, deepgram, groq, rxnorm, openfda, zkteco, maxmind, smtp, cms, nlp-router]
+consumers: [NexeagleCMSAPI, DoctorDekhoWeb, Whatsapp-Webhook, 1HMSWeb, NexEagleWebsite]
+budgets: { pr_minutes: 8, pr_tokens_inr: 50, nightly_minutes: 45 }
+secrets: [VITA_DEV_API_KEY, VITA_PROD_READONLY_KEY]
+sanity:
+  login_roles: [Admin, Doctor]
+  golden_reads:
+    - { path: /public/specialties, auth: false, expect_keys: [id, name] }
+    - { path: /public/hospitals,   auth: false, expect_keys: [success, hospitals] }
+  reconciliation_sql: vita/invariants.sql

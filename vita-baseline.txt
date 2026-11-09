@@ -1,0 +1,236 @@
+# Vita baseline for 1HMSAPI: findings that existed when Vita was switched on. Listed cases still run and
+# are reported, but cannot fail the gate. Delete a line when it is fixed (Vita says which ones pass).
+# first run 2026-11-03
+
+# authz-fuzz: 101
+authz-fuzz | unlisted-permission: DELETE /e-prescription/attachments/delete
+authz-fuzz | unlisted-permission: DELETE /e-prescription/configuration/personalized-data
+authz-fuzz | unlisted-permission: DELETE /e-prescription/drawings/delete
+authz-fuzz | unlisted-permission: DELETE /user/profile-picture/remove
+authz-fuzz | unlisted-permission: GET /alerts
+authz-fuzz | unlisted-permission: GET /alerts/counts
+authz-fuzz | unlisted-permission: GET /api/v1/Hr/attendance-today
+authz-fuzz | unlisted-permission: GET /api/v1/Hr/employees
+authz-fuzz | unlisted-permission: GET /api/v1/Hr/leave-balances
+authz-fuzz | unlisted-permission: GET /api/v1/Hr/leave-requests
+authz-fuzz | unlisted-permission: GET /api/v1/Hr/payroll/{hrPayrollRunId}/payslips
+authz-fuzz | unlisted-permission: GET /api/v1/Hr/rosters
+authz-fuzz | unlisted-permission: GET /api/v1/Hr/shifts
+authz-fuzz | unlisted-permission: GET /api/v1/Subscription/plans
+authz-fuzz | unlisted-permission: GET /api/v1/Subscription/{hospitalId}
+authz-fuzz | unlisted-permission: GET /api/v1/Subscription/{hospitalId}/payment-history
+authz-fuzz | unlisted-permission: GET /api/v1/Subscription/{hospitalId}/usage
+authz-fuzz | unlisted-permission: GET /departments/global
+authz-fuzz | unlisted-permission: GET /departments/hospital/{hospitalId}
+authz-fuzz | unlisted-permission: GET /departments/{hospitalId}
+authz-fuzz | unlisted-permission: GET /discharge-settings
+authz-fuzz | unlisted-permission: GET /doctor-fees
+authz-fuzz | unlisted-permission: GET /doctors/hospital
+authz-fuzz | unlisted-permission: GET /doctors/medical-specialities
+authz-fuzz | unlisted-permission: GET /doctors/public-directory
+authz-fuzz | unlisted-permission: GET /doctors/specializations
+authz-fuzz | unlisted-permission: GET /doctors/{doctorId}/reviews
+authz-fuzz | unlisted-permission: GET /doctors/{userId}
+authz-fuzz | unlisted-permission: GET /e-prescription/attachments/list
+authz-fuzz | unlisted-permission: GET /e-prescription/configuration/field-layout/doctorId={doctorId}
+authz-fuzz | unlisted-permission: GET /e-prescription/configuration/personalized-data
+authz-fuzz | unlisted-permission: GET /e-prescription/configuration/preference-setting/doctorId={doctorId}&hospitalId={hospitalId}
+authz-fuzz | unlisted-permission: GET /e-prescription/details/appointmentId={appointmentId}&patientId={patientId}&doctorId={doctorId}&hospitalId={hospitalId}
+authz-fuzz | unlisted-permission: GET /e-prescription/drawings/list
+authz-fuzz | unlisted-permission: GET /e-prescription/lookup/details
+authz-fuzz | unlisted-permission: GET /e-prescription/lookup/search
+authz-fuzz | unlisted-permission: GET /e-prescription/patient-details/timeline
+authz-fuzz | unlisted-permission: GET /e-prescription/patient-details/vitals
+authz-fuzz | unlisted-permission: GET /e-prescription/qr-code
+authz-fuzz | unlisted-permission: GET /e-prescription/qr-code/visit-summary
+authz-fuzz | unlisted-permission: GET /hospitals/analysis/hospitalId={hospitalId}
+authz-fuzz | unlisted-permission: GET /hospitals/analytics/lapsed-patients
+authz-fuzz | unlisted-permission: GET /hospitals/analytics/patient-volume-forecast
+authz-fuzz | unlisted-permission: GET /hospitals/mine
+authz-fuzz | unlisted-permission: GET /hospitals/users/{userId}
+authz-fuzz | unlisted-permission: GET /hospitals/{hospitalId}
+authz-fuzz | unlisted-permission: GET /hospitals/{hospitalId}/booking-qr-code
+authz-fuzz | unlisted-permission: GET /hospitals/{hospitalId}/emergency-settings
+authz-fuzz | unlisted-permission: GET /hospitals/{hospitalId}/qr-code
+authz-fuzz | unlisted-permission: GET /hospitals/{hospitalId}/visit-guide
+authz-fuzz | unlisted-permission: GET /package-type/list
+authz-fuzz | unlisted-permission: GET /prescription-settings
+authz-fuzz | unlisted-permission: GET /referrers
+authz-fuzz | unlisted-permission: GET /user/get-user-details
+authz-fuzz | unlisted-permission: GET /user/permissions
+authz-fuzz | unlisted-permission: GET /user/profile-picture/{userId}
+authz-fuzz | unlisted-permission: PATCH /departments/{departmentId}/toggle-status
+authz-fuzz | unlisted-permission: PATCH /doctors/online-status
+authz-fuzz | unlisted-permission: PATCH /doctors/online-status/self
+authz-fuzz | unlisted-permission: PATCH /doctors/public-listing
+authz-fuzz | unlisted-permission: PATCH /doctors/{doctorId}/reviews/{reviewId}/moderate
+authz-fuzz | unlisted-permission: PATCH /hospitals/{hospitalId}/deactivate
+authz-fuzz | unlisted-permission: POST /alerts/acknowledge
+authz-fuzz | unlisted-permission: POST /alerts/dismiss
+authz-fuzz | unlisted-permission: POST /alerts/evaluate
+authz-fuzz | unlisted-permission: POST /alerts/evaluate-expiry
+authz-fuzz | unlisted-permission: POST /alerts/raise
+authz-fuzz | unlisted-permission: POST /alerts/snooze
+authz-fuzz | unlisted-permission: POST /api/v1/Subscription/{hospitalId}/select-plan
+authz-fuzz | unlisted-permission: POST /api/v1/Subscription/{hospitalId}/submit-payment
+authz-fuzz | unlisted-permission: POST /api/v1/translation/translate
+authz-fuzz | unlisted-permission: POST /api/v1/translation/translate-multiple
+authz-fuzz | unlisted-permission: POST /departments
+authz-fuzz | unlisted-permission: POST /discharge-settings/upload-template
+authz-fuzz | unlisted-permission: POST /doctors
+authz-fuzz | unlisted-permission: POST /doctors/{doctorId}/reviews
+authz-fuzz | unlisted-permission: POST /e-prescription/attachments/upload
+authz-fuzz | unlisted-permission: POST /e-prescription/details/actionType={actionType}
+authz-fuzz | unlisted-permission: POST /e-prescription/details/generate-prescription
+authz-fuzz | unlisted-permission: POST /e-prescription/drawings/upload
+authz-fuzz | unlisted-permission: POST /e-prescription/visit-summary/upload
+authz-fuzz | unlisted-permission: POST /e-prescription/voice/parse
+authz-fuzz | unlisted-permission: POST /hospitals/register
+authz-fuzz | unlisted-permission: POST /hospitals/{hospitalId}/generate-code
+authz-fuzz | unlisted-permission: POST /prescription-settings/upload-template
+authz-fuzz | unlisted-permission: POST /referrers
+authz-fuzz | unlisted-permission: PUT /departments/{departmentId}
+authz-fuzz | unlisted-permission: PUT /discharge-settings
+authz-fuzz | unlisted-permission: PUT /doctor-fees
+authz-fuzz | unlisted-permission: PUT /doctors/profile
+authz-fuzz | unlisted-permission: PUT /e-prescription/configuration/field-layout/doctorId={doctorId}
+authz-fuzz | unlisted-permission: PUT /e-prescription/configuration/personalized-data
+authz-fuzz | unlisted-permission: PUT /e-prescription/configuration/update-preference-setting/doctorId={doctorId}&hospitalId={hospitalId}
+authz-fuzz | unlisted-permission: PUT /hospitals/{hospitalId}
+authz-fuzz | unlisted-permission: PUT /hospitals/{hospitalId}/emergency-settings
+authz-fuzz | unlisted-permission: PUT /hospitals/{hospitalId}/visit-guide
+authz-fuzz | unlisted-permission: PUT /package-type/upsert
+authz-fuzz | unlisted-permission: PUT /prescription-settings
+authz-fuzz | unlisted-permission: PUT /referrers
+authz-fuzz | unlisted-permission: PUT /user/profile-picture/upload
+authz-fuzz | unlisted-permission: PUT /user/update-user-details
+
+# db-guard: 128
+db-guard | rollback-pair: alter_admission_type_referral
+db-guard | rollback-pair: alter_admissiondaybill_admissionid_nullable
+db-guard | rollback-pair: alter_appointments_booked_by_mobile
+db-guard | rollback-pair: alter_appointments_booking_metadata
+db-guard | rollback-pair: alter_appointments_booking_source
+db-guard | rollback-pair: alter_appointments_visit_messages
+db-guard | rollback-pair: alter_batch_add_mrp_and_barcode
+db-guard | rollback-pair: alter_billingpolicy_add_pharmacy_max_discount
+db-guard | rollback-pair: alter_discharge_summary_add_icd10
+db-guard | rollback-pair: alter_discharge_summary_add_public_view
+db-guard | rollback-pair: alter_doctors_add_isonlinenow
+db-guard | rollback-pair: alter_doctors_add_ispubliclylisted
+db-guard | rollback-pair: alter_doctors_add_registration_verification
+db-guard | rollback-pair: alter_goodsreceiptnoteline_add_free_qty
+db-guard | rollback-pair: alter_hospital_subscriptions_add_payment
+db-guard | rollback-pair: alter_hospitals_add_branding_fields
+db-guard | rollback-pair: alter_hospitals_add_city_state_index
+db-guard | rollback-pair: alter_hospitals_add_isarchived
+db-guard | rollback-pair: alter_hospitals_add_ispubliclylisted
+db-guard | rollback-pair: alter_hr_tds_regime_and_workings
+db-guard | rollback-pair: alter_indent_internal_workflow
+db-guard | rollback-pair: alter_indent_status_add_issued_states
+db-guard | rollback-pair: alter_inventoryitem_add_salt_composition
+db-guard | rollback-pair: alter_labconfiguration_add_identity_and_signoff
+db-guard | rollback-pair: alter_labconfiguration_add_public_listing
+db-guard | rollback-pair: alter_medicinemaster_add_inventoryitem_link
+db-guard | rollback-pair: alter_pathology_result_reportid_nullable
+db-guard | rollback-pair: alter_patientregistrations_add_soundex_index
+db-guard | rollback-pair: alter_patientregistrations_admission_fields
+db-guard | rollback-pair: alter_patientregistrations_ageunit
+db-guard | rollback-pair: alter_patientregistrations_allergies
+db-guard | rollback-pair: alter_patientregistrations_extra_fields
+db-guard | rollback-pair: alter_patientregistrations_guardian_fields
+db-guard | rollback-pair: alter_patientregistrations_marketing_consent
+db-guard | rollback-pair: alter_patientregistrations_merge_fields
+db-guard | rollback-pair: alter_prescription_systemic_examination
+db-guard | rollback-pair: alter_public_patient_auth_login_tracking
+db-guard | rollback-pair: backfill_hospital_department_mappings
+db-guard | rollback-pair: create_abha_consent_table
+db-guard | rollback-pair: create_admission_doctor_assignment_table
+db-guard | rollback-pair: create_admission_document_table
+db-guard | rollback-pair: create_admission_referral_comment_table
+db-guard | rollback-pair: create_admission_referrer_assignment_table
+db-guard | rollback-pair: create_chat_tables
+db-guard | rollback-pair: create_device_assignment_table
+db-guard | rollback-pair: create_device_care_bundle_check_table
+db-guard | rollback-pair: create_discharge_summary_audit_and_link_expiry
+db-guard | rollback-pair: create_doctor_prescription_field_configs
+db-guard | rollback-pair: create_doctor_review_table
+db-guard | rollback-pair: create_doctor_review_table__add_hospital_response
+db-guard | rollback-pair: create_doctor_review_table__add_mobile_hash
+db-guard | rollback-pair: create_doctor_review_table__comment_nullable
+db-guard | rollback-pair: create_early_warning_score_table
+db-guard | rollback-pair: create_hospital_subscriptions_table
+db-guard | rollback-pair: create_hospitalchains_and_chainid
+db-guard | rollback-pair: create_infection_event_table
+db-guard | rollback-pair: create_invoice_print_settings
+db-guard | rollback-pair: create_pathology_result_history_table
+db-guard | rollback-pair: create_pathologyreportkeyword_table
+db-guard | rollback-pair: create_prescription_drawings_table
+db-guard | rollback-pair: create_public_api_client_table
+db-guard | rollback-pair: create_public_api_client_table__hospitalid_nullable
+db-guard | rollback-pair: create_rapid_response_activation_table
+db-guard | rollback-pair: create_tables_abdm
+db-guard | rollback-pair: create_tables_abdm__email_column
+db-guard | rollback-pair: create_tables_abdm_care_context
+db-guard | rollback-pair: create_tables_abdm_exchange
+db-guard | rollback-pair: create_tables_abdm_profile_share
+db-guard | rollback-pair: create_tables_agent_monitoring
+db-guard | rollback-pair: create_tables_analytics_events
+db-guard | rollback-pair: create_tables_appointment_journey
+db-guard | rollback-pair: create_tables_billing_scripts
+db-guard | rollback-pair: create_tables_consultant_incentive
+db-guard | rollback-pair: create_tables_cssd
+db-guard | rollback-pair: create_tables_discharge_summary_custom_fields
+db-guard | rollback-pair: create_tables_emergency_takeover
+db-guard | rollback-pair: create_tables_free_tier_usage
+db-guard | rollback-pair: create_tables_hospital_leads
+db-guard | rollback-pair: create_tables_hospital_visit_guide
+db-guard | rollback-pair: create_tables_hr
+db-guard | rollback-pair: create_tables_hr__attendance_dailyclose_jobsetting
+db-guard | rollback-pair: create_tables_hr__attendance_override_columns
+db-guard | rollback-pair: create_tables_hr__payroll_settings
+db-guard | rollback-pair: create_tables_hr_biometric
+db-guard | rollback-pair: create_tables_icu
+db-guard | rollback-pair: create_tables_magic_login_token
+db-guard | rollback-pair: create_tables_nursing_shift
+db-guard | rollback-pair: create_tables_ot
+db-guard | rollback-pair: create_tables_pathology
+db-guard | rollback-pair: create_tables_pathology_sample_rejection
+db-guard | rollback-pair: create_tables_patient_account_profile
+db-guard | rollback-pair: create_tables_patient_app
+db-guard | rollback-pair: create_tables_patient_family_members
+db-guard | rollback-pair: create_tables_patient_health_locker_documents
+db-guard | rollback-pair: create_tables_pharmacy_print_settings
+db-guard | rollback-pair: create_tables_pharmacy_return
+db-guard | rollback-pair: create_tables_pharmacy_salt_composition
+db-guard | rollback-pair: create_tables_pharmacy_schedule_register
+db-guard | rollback-pair: create_tables_pharmacy_vendor_return
+db-guard | rollback-pair: create_tables_rate_card
+db-guard | rollback-pair: create_tables_subscriptions
+db-guard | rollback-pair: create_tables_symptom_training_examples
+db-guard | rollback-pair: create_tables_website_visits
+db-guard | rollback-pair: create_tables_zz_foreign_keys
+db-guard | rollback-pair: create_tables_zz_hr_biometric_foreign_keys
+db-guard | rollback-pair: create_tables_zz_hr_foreign_keys
+db-guard | rollback-pair: dml_inventory_store_backfill
+db-guard | rollback-pair: fix_billing_policy_ipd_bed_charge_mode
+db-guard | rollback-pair: fix_pathology_test_reference_ranges
+db-guard | rollback-pair: normalize_numberseries_defaults
+db-guard | rollback-pair: nursing_shift_codes_allow_custom
+db-guard | rollback-pair: reconcile_bed_status_with_assignments
+db-guard | rollback-pair: rollback_appointment_journey
+db-guard | rollback-pair: rollback_billing_table_scripts
+db-guard | rollback-pair: rollback_emergency_takeover
+db-guard | rollback-pair: rollback_lookup_chief_complaint
+db-guard | rollback-pair: rollback_patient_account_profile
+db-guard | rollback-pair: rollback_seed_vita_service_role
+db-guard | rollback-pair: rollback_visit_guidance
+db-guard | rollback-pair: seed_consent_templates
+db-guard | rollback-pair: seed_drug_interactions
+db-guard | rollback-pair: seed_lookup_chief_complaint
+db-guard | rollback-pair: seed_lookup_icd10
+db-guard | rollback-pair: seed_medical_specialities
+db-guard | rollback-pair: seed_pathology_default_tests
+db-guard | rollback-pair: seed_pathology_lab_categories
+db-guard | rollback-pair: seed_pathology_report_templates
+db-guard | rollback-pair: seed_symptom_training_examples

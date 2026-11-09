@@ -1,0 +1,35 @@
+# Vita gate for 1HMSAPI. Vita (Nexeagle-HealthCareAI/VitaTestAgent) tests this repo before it ships: its unit tests, the API contract against the OpenAPI spec, authorization and tenancy probes, migration guards and clinical invariants, on a PR stack built from this branch.
+#
+# Dormant until the repository (or organisation) variable VITA_ENABLED is "true": until then this job is skipped and
+# blocks nothing. Turn it on once the shared Vita runs on the Dev VM (VitaTestAgent docs/RUNBOOK.md) and these secrets
+# exist on this repo: VITA_API_URL, VITA_GATE_KEY (Vita's gate key for 1HMSAPI), VITA_READ_TOKEN (read access to
+# VitaTestAgent). VitaTestAgent must allow its workflows to be used by the organisation's repositories
+# (VitaTestAgent > Settings > Actions > General > Access).
+#
+# on_neutral is "warn" while Vita is new: a run Vita could not decide (Vita down, nothing ran) warns instead of blocking.
+# A RED verdict always fails the check. When the team trusts it: make "vita / gate" a required check on develop and
+# main, and add `needs: vita` to the deploy job.
+name: vita
+on:
+  pull_request:
+    branches: [develop, main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+  pull-requests: write
+
+jobs:
+  vita:
+    if: vars.VITA_ENABLED == 'true'
+    uses: Nexeagle-HealthCareAI/VitaTestAgent/.github/workflows/vita-gate.yml@develop
+    with:
+      target: ${{ github.event_name == 'pull_request' && 'pr' || 'dev' }}
+      vita_ref: develop
+      on_neutral: warn
+      dockerfile: EasyHMSAPI.Api/Dockerfile       # the candidate image for the PR stack
+    secrets:
+      VITA_API_URL: ${{ secrets.VITA_API_URL }}
+      VITA_GATE_KEY: ${{ secrets.VITA_GATE_KEY }}
+      VITA_READ_TOKEN: ${{ secrets.VITA_READ_TOKEN }}
