@@ -212,6 +212,27 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Staff opened a request (e.g. the online-booking card or the appointment's details): the patient's app
+        // then shows "Hospital has seen it". Idempotent — only the first call is recorded.
+        [HttpPut("seen")]
+        [Authorize]
+        public async Task<IActionResult> MarkAppointmentSeen([FromBody] MarkAppointmentSeenRequestModel request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+            request.LoggedInUserId = UserContextHelper.GetUserId(User);
+            try
+            {
+                var response = await _mediator.Send(request);
+                return response.Success ? Ok(response) : NotFound(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in MarkAppointmentSeen for AppointmentId: {AppointmentId}", request.AppointmentId);
+                return StatusCode(500, new { Message = "Error marking the appointment as seen." });
+            }
+        }
+
         // Front-desk "Confirm" action for a PRE_APPOINTMENT row created via the public booking API.
         // Real slot commitment happens here — the receptionist picks the StartAt and it's validated
         // against the doctor's existing bookings, then a token is allocated.
@@ -301,6 +322,28 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 _logger.LogError(ex, "Error in GetPatientAppointmentDetails for hospitalId: {HospitalId}", hospitalId);
                 return StatusCode(500, new { Message = $"Error fetching appointment details: {ex.Message}" });
+            }
+        }
+
+        // Polled every few seconds by every open appointment board to surface "a new online booking
+        // just came in". Same permission gate as the rest of this controller (anyone who can see the
+        // board), and HospitalAccessFilter already scopes it to the caller's own hospital via hospitalId.
+        [HttpGet("online-bookings/recent")]
+        [Authorize]
+        public async Task<IActionResult> GetRecentOnlineBookings([FromQuery] Guid hospitalId, [FromQuery] DateTime? since)
+        {
+            if (hospitalId == Guid.Empty)
+                return BadRequest(new { Message = "HospitalId is required." });
+
+            try
+            {
+                var response = await _mediator.Send(new GetRecentOnlineBookingsRequestModel { HospitalId = hospitalId, Since = since });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetRecentOnlineBookings for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "Error checking for new online bookings." });
             }
         }
 

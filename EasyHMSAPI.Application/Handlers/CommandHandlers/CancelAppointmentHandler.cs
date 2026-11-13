@@ -81,6 +81,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     _context.AppointmentTokens.Update(token);
                 }
 
+                AppointmentSeen.Mark(appt, null);
                 _context.Appointments.Update(appt);
 
                 // ── Billing cleanup ────────────────────────────────────────────

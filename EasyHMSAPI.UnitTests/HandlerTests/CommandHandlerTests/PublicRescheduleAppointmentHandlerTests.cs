@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EasyHMSAPI.Application.Handlers.CommandHandlers;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Constants;
@@ -42,7 +43,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             _cache.Dispose();
         }
 
-        private (Guid apptId, Guid doctorId) SeedActiveAppointment(string patientMobile = "9876543210", string statusCode = "FUTURE")
+        private (Guid apptId, Guid doctorId) SeedActiveAppointment(string patientMobile = "9876543210", string statusCode = "FUTURE", string? bookingSource = null)
         {
             var user = TestDataFactory.SeedUser(_context, email: $"{Guid.NewGuid():N}@test.com", role: "Doctor");
             var doctor = TestDataFactory.SeedDoctor(_context, user);
@@ -68,10 +69,30 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                 StartAt = DateTime.UtcNow.Date.AddDays(1).AddHours(10),
                 EndAt = DateTime.UtcNow.Date.AddDays(1).AddHours(10).AddMinutes(15),
                 CurrentStatusCode = statusCode,
+                BookingSource = bookingSource,
+                HospitalSeenAt = bookingSource == null ? null : DateTime.UtcNow.AddHours(-1),
             };
             _context.Appointments.Add(appt);
             _context.SaveChanges();
             return (apptId, doctor.DoctorID);
+        }
+
+        [TestCase("PRE_APPOINTMENT")]
+        [TestCase("FUTURE")]
+        public async Task DoctorDekhoRequest_MovedToAnotherDay_IsARequestAgain_AndTheHospitalIsAlerted(string before)
+        {
+            var (apptId, _) = SeedActiveAppointment(statusCode: before, bookingSource: AppConstants.BookingSource_NexeaglePublic);
+
+            var response = await _handler.Handle(
+                new PublicRescheduleAppointmentRequestModel { AppointmentId = apptId, Mobile = "9876543210", ToApptDate = DateTime.UtcNow.Date.AddDays(4) },
+                CancellationToken.None);
+
+            Assert.That(response.Success, Is.True, response.Message);
+            Assert.That(response.FinalStatus, Is.EqualTo(AppConstants.AppointmentStatus_PreAppointment));
+            var updated = _context.Appointments.First(a => a.ApptId == apptId);
+            Assert.That(updated.CurrentStatusCode, Is.EqualTo(AppConstants.AppointmentStatus_PreAppointment));
+            Assert.That(updated.HospitalSeenAt, Is.Null);
+            Assert.That(_context.Alert.Count(a => a.SourceRefId == apptId.ToString() && a.AlertCode == AppointmentSeen.OnlineRequestAlertCode), Is.EqualTo(1));
         }
 
         [Test]

@@ -44,6 +44,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var request = new HospitalUpdateRequestModel
             {
                 HospitalId = hospitalId,
+                CallerUserId = HrAuthSeed.SeedMember(_context, hospitalId, "admin_panel"),
                 Name = "New Name",
                 Email = "new@h.com"
             };
@@ -71,6 +72,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var request = new HospitalUpdateRequestModel
             {
                 HospitalId = hospitalId,
+                CallerUserId = HrAuthSeed.SeedMember(_context, hospitalId, "admin_panel"),
                 Latitude = 22.5726m,
                 Longitude = 88.3639m,
             };
@@ -89,7 +91,8 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public async Task Handle_HospitalNotFound_ReturnsFailure()
         {
             // Arrange
-            var request = new HospitalUpdateRequestModel { HospitalId = Guid.NewGuid() };
+            var missingId = Guid.NewGuid();
+            var request = new HospitalUpdateRequestModel { HospitalId = missingId, CallerUserId = HrAuthSeed.SeedMember(_context, missingId, "admin_panel") };
 
             // Act
             var response = await _handler.Handle(request, CancellationToken.None);

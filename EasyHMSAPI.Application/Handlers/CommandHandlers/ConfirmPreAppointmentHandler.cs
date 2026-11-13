@@ -106,6 +106,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 return new ConfirmPreAppointmentResponseModel { Success = false, Message = usage.Message };
             }
 
+            AppointmentSeen.Mark(appointment, null);
             await _context.SaveChangesAsync(cancellationToken);
 
             // Invalidate both the slot it moved OUT of and the one it moved INTO — the receptionist

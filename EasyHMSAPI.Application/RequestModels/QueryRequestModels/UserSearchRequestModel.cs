@@ -7,5 +7,7 @@ namespace EasyHMSAPI.Application.RequestModels.QueryRequestModels
     public class UserSearchRequestModel : MediatR.IRequest<UserSearchResponseModel?>
     {
         public Guid? UserId { get; set; }
+        /// <summary>Stamped by the controller from the verified JWT; any client-supplied value is overwritten.</summary>
+        public Guid? CallerUserId { get; set; }
     }
 }

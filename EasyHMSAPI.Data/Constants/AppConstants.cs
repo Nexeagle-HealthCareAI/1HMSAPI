@@ -33,6 +33,11 @@ namespace EasyHMSAPI.Data.Constants
         public static readonly string AnalyticsEventType_SearchPerformed = "search_performed";
         public static readonly string AnalyticsEventType_DoctorProfileViewed = "doctor_profile_viewed";
         public static readonly string AnalyticsEventType_BookingStepReached = "booking_step_reached";
+        // Vita chat on Doctor Dekho: the chat being opened, a hand-off to WhatsApp, and a patient's
+        // thumbs up/down on one Vita reply (metadataJson carries helpful, reply kind, session and turn).
+        public static readonly string AnalyticsEventType_ChatWidgetOpened = "chat_widget_opened";
+        public static readonly string AnalyticsEventType_ChatWhatsAppHandoff = "chat_whatsapp_handoff";
+        public static readonly string AnalyticsEventType_VitaFeedback = "vita_feedback";
 
         // HospitalLead.Source / HospitalLead.LeadType values -- the Lead Generation page's own
         // vocabulary, deliberately separate from AnalyticsEventType_* above (see HospitalLead.cs).

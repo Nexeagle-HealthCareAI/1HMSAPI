@@ -98,15 +98,15 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
-        public async Task Handle_WithValidInput_CreatesUserAndReturnsToken()
+        public async Task Handle_WithValidInput_CreatesAnInactiveUser_AndIssuesNoToken()
         {
             // Arrange
             const string roleName = "Admin";
             const string mobile = "9990001111";
             SeedRole(roleName);
 
-            _jwtMock.Setup(j => j.GenerateJwtToken(It.IsAny<System.Collections.Generic.List<Claim>>()))
-                    .Returns("test-token");
+            // _jwtMock is Strict with no setup: if the handler tried to mint a token this test would throw. A token before the OTP is verified
+            // would let anyone act as an account whose mobile number they have not proved they own.
 
             var handler = new UserRegistrationHandler(_context, new Mock<Microsoft.Extensions.Configuration.IConfiguration>().Object, _jwtMock.Object);
             var request = new UserRegistrationRequestModel
@@ -121,7 +121,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 
             // Assert
             Assert.That(response.Success, Is.True);
-            Assert.That(response.AccessToken, Is.EqualTo("test-token"));
+            Assert.That(response.AccessToken, Is.Null, "no session token until the mobile number is verified by OTP");
             Assert.That(response.UserId, Is.Not.EqualTo(Guid.Empty));
 
             // Verify entities created
@@ -131,7 +131,8 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(_context.UserRoles.Any(ur => ur.UserID == user.UserID), Is.True);
             Assert.That(_context.UserProfiles.Any(up => up.UserID == user.UserID && !string.IsNullOrWhiteSpace(up.EmployeeID)), Is.True);
 
-            _jwtMock.Verify(j => j.GenerateJwtToken(It.IsAny<System.Collections.Generic.List<Claim>>()), Times.Once);
+            Assert.That(user.UserStatusId, Is.EqualTo((int)EasyHMSAPI.Data.Enums.UserStatusEnum.Inactive), "stays inactive until OTP verify");
+            _jwtMock.Verify(j => j.GenerateJwtToken(It.IsAny<System.Collections.Generic.List<Claim>>()), Times.Never);
         }
     }
 }

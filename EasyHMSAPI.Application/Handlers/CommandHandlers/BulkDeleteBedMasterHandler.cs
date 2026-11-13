@@ -47,7 +47,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             var now = DateTime.UtcNow;
             foreach (var bed in beds)
             {
-                if (bed.StatusCode == "OCCUPIED")
+                if (bed.StatusCode == "OCCUPIED" || await _context.BedAssignment.AnyAsync(a => a.BedId == bed.BedId && a.StatusCode == "ACTIVE", cancellationToken))
                 {
                     response.Blocked.Add(new BedDeleteFailure
                     {

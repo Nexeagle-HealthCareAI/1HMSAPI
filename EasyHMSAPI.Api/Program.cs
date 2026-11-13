@@ -44,6 +44,9 @@ builder.Services.AddScoped<EasyHMSAPI.Api.Common.HospitalAccessFilter>();
 builder.Services.AddScoped<EasyHMSAPI.Api.Common.PermissionAuthorizationFilter>();
 // Public (Nexeagle) API-key gate — applied per-controller via [ServiceFilter], not globally.
 builder.Services.AddScoped<EasyHMSAPI.Api.Common.PublicApiKeyFilter>();
+// Mandatory shared-key gate for server-to-server /internal/* endpoints (Health Wiki writes).
+builder.Services.AddScoped<EasyHMSAPI.Api.Common.InternalApiKeyFilter>();
+builder.Services.AddScoped<EasyHMSAPI.Api.Common.ContributorSessionFilter>();
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<EasyHMSAPI.Api.Common.HospitalAccessFilter>();
@@ -165,25 +168,75 @@ builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(UserL
 // Custom Services
 // ------------------------------------------------------------
 builder.Services.AddScoped<IJwtAuthService, JwtAuthService>();
+builder.Services.AddScoped<IMagicLinkService, MagicLinkService>();
 builder.Services.AddScoped<IMaskingService, MaskingService>();
 // Object storage: S3-compatible (MinIO) bucket.
 builder.Services.AddScoped<IBlobStorageService, S3StorageService>();
 builder.Services.AddScoped<ISmsService, SmsService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IWhatsAppMessagingService, WhatsAppMessagingService>();
+builder.Services.AddScoped<IHealthArticleService, HealthArticleService>();
+builder.Services.AddScoped<IHealthArticleReviewService, HealthArticleReviewService>();
+builder.Services.AddScoped<IHealthWikiStaffService, HealthWikiStaffService>();
+builder.Services.AddScoped<IHealthArticleStatsService, HealthArticleStatsService>();
+builder.Services.AddScoped<IHealthWikiNotifier, HealthWikiNotifier>();
+builder.Services.AddScoped<IHealthWikiMaintenanceService, HealthWikiMaintenanceService>();
+builder.Services.AddScoped<IHealthWikiTopicService, HealthWikiTopicService>();
+builder.Services.AddScoped<IHealthWikiHandoffService, HealthWikiHandoffService>();
+builder.Services.AddSingleton<IHealthWikiImageStore, HealthWikiImageStore>();
+builder.Services.AddScoped<IHealthWikiImageService, HealthWikiImageService>();
 builder.Services.AddScoped<IUsageLimitService, UsageLimitService>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IPatientTokenValidator, EasyHMSAPI.Application.Services.Implementations.PatientTokenValidator>();
-builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IGeoIpLookupService, EasyHMSAPI.Application.Services.Implementations.IpApiGeoLookupService>();
+// Visitor region lookup: the self-hosted GeoLite2 file when Tracking:GeoLite2CityDbPath points at
+// one; otherwise ip-api.com stays as the stop-gap (decided 2026-10-19) until the file is set up.
+var geoLite2Path = builder.Configuration["Tracking:GeoLite2CityDbPath"];
+if (!string.IsNullOrWhiteSpace(geoLite2Path) && File.Exists(geoLite2Path))
+{
+    builder.Services.AddSingleton<EasyHMSAPI.Application.Services.Interfaces.IGeoIpLookupService>(sp =>
+        new EasyHMSAPI.Application.Services.Implementations.GeoLite2LookupService(
+            geoLite2Path,
+            sp.GetRequiredService<ILogger<EasyHMSAPI.Application.Services.Implementations.GeoLite2LookupService>>()));
+}
+else
+{
+    builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IGeoIpLookupService, EasyHMSAPI.Application.Services.Implementations.IpApiGeoLookupService>();
+}
 builder.Services.AddScoped<IVoiceRxService, VoiceRxService>();
 builder.Services.AddScoped<IDoctorValidationHelper, DoctorValidationHelper>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IWhatsAppQueueNotifier, EasyHMSAPI.Application.Services.WhatsAppQueueNotifier>();
 builder.Services.AddScoped<ISubscriptionLimitHelper, SubscriptionLimitHelper>();
+
+// MCP server for Vita (NLP router): read-only doctor tools at POST /mcp, gated by
+// McpServiceKeyMiddleware below. Stateless: the tools never call back to the client, so no
+// session affinity is needed and any API instance can answer any request.
+builder.Services.AddMcpServer()
+    .WithHttpTransport(options => options.Stateless = true)
+    .WithTools<EasyHMSAPI.Api.Mcp.DoctorTools>();
 // Pharmacy Phase 3b: daily 90/60/30-day batch-expiry digest — the only scheduled job in the API.
 builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.ExpiryAlertBackgroundService>();
+builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.HealthWikiMaintenanceBackgroundService>();
+// Daily deletion of old website-tracking rows; switch on/off via JobSettings "TrackingDataRetention".
+builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.TrackingRetentionBackgroundService>();
+// Visit reminders and the after-visit message (Vita vision, Phase 4); off until the JobSettings row 'VisitMessages' is switched on.
+builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.VisitMessagesBackgroundService>();
 // ABDM M1: ABHA creation (Aadhaar-OTP) + existing-ABHA login (Mobile/Aadhaar-OTP).
-builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmEncryptionService, EasyHMSAPI.Application.Services.Implementations.AbdmEncryptionService>();
-builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmGatewayService, EasyHMSAPI.Application.Services.Implementations.AbdmGatewayService>();
-builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IAbdmAbhaService, EasyHMSAPI.Application.Services.Implementations.AbdmAbhaService>();
+// Own client with a 30 s timeout: the default 100 s turned a dead ABDM endpoint into a 100 s hang
+// at the counter. 30 s still leaves room for Aadhaar OTP calls, which go through UIDAI.
+static void AbdmClient(HttpClient c) => c.Timeout = TimeSpan.FromSeconds(30);
+builder.Services.AddHttpClient<EasyHMSAPI.Application.Services.Interfaces.IAbdmEncryptionService, EasyHMSAPI.Application.Services.Implementations.AbdmEncryptionService>(AbdmClient);
+builder.Services.AddHttpClient<EasyHMSAPI.Application.Services.Interfaces.IAbdmGatewayService, EasyHMSAPI.Application.Services.Implementations.AbdmGatewayService>(AbdmClient);
+builder.Services.AddHttpClient<EasyHMSAPI.Application.Services.Interfaces.IAbdmAbhaService, EasyHMSAPI.Application.Services.Implementations.AbdmAbhaService>(AbdmClient);
+builder.Services.AddSingleton<EasyHMSAPI.Application.Services.IAbhaLinkProofStore, EasyHMSAPI.Application.Services.AbhaLinkProofStore>();
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.IAbdmCallbackGuard, EasyHMSAPI.Application.Services.AbdmCallbackGuard>();
+builder.Services.AddHttpClient<EasyHMSAPI.Application.Services.Interfaces.IAbdmProfileShareService, EasyHMSAPI.Application.Services.Implementations.AbdmProfileShareService>(AbdmClient);
+// ABDM M2: HIE-CM calls recorded as exchanges, joined to their callbacks by REQUEST-ID.
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.IAbdmExchangeLog, EasyHMSAPI.Application.Services.AbdmExchangeLog>();
+builder.Services.AddHttpClient<EasyHMSAPI.Application.Services.Interfaces.IAbdmHieService, EasyHMSAPI.Application.Services.Implementations.AbdmHieService>(AbdmClient);
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.IAbdmLinkingService, EasyHMSAPI.Application.Services.AbdmLinkingService>();
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.IAbdmCallbackProcessor, EasyHMSAPI.Application.Services.AbdmCallbackProcessor>();
+// HR biometric attendance: stores device scans and rebuilds attendance from them.
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IBiometricPunchIngestionService, EasyHMSAPI.Application.Services.Implementations.BiometricPunchIngestionService>();
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IZktecoPushService, EasyHMSAPI.Application.Services.Implementations.ZktecoPushService>();
 
 builder.Services.AddHttpClient<ITranslationService, GroqTranslationService>();
 builder.Services.AddHttpClient<IBillingInsightService, GroqBillingInsightService>();
@@ -220,6 +273,16 @@ var proxyForwardingSecret = builder.Configuration["Internal:ProxyForwardingSecre
 
 builder.Services.AddRateLimiter(options =>
 {
+     // A request over the limit is "429 Too Many Requests" with a Retry-After, not the framework's default 503 ("the service is down"),
+     // so a page can tell a person to slow down and callers can tell a limit from an outage.
+     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+     options.OnRejected = async (rejected, cancellationToken) =>
+     {
+         if (rejected.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+             rejected.HttpContext.Response.Headers.RetryAfter = ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+         rejected.HttpContext.Response.ContentType = "application/json";
+         await rejected.HttpContext.Response.WriteAsync("{\"message\":\"Too many requests. Please wait a moment and try again.\"}", cancellationToken);
+     };
      options.AddPolicy("PerIpPolicy", context =>
          RateLimitPartition.GetFixedWindowLimiter(
          partitionKey: EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(context, proxyForwardingSecret),
@@ -246,6 +309,21 @@ builder.Services.AddRateLimiter(options =>
          })
      );
 
+     // Emergency takeover alerts (Vita): each one sends WhatsApp messages to up to five hospitals, so far tighter than booking. A real
+     // patient's emergency raises one alert (repeats in the same chat session are answered from the first one) and maybe one shared
+     // number; this stops one visitor from paging hospitals over and over.
+     options.AddPolicy("EmergencyAlertPolicy", context =>
+         RateLimitPartition.GetFixedWindowLimiter(
+         partitionKey: EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(context, proxyForwardingSecret),
+         factory: key => new FixedWindowRateLimiterOptions
+         {
+             PermitLimit = 4,
+             Window = TimeSpan.FromMinutes(10),
+             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+             QueueLimit = 0
+         })
+     );
+
      // Patient WhatsApp-OTP login (Doctor Dekho) — tighter per-IP ceiling than PublicBookingPolicy.
      // This is on top of, not instead of, the per-mobile-number cooldown/daily-cap enforced inside
      // PatientOtpSendHandler itself: this policy stops one IP from hammering many different numbers,
@@ -262,8 +340,65 @@ builder.Services.AddRateLimiter(options =>
          })
      );
 
+     // Health Wiki contributor sign-in (invitation link, WhatsApp code). The per-number limits (60 s between codes, 5 a day, 5 tries
+     // per code) are enforced in the handlers; this stops one IP from trying many numbers.
+     options.AddPolicy("ContributorAuthPolicy", context =>
+         RateLimitPartition.GetFixedWindowLimiter(
+         partitionKey: EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(context, proxyForwardingSecret),
+         factory: key => new FixedWindowRateLimiterOptions
+         {
+             PermitLimit = 8,
+             Window = TimeSpan.FromMinutes(1),
+             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+             QueueLimit = 0
+         })
+     );
+
+     // One-tap sign-in links from WhatsApp/email notifications. Tokens are 256-bit random so
+     // guessing is hopeless regardless; this only caps how fast one IP can probe the endpoint.
+     options.AddPolicy("MagicLinkPolicy", context =>
+         RateLimitPartition.GetFixedWindowLimiter(
+         partitionKey: EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(context, proxyForwardingSecret),
+         factory: key => new FixedWindowRateLimiterOptions
+         {
+             PermitLimit = 10,
+             Window = TimeSpan.FromMinutes(1),
+             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+             QueueLimit = 0
+         })
+     );
+
+     // Staff sign-in (password / OTP send / OTP verify). Per-IP ceiling on top of the per-account
+     // lockout enforced in UserLoginHandler / OtpVerifyHandler. Deliberately above a single user's
+     // needs: a whole hospital often shares one NAT'd IP at shift start.
+     options.AddPolicy("StaffAuthPolicy", context =>
+         RateLimitPartition.GetFixedWindowLimiter(
+         partitionKey: EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(context, proxyForwardingSecret),
+         factory: key => new FixedWindowRateLimiterOptions
+         {
+             PermitLimit = 30,
+             Window = TimeSpan.FromMinutes(1),
+             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+             QueueLimit = 0
+         })
+     );
+
      // Page-view beacons — fires on every page load, so this needs a much more generous ceiling
      // than the booking/auth policies above (a visitor browsing normally shouldn't get throttled).
+     // Vita's MCP doctor lookups: a few calls per chat turn from a handful of router instances,
+     // so the limit is per caller IP and generous; it only exists to cap a runaway client.
+     options.AddPolicy("McpPolicy", context =>
+         RateLimitPartition.GetFixedWindowLimiter(
+         partitionKey: EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(context, proxyForwardingSecret),
+         factory: key => new FixedWindowRateLimiterOptions
+         {
+             PermitLimit = 600,
+             Window = TimeSpan.FromMinutes(1),
+             QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+             QueueLimit = 0
+         })
+     );
+
      options.AddPolicy("TrackVisitPolicy", context =>
          RateLimitPartition.GetFixedWindowLimiter(
          partitionKey: EasyHMSAPI.Api.Common.TrustedProxyIpResolver.Resolve(context, proxyForwardingSecret),
@@ -318,7 +453,13 @@ app.UseCors("FrontendCors");
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseWhen(
+    context => context.Request.Path.StartsWithSegments("/mcp"),
+    branch => branch.UseMiddleware<EasyHMSAPI.Api.Mcp.McpServiceKeyMiddleware>());
 app.MapControllers();
+app.MapMcp("/mcp")
+    .RequireRateLimiting("McpPolicy")
+    .ExcludeFromDescription();
 
 // Simple redirect for root
 app.MapGet("/", context =>

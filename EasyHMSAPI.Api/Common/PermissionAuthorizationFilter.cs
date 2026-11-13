@@ -36,7 +36,10 @@ namespace EasyHMSAPI.Api.Common
 
         public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
         {
-            var attr = context.ActionDescriptor.EndpointMetadata.OfType<RequiresPermissionAttribute>().FirstOrDefault();
+            // Endpoint metadata is ordered least- to most-specific (controller, then action), so take the LAST:
+            // an action-level attribute overrides the controller-level one (e.g. an admin-only action on a
+            // controller otherwise open to nurses).
+            var attr = context.ActionDescriptor.EndpointMetadata.OfType<RequiresPermissionAttribute>().LastOrDefault();
             if (attr == null || attr.PermissionKeys.Length == 0) { await next(); return; }
 
             var userId = UserContextHelper.GetUserId(context.HttpContext.User);

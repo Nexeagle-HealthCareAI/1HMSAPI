@@ -24,8 +24,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
     /// via DoctorDepartments, not the single retrofitted Doctor.HospitalId field (see
     /// GetDoctorFeesHandler for the same convention).
     /// Deliberately narrower than GetDepartmentDoctorsHandler / GetHospitalDoctorsHandler:
-    /// excludes LicenseNumber, MedicalCouncil, RegistrationYear, UserId, and any mobile/email/
-    /// queue-internal field, and additionally resolves a fresh presigned photo URL per doctor
+    /// excludes RegistrationYear, UserId, and any mobile/email/queue-internal field (LicenseNumber /
+    /// MedicalCouncil are exposed as RegistrationNumber / RegistrationCouncil), and additionally resolves a fresh presigned photo URL per doctor
     /// (same GetUrlAsync pattern as GetProfilePictureHandler — presigned URLs expire, so this is
     /// never cached long-term).
     /// </summary>
@@ -63,7 +63,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             // One cache entry per filter combo now (not one whole-platform entry) — see
             // PublicDirectoryCacheKeys.PublicDoctorsList. Presigned photo URLs are valid for 24h
             // (Storage:S3:UrlExpiryHours), so a 60s-stale cache entry never serves an expired one.
-            var cacheKey = PublicDirectoryCacheKeys.PublicDoctorsList(page, pageSize, request.City, request.State, request.SpecialtyCategory, request.Search, request.HospitalId, request.DoctorId);
+            var cacheKey = PublicDirectoryCacheKeys.PublicDoctorsList(page, pageSize, request.City, request.State, request.SpecialtyCategory, request.Search, request.HospitalId, request.DoctorId, request.DoctorIds);
             if (_cache.TryGetValue(cacheKey, out GetPublicDoctorsResponseModel? cached) && cached != null)
             {
                 return cached;
@@ -163,6 +163,12 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 filteredQuery = filteredQuery.Where(x => x.d.DoctorID == request.DoctorId.Value);
             }
 
+            if (request.DoctorIds is { Count: > 0 })
+            {
+                var wantedIds = request.DoctorIds;
+                filteredQuery = filteredQuery.Where(x => wantedIds.Contains(x.d.DoctorID));
+            }
+
             if (!string.IsNullOrWhiteSpace(request.SpecialtyCategory))
             {
                 var category = request.SpecialtyCategory;
@@ -209,7 +215,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .Select(x => new
                 {
                     x.d.DoctorID, x.d.UserID, x.d.PrimaryDepartmentID, x.d.PrimaryMedicalSpecialityId, x.d.Qualification, x.d.ExperienceYears, x.d.Bio, x.d.LanguagesJson,
-                    x.d.IsFeatured, x.d.DiscountPercent, x.d.DiscountStartAt, x.d.DiscountEndAt, x.d.IsRegistrationVerified, x.d.IsOnlineNow,
+                    x.d.IsFeatured, x.d.DiscountPercent, x.d.DiscountStartAt, x.d.DiscountEndAt, x.d.IsRegistrationVerified, x.d.IsOnlineNow, x.d.LicenseNumber, x.d.MedicalCouncil,
                     x.FullName
                 })
                 .ToListAsync(cancellationToken);
@@ -222,7 +228,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             var hospitalIdsUsed = pageRows.Select(r => doctorHospital[r.DoctorID]).Distinct().ToList();
             var hospitalById = await _context.Hospitals
                 .Where(h => hospitalIdsUsed.Contains(h.HospitalID))
-                .Select(h => new { h.HospitalID, h.Name, h.Location, h.City, h.State, h.Pincode, h.Latitude, h.Longitude })
+                .Select(h => new { h.HospitalID, h.Name, h.Location, h.City, h.State, h.Pincode, h.Contact, h.AlternateContact, h.Latitude, h.Longitude })
                 .ToDictionaryAsync(h => h.HospitalID, cancellationToken);
 
             var deptIds = pageRows.Where(r => r.PrimaryDepartmentID.HasValue).Select(r => r.PrimaryDepartmentID!.Value).Distinct().ToList();
@@ -320,11 +326,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 var specializations = specializationsByDoctor.TryGetValue(r.DoctorID, out var specs) ? specs : new List<string>();
                 var fee = feeLookup.TryGetValue((r.DoctorID, hospitalId), out var feeAmount) ? feeAmount : (decimal?)null;
                 var discountActive = DoctorMarketingHelpers.IsDiscountActive(r.DiscountPercent, r.DiscountStartAt, r.DiscountEndAt, nowUtc);
+                var todayOverrides = overridesByDoctor.TryGetValue(r.DoctorID, out var doctorOverrides) ? doctorOverrides : Array.Empty<DoctorShiftOverride>();
                 var isAvailableToday = DoctorAvailabilityResolver.IsAvailable(
                     todayIst,
                     timeOffsByDoctor.TryGetValue(r.DoctorID, out var doctorTimeOffs) ? doctorTimeOffs : Array.Empty<DoctorTimeOff>(),
-                    overridesByDoctor.TryGetValue(r.DoctorID, out var doctorOverrides) ? doctorOverrides : Array.Empty<DoctorShiftOverride>(),
+                    todayOverrides,
                     activeTemplates);
+                var todayHours = isAvailableToday ? DoctorAvailabilityResolver.ResolveShifts(todayOverrides, activeTemplates) : new List<PublicShiftInfo>();
 
                 doctors.Add(new PublicDoctorInfo
                 {
@@ -347,6 +355,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     City = hospital?.City,
                     State = hospital?.State,
                     Pincode = hospital?.Pincode,
+                    HospitalContact = PublicHospitalContact(hospital?.Contact, hospital?.AlternateContact),
                     Latitude = hospital?.Latitude,
                     Longitude = hospital?.Longitude,
                     Rating = reviewAgg != null ? Math.Round(reviewAgg.Average, 1) : (double?)null,
@@ -358,7 +367,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         : null,
                     IsFeatured = r.IsFeatured,
                     IsRegistrationVerified = r.IsRegistrationVerified,
+                    RegistrationNumber = string.IsNullOrWhiteSpace(r.LicenseNumber) ? null : r.LicenseNumber.Trim(),
+                    RegistrationCouncil = string.IsNullOrWhiteSpace(r.MedicalCouncil) ? null : r.MedicalCouncil.Trim(),
                     IsAvailableToday = isAvailableToday,
+                    TodayHours = todayHours,
                     IsOnlineNow = r.IsOnlineNow,
                 });
             }
@@ -373,6 +385,17 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             };
             _cache.Set(cacheKey, response, CacheTtl);
             return response;
+        }
+
+        // Hospital.Contact is required at onboarding, but older/partial rows can hold blanks — fall back
+        // to the alternate number, and return null (not "") when neither is usable so the frontend's
+        // "hide when absent" rendering applies.
+        private static string? PublicHospitalContact(string? contact, string? alternateContact)
+        {
+            var primary = contact?.Trim();
+            if (!string.IsNullOrEmpty(primary)) return primary;
+            var alternate = alternateContact?.Trim();
+            return string.IsNullOrEmpty(alternate) ? null : alternate;
         }
 
         private static GetPublicDoctorsResponseModel EmptyResult(int page, int pageSize, int totalCount = 0) =>

@@ -26,6 +26,7 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? PlaceOfSupplyStateCode { get; set; }
         public bool DefaultPriceIsTaxInclusive { get; set; }
         public string? TaxRoundingMode { get; set; }
+        public decimal PharmacyMaxDiscountPercent { get; set; } = 20m;
 
         public Dictionary<string, NumberSeriesResponseModel> NumberSeries { get; set; } = new();
         public DateTime UpdatedAt { get; set; }

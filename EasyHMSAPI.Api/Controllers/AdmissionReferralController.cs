@@ -14,6 +14,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("admission-referral")]
     [Authorize]
+    [RequiresPermission("ipd", "doc_board")]
     public class AdmissionReferralController : ControllerBase
     {
         private readonly IMediator _mediator;

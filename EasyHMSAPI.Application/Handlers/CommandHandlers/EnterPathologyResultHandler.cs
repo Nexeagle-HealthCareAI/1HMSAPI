@@ -103,6 +103,49 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
             else
             {
+                // Results are never silently overwritten: keep what was there, and once a report exists require a
+                // reason and mark that report AMENDED so it is not mistaken for the verified original.
+                var reportId = line.ReportId ?? result.ReportId;
+                var changed = result.ResultValuesJson != enrichedJson
+                    || (result.Interpretation ?? string.Empty) != (request.Interpretation ?? string.Empty);
+                if (changed)
+                {
+                    var reason = request.AmendmentReason?.Trim();
+                    if (reportId.HasValue && (reason == null || reason.Length < 5))
+                        throw new Common.AmendmentReasonRequiredException();
+
+                    _context.PathologyResultHistory.Add(new PathologyResultHistory
+                    {
+                        HistoryId = Guid.NewGuid(),
+                        HospitalId = request.HospitalId,
+                        ResultId = result.ResultId,
+                        OrderLineId = result.OrderLineId,
+                        ReportId = reportId,
+                        PreviousValuesJson = result.ResultValuesJson,
+                        PreviousInterpretation = result.Interpretation,
+                        PreviousHasCriticalFlag = result.HasCriticalFlag,
+                        PreviousUpdatedAt = result.UpdatedAt,
+                        PreviousUpdatedBy = result.UpdatedBy,
+                        ChangeReason = string.IsNullOrWhiteSpace(reason) ? null : reason,
+                        ChangedAt = DateTime.UtcNow,
+                        ChangedBy = request.LoggedInUserName ?? request.LoggedInUserId.ToString(),
+                    });
+
+                    if (reportId.HasValue)
+                    {
+                        var report = await _context.PathologyReport
+                            .FirstOrDefaultAsync(r => r.ReportId == reportId.Value && r.HospitalId == request.HospitalId, cancellationToken);
+                        if (report != null)
+                        {
+                            report.Status = "AMENDED";
+                            report.ApprovedAt = null;          // a verification covered the OLD values
+                            report.ApprovedByUserId = null;
+                            report.UpdatedAt = DateTime.UtcNow;
+                            report.UpdatedBy = request.LoggedInUserName ?? request.LoggedInUserId.ToString();
+                        }
+                    }
+                }
+
                 result.ResultValuesJson = enrichedJson;
                 result.HasCriticalFlag = hasCritical;
                 result.Interpretation = request.Interpretation;
@@ -149,7 +192,67 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
 
             await _context.SaveChangesAsync(cancellationToken);
+
+            // A panic value must not wait for someone to open the lab screen: raise an in-app CRITICAL alert for
+            // the ward/doctors (once per line while one is still open).
+            if (hasCritical)
+                await RaiseCriticalAlertAsync(request, line, order, enrichedJson, cancellationToken);
+
             return true;
+        }
+
+        private async Task RaiseCriticalAlertAsync(EnterPathologyResultCommand request, PathologyOrderLine line, PathologyOrder? order, string enrichedJson, CancellationToken cancellationToken)
+        {
+            const string code = "CRITICAL_LAB_RESULT";
+            var sourceRef = line.OrderLineId.ToString();
+            var alreadyOpen = await _context.Alert.AnyAsync(a => a.HospitalId == request.HospitalId && a.AlertCode == code
+                && a.SourceRefId == sourceRef && (a.Status == "ACTIVE" || a.Status == "SNOOZED"), cancellationToken);
+            if (alreadyOpen) return;
+
+            var critical = new List<string>();
+            try
+            {
+                using var doc = JsonDocument.Parse(enrichedJson);
+                foreach (var p in doc.RootElement.EnumerateObject())
+                {
+                    if (p.Value.ValueKind != JsonValueKind.Object) continue;
+                    var flag = p.Value.TryGetProperty("flag", out var f) ? f.GetString() : null;
+                    if (flag != null && flag.StartsWith("CRITICAL", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var value = p.Value.TryGetProperty("value", out var v) ? v.ToString() : "?";
+                        critical.Add($"{p.Name} {value} ({flag.Replace('_', ' ').ToLowerInvariant()})");
+                    }
+                }
+            }
+            catch (JsonException) { /* unparseable: still alert without the parameter list */ }
+
+            var testName = await _context.PathologyTestMaster
+                .Where(t => t.TestId == line.TestId)
+                .Select(t => t.TestName)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            _context.Alert.Add(new Alert
+            {
+                AlertId = Guid.NewGuid(),
+                HospitalId = request.HospitalId,
+                AlertCode = code,
+                Severity = "CRITICAL",
+                Title = $"Critical lab result{(testName != null ? $": {testName}" : string.Empty)}",
+                Body = critical.Count > 0 ? string.Join("; ", critical) : "A parameter is outside its critical limits. Review the result.",
+                PatientId = order?.PatientId,
+                AdmissionId = order?.AdmissionId,
+                EncounterId = order?.EncounterId,
+                AudienceRoles = "Doctor,AdminDoctor,Nurse",
+                Status = "ACTIVE",
+                RaisedAt = DateTime.UtcNow,
+                RaisedBy = request.LoggedInUserName,
+                RaisedByUserId = request.LoggedInUserId == Guid.Empty ? null : request.LoggedInUserId,
+                SourceModule = "PATHOLOGY",
+                SourceRefId = sourceRef,
+                DispatchInApp = true,
+                CreatedAt = DateTime.UtcNow,
+            });
+            await _context.SaveChangesAsync(cancellationToken);
         }
 
         /// <summary>Re-derives {value, flag} for every entered parameter server-side -- the client

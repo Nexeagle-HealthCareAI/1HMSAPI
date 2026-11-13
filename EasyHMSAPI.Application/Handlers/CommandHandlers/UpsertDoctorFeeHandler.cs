@@ -22,6 +22,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
         public async Task<UpsertDoctorFeeResponseModel> Handle(UpsertDoctorFeeRequestModel request, CancellationToken cancellationToken)
         {
+            // Fees drive OPD billing, so only an admin_panel holder at this hospital may change them.
+            if (request.CallerUserId == null
+                || !await Common.CallerGuards.HasPermissionAtHospitalAsync(_context, request.CallerUserId.Value, request.HospitalId, "admin_panel", cancellationToken))
+                return new UpsertDoctorFeeResponseModel { IsSuccess = false, Forbidden = true, Message = "You don't have permission to change doctor fees." };
+
             if (request.DoctorId == Guid.Empty)
                 return new UpsertDoctorFeeResponseModel { IsSuccess = false, Message = "DoctorId is required." };
             if (request.OpdConsultFee < 0 || request.IpdVisitFee < 0 || request.EmergencyFee < 0)

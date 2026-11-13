@@ -72,6 +72,9 @@ namespace EasyHMSAPI.Application.Services
 
         // Employer contributions
         decimal PfEmployer,
-        decimal EsiEmployer
+        decimal EsiEmployer,
+
+        // Section 192 workings (JSON) for Track A; null otherwise.
+        string? TdsWorkingsJson = null
     );
 }

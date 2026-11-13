@@ -111,7 +111,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 var report = line.ReportId.HasValue
                     ? await _context.PathologyReport.FirstOrDefaultAsync(r => r.ReportId == line.ReportId.Value && r.HospitalId == request.HospitalId, cancellationToken)
                     : null;
-                var isNewReport = report == null;
 
                 // Report numbering and the report/result/line/order updates below must commit or
                 // roll back together -- previously the number series had its own SaveChangesAsync
@@ -193,23 +192,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 await _context.SaveChangesAsync(cancellationToken);
                 await tx.CommitAsync(cancellationToken);
 
-                // Billing is deliberately OUTSIDE the transaction above -- a billing failure must
-                // not undo an already-committed report (same soft-fail philosophy as
-                // CollectPathologySampleHandler's billing dispatch).
-                // 6. Auto-bill the first time a report is generated for THIS test, if the hospital's
-                // billing policy is configured for it. Deliberately NOT re-dispatched on a
-                // regenerate (isNewReport guard) -- AddChargeEventHandler has no dedup for this
-                // caller, so firing it again on every "Update Report" click would double-bill the
-                // same test. Best-effort, same as CollectPathologySampleHandler's dispatch.
-                if (isNewReport)
-                {
-                    var billingPolicy = await _context.BillingPolicy
-                        .FirstOrDefaultAsync(p => p.HospitalId == request.HospitalId, cancellationToken);
-                    if (billingPolicy?.LabPathTrigger == "ON_REPORT_APPROVAL")
-                    {
-                        await DispatchReportGenerationBillingAsync(order, new[] { line.TestId }, request, cancellationToken);
-                    }
-                }
+                // NOT billed here any more: "On report approval" bills when the pathologist VERIFIES the report
+                // (VerifyPathologyReportHandler), so a draft report that is later corrected or abandoned is never charged.
 
                 return new GeneratePathologyReportResponseModel
                 {
@@ -217,35 +201,6 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     ReportId = report.ReportId,
                     ReportNo = report.ReportNo
                 };
-        }
-
-        private async Task DispatchReportGenerationBillingAsync(
-            PathologyOrder order, IEnumerable<Guid> testIds, GeneratePathologyReportCommand request, CancellationToken cancellationToken)
-        {
-            try
-            {
-                var billingEncounterId = await PathologyAutoBillingHelper.ResolveBillingEncounterIdAsync(
-                    _context, request.HospitalId, order.EncounterId, order.AdmissionId, cancellationToken);
-                if (!billingEncounterId.HasValue) return;
-
-                var charges = await PathologyAutoBillingHelper.BuildChargeDetailsAsync(
-                    _context, request.HospitalId, testIds, order.OrderId.ToString(), order.OrderedByDoctorId, cancellationToken);
-                if (!charges.Any()) return;
-
-                await _mediator.Send(new AddChargeEventRequestModel
-                {
-                    HospitalId = request.HospitalId,
-                    PatientId = order.PatientId,
-                    EncounterId = billingEncounterId.Value,
-                    Charges = charges,
-                    LoggedInUserId = request.LoggedInUserId,
-                    LoggedInUserName = request.LoggedInUserName
-                }, cancellationToken);
-            }
-            catch
-            {
-                // Swallow -- report generation already succeeded and must not be undone by a billing failure.
-            }
         }
     }
 }

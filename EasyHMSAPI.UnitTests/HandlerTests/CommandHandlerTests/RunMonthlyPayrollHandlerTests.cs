@@ -320,7 +320,15 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task TrackA_ProRatedPayForPartialMonth()
         {
-            // Arrange: Only 15 days worked out of 31
+            // Arrange: Only 15 days worked out of 31. Weekly offs are configured UNPAID here so this test
+            // isolates pro-rating (the default policy pays Sundays -- covered by the tests below).
+            _context.Set<HrPayrollSettings>().Add(new HrPayrollSettings
+            {
+                HospitalId = _salariedEmployee.HospitalId,
+                WeeklyOffDays = "SUN",
+                WeeklyOffPayable = false,
+                HolidayPayable = false,
+            });
             for (int day = 1; day <= 15; day++)
             {
                 _context.Set<HrAttendanceLog>().Add(new HrAttendanceLog
@@ -397,9 +405,50 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             // Act
             var result = await strategy.ComputeAsync(_salariedEmployee, _august2026, CancellationToken.None);
 
-            // Assert: 20 full + 2 × 0.5 = 21 payable days
-            Assert.That(result.PayableDays, Is.EqualTo(21m),
-                "2 half-days should each count as 0.5 payable days");
+            // Assert: 20 full + 2 × 0.5 = 21 worked days, plus the two Sundays that were not attended
+            // (23 and 30 Aug 2026) which are paid by default (Sunday weekly off, payable). Sundays 2/9/16
+            // fall inside the attended range and are not double-counted.
+            Assert.That(result.PayableDays, Is.EqualTo(23m),
+                "2 half-days count 0.5 each; unattended Sundays are paid by the default policy");
+        }
+
+        [Test]
+        public async Task TrackA_WeeklyOffsUnpaid_WhenHospitalConfiguresIt()
+        {
+            _context.Set<HrPayrollSettings>().Add(new HrPayrollSettings
+            {
+                HospitalId = _salariedEmployee.HospitalId,
+                WeeklyOffDays = "SUN",
+                WeeklyOffPayable = false,
+                HolidayPayable = true,
+            });
+            for (int day = 1; day <= 20; day++)
+            {
+                _context.Set<HrAttendanceLog>().Add(new HrAttendanceLog
+                {
+                    HrAttendanceLogId = Guid.NewGuid(),
+                    HrEmployeeId = _salariedEmployee.HrEmployeeId,
+                    AttendanceDate = new DateOnly(2026, 8, day),
+                    Status = "PRESENT",
+                    PunchSource = "BIOMETRIC",
+                });
+            }
+            for (int day = 21; day <= 22; day++)
+            {
+                _context.Set<HrAttendanceLog>().Add(new HrAttendanceLog
+                {
+                    HrAttendanceLogId = Guid.NewGuid(),
+                    HrEmployeeId = _salariedEmployee.HrEmployeeId,
+                    AttendanceDate = new DateOnly(2026, 8, day),
+                    Status = "HALF_DAY",
+                    PunchSource = "BIOMETRIC",
+                });
+            }
+            await _context.SaveChangesAsync();
+
+            var result = await new SalariedPayrollStrategy(_context).ComputeAsync(_salariedEmployee, _august2026, CancellationToken.None);
+
+            Assert.That(result.PayableDays, Is.EqualTo(21m), "with weekly offs unpaid only worked days count");
         }
 
         // ═══════════════════════════════════════════════════════════════════════

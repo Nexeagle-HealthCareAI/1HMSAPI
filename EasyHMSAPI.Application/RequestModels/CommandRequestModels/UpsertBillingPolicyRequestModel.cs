@@ -21,6 +21,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? PlaceOfSupplyStateCode { get; set; }
         public bool DefaultPriceIsTaxInclusive { get; set; }
         public string? TaxRoundingMode { get; set; }
+        // Null keeps the stored value (older clients do not send it).
+        public decimal? PharmacyMaxDiscountPercent { get; set; }
 
         [JsonIgnore]
         public string? LoggedInUserName { get; set; }

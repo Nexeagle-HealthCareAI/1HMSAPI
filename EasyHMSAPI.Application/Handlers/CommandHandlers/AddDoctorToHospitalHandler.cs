@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Domain.Context;
@@ -17,10 +18,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     {
         private static readonly string[] DoctorRoleNames = { "Doctor", "AdminDoctor" };
         private readonly AppDbContext _context;
+        private readonly ISubscriptionLimitHelper _subscriptionLimitHelper;
 
-        public AddDoctorToHospitalHandler(AppDbContext context)
+        public AddDoctorToHospitalHandler(AppDbContext context, ISubscriptionLimitHelper subscriptionLimitHelper)
         {
             _context = context;
+            _subscriptionLimitHelper = subscriptionLimitHelper;
         }
 
         public async Task<AddDoctorToHospitalResponseModel> Handle(AddDoctorToHospitalRequestModel request, CancellationToken cancellationToken)
@@ -57,6 +60,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     .AnyAsync(hu => hu.HospitalID == request.TargetHospitalId && hu.UserID == doctor.UserID, cancellationToken);
                 if (alreadyMember)
                     return new AddDoctorToHospitalResponseModel { Success = true, AlreadyMember = true, Message = "This doctor already works at the selected hospital." };
+
+                // The target hospital's own plan applies: a chain doctor takes a doctor seat there too.
+                var limit = await _subscriptionLimitHelper.CanAddDoctorAsync(request.TargetHospitalId, cancellationToken);
+                if (!limit.Allowed)
+                    return Fail(limit.Reason ?? "The target hospital's plan does not allow more doctors.");
 
                 var now = DateTime.UtcNow;
                 var employeeId = await _context.UserProfiles

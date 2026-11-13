@@ -35,12 +35,13 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         public async Task Handle_ValidRequest_CreatesDepartment()
         {
             // Arrange
+            var hospitalId = Guid.NewGuid();
             var request = new CreateDepartmentRequestModel
             {
-                HospitalID = Guid.NewGuid(),
+                HospitalID = hospitalId,
                 Name = "Cardiology",
                 Description = "Heart stuff",
-                CreatedByUserID = Guid.NewGuid()
+                CallerUserId = HrAuthSeed.SeedMember(_context, hospitalId, "admin_panel")
             };
 
             // Act

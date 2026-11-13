@@ -1,4 +1,6 @@
+using EasyHMSAPI.Application.Services.Models;
 using EasyHMSAPI.Application.Services.Interfaces;
+using EasyHMSAPI.Data.Constants;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System;
@@ -19,6 +21,8 @@ namespace EasyHMSAPI.Application.Services.Implementations
         // Country code (digits only, no '+') prepended to 10-digit numbers.
         // Defaults to "91" (India). Override via WhatsApp:CountryCode in appsettings.
         private readonly string _countryCode;
+        // Language the Health Wiki templates were created in. "en" is English; "en_US" would be English (US) in WhatsApp Manager.
+        private readonly string _healthWikiLanguage;
 
         public WhatsAppMessagingService(HttpClient httpClient, IConfiguration configuration, ILogger<WhatsAppMessagingService> logger)
         {
@@ -28,6 +32,8 @@ namespace EasyHMSAPI.Application.Services.Implementations
             _apiUrl = configuration["WhatsApp:ApiUrl"] ?? string.Empty;
             _accessToken = configuration["WhatsApp:AccessToken"] ?? string.Empty;
             _countryCode = configuration["WhatsApp:CountryCode"] ?? "91";
+            var language = configuration["HealthWiki:TemplateLanguage"]?.Trim();
+            _healthWikiLanguage = string.IsNullOrEmpty(language) || language.StartsWith("<") ? "en" : language;
         }
 
         private bool IsEnabled => !string.IsNullOrEmpty(_isEnabled) && _isEnabled.Trim().ToLower() == "true";
@@ -35,7 +41,9 @@ namespace EasyHMSAPI.Application.Services.Implementations
         // Single transport chokepoint for every template send below -- centralizes the
         // request/response plumbing AND the logging, so a bad token/URL/template shows up in
         // the logs with the actual Meta error body instead of every caller just seeing `false`.
-        private async Task<bool> SendAsync(string methodName, string to, object payload)
+        private async Task<bool> SendAsync(string methodName, string to, object payload) => (await SendForResultAsync(methodName, to, payload)).Accepted;
+
+        private async Task<WhatsAppSendResult> SendForResultAsync(string methodName, string to, object payload)
         {
             try
             {
@@ -46,19 +54,34 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 request.Headers.Add("Authorization", $"Bearer {_accessToken}");
 
                 var response = await _httpClient.SendAsync(request);
+                var body = await response.Content.ReadAsStringAsync();
                 if (!response.IsSuccessStatusCode)
                 {
-                    var body = await response.Content.ReadAsStringAsync();
                     _logger.LogWarning("WhatsApp {Method} failed for {Mobile}: {StatusCode} {Body}",
                         methodName, MaskMobile(to), (int)response.StatusCode, body);
+                    return WhatsAppSendResult.Refused;
                 }
-                return response.IsSuccessStatusCode;
+                return new WhatsAppSendResult { Accepted = true, MessageId = ReadMessageId(body) };
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "WhatsApp {Method} threw for {Mobile}", methodName, MaskMobile(to));
-                return false;
+                return WhatsAppSendResult.Refused;
             }
+        }
+
+        // Meta answers {"messages":[{"id":"wamid...."}], ...}. A body in another shape just means no id to track.
+        private static string? ReadMessageId(string body)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(body);
+                if (doc.RootElement.TryGetProperty("messages", out var messages) && messages.ValueKind == JsonValueKind.Array && messages.GetArrayLength() > 0
+                    && messages[0].TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String)
+                    return id.GetString();
+            }
+            catch (JsonException) { }
+            return null;
         }
 
         public Task<bool> SendOtpAsync(string mobileNumber, string otp)
@@ -452,10 +475,10 @@ namespace EasyHMSAPI.Application.Services.Implementations
                             type = "body",
                             parameters = new object[]
                             {
-                                new { type = "text", text = FormatDoctorName(doctorName), parameter_name = "doctor_name" },
-                                new { type = "text", text = patientName, parameter_name = "patient_name" },
-                                new { type = "text", text = maskedPatientMobile, parameter_name = "patient_mobile" },
-                                new { type = "text", text = patientAddress, parameter_name = "patient_address" },
+                                new { type = "text", text = SanitizeTemplateParam(FormatDoctorName(doctorName)), parameter_name = "doctor_name" },
+                                new { type = "text", text = SanitizeTemplateParam(patientName), parameter_name = "patient_name" },
+                                new { type = "text", text = SanitizeTemplateParam(maskedPatientMobile), parameter_name = "patient_mobile" },
+                                new { type = "text", text = SanitizeTemplateParam(patientAddress), parameter_name = "patient_address" },
                                 new { type = "text", text = loginUrl, parameter_name = "login_url" }
                             }
                         }
@@ -465,6 +488,83 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
             return SendAsync(nameof(SendDoctorNewOnlineAppointmentAlertAsync), to, payload);
         }
+
+        public Task<bool> SendHealthWikiInviteAsync(string mobileNumber, string contributorName, string task, string url)
+        {
+            if (!IsEnabled)
+            {
+                _logger.LogInformation("WhatsApp is disabled (WhatsApp:IsEnabled); skipping {Method} for {Mobile}", nameof(SendHealthWikiInviteAsync), MaskMobile(mobileNumber));
+                return Task.FromResult(false);
+            }
+
+            var to = NormalizeToE164(mobileNumber);
+            var payload = new
+            {
+                messaging_product = "whatsapp",
+                to,
+                type = "template",
+                template = new
+                {
+                    name = HealthWikiConstants.Template.Invite,
+                    language = new { code = "en" },
+                    components = new object[]
+                    {
+                        new
+                        {
+                            type = "body",
+                            parameters = new object[]
+                            {
+                                new { type = "text", text = SanitizeTemplateParam(contributorName, 100), parameter_name = "contributor_name" },
+                                new { type = "text", text = SanitizeTemplateParam(task, 200), parameter_name = "task" },
+                                new { type = "text", text = url, parameter_name = "url" }
+                            }
+                        }
+                    }
+                }
+            };
+
+            return SendAsync(nameof(SendHealthWikiInviteAsync), to, payload);
+        }
+
+        public async Task<bool> SendHealthWikiTemplateAsync(string mobileNumber, string templateName, IReadOnlyList<KeyValuePair<string, string>> parameters)
+            => (await SendHealthWikiTemplateTrackedAsync(mobileNumber, templateName, parameters)).Accepted;
+
+        public Task<WhatsAppSendResult> SendHealthWikiTemplateTrackedAsync(string mobileNumber, string templateName, IReadOnlyList<KeyValuePair<string, string>> parameters)
+        {
+            if (!IsEnabled)
+            {
+                _logger.LogInformation("WhatsApp is disabled (WhatsApp:IsEnabled); skipping {Method} {Template} for {Mobile}", nameof(SendHealthWikiTemplateAsync), templateName, MaskMobile(mobileNumber));
+                return Task.FromResult(WhatsAppSendResult.Refused);
+            }
+
+            var to = NormalizeToE164(mobileNumber);
+            var payload = new
+            {
+                messaging_product = "whatsapp",
+                to,
+                type = "template",
+                template = new
+                {
+                    name = templateName,
+                    language = new { code = _healthWikiLanguage },
+                    components = new object[]
+                    {
+                        new
+                        {
+                            type = "body",
+                            parameters = parameters
+                                .Select(p => (object)new { type = "text", text = SanitizeTemplateParam(p.Value, 300), parameter_name = p.Key })
+                                .ToArray(),
+                        },
+                    },
+                },
+            };
+
+            return SendForResultAsync($"{nameof(SendHealthWikiTemplateAsync)}:{templateName}", to, payload);
+        }
+
+        public Task<WhatsAppSendResult> SendNamedTemplateTrackedAsync(string mobileNumber, string templateName, IReadOnlyList<KeyValuePair<string, string>> parameters)
+            => SendHealthWikiTemplateTrackedAsync(mobileNumber, templateName, parameters);
 
         // Normalizes a mobile number to E.164 style (no leading '+') as required by the Meta
         // Cloud API. Strips non-digits, removes a leading '0', and prepends the configured
@@ -479,6 +579,55 @@ namespace EasyHMSAPI.Application.Services.Implementations
             if (!digits.StartsWith(_countryCode))
                 digits = _countryCode + digits;
             return digits;
+        }
+
+        public Task<WhatsAppSendResult> SendTemplateWithButtonsAsync(string mobileNumber, string templateName, string languageCode,
+            IReadOnlyList<KeyValuePair<string, string>> parameters, IReadOnlyList<string> buttonUrlSuffixes)
+        {
+            if (!IsEnabled)
+            {
+                _logger.LogInformation("WhatsApp is disabled (WhatsApp:IsEnabled); skipping {Template} for {Mobile}", templateName, MaskMobile(mobileNumber));
+                return Task.FromResult(WhatsAppSendResult.Refused);
+            }
+            var to = NormalizeToE164(mobileNumber);
+            var components = new List<object>
+            {
+                new
+                {
+                    type = "body",
+                    parameters = parameters
+                        .Select(p => (object)new { type = "text", text = SanitizeTemplateParam(p.Value, 300), parameter_name = p.Key })
+                        .ToArray(),
+                },
+            };
+            for (var i = 0; i < buttonUrlSuffixes.Count; i++)
+            {
+                components.Add(new
+                {
+                    type = "button",
+                    sub_type = "url",
+                    index = i.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    parameters = new object[] { new { type = "text", text = buttonUrlSuffixes[i] } },
+                });
+            }
+            var payload = new
+            {
+                messaging_product = "whatsapp",
+                to,
+                type = "template",
+                template = new { name = templateName, language = new { code = string.IsNullOrWhiteSpace(languageCode) ? "en" : languageCode }, components = components.ToArray() },
+            };
+            return SendForResultAsync($"{nameof(SendTemplateWithButtonsAsync)}:{templateName}", to, payload);
+        }
+
+        // Meta rejects a template send (#132018) when a parameter contains a newline, a tab or 4+
+        // consecutive spaces, and rejects an empty one. Patient-typed fields (name, address) are free
+        // text, so they are flattened to single-spaced one-liners before being sent.
+        private static string SanitizeTemplateParam(string? value, int maxLength = 500)
+        {
+            var flattened = string.Join(' ', (value ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+            if (flattened.Length == 0) return "-";
+            return flattened.Length <= maxLength ? flattened : flattened[..maxLength];
         }
 
         private static string FormatDoctorName(string doctorName)

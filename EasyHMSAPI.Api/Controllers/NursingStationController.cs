@@ -1,4 +1,5 @@
 using EasyHMSAPI.Api.Common;
+using EasyHMSAPI.Application.Handlers.CommandHandlers;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
@@ -24,6 +25,29 @@ namespace EasyHMSAPI.Api.Controllers
         {
             _mediator = mediator;
             _logger = logger;
+        }
+
+        // Hospital nursing shift definitions (was browser localStorage). Anyone on the nursing station may
+        // read them; only admins may change them (action-level attribute overrides the class-level one).
+        [HttpGet("shifts")]
+        public async Task<ActionResult<GetNursingShiftsResponseModel>> GetShifts([FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
+            return Ok(await _mediator.Send(new GetNursingShiftsRequestModel { HospitalId = hospitalId }));
+        }
+
+        [HttpPut("shifts")]
+        [RequiresPermission("admin_panel")]
+        public async Task<ActionResult<SaveNursingShiftsResponseModel>> SaveShifts([FromQuery] Guid hospitalId, [FromBody] List<NursingShiftDto> shifts)
+        {
+            if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
+            var response = await _mediator.Send(new SaveNursingShiftsRequestModel
+            {
+                HospitalId = hospitalId,
+                UserId = UserContextHelper.GetUserId(User) ?? Guid.Empty,
+                Shifts = shifts ?? new List<NursingShiftDto>(),
+            });
+            return response.Success ? Ok(response) : BadRequest(response);
         }
 
         [HttpPost("assignment")]

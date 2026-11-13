@@ -14,6 +14,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("consent-template")]
     [Authorize]
+    [RequiresPermission("ipd", "ot_board", "admin_panel")]
     public class ConsentTemplateController : ControllerBase
     {
         private readonly IMediator _mediator;

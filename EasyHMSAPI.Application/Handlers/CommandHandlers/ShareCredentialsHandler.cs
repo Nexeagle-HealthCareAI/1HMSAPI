@@ -42,7 +42,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 return Fail("You don't have access to this hospital.");
 
             // Sharing login details is an administrator action.
-            if (!await Common.CallerGuards.IsAdminAsync(_context, request.CallerUserId, cancellationToken))
+            if (!await Common.CallerGuards.IsAdminAtHospitalAsync(_context, request.CallerUserId, request.HospitalId, cancellationToken))
                 return Fail("Only an administrator can share login details.");
 
             var hospitalName = await _context.Hospitals

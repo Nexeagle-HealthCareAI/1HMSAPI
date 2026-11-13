@@ -143,6 +143,10 @@ namespace EasyHMSAPI.Domain.Entities
         [Column(TypeName = "decimal(10,2)")]
         public decimal TdsDeducted { get; set; } = 0;
 
+        // How TdsDeducted was worked out (regime, projected annual income, taxable income, annual tax, TDS already deducted this year,
+        // months left). Lets an accountant check the figure. Null for payslips produced before this existed and for consultants.
+        public string? TdsWorkingsJson { get; set; }
+
         [Column(TypeName = "decimal(10,2)")]
         public decimal LoanInstallment { get; set; } = 0;
 

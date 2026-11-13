@@ -112,6 +112,10 @@ namespace EasyHMSAPI.Api.Controllers.V1
                 if (!success) return BadRequest(new { success = false, message = "Failed to enter result or order line not found." });
                 return Ok(new { success = true });
             }
+            catch (EasyHMSAPI.Application.Common.AmendmentReasonRequiredException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message, amendmentReasonRequired = true });
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error entering pathology result for order line {OrderLineId}", orderLineId);
@@ -247,6 +251,29 @@ namespace EasyHMSAPI.Api.Controllers.V1
             {
                 _logger.LogError(ex, "Error marking external lab result received for pathology order line {OrderLineId}", orderLineId);
                 return StatusCode(500, new { Message = "An error occurred while recording the external lab result." });
+            }
+        }
+
+        // Pathologist sign-off of a generated report; any later amendment of its results clears it (status AMENDED).
+        [HttpPost("{hospitalId}/{orderId}/report/{reportId}/verify")]
+        public async Task<IActionResult> VerifyReport(Guid hospitalId, Guid orderId, Guid reportId, [FromBody] VerifyPathologyReportCommand request)
+        {
+            request.HospitalId = hospitalId;
+            request.OrderId = orderId;
+            request.ReportId = reportId;
+            request.LoggedInUserId = UserContextHelper.GetUserId(User) ?? Guid.Empty;
+            request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+
+            try
+            {
+                var result = await _mediator.Send(request);
+                if (!result.Success) return BadRequest(new { success = false, message = result.Message });
+                return Ok(new { success = true, message = result.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error verifying pathology report {ReportId}", reportId);
+                return StatusCode(500, new { Message = "An error occurred while verifying the report." });
             }
         }
 

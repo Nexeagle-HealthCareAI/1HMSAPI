@@ -1,7 +1,9 @@
+using EasyHMSAPI.Application.Common;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -17,12 +19,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     /// </summary>
     public class DischargeSummaryDocumentCommandHandlers :
         IRequestHandler<UploadDischargeSummaryPdfRequestModel, UploadDischargeSummaryPdfResponseModel>,
-        IRequestHandler<SendDischargeSummaryWhatsAppRequestModel, SendDischargeSummaryWhatsAppResponseModel>
+        IRequestHandler<SendDischargeSummaryWhatsAppRequestModel, SendDischargeSummaryWhatsAppResponseModel>,
+        IRequestHandler<RegenerateDischargeLinkRequestModel, RegenerateDischargeLinkResponseModel>
     {
         private readonly AppDbContext _context;
         private readonly IBlobStorageService _blobStorageService;
         private readonly IWhatsAppMessagingService _whatsAppMessagingService;
         private readonly string _containerName;
+        private readonly IConfiguration _configuration;
 
         public DischargeSummaryDocumentCommandHandlers(AppDbContext context, IBlobStorageService blobStorageService, IWhatsAppMessagingService whatsAppMessagingService, IConfiguration configuration)
         {
@@ -30,6 +34,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             _blobStorageService = blobStorageService;
             _whatsAppMessagingService = whatsAppMessagingService;
             _containerName = configuration["BlobStorage:DischargeSummaryContainer"] ?? string.Empty;
+            _configuration = configuration;
         }
 
         public async Task<UploadDischargeSummaryPdfResponseModel> Handle(UploadDischargeSummaryPdfRequestModel request, CancellationToken cancellationToken)
@@ -52,13 +57,22 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 var now = DateTime.UtcNow;
                 summary.PdfBlobKey = $"{entityId}_{_containerName}";
                 summary.PdfUploadedAt = now;
-                if (string.IsNullOrEmpty(summary.AccessToken))
-                    summary.AccessToken = RandomNumberGenerator.GetHexString(40);
+                // Mint on first use; an expired link is replaced rather than revived, and a link that has no
+                // expiry yet (legacy) gets one now.
+                if (string.IsNullOrEmpty(summary.AccessToken) || DischargeLinkPolicy.IsExpired(summary.AccessTokenExpiresAt, now))
+                {
+                    summary.AccessToken = DischargeLinkPolicy.NewToken();
+                    summary.AccessTokenExpiresAt = DischargeLinkPolicy.ExpiryFrom(now, _configuration);
+                }
+                else if (summary.AccessTokenExpiresAt == null)
+                {
+                    summary.AccessTokenExpiresAt = DischargeLinkPolicy.ExpiryFrom(now, _configuration);
+                }
                 summary.UpdatedAt = now;
 
                 await _context.SaveChangesAsync(cancellationToken);
 
-                return new UploadDischargeSummaryPdfResponseModel { Success = true, Message = "Discharge summary PDF uploaded.", AccessToken = summary.AccessToken };
+                return new UploadDischargeSummaryPdfResponseModel { Success = true, Message = "Discharge summary PDF uploaded.", AccessToken = summary.AccessToken, AccessTokenExpiresAt = summary.AccessTokenExpiresAt };
             }
             catch (Exception)
             {
@@ -77,6 +91,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     .FirstOrDefaultAsync(d => d.HospitalId == request.HospitalId && d.AdmissionId == request.AdmissionId, cancellationToken);
                 if (summary == null || string.IsNullOrEmpty(summary.PdfBlobKey))
                     return new SendDischargeSummaryWhatsAppResponseModel { Success = false, Message = "Generate the discharge summary PDF before sending it." };
+                if (!summary.IsSigned)
+                    return new SendDischargeSummaryWhatsAppResponseModel { Success = false, Message = "Only a signed discharge summary can be sent to the patient." };
 
                 var admission = await _context.Admission
                     .FirstOrDefaultAsync(a => a.AdmissionId == request.AdmissionId && a.HospitalId == request.HospitalId, cancellationToken);
@@ -122,6 +138,52 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             catch (Exception)
             {
                 return new SendDischargeSummaryWhatsAppResponseModel { Success = false, Message = "Error sending discharge summary via WhatsApp." };
+            }
+        }
+
+        public async Task<RegenerateDischargeLinkResponseModel> Handle(RegenerateDischargeLinkRequestModel request, CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (request.HospitalId == Guid.Empty || request.AdmissionId == Guid.Empty)
+                    return new RegenerateDischargeLinkResponseModel { Success = false, Message = "HospitalId and AdmissionId are required." };
+
+                var summary = await _context.DischargeSummary
+                    .FirstOrDefaultAsync(d => d.HospitalId == request.HospitalId && d.AdmissionId == request.AdmissionId, cancellationToken);
+                if (summary == null)
+                    return new RegenerateDischargeLinkResponseModel { Success = false, Message = "Discharge summary not found." };
+
+                var now = DateTime.UtcNow;
+                summary.AccessToken = DischargeLinkPolicy.NewToken();
+                summary.AccessTokenExpiresAt = DischargeLinkPolicy.ExpiryFrom(now, _configuration);
+                summary.UpdatedAt = now;
+                summary.UpdatedBy = request.LoggedInUserName;
+
+                _context.DischargeSummaryAudit.Add(new DischargeSummaryAudit
+                {
+                    AuditId = Guid.NewGuid(),
+                    HospitalId = summary.HospitalId,
+                    DischargeSummaryId = summary.DischargeSummaryId,
+                    AdmissionId = summary.AdmissionId,
+                    Action = DischargeSummaryAudit.ActionLinkRegenerated,
+                    Reason = string.IsNullOrWhiteSpace(request.Reason) ? null : request.Reason.Trim(),
+                    PerformedByUserId = request.LoggedInUserId,
+                    PerformedBy = request.LoggedInUserName,
+                    PerformedAt = now,
+                });
+
+                await _context.SaveChangesAsync(cancellationToken);
+                return new RegenerateDischargeLinkResponseModel
+                {
+                    Success = true,
+                    Message = "A new link was issued. Any earlier QR code or link no longer works.",
+                    AccessToken = summary.AccessToken,
+                    AccessTokenExpiresAt = summary.AccessTokenExpiresAt,
+                };
+            }
+            catch (Exception)
+            {
+                return new RegenerateDischargeLinkResponseModel { Success = false, Message = "Error regenerating the discharge summary link." };
             }
         }
     }

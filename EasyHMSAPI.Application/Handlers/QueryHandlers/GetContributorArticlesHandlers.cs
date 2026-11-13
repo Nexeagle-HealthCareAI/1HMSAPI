@@ -1,0 +1,145 @@
+using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
+using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Application.Services;
+using EasyHMSAPI.Domain.Context;
+using EasyHMSAPI.Domain.Entities;
+using MediatR;
+using Microsoft.EntityFrameworkCore;
+
+namespace EasyHMSAPI.Application.Handlers.QueryHandlers
+{
+    internal static class ContributorArticleLoader
+    {
+        /// <summary>The articles a person wrote or must review, with their open edits and the names to show.</summary>
+        public static async Task<List<MyArticleInfo>> Load(AppDbContext context, Guid me, string? slug, CancellationToken ct)
+        {
+            var query = context.HealthArticles.AsNoTracking().Where(a => a.AuthorContributorId == me || a.ReviewerContributorId == me);
+            if (slug != null) query = query.Where(a => a.Slug == slug);
+            var articles = await query.OrderByDescending(a => a.UpdatedAt).Take(500).ToListAsync(ct);
+            if (articles.Count == 0) return new List<MyArticleInfo>();
+
+            var ids = articles.Select(a => a.ArticleId).ToList();
+            var open = (await context.HealthArticleRevisions.AsNoTracking()
+                .Where(r => ids.Contains(r.ArticleId) && (r.Status == HealthArticleRevision.StatusDraft || r.Status == HealthArticleRevision.StatusInReview))
+                .ToListAsync(ct)).ToDictionary(r => r.ArticleId);
+            var peopleIds = articles.SelectMany(a => new[] { a.AuthorContributorId, a.ReviewerContributorId }).Where(i => i.HasValue).Select(i => i!.Value).Distinct().ToList();
+            var names = await context.HealthWikiContributors.AsNoTracking().Where(c => peopleIds.Contains(c.ContributorId))
+                .ToDictionaryAsync(c => c.ContributorId, c => c.FullName, ct);
+
+            var suggesters = await HealthArticleOrigin.SuggestersOf(context, ids, ct);
+            var now = DateTime.UtcNow;
+            string? Name(Guid? id) => id.HasValue && names.TryGetValue(id.Value, out var n) ? n : null;
+
+            var result = new List<MyArticleInfo>();
+            foreach (var a in articles)
+            {
+                var revision = open.GetValueOrDefault(a.ArticleId);
+                var isAuthor = a.AuthorContributorId == me;
+                // A reviewer sees an article only once it is with them: in review, live, or with an edit in review.
+                if (!isAuthor)
+                {
+                    var visible = a.Status != HealthArticle.StatusDraft || revision?.Status == HealthArticleRevision.StatusInReview;
+                    if (!visible) continue;
+                }
+                var info = ContributorPortalMapper.ToMyArticle(a, revision, me, Name(a.AuthorContributorId), Name(a.ReviewerContributorId), now);
+                // The reviewer is told whose topic it was, and whether it was their own.
+                if (!isAuthor && suggesters.TryGetValue(a.ArticleId, out var by)) { info.SuggestedBy = by.Name; info.SuggestedByMe = by.Id == me; }
+                result.Add(info);
+            }
+            return result;
+        }
+    }
+
+    public class GetContributorArticlesHandler : IRequestHandler<GetContributorArticlesRequestModel, GetContributorArticlesResponseModel>
+    {
+        private readonly AppDbContext _context;
+
+        public GetContributorArticlesHandler(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        public async Task<GetContributorArticlesResponseModel> Handle(GetContributorArticlesRequestModel request, CancellationToken ct)
+        {
+            var all = await ContributorArticleLoader.Load(_context, request.ContributorId, null, ct);
+            bool Reviewer(MyArticleInfo a) => a.MyRole == ContributorPortalMapper.RoleReviewer;
+
+            return GetContributorArticlesResponseModel.Ok(new MyArticleListInfo
+            {
+                // Waiting for MY decision: in review and not yet approved by me, or a live article with an edit in review.
+                Pending = all.Where(a => Reviewer(a) && !a.AwaitingVerification
+                                         && (a.Status == HealthArticle.StatusInReview || a.RevisionStatus == HealthArticleRevision.StatusInReview))
+                             .OrderByDescending(a => a.WaitingDays ?? 0).ToList(),
+                Published = all.Where(a => a.Status == HealthArticle.StatusPublished).OrderByDescending(a => a.UpdatedAt).ToList(),
+                Drafts = all.Where(a => !Reviewer(a) && a.Status != HealthArticle.StatusPublished).OrderByDescending(a => a.UpdatedAt).ToList(),
+            });
+        }
+    }
+
+    public class GetContributorArticleHandler : IRequestHandler<GetContributorArticleRequestModel, GetContributorArticleResponseModel>
+    {
+        private readonly AppDbContext _context;
+
+        public GetContributorArticleHandler(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        public async Task<GetContributorArticleResponseModel> Handle(GetContributorArticleRequestModel request, CancellationToken ct)
+        {
+            var slug = request.Slug?.Trim().ToLowerInvariant();
+            var found = (await ContributorArticleLoader.Load(_context, request.ContributorId, slug, ct)).FirstOrDefault();
+            // Someone else's article reads the same as one that does not exist.
+            return found == null ? GetContributorArticleResponseModel.Fail(404, "Article not found.") : GetContributorArticleResponseModel.Ok(found);
+        }
+    }
+
+    /// <summary>
+    /// What happened to an article, for the doctor who wrote it or reviews it. Team actions show as "NexEagle team"; WhatsApp delivery
+    /// notes are left out; a note is shown only where it is a reason written for the doctor.
+    /// </summary>
+    public class GetContributorArticleHistoryHandler : IRequestHandler<GetContributorArticleHistoryRequestModel, GetContributorArticleHistoryResponseModel>
+    {
+        private const string TeamName = "NexEagle team";
+        private readonly AppDbContext _context;
+
+        public GetContributorArticleHistoryHandler(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        public async Task<GetContributorArticleHistoryResponseModel> Handle(GetContributorArticleHistoryRequestModel request, CancellationToken ct)
+        {
+            var slug = request.Slug?.Trim().ToLowerInvariant();
+            // Same access as reading the article: someone else's article reads the same as one that does not exist.
+            var mine = (await ContributorArticleLoader.Load(_context, request.ContributorId, slug, ct)).FirstOrDefault();
+            if (mine == null) return GetContributorArticleHistoryResponseModel.Fail(404, "Article not found.");
+            var articleId = await _context.HealthArticles.AsNoTracking().Where(a => a.Slug == slug).Select(a => a.ArticleId).FirstAsync(ct);
+            var myName = await _context.HealthWikiContributors.AsNoTracking().Where(c => c.ContributorId == request.ContributorId).Select(c => c.FullName).FirstOrDefaultAsync(ct);
+
+            var rows = await _context.HealthWikiAudits.AsNoTracking()
+                .Where(h => h.EntityType == HealthWikiAudit.EntityArticle && h.EntityId == articleId)
+                .OrderByDescending(h => h.CreatedAt).ThenByDescending(h => h.AuditId)
+                .ToListAsync(ct);
+
+            var entries = new List<ContributorArticleHistoryEntry>();
+            foreach (var h in rows)
+            {
+                var label = HealthWikiAuditLog.DoctorLabel(h.Action);
+                if (label == null) continue;
+                var isPerson = h.ActorType == HealthWikiAudit.ActorContributor || h.ActorType == HealthWikiAudit.ActorDoctorStaff;
+                entries.Add(new ContributorArticleHistoryEntry
+                {
+                    At = h.CreatedAt,
+                    Kind = h.Action,
+                    Action = label,
+                    Actor = isPerson && !string.IsNullOrWhiteSpace(h.ActorName) ? h.ActorName! : TeamName,
+                    ByMe = isPerson && myName != null && string.Equals(h.ActorName, myName, StringComparison.OrdinalIgnoreCase),
+                    Detail = HealthWikiAuditLog.DoctorSeesDetail(h.Action) && !string.IsNullOrWhiteSpace(h.Detail) ? h.Detail : null,
+                });
+            }
+            return GetContributorArticleHistoryResponseModel.Ok(entries);
+        }
+    }
+}

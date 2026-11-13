@@ -17,6 +17,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
     [TestFixture]
     public class DeleteProfilePictureHandlerTests
     {
+        private static readonly Guid _unknownId = Guid.NewGuid();
         private AppDbContext _context = null!;
         private Mock<IBlobStorageService> _blobStorageServiceMock = null!;
         private Mock<IConfiguration> _configurationMock = null!;
@@ -54,7 +55,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             _blobStorageServiceMock.Setup(x => x.DeleteAsync(user.UserID.ToString(), "profile-photos", It.IsAny<CancellationToken>()))
                  .ReturnsAsync(true);
 
-            var request = new DeleteProfilePictureRequestModel { UserId = user.UserID };
+            var request = new DeleteProfilePictureRequestModel { UserId = user.UserID, CallerUserId = user.UserID};
 
             // Act
             var response = await _handler.Handle(request, CancellationToken.None);
@@ -69,7 +70,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public async Task Handle_UserNotFound_ReturnsFailure()
         {
             // Arrange
-            var request = new DeleteProfilePictureRequestModel { UserId = Guid.NewGuid() };
+            var request = new DeleteProfilePictureRequestModel { UserId = _unknownId, CallerUserId = _unknownId };
 
              // Act
             var response = await _handler.Handle(request, CancellationToken.None);

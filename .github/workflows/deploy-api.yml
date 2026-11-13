@@ -76,6 +76,29 @@
 #                                 setting (do not assume it mirrors the sandbox URL's path shape)
 #     ABDM_CERT_URL_PROD          Abdm:CertUrlProd — confirm against NHA's own docs before setting;
 #                                 sandbox is https://abhasbx.abdm.gov.in/abha/api/v3/profile/public/certificate
+#     INTERNAL_HEALTH_ARTICLES_KEY Internal:HealthArticlesKey — shared key the CMS API sends as
+#                           X-Internal-Key to every /internal/health-articles and /internal/health-wiki
+#                           route (articles, contributors, topic requests). Unset = those endpoints
+#                           reject every call (fail closed, 503); public reads are unaffected.
+#                           The same value goes into the CMS API's own secrets.
+#     DEV_MCP_SERVICE_KEYS / PROD_MCP_SERVICE_KEYS Mcp:ServiceKeys — comma-separated keys for POST /mcp
+#                           (Vita's read-only doctor tools), one per caller, sent as X-Service-Key.
+#                           Unset = /mcp answers 503 to everything (fail closed); nothing else is affected.
+#     DEV_HEALTHWIKI_BUCKET / PROD_HEALTHWIKI_BUCKET (variables, optional)
+#                           HealthWiki:ImageBucket — the bucket for Health Wiki article images, apart from
+#                           the patient-file bucket. Defaults nexeagle-healthwiki-dev / -prod. It uses the
+#                           same Storage:S3:* credentials, which must be allowed to write to it, and the
+#                           bucket must let anyone read single files (never list them). Unset or without
+#                           access: image upload answers 503 / 502 and nothing else is affected.
+#     DEV_HEALTHWIKI_S3_ACCESS_KEY / DEV_HEALTHWIKI_S3_SECRET_KEY, PROD_HEALTHWIKI_S3_ACCESS_KEY / PROD_HEALTHWIKI_S3_SECRET_KEY
+#                           HealthWiki:ImageAccessKey / ImageSecretKey — an access key allowed ONLY on the Health
+#                           Wiki image bucket (not on the patient-file bucket). Optional: without them the
+#                           shared S3_ACCESS_KEY / S3_SECRET_KEY is used, which must then be attached to that bucket.
+#     DEV_DOCTORDEKHO_URL / PROD_DOCTORDEKHO_URL (variables, optional)
+#                           HealthWiki:ContributorBaseUrl — the Doctor Dekho site's public address,
+#                           used to build the invitation links sent to Health Wiki contributors
+#                           (<url>/contribute/invite/<token>). Defaults to the dev / prod site.
+#                           Without it the invite and send-link routes answer 503.
 #     INTERNAL_PROXY_SECRET Internal:ProxyForwardingSecret — lets the public-API rate limiters
 #                           (PerIpPolicy/PublicBookingPolicy/PatientAuthPolicy) see each real
 #                           visitor's IP instead of NexEagleWebsite's own container IP for every
@@ -217,6 +240,12 @@ jobs:
           CMS_SERVICE_KEY: ${{ secrets.CMS_SERVICE_KEY }}
           CMS_BASE_URL:    ${{ vars.CMS_BASE_URL || 'http://151.185.45.77:5002' }}
           PROXY_SECRET:    ${{ secrets.INTERNAL_PROXY_SECRET }}
+          MCP_SERVICE_KEYS: ${{ secrets.DEV_MCP_SERVICE_KEYS }}
+          HEALTH_ARTICLES_KEY: ${{ secrets.INTERNAL_HEALTH_ARTICLES_KEY }}
+          HEALTHWIKI_BASE_URL: ${{ vars.DEV_DOCTORDEKHO_URL || 'https://doctordekho-dev.nexeagle.com' }}
+          HEALTHWIKI_IMAGE_BUCKET: ${{ vars.DEV_HEALTHWIKI_BUCKET || 'nexeagle-healthwiki-dev' }}
+          HEALTHWIKI_S3_ACCESS_KEY: ${{ secrets.DEV_HEALTHWIKI_S3_ACCESS_KEY }}
+          HEALTHWIKI_S3_SECRET_KEY: ${{ secrets.DEV_HEALTHWIKI_S3_SECRET_KEY }}
           WHATSAPP_BOT_BASE_URL: ${{ vars.WHATSAPP_BOT_BASE_URL || 'https://whatsapp-dev-api.nexeagle.com' }}
         with:
           host: ${{ secrets.DEV_SSH_HOST }}
@@ -224,7 +253,7 @@ jobs:
           password: ${{ secrets.DEV_SSH_PASSWORD }}
           port: 22
           command_timeout: 10m
-          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,JWT_ISSUER,JWT_AUDIENCE,OTP_PEPPER,SMTP_PW,TWILIO_SID,TWILIO_TOKEN,TWILIO_PHONE,WHATSAPP_TOKEN,WHATSAPP_ENABLED,WHATSAPP_API_URL,OPENAI_KEY,DEEPGRAM_KEY,GROQ_KEY,ABDM_CLIENT_ID,ABDM_CLIENT_SECRET,INVITATION_URL,STORAGE_PROVIDER,S3_SERVICE_URL,S3_ACCESS_KEY,S3_SECRET_KEY,S3_BUCKET,S3_PREFIX,CMS_SERVICE_KEY,CMS_BASE_URL,PROXY_SECRET,WHATSAPP_BOT_BASE_URL
+          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,JWT_ISSUER,JWT_AUDIENCE,OTP_PEPPER,SMTP_PW,TWILIO_SID,TWILIO_TOKEN,TWILIO_PHONE,WHATSAPP_TOKEN,WHATSAPP_ENABLED,WHATSAPP_API_URL,OPENAI_KEY,DEEPGRAM_KEY,GROQ_KEY,ABDM_CLIENT_ID,ABDM_CLIENT_SECRET,INVITATION_URL,STORAGE_PROVIDER,S3_SERVICE_URL,S3_ACCESS_KEY,S3_SECRET_KEY,S3_BUCKET,S3_PREFIX,CMS_SERVICE_KEY,CMS_BASE_URL,PROXY_SECRET,HEALTH_ARTICLES_KEY,HEALTHWIKI_BASE_URL,HEALTHWIKI_IMAGE_BUCKET,HEALTHWIKI_S3_ACCESS_KEY,HEALTHWIKI_S3_SECRET_KEY,WHATSAPP_BOT_BASE_URL,MCP_SERVICE_KEYS
           script: |
             set -e
             : "${DB_CONN:?DEV_DB_CONNECTION is empty}"
@@ -264,10 +293,32 @@ jobs:
             add 'Cms__ServiceApiKey'                     "$CMS_SERVICE_KEY"
             add 'Cms__BaseUrl'                           "$CMS_BASE_URL"
             add 'Internal__ProxyForwardingSecret'        "$PROXY_SECRET"
+            add 'Internal__HealthArticlesKey'            "$HEALTH_ARTICLES_KEY"
+            add 'Mcp__ServiceKeys'                       "$MCP_SERVICE_KEYS"
+            add 'HealthWiki__ContributorBaseUrl'         "$HEALTHWIKI_BASE_URL"
+            # Dev only: the sign-in code is also shown on the Doctor Dekho page (and only works while ASPNETCORE_ENVIRONMENT is Development).
+            add 'HealthWiki__ShowOtpOnScreen'            "true"
+            # Patient login/booking OTP: sent on WhatsApp on dev too, from the same (production) WhatsApp number and template as prod.
+            # To show it on the page again instead (nothing sent), add back: add 'PatientAuth__ShowOtpOnScreen' "true"
+            # Tester numbers that skip the patient OTP daily cap (comma-separated 10-digit mobiles). Set the repository variable
+            # PATIENT_OTP_TESTER_MOBILES under Settings → Secrets and variables → Actions → Variables; empty = no exceptions.
+            add 'PatientAuth__UnlimitedOtpMobiles'       "${{ vars.PATIENT_OTP_TESTER_MOBILES }}"
+            add 'HealthWiki__ImageBucket'                "$HEALTHWIKI_IMAGE_BUCKET"
+            add 'HealthWiki__ImageAccessKey'             "$HEALTHWIKI_S3_ACCESS_KEY"
+            add 'HealthWiki__ImageSecretKey'             "$HEALTHWIKI_S3_SECRET_KEY"
             add 'WhatsAppBot__BaseUrl'                   "$WHATSAPP_BOT_BASE_URL"
 
             IMAGE_LC=$(printf '%s' "$IMAGE" | tr '[:upper:]' '[:lower:]')
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+
+            # Free disk before pulling: every deploy leaves an image tagged with its commit, and
+            # `docker image prune -f` only removes untagged ones, so old API images piled up until the
+            # shared VM ran out of space. Remove this app's images except the one the running container
+            # uses (other apps' images are not touched).
+            CURRENT=$(docker inspect -f '{{.Image}}' easyhms-api-dev 2>/dev/null || true)
+            for id in $(docker images --no-trunc --format '{{.ID}}' "${IMAGE_LC%:*}" | sort -u); do
+              [ "$id" = "$CURRENT" ] || docker rmi -f "$id" >/dev/null 2>&1 || true
+            done
 
             # docker pull occasionally hits a transient containerd content-store race
             # ("failed commit on ref ... rename ... no such file or directory") — retry
@@ -347,6 +398,12 @@ jobs:
           CMS_SERVICE_KEY: ${{ secrets.CMS_SERVICE_KEY }}
           CMS_BASE_URL:    ${{ vars.CMS_BASE_URL || 'http://151.185.45.67:5002' }}
           PROXY_SECRET:    ${{ secrets.INTERNAL_PROXY_SECRET }}
+          MCP_SERVICE_KEYS: ${{ secrets.PROD_MCP_SERVICE_KEYS }}
+          HEALTH_ARTICLES_KEY: ${{ secrets.INTERNAL_HEALTH_ARTICLES_KEY }}
+          HEALTHWIKI_BASE_URL: ${{ vars.PROD_DOCTORDEKHO_URL || 'https://doctordekho.nexeagle.com' }}
+          HEALTHWIKI_IMAGE_BUCKET: ${{ vars.PROD_HEALTHWIKI_BUCKET || 'nexeagle-healthwiki-prod' }}
+          HEALTHWIKI_S3_ACCESS_KEY: ${{ secrets.PROD_HEALTHWIKI_S3_ACCESS_KEY }}
+          HEALTHWIKI_S3_SECRET_KEY: ${{ secrets.PROD_HEALTHWIKI_S3_SECRET_KEY }}
           WHATSAPP_BOT_BASE_URL: ${{ vars.WHATSAPP_BOT_BASE_URL }}
         run: |
           : "${DB_CONN:?PROD_DB_CONNECTION is empty}"
@@ -387,6 +444,12 @@ jobs:
           add 'Cms__ServiceApiKey'                     "$CMS_SERVICE_KEY"
           add 'Cms__BaseUrl'                           "$CMS_BASE_URL"
           add 'Internal__ProxyForwardingSecret'        "$PROXY_SECRET"
+          add 'Internal__HealthArticlesKey'            "$HEALTH_ARTICLES_KEY"
+          add 'Mcp__ServiceKeys'                       "$MCP_SERVICE_KEYS"
+          add 'HealthWiki__ContributorBaseUrl'         "$HEALTHWIKI_BASE_URL"
+          add 'HealthWiki__ImageBucket'                "$HEALTHWIKI_IMAGE_BUCKET"
+          add 'HealthWiki__ImageAccessKey'             "$HEALTHWIKI_S3_ACCESS_KEY"
+          add 'HealthWiki__ImageSecretKey'             "$HEALTHWIKI_S3_SECRET_KEY"
           add 'WhatsAppBot__BaseUrl'                   "$WHATSAPP_BOT_BASE_URL"
 
       - name: Copy prod.env to Prod VM
@@ -413,6 +476,10 @@ jobs:
           ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
               ${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }} \
               "set -e; \
+               CURRENT=\$(docker inspect -f '{{.Image}}' easyhms-api-prod 2>/dev/null || true); \
+               for id in \$(docker images --no-trunc --format '{{.ID}}' '${IMAGE_LC%:*}' | sort -u); do \
+                 [ \"\$id\" = \"\$CURRENT\" ] || docker rmi -f \"\$id\" >/dev/null 2>&1 || true; \
+               done; \
                PULLED=0; \
                for i in 1 2 3; do \
                  if docker pull '$IMAGE_LC'; then PULLED=1; break; fi; \

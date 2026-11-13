@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Common;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Domain.Context;
@@ -24,7 +25,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             var run = await _dbContext.HrPayrollRun
                 .FirstOrDefaultAsync(r => r.HrPayrollRunId == request.HrPayrollRunId, cancellationToken);
 
-            if (run == null)
+            // The run is looked up by ID alone, so authorization has to come from the run's own hospital:
+            // HospitalAccessFilter never sees a hospitalId on this request. A run at someone else's hospital
+            // gets the same "not found" as a missing one so its existence isn't revealed.
+            if (run == null || !await CallerGuards.HasPermissionAtHospitalAsync(_dbContext, request.LoggedInUserId, run.HospitalId, "hr.manage_payroll", cancellationToken))
             {
                 return new ExportBankFileResponseModel { Success = false, Message = "Payroll run not found." };
             }

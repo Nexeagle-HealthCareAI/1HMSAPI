@@ -17,6 +17,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("irdai-discharge")]
     [Authorize]
+    [RequiresPermission("ipd", "billing")]
     public class IrdaiDischargeController : ControllerBase
     {
         private readonly IMediator _mediator;

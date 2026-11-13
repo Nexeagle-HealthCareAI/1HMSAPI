@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Common;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Domain.Context;
@@ -20,6 +21,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             var doctor = await _context.Doctors.FirstOrDefaultAsync(d => d.UserID == request.CallerUserId, cancellationToken);
             if (doctor == null)
                 return new UpdateDoctorOnlineStatusResponseModel { Success = false, Message = "No doctor profile found for the signed-in user." };
+
+            if (request.IsOnlineNow && !DoctorProfileRules.IsConfirmed(doctor))
+                return new UpdateDoctorOnlineStatusResponseModel { Success = false, Message = DoctorProfileRules.NotConfirmedMessage };
 
             doctor.IsOnlineNow = request.IsOnlineNow;
             await _context.SaveChangesAsync(cancellationToken);

@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Common;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
@@ -42,6 +43,8 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 // the token itself still exists.
                 if (!summary.IsSigned)
                     return new GetPublicDischargeSummaryPdfResponseModel { Success = false, Message = "This discharge summary is not yet finalized." };
+                if (DischargeLinkPolicy.IsExpired(summary.AccessTokenExpiresAt, DateTime.UtcNow))
+                    return new GetPublicDischargeSummaryPdfResponseModel { Success = false, Expired = true, Message = "This link has expired. Please ask the hospital for a new one." };
 
                 var url = await _blobStorageService.RefreshUrlAsync(_containerName, summary.PdfBlobKey, null, cancellationToken);
                 if (string.IsNullOrEmpty(url))

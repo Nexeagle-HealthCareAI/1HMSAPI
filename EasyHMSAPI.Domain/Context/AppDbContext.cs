@@ -71,6 +71,14 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<AnalyticsEvent> AnalyticsEvents { get; set; }
         public DbSet<HospitalLead> HospitalLeads { get; set; }
         public DbSet<PatientHealthLockerDocument> PatientHealthLockerDocuments { get; set; }
+        public DbSet<PatientAccountProfile> PatientAccountProfiles { get; set; }
+        public DbSet<PatientFamilyMember> PatientFamilyMembers { get; set; }
+        public DbSet<HospitalVisitGuide> HospitalVisitGuides { get; set; }
+        public DbSet<AppointmentJourney> AppointmentJourneys { get; set; }
+        public DbSet<HospitalEmergencySetting> HospitalEmergencySettings { get; set; }
+        public DbSet<EmergencyAlert> EmergencyAlerts { get; set; }
+        public DbSet<PatientAppProfile> PatientAppProfiles { get; set; }
+        public DbSet<PatientAppDevice> PatientAppDevices { get; set; }
         public DbSet<UserProfile> UserProfiles { get; set; }
         public DbSet<Role> Roles { get; set; }
         public DbSet<RolePermission> RolePermissions { get; set; }
@@ -143,6 +151,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<AdmissionCoverage> AdmissionCoverage { get; set; }
         public DbSet<AdmissionStatusHistory> AdmissionStatusHistory { get; set; }
         public DbSet<DischargeSummary> DischargeSummary { get; set; }
+        public DbSet<DischargeSummaryAudit> DischargeSummaryAudit { get; set; }
         public DbSet<DischargeMedication> DischargeMedication { get; set; }
         public DbSet<BedAssignment> BedAssignment { get; set; }
         public DbSet<AdmissionDoctorAssignment> AdmissionDoctorAssignment { get; set; }
@@ -158,6 +167,14 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<ConsentRecord> ConsentRecord { get; set; }
         public DbSet<ConsentTemplate> ConsentTemplate { get; set; }
         public DbSet<AbhaAccount> AbhaAccount { get; set; }
+        public DbSet<AbhaConsent> AbhaConsent { get; set; }
+        public DbSet<AbdmProfileShare> AbdmProfileShares { get; set; }
+        public DbSet<MagicLoginToken> MagicLoginTokens { get; set; }
+        public DbSet<AbdmFacility> AbdmFacilities { get; set; }
+        public DbSet<AbdmExchange> AbdmExchanges { get; set; }
+        public DbSet<AbdmInbound> AbdmInbounds { get; set; }
+        public DbSet<AbdmCareContext> AbdmCareContexts { get; set; }
+        public DbSet<AbdmLinkToken> AbdmLinkTokens { get; set; }
         public DbSet<VitalReading> VitalReading { get; set; }
         public DbSet<FluidEntry> FluidEntry { get; set; }
         public DbSet<GlucoseReading> GlucoseReading { get; set; }
@@ -184,6 +201,8 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<GoodsReceiptNote> GoodsReceiptNote { get; set; }
         public DbSet<GoodsReceiptNoteLine> GoodsReceiptNoteLine { get; set; }
         public DbSet<NarcoticRegisterEntry> NarcoticRegisterEntry { get; set; }
+        public DbSet<PatientAllergy> PatientAllergy { get; set; }
+        public DbSet<DrugInteraction> DrugInteraction { get; set; }
         public DbSet<DrugScheduleRegisterEntry> DrugScheduleRegisterEntry { get; set; }
         public DbSet<PharmacyPrintSettings> PharmacyPrintSettings { get; set; }
         public DbSet<Molecule> Molecule { get; set; }
@@ -224,6 +243,20 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<RoomClassRateMultiplier> RoomClassRateMultiplier { get; set; }
         public DbSet<ConsultantIncentiveLedger> ConsultantIncentiveLedger { get; set; }
         public DbSet<PublicApiClient> PublicApiClient { get; set; }
+        public DbSet<HealthArticle> HealthArticles { get; set; }
+        public DbSet<HealthWikiContributor> HealthWikiContributors { get; set; }
+        public DbSet<HealthArticleRevision> HealthArticleRevisions { get; set; }
+        public DbSet<HealthWikiAudit> HealthWikiAudits { get; set; }
+        public DbSet<HealthWikiTopicRequest> HealthWikiTopicRequests { get; set; }
+        public DbSet<HealthArticleAccessLink> HealthArticleAccessLinks { get; set; }
+        public DbSet<ContributorOtp> ContributorOtps { get; set; }
+        public DbSet<HealthArticleReview> HealthArticleReviews { get; set; }
+        public DbSet<HealthArticleLike> HealthArticleLikes { get; set; }
+        public DbSet<HealthArticleImage> HealthArticleImages { get; set; }
+        public DbSet<HealthWikiNotification> HealthWikiNotifications { get; set; }
+        public DbSet<HealthArticleStatDaily> HealthArticleStatDailies { get; set; }
+        public DbSet<ContributorSession> ContributorSessions { get; set; }
+        public DbSet<ContributorHandoff> ContributorHandoffs { get; set; }
 
         // ─── 1HR Suite — Hospital Workforce Management ────────────────────────
         public DbSet<HrEmployee> HrEmployee { get; set; }
@@ -238,7 +271,14 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<HrSalaryStructure> HrSalaryStructure { get; set; }
         public DbSet<HrConsultantFeeConfig> HrConsultantFeeConfig { get; set; }
         public DbSet<HrPayrollRun> HrPayrollRun { get; set; }
+        public DbSet<HrPayrollSettings> HrPayrollSettings { get; set; }
+        public DbSet<HrHoliday> HrHoliday { get; set; }
+        public DbSet<NursingShift> NursingShift { get; set; }
+        public DbSet<DischargeSummaryCustomField> DischargeSummaryCustomField { get; set; }
         public DbSet<HrPayslip> HrPayslip { get; set; }
+        public DbSet<HrBiometricDevice> HrBiometricDevice { get; set; }
+        public DbSet<HrBiometricPunch> HrBiometricPunch { get; set; }
+        public DbSet<HrEmployeeDeviceUser> HrEmployeeDeviceUser { get; set; }
 
         // Pathology
         public DbSet<PathologyTestMaster> PathologyTestMaster { get; set; }
@@ -246,6 +286,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<PathologyOrder> PathologyOrder { get; set; }
         public DbSet<PathologyOrderLine> PathologyOrderLine { get; set; }
         public DbSet<PathologyResult> PathologyResult { get; set; }
+        public DbSet<PathologyResultHistory> PathologyResultHistory { get; set; }
         public DbSet<PathologyReport> PathologyReport { get; set; }
         public DbSet<PathologyTokenQueue> PathologyTokenQueue { get; set; }
         public DbSet<LabConfiguration> LabConfiguration { get; set; }
@@ -859,6 +900,136 @@ namespace EasyHMSAPI.Domain.Context
                 entity.Property(p => p.UpdatedAt).HasColumnType("datetime2(3)");
             });
 
+            modelBuilder.Entity<HealthArticle>(entity =>
+            {
+                entity.ToTable("HealthArticle");
+                entity.HasKey(a => a.ArticleId);
+                entity.HasIndex(a => a.Slug).IsUnique();
+                entity.Property(a => a.PublishedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.SubmittedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.ApprovedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(a => a.UpdatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<HealthWikiContributor>(entity =>
+            {
+                entity.ToTable("HealthWikiContributor");
+                entity.HasKey(c => c.ContributorId);
+                entity.Property(c => c.ConsentAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.VerifiedAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.LinkSentAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.UpdatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<HealthArticleRevision>(entity =>
+            {
+                entity.ToTable("HealthArticleRevision");
+                entity.HasKey(r => r.RevisionId);
+                entity.Ignore(r => r.IsOpen);
+                entity.Property(r => r.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.UpdatedAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.ResolvedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<HealthWikiAudit>(entity =>
+            {
+                entity.ToTable("HealthWikiAudit");
+                entity.HasKey(a => a.AuditId);
+                entity.Property(a => a.CreatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<HealthArticleReview>(entity =>
+            {
+                entity.ToTable("HealthArticleReview");
+                entity.HasKey(r => r.ReviewId);
+                entity.Property(r => r.DecidedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<HealthArticleImage>(entity =>
+            {
+                entity.ToTable("HealthArticleImage");
+                entity.HasKey(i => i.ImageId);
+                entity.Property(i => i.CreatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<HealthWikiNotification>(entity =>
+            {
+                entity.ToTable("HealthWikiNotification");
+                entity.HasKey(n => n.NotificationId);
+                entity.Property(n => n.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(n => n.DeliveryAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<HealthArticleLike>(entity =>
+            {
+                entity.ToTable("HealthArticleLike");
+                entity.HasKey(l => new { l.ArticleId, l.VisitorKeyHash });
+                entity.Property(l => l.VisitorKeyHash).HasColumnType("char(64)");
+                entity.Property(l => l.CreatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<HealthArticleStatDaily>(entity =>
+            {
+                entity.ToTable("HealthArticleStatDaily");
+                entity.HasKey(d => new { d.ArticleId, d.StatDate });
+                entity.Property(d => d.StatDate).HasColumnType("date");
+            });
+
+            modelBuilder.Entity<HealthArticleAccessLink>(entity =>
+            {
+                entity.ToTable("HealthArticleAccessLink");
+                entity.HasKey(l => l.LinkId);
+                entity.HasIndex(l => l.TokenHash).IsUnique();
+                entity.Property(l => l.TokenHash).HasColumnType("char(64)");
+                entity.Property(l => l.ExpiresAt).HasColumnType("datetime2(3)");
+                entity.Property(l => l.UsedAt).HasColumnType("datetime2(3)");
+                entity.Property(l => l.RevokedAt).HasColumnType("datetime2(3)");
+                entity.Property(l => l.LastSentAt).HasColumnType("datetime2(3)");
+                entity.Property(l => l.CreatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<ContributorOtp>(entity =>
+            {
+                entity.ToTable("ContributorOtp");
+                entity.HasKey(o => o.OtpId);
+                entity.Property(o => o.CodeHash).HasColumnType("char(64)");
+                entity.Property(o => o.ExpiresAt).HasColumnType("datetime2(3)");
+                entity.Property(o => o.ConsumedAt).HasColumnType("datetime2(3)");
+                entity.Property(o => o.CreatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<ContributorHandoff>(entity =>
+            {
+                entity.ToTable("ContributorHandoff");
+                entity.HasKey(h => h.HandoffId);
+                entity.Property(h => h.TokenHash).HasColumnType("char(64)");
+                entity.Property(h => h.ExpiresAt).HasColumnType("datetime2(3)");
+                entity.Property(h => h.UsedAt).HasColumnType("datetime2(3)");
+                entity.Property(h => h.CreatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<ContributorSession>(entity =>
+            {
+                entity.ToTable("ContributorSession");
+                entity.HasKey(s => s.SessionId);
+                entity.HasIndex(s => s.TokenHash).IsUnique();
+                entity.Property(s => s.TokenHash).HasColumnType("char(64)");
+                entity.Property(s => s.ExpiresAt).HasColumnType("datetime2(3)");
+                entity.Property(s => s.LastSeenAt).HasColumnType("datetime2(3)");
+                entity.Property(s => s.RevokedAt).HasColumnType("datetime2(3)");
+                entity.Property(s => s.CreatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<HealthWikiTopicRequest>(entity =>
+            {
+                entity.ToTable("HealthWikiTopicRequest");
+                entity.HasKey(t => t.TopicId);
+                entity.Property(t => t.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(t => t.UpdatedAt).HasColumnType("datetime2(3)");
+            });
+
             modelBuilder.Entity<AdmissionStatusHistory>(entity =>
             {
                 entity.ToTable("AdmissionStatusHistory");
@@ -1011,6 +1182,71 @@ namespace EasyHMSAPI.Domain.Context
                 entity.ToTable("AbhaAccount");
                 entity.HasKey(a => a.AbhaAccountId);
                 entity.Property(a => a.CreatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<AbdmProfileShare>(entity =>
+            {
+                entity.ToTable("AbdmProfileShare");
+                entity.HasKey(s => s.ProfileShareId);
+                entity.Property(s => s.ReceivedAt).HasColumnType("datetime2(3)");
+                entity.Property(s => s.HandledAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<MagicLoginToken>(entity =>
+            {
+                entity.ToTable("MagicLoginToken");
+                entity.HasKey(t => t.TokenId);
+                entity.Property(t => t.TokenHash).HasColumnType("char(64)");
+                entity.Property(t => t.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(t => t.ExpiresAt).HasColumnType("datetime2(3)");
+                entity.Property(t => t.ConsumedAt).HasColumnType("datetime2(3)");
+                entity.Property(t => t.RowVersion).IsRowVersion();
+            });
+
+            modelBuilder.Entity<AbdmFacility>(entity =>
+            {
+                entity.ToTable("AbdmFacility");
+                entity.HasKey(f => f.HospitalId);
+                entity.Property(f => f.UpdatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<AbdmExchange>(entity =>
+            {
+                entity.ToTable("AbdmExchange");
+                entity.HasKey(e => e.ExchangeId);
+                entity.HasIndex(e => e.RequestId).IsUnique();
+                entity.Property(e => e.SentAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.AcceptedAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.AnsweredAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<AbdmInbound>(entity =>
+            {
+                entity.ToTable("AbdmInbound");
+                entity.HasKey(i => i.InboundId);
+                entity.Property(i => i.ReceivedAt).HasColumnType("datetime2(3)");
+                entity.Property(i => i.ProcessedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<AbdmCareContext>(entity =>
+            {
+                entity.ToTable("AbdmCareContext");
+                entity.HasKey(c => c.CareContextId);
+                entity.HasIndex(c => new { c.HospitalId, c.SourceType, c.SourceId }).IsUnique();
+                // The button and the token callback can both try to move the same row on; only
+                // the one whose expected status still holds wins, so a link is never sent twice.
+                entity.Property(c => c.LinkStatus).IsConcurrencyToken();
+                entity.Property(c => c.LinkedAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.UpdatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<AbdmLinkToken>(entity =>
+            {
+                entity.ToTable("AbdmLinkToken");
+                entity.HasKey(t => t.LinkTokenId);
+                entity.Property(t => t.ExpiresAt).HasColumnType("datetime2(3)");
+                entity.Property(t => t.ReceivedAt).HasColumnType("datetime2(3)");
             });
 
             modelBuilder.Entity<VitalReading>(entity =>
@@ -1326,6 +1562,88 @@ namespace EasyHMSAPI.Domain.Context
                 entity.HasKey(e => e.DocumentId);
                 entity.Property(e => e.DocumentId).HasDefaultValueSql("newsequentialid()");
                 entity.Property(e => e.UploadedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+            });
+
+            modelBuilder.Entity<PatientAccountProfile>(entity =>
+            {
+                entity.ToTable("PatientAccountProfiles");
+                entity.HasKey(e => e.Mobile);
+                entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+            });
+
+            modelBuilder.Entity<PatientFamilyMember>(entity =>
+            {
+                entity.ToTable("PatientFamilyMembers");
+                entity.HasKey(e => e.MemberId);
+                entity.Property(e => e.MemberId).HasDefaultValueSql("newsequentialid()");
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+                entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+            });
+
+            modelBuilder.Entity<HospitalEmergencySetting>(entity =>
+            {
+                entity.ToTable("HospitalEmergencySettings");
+                entity.HasKey(e => e.SettingId);
+                entity.Property(e => e.SettingId).HasDefaultValueSql("newsequentialid()");
+                entity.Property(e => e.Latitude).HasColumnType("decimal(9,6)");
+                entity.Property(e => e.Longitude).HasColumnType("decimal(9,6)");
+                entity.Property(e => e.OpenTime).HasColumnType("time(0)");
+                entity.Property(e => e.CloseTime).HasColumnType("time(0)");
+                entity.Property(e => e.TermsAcceptedAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.VerifiedAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+                entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+                entity.HasOne(e => e.Hospital).WithMany().HasForeignKey(e => e.HospitalId);
+            });
+
+            modelBuilder.Entity<EmergencyAlert>(entity =>
+            {
+                entity.ToTable("EmergencyAlerts");
+                entity.HasKey(e => e.EmergencyAlertId);
+                entity.Property(e => e.EmergencyAlertId).HasDefaultValueSql("newsequentialid()");
+                entity.Property(e => e.DistanceKm).HasColumnType("decimal(7,2)");
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+            });
+
+            modelBuilder.Entity<HospitalVisitGuide>(entity =>
+            {
+                entity.ToTable("HospitalVisitGuides");
+                entity.HasKey(e => e.HospitalId);
+                entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+            });
+
+            modelBuilder.Entity<AppointmentJourney>(entity =>
+            {
+                entity.ToTable("AppointmentJourneys");
+                entity.HasKey(e => e.ApptId);
+                entity.Property(e => e.DistanceKm).HasColumnType("decimal(6,1)");
+                foreach (var col in new[] { "PlannedLeaveAt", "StartedAt", "EtaAt", "ArrivedAt", "LeaveReminderSentAt" })
+                    entity.Property(col).HasColumnType("datetime2(3)");
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+                entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+            });
+
+            modelBuilder.Entity<PatientAppProfile>(entity =>
+            {
+                entity.ToTable("PatientAppProfiles");
+                entity.HasKey(e => e.Mobile);
+                entity.Property(e => e.HomeLatitude).HasColumnType("decimal(9,6)");
+                entity.Property(e => e.HomeLongitude).HasColumnType("decimal(9,6)");
+                entity.Property(e => e.LastBookedAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.RemindersOptInAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.OnboardingCompletedAt).HasColumnType("datetime2(3)");
+                entity.Property(e => e.CreatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+                entity.Property(e => e.UpdatedAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+            });
+
+            modelBuilder.Entity<PatientAppDevice>(entity =>
+            {
+                entity.ToTable("PatientAppDevices");
+                entity.HasKey(e => e.DeviceId);
+                entity.Property(e => e.DeviceId).HasDefaultValueSql("newsequentialid()");
+                entity.HasIndex(e => new { e.Mobile, e.InstallationId }).IsUnique();
+                entity.Property(e => e.FirstSeenAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
+                entity.Property(e => e.LastSeenAt).HasColumnType("datetime2(3)").HasDefaultValueSql("sysutcdatetime()");
             });
 
             modelBuilder.Entity<AnalyticsEvent>(entity =>

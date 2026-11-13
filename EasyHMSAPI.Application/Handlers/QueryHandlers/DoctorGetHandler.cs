@@ -116,6 +116,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 PrimaryMedicalSpecialityPatientFacingName = temp.PrimaryMedicalSpecialityPatientFacingName,
                 CreatedAt = temp.CreatedAt,
                 ProfileCompletionPercentage = temp.ProfileCompletionPercentage,
+                MissingProfileItems = Common.DoctorProfileRules.MissingItems(temp.LicenseNumber, temp.MedicalCouncil, temp.RegistrationYear),
                 DoctorDepartments = doctorDepartments,
                 DoctorSpecializations = temp.DoctorSpecializations,
                 Qualifications = string.IsNullOrWhiteSpace(temp.Qualifications)
@@ -125,6 +126,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                         .Select(q => q.Trim())
                         .Where(q => !string.IsNullOrWhiteSpace(q))]
             };
+            response.IsProfileConfirmed = response.MissingProfileItems.Count == 0;
 
             return response;
         }

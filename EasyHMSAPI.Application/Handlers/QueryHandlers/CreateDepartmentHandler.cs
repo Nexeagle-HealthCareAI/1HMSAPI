@@ -15,13 +15,21 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
         }
         public async Task<CreateDepartmentResponseModel> Handle(CreateDepartmentRequestModel request, CancellationToken cancellationToken)
         {
+            // Only an admin_panel holder at the target hospital may create departments there; the
+            // creator is the verified caller, not a client-supplied id.
+            if (request.CallerUserId == null
+                || !await Common.CallerGuards.HasPermissionAtHospitalAsync(_context, request.CallerUserId.Value, request.HospitalID, "admin_panel", cancellationToken))
+            {
+                return new CreateDepartmentResponseModel { Forbidden = true, Message = "You don't have permission to manage departments for this hospital." };
+            }
+
             var department = new Department
             {
                 DepartmentID = Guid.NewGuid(),
                 HospitalID = request.HospitalID,
                 Name = request.Name,
                 Description = request.Description,
-                CreatedByUserID = request.CreatedByUserID,
+                CreatedByUserID = request.CallerUserId,
                 CreatedAt = DateTime.UtcNow,
                 IsActive = true
             };

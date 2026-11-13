@@ -1,7 +1,14 @@
+using EasyHMSAPI.Application.Services.Models;
 namespace EasyHMSAPI.Application.Services.Interfaces
 {
     public interface IWhatsAppMessagingService
     {
+        /// <summary>A template with NAMED body variables in a given language ("en", "hi") plus dynamic URL buttons: each entry in
+        /// buttonUrlSuffixes fills the {{1}} at the end of that button's URL (index 0, 1, ...). Used by the visit messages
+        /// (confirmation, reminders, after the visit). Refused while WhatsApp:IsEnabled is off or until Meta approves the template.</summary>
+        Task<WhatsAppSendResult> SendTemplateWithButtonsAsync(string mobileNumber, string templateName, string languageCode,
+            IReadOnlyList<KeyValuePair<string, string>> parameters, IReadOnlyList<string> buttonUrlSuffixes);
+
         Task<bool> SendOtpAsync(string mobileNumber, string otp);
         Task<bool> SendInvitationAsync(string mobileNumber, string hospitalName, string role, string registrationUrl);
         Task<bool> SendLoginDetailsAsync(string mobileNumber, string hospitalName, string loginId, string password);
@@ -36,5 +43,25 @@ namespace EasyHMSAPI.Application.Services.Interfaces
         /// approved in Meta Business Manager; returns false (no-op, matches SendLoginDetailsAsync's
         /// behavior today) until that template exists.</summary>
         Task<bool> SendDoctorNewOnlineAppointmentAlertAsync(string mobileNumber, string doctorName, string patientName, string maskedPatientMobile, string patientAddress, string loginUrl);
+
+        /// <summary>Invitation link for a Health Wiki contributor (review or write an article, or join).
+        /// Requires a "health_wiki_invite" template (language en, named body variables contributor_name, task, url)
+        /// approved in Meta Business Manager; returns false (no-op) until it exists or while WhatsApp:IsEnabled is off,
+        /// so the CMS shows the link to copy instead.</summary>
+        Task<bool> SendHealthWikiInviteAsync(string mobileNumber, string contributorName, string task, string url);
+
+        /// <summary>Sends one of the Health Wiki's approved templates (see HealthWikiConstants.Template). Parameters are the template's NAMED body
+        /// variables, matched by name in Meta, so each template's names must be exact. A value is flattened to one line and cut to a safe
+        /// length. Returns false (no-op) while WhatsApp:IsEnabled is off or when Meta refuses (for example a template not approved yet).</summary>
+        Task<bool> SendHealthWikiTemplateAsync(string mobileNumber, string templateName, IReadOnlyList<KeyValuePair<string, string>> parameters);
+
+        /// <summary>Same send as <see cref="SendHealthWikiTemplateAsync"/>, but also returns the message id WhatsApp gave it, so a later delivery
+        /// status (delivered, read, failed) can be matched to the message.</summary>
+        Task<WhatsAppSendResult> SendHealthWikiTemplateTrackedAsync(string mobileNumber, string templateName, IReadOnlyList<KeyValuePair<string, string>> parameters);
+
+        /// <summary>Any approved template with NAMED body variables (same send as the Health Wiki ones), returning WhatsApp's message id.
+        /// Used by the emergency takeover ("emergency_nearby_alert", "emergency_patient_number"). Returns Refused while WhatsApp:IsEnabled
+        /// is off or until Meta approves the template.</summary>
+        Task<WhatsAppSendResult> SendNamedTemplateTrackedAsync(string mobileNumber, string templateName, IReadOnlyList<KeyValuePair<string, string>> parameters);
     }
 }

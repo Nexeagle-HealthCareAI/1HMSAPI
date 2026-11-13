@@ -30,5 +30,10 @@ namespace EasyHMSAPI.Domain.Entities
         public string? UserAgent { get; set; }
         // Client-generated (localStorage-persisted) id grouping page views into one visit/session.
         public string? SessionId { get; set; }
+
+        // Bot / crawler / data-centre page view (see TrafficClassifier); excluded from CMS reports.
+        public bool IsAutomated { get; set; }
+        // Which website sent it: "doctordekho" | "nexeagle" (null for rows before 2026-10).
+        public string? Site { get; set; }
     }
 }

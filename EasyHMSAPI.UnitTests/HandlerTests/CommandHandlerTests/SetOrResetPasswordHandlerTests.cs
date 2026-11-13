@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.Handlers.CommandHandlers;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.Services.Interfaces;
@@ -66,8 +67,10 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(updatedUser!.Email, Is.EqualTo("new@test.com"));
 
             var updatedAuth = await _context.UserAuths.FindAsync(userAuth!.UserAuthID);
-            var expectedHash = BitConverter.ToString(SHA256.HashData(Encoding.UTF8.GetBytes("newPassword"))).Replace("-", "").ToLower();
-            Assert.That(updatedAuth!.HashedPassword, Is.EqualTo(expectedHash));
+            // Stored as a salted PBKDF2 hash (never the legacy unsalted SHA-256 hex).
+            Assert.That(PasswordHasher.IsModern(updatedAuth!.HashedPassword), Is.True);
+            Assert.That(PasswordHasher.Verify("newPassword", updatedAuth.HashedPassword, _maskingServiceMock.Object), Is.True);
+            Assert.That(PasswordHasher.Verify("oldPassword", updatedAuth.HashedPassword, _maskingServiceMock.Object), Is.False);
         }
 
         [Test]
@@ -93,8 +96,10 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(response.Message, Does.Contain("successfully reset"));
             
             var updatedAuth = await _context.UserAuths.FindAsync(userAuth!.UserAuthID);
-            var expectedHash = BitConverter.ToString(SHA256.HashData(Encoding.UTF8.GetBytes("newPassword"))).Replace("-", "").ToLower();
-            Assert.That(updatedAuth!.HashedPassword, Is.EqualTo(expectedHash));
+            // Stored as a salted PBKDF2 hash (never the legacy unsalted SHA-256 hex).
+            Assert.That(PasswordHasher.IsModern(updatedAuth!.HashedPassword), Is.True);
+            Assert.That(PasswordHasher.Verify("newPassword", updatedAuth.HashedPassword, _maskingServiceMock.Object), Is.True);
+            Assert.That(PasswordHasher.Verify("oldPassword", updatedAuth.HashedPassword, _maskingServiceMock.Object), Is.False);
         }
 
         [Test]

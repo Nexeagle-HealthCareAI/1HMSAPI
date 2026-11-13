@@ -16,6 +16,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("equipment")]
     [Authorize]
+    [RequiresPermission("inventory", "admin_panel")]
     public class EquipmentController : ControllerBase
     {
         private readonly IMediator _mediator;

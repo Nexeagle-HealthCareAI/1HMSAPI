@@ -54,6 +54,16 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public bool ConsultPaid { get; set; }
         public decimal ConsultAmount { get; set; }
         public string? ConsultReceiptNo { get; set; }
+
+        // Vita "takes you there": the patient's trip, only when they agreed to share it (never a location). Status: planned |
+        // on_the_way | late | arrived | cancelled; PlannedLeaveAt is hospital time; EtaAt is UTC.
+        public string? JourneyStatus { get; set; }
+        public string? JourneyTravelMode { get; set; }
+        public DateTime? JourneyPlannedLeaveAt { get; set; }
+        public DateTime? JourneyEtaAt { get; set; }
+        public int? JourneyLateByMinutes { get; set; }
+        public decimal? JourneyDistanceKm { get; set; }
+        public DateTime? JourneyUpdatedAt { get; set; }
     }
 
     [ExcludeFromCodeCoverage]

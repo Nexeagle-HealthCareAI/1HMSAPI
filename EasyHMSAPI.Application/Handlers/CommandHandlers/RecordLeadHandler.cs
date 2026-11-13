@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Common;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
@@ -5,6 +6,7 @@ using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace EasyHMSAPI.Application.Handlers.CommandHandlers
@@ -68,12 +70,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 Mobile = Truncate(request.Mobile, 20),
                 PatientName = Truncate(request.PatientName, 200),
                 SessionId = Truncate(request.SessionId, 64),
-                IpAddress = request.IpAddress,
+                IpAddress = TrackingPrivacy.TruncateIp(request.IpAddress),   // truncated after the geo lookup
                 Country = geo?.Country,
                 Region = geo?.Region,
                 City = geo?.City,
                 OccurredAt = DateTime.UtcNow,
             };
+
+            lead.IsAutomated = geo?.IsHosting == true || await IsAutomatedSessionAsync(lead.SessionId, cancellationToken);
 
             try
             {
@@ -87,6 +91,21 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             }
 
             return new RecordLeadResponseModel { Success = true };
+        }
+
+        // Web leads carry no user agent; they inherit the verdict on the session's page views.
+        private async Task<bool> IsAutomatedSessionAsync(string? sessionId, CancellationToken ct)
+        {
+            if (sessionId == null) return false;
+            try
+            {
+                return await _context.WebsiteVisits.AsNoTracking().AnyAsync(v => v.SessionId == sessionId && v.IsAutomated, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Automated-session lookup failed");
+                return false;
+            }
         }
 
         private static string? Truncate(string? value, int maxLength) =>

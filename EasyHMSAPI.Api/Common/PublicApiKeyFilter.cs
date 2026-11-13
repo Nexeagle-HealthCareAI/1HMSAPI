@@ -23,6 +23,9 @@ namespace EasyHMSAPI.Api.Common
     public class PublicApiKeyFilter : IAsyncActionFilter
     {
         public const string ApiKeyHeaderName = "X-Api-Key";
+        /// <summary>HttpContext.Items key holding the ApiClientId when a valid key was sent (actions that need an identified caller,
+        /// e.g. alerting hospitals in an emergency, check it).</summary>
+        public const string ClientItemKey = "PublicApiClientId";
 
         private readonly AppDbContext _db;
 
@@ -53,6 +56,7 @@ namespace EasyHMSAPI.Api.Common
                 return;
             }
 
+            context.HttpContext.Items[ClientItemKey] = client.ApiClientId;
             client.LastUsedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
 

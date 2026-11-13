@@ -25,6 +25,10 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? PrimaryMedicalSpecialityName { get; set; }
         public string? PrimaryMedicalSpecialityPatientFacingName { get; set; }
         public int ProfileCompletionPercentage { get; set; }
+        // Confirmed = real licence number + state medical council + year of registration (see DoctorProfileRules). Until then the doctor
+        // cannot go online and the Doctor Board asks them to complete these.
+        public bool IsProfileConfirmed { get; set; }
+        public List<string> MissingProfileItems { get; set; } = new List<string>();
         public DateTime CreatedAt { get; set; }
         public List<DoctorDepartmentInfo> DoctorDepartments { get; set; } = new List<DoctorDepartmentInfo>();
         public List<DoctorSpecializationInfo> DoctorSpecializations { get; set; } = new List<DoctorSpecializationInfo>();

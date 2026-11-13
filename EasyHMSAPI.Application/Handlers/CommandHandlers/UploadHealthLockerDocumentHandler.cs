@@ -1,6 +1,7 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using MediatR;
@@ -11,6 +12,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 {
     public class UploadHealthLockerDocumentHandler : IRequestHandler<UploadHealthLockerDocumentRequestModel, UploadHealthLockerDocumentResponseModel>
     {
+        // PatientHealthLockerDocuments.FileName is NVARCHAR(260).
+        private const int MaxFileNameLength = 260;
+
         private readonly AppDbContext _context;
         private readonly IBlobStorageService _blobStorageService;
         private readonly string _containerName;
@@ -25,6 +29,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         public async Task<UploadHealthLockerDocumentResponseModel> Handle(UploadHealthLockerDocumentRequestModel request, CancellationToken cancellationToken)
         {
             var response = new UploadHealthLockerDocumentResponseModel();
+
+            var visitProblem = PatientProfileRules.ValidateVisit(request.ApptId, request.ExternalDoctorName, request.ExternalClinicName, request.ExternalLocation, request.VisitDate);
+            if (visitProblem != null)
+            {
+                response.Message = visitProblem;
+                return response;
+            }
 
             // Optional tag to a past appointment — only allowed when it's genuinely this patient's
             // own (same ownership check GetPublicAppointmentDocumentsHandler uses), otherwise reject
@@ -46,6 +57,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
             }
 
+            // A family member's record must go to a member of THIS account, never someone else's.
+            if (request.MemberId.HasValue &&
+                !await _context.PatientFamilyMembers.AnyAsync(m => m.MemberId == request.MemberId.Value && m.OwnerMobile == request.Mobile, cancellationToken))
+            {
+                response.Message = "Family member not found.";
+                return response;
+            }
+
             var newDocumentId = Guid.NewGuid();
             var uploadResult = await _blobStorageService.UploadAsync(newDocumentId.ToString(), request.File, _containerName, cancellationToken);
 
@@ -55,19 +74,28 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 return response;
             }
 
-            // Format: "blobName|sasUrl" (see UploadPrescriptionAttachmentsHandler).
-            var urlParts = uploadResult.Split('|');
-            var blobName = urlParts.Length > 0 ? urlParts[0] : string.Empty;
-            var fileUrl = urlParts.Length > 1 ? urlParts[1] : uploadResult;
+            // The special prescription containers answer "blobName|sasUrl"; every other container (this one) answers just the signed URL.
+            // The old code took the first part as the file name, so here the whole signed URL (hundreds of characters) became FileName and
+            // overflowed its 260-character column: the save failed with a 500 on every upload.
+            var pipe = uploadResult.IndexOf('|');
+            var blobName = pipe >= 0 ? uploadResult[..pipe] : string.Empty;
+            var fileUrl = pipe >= 0 ? uploadResult[(pipe + 1)..] : uploadResult;
+            var storedName = !string.IsNullOrEmpty(blobName) ? blobName : request.FileName;
+            if (storedName is { Length: > MaxFileNameLength }) storedName = storedName[..MaxFileNameLength];
 
             var document = new PatientHealthLockerDocument
             {
                 DocumentId = newDocumentId,
                 Mobile = request.Mobile,
                 ApptId = request.ApptId,
+                MemberId = request.MemberId,
+                VisitDate = request.VisitDate?.Date,
+                ExternalDoctorName = PatientProfileRules.Clean(request.ExternalDoctorName),
+                ExternalClinicName = PatientProfileRules.Clean(request.ExternalClinicName),
+                ExternalLocation = PatientProfileRules.Clean(request.ExternalLocation),
                 DocumentType = request.DocumentType,
                 StorageUrl = fileUrl,
-                FileName = !string.IsNullOrEmpty(blobName) ? blobName : request.FileName,
+                FileName = storedName,
                 Notes = request.Notes,
                 UploadedAt = DateTime.UtcNow,
             };

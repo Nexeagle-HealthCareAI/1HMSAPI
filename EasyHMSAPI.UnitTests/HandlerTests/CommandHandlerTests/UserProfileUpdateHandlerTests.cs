@@ -17,6 +17,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
     [TestFixture]
     public class UserProfileUpdateHandlerTests
     {
+        private static readonly Guid _unknownId = Guid.NewGuid();
         private AppDbContext _context = null!;
         private UserProfileUpdateHandler _handler = null!;
 
@@ -38,7 +39,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public async Task Handle_UserNotFound_ReturnsError()
         {
             // Arrange
-            var request = new UserProfileUpdateRequestModel { UserId = Guid.NewGuid() };
+            var request = new UserProfileUpdateRequestModel { UserId = _unknownId, CallerUserId = _unknownId };
 
             // Act
             var response = await _handler.Handle(request, CancellationToken.None);
@@ -62,7 +63,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             });
             await _context.SaveChangesAsync();
 
-            var request = new UserProfileUpdateRequestModel { UserId = userId };
+            var request = new UserProfileUpdateRequestModel { UserId = userId, CallerUserId = userId};
 
             // Act
             var response = await _handler.Handle(request, CancellationToken.None);
@@ -89,6 +90,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var request = new UserProfileUpdateRequestModel
             {
                 UserId = userId,
+                CallerUserId = userId,
                 MobileNumber = "0987654321"
             };
 
@@ -120,6 +122,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var request = new UserProfileUpdateRequestModel
             {
                 UserId = userId,
+                CallerUserId = userId,
                 FullName = "John Doe",
                 Gender = "Male"
             };
@@ -162,6 +165,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var request = new UserProfileUpdateRequestModel
             {
                 UserId = userId,
+                CallerUserId = userId,
                 FullName = "Jane Smith",
                 City = "New City"
             };
@@ -196,6 +200,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var request = new UserProfileUpdateRequestModel
             {
                 UserId = userId,
+                CallerUserId = userId,
                 FullName = "Complete User",
                 Gender = "Male",
                 Language = "English",
@@ -244,6 +249,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var request = new UserProfileUpdateRequestModel
             {
                 UserId = userId,
+                CallerUserId = userId,
                 FullName = "No Change" // Same value
             };
 

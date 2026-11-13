@@ -74,6 +74,10 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 .ToDictionaryAsync(p => p.PatientId!, p => p, cancellationToken);
 
             var apptIds = appts.Select(a => a.ApptId).ToList();
+            // Only journeys the patient chose to share with the hospital (Vita "takes you there").
+            var journeys = await _context.AppointmentJourneys.AsNoTracking()
+                .Where(j => j.ShareWithHospital && apptIds.Contains(j.ApptId))
+                .ToDictionaryAsync(j => j.ApptId, cancellationToken);
             var tokens = await _context.AppointmentTokens
                 .Where(t => apptIds.Contains(t.ApptId))
                 .OrderByDescending(t => t.CreatedAt)
@@ -148,6 +152,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     patients.TryGetValue(a.PatientId, out p);
                 }
                 var token = tokens.FirstOrDefault(t => t.ApptId == a.ApptId);
+                journeys.TryGetValue(a.ApptId, out var jr);
                 doctorInfoById.TryGetValue(a.DoctorId, out var doctorInfo);
                 string? doctorName = doctorInfo?.DoctorName;
                 Guid? departmentId = doctorInfo?.DepartmentId;
@@ -203,6 +208,13 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     ConsultPaid = consultPaid,
                     ConsultAmount = consultAmount,
                     ConsultReceiptNo = consultReceiptNo,
+                    JourneyStatus = jr?.Status,
+                    JourneyTravelMode = jr?.TravelMode,
+                    JourneyPlannedLeaveAt = jr?.PlannedLeaveAt,
+                    JourneyEtaAt = jr?.EtaAt,
+                    JourneyLateByMinutes = jr?.LateByMinutes,
+                    JourneyDistanceKm = jr?.DistanceKm,
+                    JourneyUpdatedAt = jr?.UpdatedAt,
                     Token = token == null ? null : new TokenDetail
                     {
                         TokenId = token.TokenId,

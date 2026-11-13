@@ -76,7 +76,9 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string Reaction { get; set; } = "NONE";
         public string? ReactionNotes { get; set; }
 
-        public string WitnessName { get; set; } = null!;
+        // The witness is a real second staff member (WitnessUserId is required and must differ from the
+        // administering user); the name is taken from their profile, WitnessName is only a fallback label.
+        public string? WitnessName { get; set; }
         public Guid? WitnessUserId { get; set; }
 
         public string? Notes { get; set; }

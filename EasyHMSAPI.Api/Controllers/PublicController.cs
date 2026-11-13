@@ -269,6 +269,80 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Health Wiki — published articles only (DRAFT / IN_REVIEW never exposed). Read-only; articles
+        // are written via /internal/health-articles. `id` in the response is the article slug.
+        [HttpGet("health-articles")]
+        public async Task<ActionResult<GetPublicHealthArticlesResponseModel>> GetHealthArticles([FromQuery] int pageSize = 100)
+        {
+            try
+            {
+                var response = await _mediator.Send(new GetPublicHealthArticlesRequestModel { PageSize = pageSize });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetHealthArticles");
+                return StatusCode(500, new { Message = "An error occurred while fetching health articles." });
+            }
+        }
+
+        [HttpGet("health-articles/{id}")]
+        public async Task<ActionResult<PublicHealthArticleInfo>> GetHealthArticleById(string id)
+        {
+            try
+            {
+                var response = await _mediator.Send(new GetPublicHealthArticlesRequestModel { Slug = id, PageSize = 1 });
+                var article = response.Articles.FirstOrDefault();
+                if (article == null)
+                    return NotFound(new { Message = "Article not found." });
+                return Ok(article);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetHealthArticleById for id: {Id}", id);
+                return StatusCode(500, new { Message = "An error occurred while fetching the article." });
+            }
+        }
+
+        public class ReactionBody
+        {
+            // An anonymous id the Doctor Dekho site keeps for the reader (a random value in a cookie). Never an IP address or a name.
+            public string? VisitorKey { get; set; }
+        }
+
+        // "Helpful" on a published article. One per reader; asking again changes nothing.
+        [HttpPost("health-articles/{id}/like")]
+        public async Task<IActionResult> LikeHealthArticle(string id, [FromBody] ReactionBody? body)
+        {
+            try
+            {
+                var res = await _mediator.Send(new LikeHealthArticleRequestModel { Slug = id, VisitorKey = body?.VisitorKey });
+                return res.Success ? Ok(new { changed = res.Changed, likes = res.Likes }) : StatusCode(res.StatusCode, new { message = res.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.LikeHealthArticle for id: {Id}", id);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
+        // Page view of a published article. One per reader per day. Fired by the page-view beacon, so it has the generous beacon limit.
+        [HttpPost("health-articles/{id}/view")]
+        [EnableRateLimiting("TrackVisitPolicy")]
+        public async Task<IActionResult> ViewHealthArticle(string id, [FromBody] ReactionBody? body)
+        {
+            try
+            {
+                var res = await _mediator.Send(new RecordHealthArticleViewRequestModel { Slug = id, VisitorKey = body?.VisitorKey });
+                return res.Success ? Ok(new { changed = res.Changed, views = res.Views }) : StatusCode(res.StatusCode, new { message = res.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.ViewHealthArticle for id: {Id}", id);
+                return StatusCode(500, new { Message = "An error occurred." });
+            }
+        }
+
         // Doctor's own WhatsApp-booking QR (NexEagle logo centered) -- rendered on their Doctor
         // Dekho profile page. Scanning it lands the patient straight into a booking flow for
         // THIS exact doctor (skips specialty/name search entirely) -- see the bot's DRBOOK
@@ -587,6 +661,180 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // The patient saves their own details. Written to their own account profile, never to a hospital's registration. Same manual-JWT validation.
+        [HttpPut("patients/me")]
+        public async Task<ActionResult<GetPublicPatientProfileResponseModel>> UpdateMyPatientProfile([FromBody] UpdatePublicPatientProfileRequestModel request, CancellationToken cancellationToken)
+        {
+            var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
+            if (!auth.IsValid || auth.Mobile == null)
+            {
+                return Unauthorized(new { Message = auth.Reason ?? "Please log in again." });
+            }
+
+            try
+            {
+                request.Mobile = auth.Mobile;
+                var response = await _mediator.Send(request, cancellationToken);
+                return response.Success ? Ok(response) : StatusCode(response.StatusCode, new { message = response.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.UpdateMyPatientProfile");
+                return StatusCode(500, new { Message = "An error occurred while saving your details." });
+            }
+        }
+
+        // "Delete account" in the Doctor Dekho app. Same manual-JWT validation; everything is keyed by the verified mobile, never the body.
+        // 200 when everything is gone (and every session is ended); 503 when some record files couldn't be removed yet — the rest is
+        // already gone and the call can be repeated with the same session.
+        [HttpDelete("patients/me")]
+        public async Task<ActionResult<DeletePatientAccountResponseModel>> DeleteMyAccount(CancellationToken cancellationToken)
+        {
+            var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
+            if (!auth.IsValid || auth.Mobile == null) return Unauthorized(new { Message = auth.Reason ?? "Please log in again." });
+            try
+            {
+                var response = await _mediator.Send(new DeletePatientAccountRequestModel { Mobile = auth.Mobile }, cancellationToken);
+                return response.Success ? Ok(response) : StatusCode(503, response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.DeleteMyAccount");
+                return StatusCode(500, new { Message = "Your account could not be deleted right now. Please try again." });
+            }
+        }
+
+        // Family members — people the patient looks after, so their records can be kept and opened in one place. Same manual-JWT validation; every
+        // lookup is scoped to the verified mobile, so another account's member is just "not found".
+        [HttpGet("patients/me/family")]
+        public async Task<ActionResult<PatientFamilyMembersResponseModel>> GetMyFamilyMembers(CancellationToken cancellationToken)
+        {
+            var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
+            if (!auth.IsValid || auth.Mobile == null) return Unauthorized(new { Message = auth.Reason ?? "Please log in again." });
+            try
+            {
+                return Ok(await _mediator.Send(new GetPatientFamilyMembersRequestModel { Mobile = auth.Mobile }, cancellationToken));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetMyFamilyMembers");
+                return StatusCode(500, new { Message = "An error occurred while fetching your family members." });
+            }
+        }
+
+        [HttpPost("patients/me/family")]
+        public Task<ActionResult<PatientFamilyMembersResponseModel>> AddMyFamilyMember([FromBody] SavePatientFamilyMemberRequestModel request, CancellationToken cancellationToken)
+            => SaveFamilyMember(request, null, cancellationToken);
+
+        [HttpPut("patients/me/family/{memberId:guid}")]
+        public Task<ActionResult<PatientFamilyMembersResponseModel>> UpdateMyFamilyMember(Guid memberId, [FromBody] SavePatientFamilyMemberRequestModel request, CancellationToken cancellationToken)
+            => SaveFamilyMember(request, memberId, cancellationToken);
+
+        private async Task<ActionResult<PatientFamilyMembersResponseModel>> SaveFamilyMember(SavePatientFamilyMemberRequestModel request, Guid? memberId, CancellationToken cancellationToken)
+        {
+            var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
+            if (!auth.IsValid || auth.Mobile == null) return Unauthorized(new { Message = auth.Reason ?? "Please log in again." });
+            try
+            {
+                request.Mobile = auth.Mobile;
+                request.MemberId = memberId;
+                var response = await _mediator.Send(request, cancellationToken);
+                return response.Success ? Ok(response) : StatusCode(response.StatusCode, new { message = response.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.SaveFamilyMember");
+                return StatusCode(500, new { Message = "An error occurred while saving the family member." });
+            }
+        }
+
+        [HttpDelete("patients/me/family/{memberId:guid}")]
+        public async Task<ActionResult<PatientFamilyMembersResponseModel>> DeleteMyFamilyMember(Guid memberId, CancellationToken cancellationToken)
+        {
+            var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
+            if (!auth.IsValid || auth.Mobile == null) return Unauthorized(new { Message = auth.Reason ?? "Please log in again." });
+            try
+            {
+                var response = await _mediator.Send(new DeletePatientFamilyMemberRequestModel { Mobile = auth.Mobile, MemberId = memberId }, cancellationToken);
+                return response.Success ? Ok(response) : StatusCode(response.StatusCode, new { message = response.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.DeleteMyFamilyMember");
+                return StatusCode(500, new { Message = "An error occurred while removing the family member." });
+            }
+        }
+
+        // Doctor Dekho mobile app — quick-booking preferences and installs (PatientAppProfiles, PatientAppDevices). The short profile itself
+        // stays on patients/me (PatientAccountProfiles), shared with the website. Same manual-JWT validation; everything keyed by the verified mobile.
+        [HttpGet("patients/me/app-profile")]
+        public async Task<ActionResult<PatientAppProfileResponseModel>> GetMyAppProfile(CancellationToken cancellationToken)
+        {
+            var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
+            if (!auth.IsValid || auth.Mobile == null) return Unauthorized(new { Message = auth.Reason ?? "Please log in again." });
+            try
+            {
+                return Ok(await _mediator.Send(new GetPatientAppProfileRequestModel { Mobile = auth.Mobile }, cancellationToken));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.GetMyAppProfile");
+                return StatusCode(500, new { Message = "An error occurred while fetching your app settings." });
+            }
+        }
+
+        [HttpPut("patients/me/app-profile")]
+        public async Task<ActionResult<PatientAppProfileResponseModel>> SaveMyAppProfile([FromBody] SavePatientAppProfileRequestModel request, CancellationToken cancellationToken)
+        {
+            var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
+            if (!auth.IsValid || auth.Mobile == null) return Unauthorized(new { Message = auth.Reason ?? "Please log in again." });
+            try
+            {
+                request.Mobile = auth.Mobile;
+                var response = await _mediator.Send(request, cancellationToken);
+                return response.Success ? Ok(response) : StatusCode(response.StatusCode, new { message = response.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.SaveMyAppProfile");
+                return StatusCode(500, new { Message = "An error occurred while saving your app settings." });
+            }
+        }
+
+        [HttpPost("patients/me/devices")]
+        public async Task<ActionResult<PatientAppDeviceResponseModel>> RegisterMyAppDevice([FromBody] RegisterPatientAppDeviceRequestModel request, CancellationToken cancellationToken)
+        {
+            var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
+            if (!auth.IsValid || auth.Mobile == null) return Unauthorized(new { Message = auth.Reason ?? "Please log in again." });
+            try
+            {
+                request.Mobile = auth.Mobile;
+                var response = await _mediator.Send(request, cancellationToken);
+                return response.Success ? Ok(response) : StatusCode(response.StatusCode, new { message = response.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.RegisterMyAppDevice");
+                return StatusCode(500, new { Message = "An error occurred while registering this device." });
+            }
+        }
+
+        [HttpDelete("patients/me/devices/{installationId}")]
+        public async Task<ActionResult<PatientAppDeviceResponseModel>> DeactivateMyAppDevice(string installationId, CancellationToken cancellationToken)
+        {
+            var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
+            if (!auth.IsValid || auth.Mobile == null) return Unauthorized(new { Message = auth.Reason ?? "Please log in again." });
+            try
+            {
+                return Ok(await _mediator.Send(new DeactivatePatientAppDeviceRequestModel { Mobile = auth.Mobile, InstallationId = installationId }, cancellationToken));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in PublicController.DeactivateMyAppDevice");
+                return StatusCode(500, new { Message = "An error occurred while signing out this device." });
+            }
+        }
+
         // Health Locker — patient-initiated uploads independent of any appointment, keyed purely
         // by the OTP-verified Mobile (see PatientHealthLockerDocument). Same manual-JWT validation
         // as GetMyAppointments/GetMyPatientProfile.
@@ -614,7 +862,7 @@ namespace EasyHMSAPI.Api.Controllers
         }
 
         [HttpGet("patients/me/documents")]
-        public async Task<ActionResult<GetHealthLockerDocumentsResponseModel>> GetHealthLockerDocuments(CancellationToken cancellationToken)
+        public async Task<ActionResult<GetHealthLockerDocumentsResponseModel>> GetHealthLockerDocuments([FromQuery] Guid? memberId, [FromQuery] bool all, CancellationToken cancellationToken)
         {
             var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
             if (!auth.IsValid || auth.Mobile == null)
@@ -624,7 +872,7 @@ namespace EasyHMSAPI.Api.Controllers
 
             try
             {
-                var response = await _mediator.Send(new GetHealthLockerDocumentsRequestModel { Mobile = auth.Mobile });
+                var response = await _mediator.Send(new GetHealthLockerDocumentsRequestModel { Mobile = auth.Mobile, MemberId = memberId, All = all });
                 return Ok(response);
             }
             catch (Exception ex)

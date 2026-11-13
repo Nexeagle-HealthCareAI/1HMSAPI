@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Common;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Data.Constants;
@@ -50,7 +51,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (bed == null)
                     return new AssignBedResponseModel { Success = false, Message = "Bed not found." };
 
+                var patientSex = await BedOccupancy.LoadPatientSexAsync(_context, request.HospitalId, admission.PatientId, cancellationToken);
+                var bedProblem = await BedOccupancy.CheckAssignableAsync(_context, bed, patientSex, cancellationToken);
+                if (bedProblem != null)
+                    return new AssignBedResponseModel { Success = false, Message = bedProblem };
+
                 var now = DateTime.UtcNow;
+                BedOccupancy.MarkOccupied(bed, now, request.LoggedInUserName);
                 var assignment = new BedAssignment
                 {
                     AssignmentId = Guid.NewGuid(),
@@ -113,6 +120,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 assignment.UpdatedAt = now;
                 assignment.UpdatedBy = request.LoggedInUserName;
 
+                var releasedBed = await _context.BedMaster.FirstOrDefaultAsync(b => b.BedId == assignment.BedId, cancellationToken);
+                if (releasedBed != null) BedOccupancy.MarkVacated(releasedBed, now, request.LoggedInUserName);
+
                 await _context.SaveChangesAsync(cancellationToken);
 
                 return new ReleaseBedResponseModel
@@ -164,7 +174,20 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             return new TransferBedResponseModel { Success = false, Message = "Bed not found." };
                         }
 
+                        var admission = await _context.Admission
+                            .FirstOrDefaultAsync(a => a.AdmissionId == request.AdmissionId && a.HospitalId == request.HospitalId, cancellationToken);
+                        var patientSex = await BedOccupancy.LoadPatientSexAsync(_context, request.HospitalId, admission?.PatientId, cancellationToken);
+                        var bedProblem = await BedOccupancy.CheckAssignableAsync(_context, newBed, patientSex, cancellationToken);
+                        if (bedProblem != null)
+                        {
+                            await tx.RollbackAsync(cancellationToken);
+                            return new TransferBedResponseModel { Success = false, Message = bedProblem };
+                        }
+
                         var now = DateTime.UtcNow;
+                        var oldBed = await _context.BedMaster.FirstOrDefaultAsync(b => b.BedId == current.BedId, cancellationToken);
+                        if (oldBed != null) BedOccupancy.MarkVacated(oldBed, now, request.LoggedInUserName);
+                        BedOccupancy.MarkOccupied(newBed, now, request.LoggedInUserName);
                         current.StatusCode = IpdConstants.BedAssignmentStatus.Released;
                         current.ReleasedAt = now;
                         current.ReleasedBy = request.LoggedInUserName;

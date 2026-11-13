@@ -64,6 +64,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 decimal totalPf = 0;
                 decimal totalEsi = 0;
                 decimal totalTds = 0;
+                var skipped = new List<string>();
 
                 var salariedStrategy = new SalariedPayrollStrategy(_context);
                 var consultantStrategy = new ConsultantPayrollStrategy(_context);
@@ -111,6 +112,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             EsiEmployee = result.EsiEmployee,
                             ProfTax = result.ProfTax,
                             TdsDeducted = result.TdsDeducted,
+                            TdsWorkingsJson = result.TdsWorkingsJson,
                             LoanInstallment = result.LoanInstallment,
                             TotalDeductions = result.TotalDeductions,
                             NetSalary = result.NetSalary,
@@ -130,8 +132,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     }
                     catch (Exception ex)
                     {
-                        // Log warning for missing config and skip this employee
-                        Console.WriteLine($"Skipping payroll for {employee.EmployeeCode}: {ex.Message}");
+                        // One bad record must not fail the whole hospital's run, but it must never be
+                        // silent either: report every skipped employee back to the caller.
+                        skipped.Add($"{employee.EmployeeCode}: {ex.Message}");
                     }
                 }
 
@@ -146,7 +149,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 return new RunMonthlyPayrollResponseModel
                 {
                     Success = true,
-                    Message = "Monthly payroll generated successfully",
+                    Message = skipped.Count == 0
+                        ? "Monthly payroll generated successfully"
+                        : $"Payroll generated, but {skipped.Count} employee(s) were skipped and have NO payslip: {string.Join("; ", skipped)}",
+                    SkippedEmployees = skipped,
                     HrPayrollRunId = run.HrPayrollRunId,
                     PayslipsGenerated = _context.ChangeTracker.Entries<HrPayslip>().Count(e => e.State == EntityState.Unchanged || e.State == EntityState.Added),
                     TotalNetDisbursement = totalNet

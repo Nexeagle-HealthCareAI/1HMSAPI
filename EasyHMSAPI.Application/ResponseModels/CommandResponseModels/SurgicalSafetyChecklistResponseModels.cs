@@ -22,4 +22,11 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public bool Success { get; set; }
         public string? Message { get; set; }
     }
+
+    [ExcludeFromCodeCoverage]
+    public class AddChecklistAddendumResponseModel
+    {
+        public bool Success { get; set; }
+        public string? Message { get; set; }
+    }
 }

@@ -17,6 +17,9 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public string? DateOfBirth { get; set; }
         public string? Mobile { get; set; }
         public string? Email { get; set; }
+        // One-time proof that this profile was verified with ABDM by the caller for the hospital. accounts/link needs it and takes the
+        // demographics from what ABDM returned, not from the client. Expires in 15 minutes.
+        public string? LinkToken { get; set; }
         // Only populated when this came from GetAbdmProfileHandler (§9 Get Profile) — base64 JPEG.
         public string? ProfilePhoto { get; set; }
     }

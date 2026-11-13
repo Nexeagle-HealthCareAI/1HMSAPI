@@ -11,12 +11,17 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     public class SaveLinkedAbhaAccountRequestModel : IRequest<SaveAbhaAccountResponseModel>
     {
         public Guid HospitalId { get; set; }
+        /// <summary>From login/verify-otp. Required: the account is saved from the profile ABDM returned for that token.</summary>
+        public string? LinkToken { get; set; }
+        // The fields below are accepted for older clients but IGNORED: nothing the client sends is stored.
         public string AbhaNumber { get; set; } = string.Empty;
         public string? AbhaAddress { get; set; }
         public string? FullName { get; set; }
         public string? Gender { get; set; }
         public string? DateOfBirth { get; set; }
         public string? Mobile { get; set; }
+        [JsonIgnore]
+        public Guid CallerUserId { get; set; }
         [JsonIgnore]
         public string? LoggedInUserName { get; set; }
     }

@@ -20,6 +20,11 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             if (request.UserId == null)
                 return null;
 
+            // Self, or an admin_panel holder who shares a hospital with the target. CallerUserId is
+            // stamped by the controller from the JWT; a missing caller (or a stranger) gets Forbidden.
+            if (!await Common.CallerGuards.CanAccessUserAsync(_context, request.CallerUserId, request.UserId.Value, cancellationToken))
+                return new UserSearchResponseModel { Forbidden = true };
+
             var user = await _context.Users
                 .Include(u => u.UserAuths)
                 .Include(u => u.UserProfiles)
@@ -43,7 +48,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 UserStatusId = user.UserStatusId,
                 CreatedAt = user.CreatedAt,
 
-                UserAuth = userAuth != null ? new UserAuthInfo
+                // Login-security details (lockout, last IP) are the user's own business; an admin
+                // viewing a member does not need them.
+                UserAuth = userAuth != null && request.CallerUserId == request.UserId ? new UserAuthInfo
                 {
                     UserAuthId = userAuth.UserAuthID,
                     LoginMethod = userAuth.LoginMethod,

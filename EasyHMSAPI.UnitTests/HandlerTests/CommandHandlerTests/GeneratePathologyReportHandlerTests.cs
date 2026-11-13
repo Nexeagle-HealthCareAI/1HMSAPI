@@ -304,104 +304,29 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
-        public async Task Handle_BillingPolicyOnReportGeneration_PostsChargeOnFirstGenerateOnly()
+        public async Task Handle_BillingPolicyOnReportApproval_GeneratingNeverBills()
         {
+            // "On report approval" bills when the pathologist VERIFIES the report (see VerifyReportBillingTests), not when
+            // a draft report is generated or regenerated.
             var chargeId = Guid.NewGuid();
             var testId = Guid.NewGuid();
-            var encounterId = Guid.NewGuid();
-            var (hospitalId, orderId, lineId) = SeedSingleLineOrderWithResult(testIdOverride: testId, encounterId: encounterId);
+            var (hospitalId, orderId, lineId) = SeedSingleLineOrderWithResult(testIdOverride: testId, encounterId: Guid.NewGuid());
 
             _context.BillingPolicy.Add(new BillingPolicy { HospitalId = hospitalId, LabPathTrigger = "ON_REPORT_APPROVAL" });
-            _context.ChargeMaster.Add(new ChargeMaster
-            {
-                ChargeId = chargeId,
-                HospitalId = hospitalId,
-                DisplayName = "Hemoglobin",
-                DefaultRate = 150m,
-                IsActive = true,
-            });
-            _context.PathologyTestMaster.Add(new PathologyTestMaster
-            {
-                TestId = testId,
-                HospitalId = hospitalId,
-                TestCode = "HEM-HB",
-                TestName = "Hemoglobin",
-                ChargeId = chargeId,
-                IsActive = true,
-            });
+            _context.ChargeMaster.Add(new ChargeMaster { ChargeId = chargeId, HospitalId = hospitalId, DisplayName = "Hemoglobin", DefaultRate = 150m, IsActive = true });
+            _context.PathologyTestMaster.Add(new PathologyTestMaster { TestId = testId, HospitalId = hospitalId, TestCode = "HEM-HB", TestName = "Hemoglobin", ChargeId = chargeId, IsActive = true });
             _context.SaveChanges();
 
-            await _handler.Handle(new GeneratePathologyReportCommand
+            for (var i = 0; i < 2; i++)
             {
-                HospitalId = hospitalId,
-                OrderId = orderId,
-                OrderLineId = lineId,
-                LoggedInUserName = "tester",
-            }, CancellationToken.None);
+                var response = await _handler.Handle(new GeneratePathologyReportCommand
+                {
+                    HospitalId = hospitalId, OrderId = orderId, OrderLineId = lineId, LoggedInUserName = "tester",
+                }, CancellationToken.None);
+                Assert.That(response.Success, Is.True, response.Message);
+            }
 
-            _mediatorMock.Verify(m => m.Send(
-                It.Is<AddChargeEventRequestModel>(r =>
-                    r.EncounterId == encounterId &&
-                    r.Charges.Count == 1 &&
-                    r.Charges.Single().ChargeId == chargeId),
-                It.IsAny<CancellationToken>()), Times.Once);
-
-            // Regenerating the same line's report must not post the charge a second time.
-            await _handler.Handle(new GeneratePathologyReportCommand
-            {
-                HospitalId = hospitalId,
-                OrderId = orderId,
-                OrderLineId = lineId,
-                LoggedInUserName = "tester",
-            }, CancellationToken.None);
-
-            _mediatorMock.Verify(m => m.Send(It.IsAny<AddChargeEventRequestModel>(), It.IsAny<CancellationToken>()), Times.Once);
-        }
-
-        [Test]
-        public async Task Handle_BillingPolicyOnReportGeneration_SecondLineFirstGenerateAlsoBillsIndependently()
-        {
-            var chargeIdOne = Guid.NewGuid();
-            var chargeIdTwo = Guid.NewGuid();
-            var testIdOne = Guid.NewGuid();
-            var testIdTwo = Guid.NewGuid();
-            var encounterId = Guid.NewGuid();
-            var hospitalId = Guid.NewGuid();
-            var orderId = SeedOrder(hospitalId, encounterId: encounterId);
-            var lineOne = SeedLineWithResult(hospitalId, orderId, testIdOverride: testIdOne);
-            var lineTwo = SeedLineWithResult(hospitalId, orderId, testIdOverride: testIdTwo);
-
-            _context.BillingPolicy.Add(new BillingPolicy { HospitalId = hospitalId, LabPathTrigger = "ON_REPORT_APPROVAL" });
-            _context.ChargeMaster.AddRange(
-                new ChargeMaster { ChargeId = chargeIdOne, HospitalId = hospitalId, DisplayName = "Test One", DefaultRate = 100m, IsActive = true },
-                new ChargeMaster { ChargeId = chargeIdTwo, HospitalId = hospitalId, DisplayName = "Test Two", DefaultRate = 200m, IsActive = true });
-            _context.PathologyTestMaster.AddRange(
-                new PathologyTestMaster { TestId = testIdOne, HospitalId = hospitalId, TestCode = "T1", TestName = "Test One", ChargeId = chargeIdOne, IsActive = true },
-                new PathologyTestMaster { TestId = testIdTwo, HospitalId = hospitalId, TestCode = "T2", TestName = "Test Two", ChargeId = chargeIdTwo, IsActive = true });
-            _context.SaveChanges();
-
-            await _handler.Handle(new GeneratePathologyReportCommand
-            {
-                HospitalId = hospitalId,
-                OrderId = orderId,
-                OrderLineId = lineOne,
-                LoggedInUserName = "tester",
-            }, CancellationToken.None);
-
-            await _handler.Handle(new GeneratePathologyReportCommand
-            {
-                HospitalId = hospitalId,
-                OrderId = orderId,
-                OrderLineId = lineTwo,
-                LoggedInUserName = "tester",
-            }, CancellationToken.None);
-
-            _mediatorMock.Verify(m => m.Send(
-                It.Is<AddChargeEventRequestModel>(r => r.Charges.Count == 1 && r.Charges.Single().ChargeId == chargeIdOne),
-                It.IsAny<CancellationToken>()), Times.Once);
-            _mediatorMock.Verify(m => m.Send(
-                It.Is<AddChargeEventRequestModel>(r => r.Charges.Count == 1 && r.Charges.Single().ChargeId == chargeIdTwo),
-                It.IsAny<CancellationToken>()), Times.Once);
+            _mediatorMock.Verify(m => m.Send(It.IsAny<AddChargeEventRequestModel>(), It.IsAny<CancellationToken>()), Times.Never);
         }
 
         [Test]

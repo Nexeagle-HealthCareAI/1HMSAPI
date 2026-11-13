@@ -1,4 +1,4 @@
-﻿using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
+using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Enums;
@@ -26,6 +26,17 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
         {
             var userExists = await _context.Users.Where(x => x.UserID == request.UserId && x.UserStatusId != (int)UserStatusEnum.Revoked).Select(x => x.UserID).FirstOrDefaultAsync(cancellationToken);
             GetProfilePictureResponseModel response = new();
+
+            // Colleagues see each other's photos (staff lists, headers); strangers do not.
+            var allowed = request.CallerUserId == request.UserId
+                || (request.CallerUserId.HasValue && await Common.CallerGuards.SharesHospitalAsync(_context, request.CallerUserId.Value, request.UserId, cancellationToken));
+            if (!allowed)
+            {
+                response.Success = false;
+                response.Forbidden = true;
+                response.ProfilePictureUrl = string.Empty;
+                return response;
+            }
 
             if (userExists == Guid.Empty)
             {

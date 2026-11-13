@@ -6,6 +6,8 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
     public class UserSearchResponseModel
     {
         public Guid UserId { get; set; }
+        /// <summary>True when the caller is not allowed to act on the target user (controller maps to 403).</summary>
+        public bool Forbidden { get; set; }
         public string MobileNumber { get; set; } = null!;
         public string? Email { get; set; }
         public int UserStatusId { get; set; }

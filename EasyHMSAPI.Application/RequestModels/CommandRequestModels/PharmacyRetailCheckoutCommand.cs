@@ -32,6 +32,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public decimal TotalAmount { get; set; }
         public decimal DiscountAmount { get; set; }
         public decimal PaidAmount { get; set; } // Allows partial/credit payments
+        // Collect exactly the invoice total the server computed (the browser only has an estimate). When set, PaidAmount is ignored.
+        public bool PayInFull { get; set; }
         public string? PaymentMode { get; set; }
 
         // DirectCash (default): finalize a BillingInvoice + optional payment, as today.
@@ -43,6 +45,11 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
 
         public string? LoggedInUserName { get; set; }
         public Guid? LoggedInUserId { get; set; }
+
+        // From the Idempotency-Key request header. A repeated key (double click, retry, offline replay) returns
+        // the first sale instead of selling and billing again.
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string? IdempotencyKey { get; set; }
     }
 
     [ExcludeFromCodeCoverage]
@@ -58,7 +65,9 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public Guid InventoryItemId { get; set; }
         public Guid? BatchId { get; set; }
         public decimal Qty { get; set; }
-        public decimal Rate { get; set; } // The rate applied at checkout
+        // Ignored: the server prices every line (batch MRP, else the Charge Master default rate). Kept so
+        // older clients still deserialize.
+        public decimal Rate { get; set; }
         public decimal DiscountPercent { get; set; }
     }
 
@@ -71,6 +80,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public Guid ChargeEventId { get; set; }
         public Guid InvoiceId { get; set; }
         public string? InvoiceNo { get; set; }
+        public bool IsReplay { get; set; }
         public List<AllocatedBatchLine> AllocatedBatches { get; set; } = new();
     }
 

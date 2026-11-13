@@ -67,6 +67,20 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                 UpdatedAt = DateTime.UtcNow,
             };
             _context.InventoryItem.Add(item);
+            // Pricing is server-side: every billable item needs a Charge Master row (default rate + optional cap).
+            if (chargeId != Guid.Empty && !_context.ChargeMaster.Any(m => m.ChargeId == chargeId))
+            {
+                _context.ChargeMaster.Add(new ChargeMaster
+                {
+                    ChargeId = chargeId,
+                    HospitalId = _hospitalId,
+                    DisplayName = "Paracetamol 500mg",
+                    DefaultRate = 2,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                });
+            }
             return item;
         }
 
@@ -183,7 +197,8 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var response = await _handler.Handle(ValidRequest(item.InventoryItemId), CancellationToken.None);
 
             Assert.That(response.Success, Is.False);
-            Assert.That(response.Message, Does.Contain("No billable items"));
+            Assert.That(response.Message, Does.Contain("no charge configured"));
+            _mediatorMock.Verify(m => m.Send(It.IsAny<RecordInventoryMovementRequestModel>(), It.IsAny<CancellationToken>()), Times.Never, "an unbilled item must never reach the stock engine");
         }
 
         [Test]

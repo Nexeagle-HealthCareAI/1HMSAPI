@@ -1,17 +1,16 @@
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Domain.Context;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 {
-    // Read-only "my details" for the Doctor Dekho profile page. A single mobile number can have a
-    // PatientRegistrations row per hospital they've visited (see GetPublicAppointmentsByMobileHandler)
-    // — there's no single authoritative one, so this picks the most recently created row as the
-    // best-effort "current" answer rather than trying to merge/reconcile fields across hospitals.
-    // Deliberately read-only: writing back would mean picking which hospital's row to edit, which
-    // is exactly the ambiguity this sidesteps — patient-detail corrections stay a front-desk action.
+    // "My details" for the Doctor Dekho profile page. What the patient saved on their own account wins; until they save anything it is the
+    // most recent hospital registration for that mobile (a number can have one per hospital, and none is authoritative, so the latest is a
+    // best-effort starting point). The hospital rows themselves are never written from here: they belong to the hospital, and the patient's
+    // edits go to PatientAccountProfile (see UpdatePublicPatientProfileHandler).
     public class GetPublicPatientProfileHandler : IRequestHandler<GetPublicPatientProfileRequestModel, GetPublicPatientProfileResponseModel>
     {
         private readonly AppDbContext _context;
@@ -24,6 +23,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
         public async Task<GetPublicPatientProfileResponseModel> Handle(GetPublicPatientProfileRequestModel request, CancellationToken cancellationToken)
         {
             _context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
+
+            var own = await _context.PatientAccountProfiles.FirstOrDefaultAsync(p => p.Mobile == request.Mobile, cancellationToken);
+            if (own != null) return FromAccount(own);
 
             var patient = await _context.PatientRegistrations
                 .Where(p => p.Mobile == request.Mobile)
@@ -41,13 +43,22 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             {
                 Success = true,
                 FullName = patient.FullName,
+                FirstName = PatientProfileRules.SplitName(null, null, patient.FullName).First,
+                LastName = PatientProfileRules.SplitName(null, null, patient.FullName).Last,
                 Age = patient.Age,
                 AgeUnit = patient.AgeUnit,
                 Sex = patient.Sex,
                 Email = patient.Email,
                 GuardianName = patient.GuardianName,
                 GuardianRelation = patient.GuardianRelation,
+                Source = "BOOKING",
             };
         }
+
+        internal static GetPublicPatientProfileResponseModel FromAccount(EasyHMSAPI.Domain.Entities.PatientAccountProfile own) => new()
+        {
+            Success = true, FullName = own.FullName, FirstName = own.FirstName, LastName = own.LastName, BloodGroup = own.BloodGroup, Age = own.Age, AgeUnit = own.AgeUnit, Sex = own.Sex, Email = own.Email,
+            GuardianName = own.GuardianName, GuardianRelation = own.GuardianRelation, Source = "ACCOUNT",
+        };
     }
 }

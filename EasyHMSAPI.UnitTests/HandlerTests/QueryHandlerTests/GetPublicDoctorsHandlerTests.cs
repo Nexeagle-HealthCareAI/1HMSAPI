@@ -95,6 +95,44 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.QueryHandlerTests
         }
 
         [Test]
+        public async Task Handle_ReturnsHospitalContact_NotTheDoctorsOwnMobile()
+        {
+            var user = TestDataFactory.SeedUser(_context);   // doctor's own mobile: 1234567890
+            var hospital = TestDataFactory.SeedHospital(_context, user.UserID);
+            hospital.Contact = "  9830012345 ";
+            var doctor = TestDataFactory.SeedDoctor(_context, user, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, hospital.HospitalID);
+            SeedProfile(user);
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetPublicDoctorsRequestModel(), CancellationToken.None);
+
+            var d = response.Doctors.Single();
+            Assert.That(d.HospitalContact, Is.EqualTo("9830012345"));
+            Assert.That(d.HospitalContact, Is.Not.EqualTo(user.MobileNumber));
+        }
+
+        [TestCase("", "9000011111", "9000011111")]
+        [TestCase("   ", "9000011111", "9000011111")]
+        [TestCase("", "", null)]
+        [TestCase("", null, null)]
+        public async Task Handle_HospitalContact_FallsBackToAlternate_OrIsNullWhenNothingUsable(string contact, string? alternate, string? expected)
+        {
+            var user = TestDataFactory.SeedUser(_context);
+            var hospital = TestDataFactory.SeedHospital(_context, user.UserID);
+            hospital.Contact = contact;
+            hospital.AlternateContact = alternate;
+            var doctor = TestDataFactory.SeedDoctor(_context, user, isPubliclyListed: true);
+            TestDataFactory.SeedDoctorDepartment(_context, doctor.DoctorID, hospital.HospitalID);
+            SeedProfile(user);
+            await _context.SaveChangesAsync();
+
+            var response = await _handler.Handle(new GetPublicDoctorsRequestModel(), CancellationToken.None);
+
+            Assert.That(response.Doctors.Single().HospitalContact, Is.EqualTo(expected));
+        }
+
+        [Test]
         public async Task Handle_ReturnsLanguages_AndHospitalGeolocation()
         {
             var user = TestDataFactory.SeedUser(_context);

@@ -32,6 +32,13 @@ namespace EasyHMSAPI.Api.Controllers
             _logger.LogInformation("RegisterHospital started at {Time}", DateTime.UtcNow);
             try
             {
+                // The new hospital (and its admin role / doctor profile) is created for request.UserId, so that has to be the caller:
+                // a client-supplied id must never let one signed-in user register a hospital onto another account.
+                var callerId = UserContextHelper.GetUserId(User);
+                if (callerId == null) return Unauthorized(new { Message = "Could not resolve the signed-in user." });
+                if (request.UserId != callerId.Value)
+                    return StatusCode(403, new { Message = "You can only register a hospital for your own account." });
+
                 request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
                 var response = await _mediator.Send(request);
                 _logger.LogInformation("RegisterHospital ended");
@@ -41,8 +48,7 @@ namespace EasyHMSAPI.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in RegisterHospital");
-                var errorMsg = ex.InnerException != null ? $"{ex.Message} Inner: {ex.InnerException.Message}" : ex.Message;
-                return StatusCode(500, new { Message = "An error occurred while registering hospital", Error = errorMsg });
+                return StatusCode(500, new { Message = "An error occurred while registering hospital" });
             }
         }
 
@@ -59,16 +65,18 @@ namespace EasyHMSAPI.Api.Controllers
                 }
 
                 request.HospitalId = hospitalId;
+                request.CallerUserId = EasyHMSAPI.Api.Common.UserContextHelper.GetUserId(User);
 
                 var response = await _mediator.Send(request);
                 _logger.LogInformation("UpdateHospital ended for hospitalId: {HospitalId}", hospitalId);
 
+                if (response.Forbidden) return StatusCode(403, new { message = response.Message });
                 return Ok(response);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in UpdateHospital for hospitalId: {HospitalId}", hospitalId);
-                return StatusCode(500, new { Message = "An error occurred while updating hospital", Error = ex.Message });
+                return StatusCode(500, new { Message = "An error occurred while updating hospital" });
             }
         }
 

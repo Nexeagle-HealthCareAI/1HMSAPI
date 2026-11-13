@@ -94,6 +94,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     : System.Text.Json.JsonSerializer.Deserialize<List<object>>(appt.StatusHistoryJson) ?? new List<object>();
                 history.Add(new { status = AppConstants.AppointmentStatus_Future, timestamp = DateTime.UtcNow.ToString("o"), reason = request.Reason });
                 appt.StatusHistoryJson = System.Text.Json.JsonSerializer.Serialize(history);
+                AppointmentSeen.Mark(appt, null);
 
                 _context.Appointments.Update(appt);
 

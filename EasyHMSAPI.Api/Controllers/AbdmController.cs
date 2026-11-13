@@ -1,8 +1,10 @@
 using EasyHMSAPI.Api.Common;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
+using EasyHMSAPI.Application.Services.Interfaces;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -24,11 +26,194 @@ namespace EasyHMSAPI.Api.Controllers
     {
         private readonly IMediator _mediator;
         private readonly ILogger<AbdmController> _logger;
+        private readonly IAbdmProfileShareService _profileShareService;
+        private readonly IConfiguration _configuration;
 
-        public AbdmController(IMediator mediator, ILogger<AbdmController> logger)
+        public AbdmController(IMediator mediator, ILogger<AbdmController> logger, IAbdmProfileShareService profileShareService, IConfiguration configuration)
         {
             _mediator = mediator;
             _logger = logger;
+            _profileShareService = profileShareService;
+            _configuration = configuration;
+        }
+
+        // ---- "Scan Health Facility QR": counter QR + patient-shared profiles (M1 §2.2) ----
+
+        [HttpGet("facility")]
+        public async Task<ActionResult<GetAbdmFacilityResponseModel>> GetFacility([FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
+            try
+            {
+                return Ok(await _mediator.Send(new GetAbdmFacilityRequestModel { HospitalId = hospitalId }));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching ABDM facility for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching the facility settings." });
+            }
+        }
+
+        [HttpPut("facility")]
+        public async Task<ActionResult<SaveAbdmFacilityResponseModel>> SaveFacility([FromBody] SaveAbdmFacilityRequestModel request)
+        {
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success) return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error saving ABDM facility.");
+                return StatusCode(500, new { Message = "An error occurred while saving the HIP ID." });
+            }
+        }
+
+        // ---- M2: link OPD visits / IPD admissions to the patient's ABHA (care contexts) ----
+
+        /// <summary>Starts linking and returns at once; the care context's LinkStatus says where it
+        /// has got to (ABDM answers on callbacks, which may take a while or never come).</summary>
+        [HttpPost("care-contexts/link")]
+        public async Task<ActionResult<AbdmCareContextResponseModel>> LinkCareContext([FromBody] LinkAbdmCareContextRequestModel request)
+        {
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success) return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error starting ABDM care context link for {SourceType} {SourceId}.", request.SourceType, request.SourceId);
+                return StatusCode(500, new { Message = "An error occurred while starting the ABDM link." });
+            }
+        }
+
+        [HttpGet("care-contexts")]
+        public async Task<ActionResult<AbdmCareContextListResponseModel>> GetCareContexts([FromQuery] Guid hospitalId, [FromQuery] string? patientId)
+        {
+            if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
+            try
+            {
+                return Ok(await _mediator.Send(new GetAbdmCareContextsRequestModel { HospitalId = hospitalId, PatientId = patientId }));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching ABDM care contexts for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching ABDM links." });
+            }
+        }
+
+        [HttpGet("m2/readiness")]
+        public async Task<ActionResult<AbdmM2ReadinessResponseModel>> GetM2Readiness([FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
+            try
+            {
+                return Ok(await _mediator.Send(new GetAbdmM2ReadinessRequestModel { HospitalId = hospitalId }));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking ABDM M2 readiness for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while checking ABDM readiness." });
+            }
+        }
+
+        /// <summary>Integrator view: each outbound ABDM call with the callback that answered it.</summary>
+        [HttpGet("exchanges")]
+        public async Task<ActionResult<AbdmExchangeListResponseModel>> GetExchanges([FromQuery] Guid hospitalId, [FromQuery] int take = 100)
+        {
+            if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
+            try
+            {
+                return Ok(await _mediator.Send(new GetAbdmExchangesRequestModel { HospitalId = hospitalId, Take = take }));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching ABDM exchanges for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching ABDM activity." });
+            }
+        }
+
+        /// <summary>Requests ABDM made to us that answer nothing we sent, and whether we replied.</summary>
+        [HttpGet("inbound-requests")]
+        public async Task<ActionResult<AbdmInboundListResponseModel>> GetInboundRequests([FromQuery] Guid hospitalId, [FromQuery] int take = 100)
+        {
+            if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
+            try
+            {
+                return Ok(await _mediator.Send(new GetAbdmInboundRequestsRequestModel { HospitalId = hospitalId, Take = take }));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching ABDM inbound requests for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching ABDM requests." });
+            }
+        }
+
+        [HttpGet("profile-shares")]
+        public async Task<ActionResult<GetAbdmProfileSharesResponseModel>> GetProfileShares([FromQuery] Guid hospitalId, [FromQuery] string? counterId, [FromQuery] string? status)
+        {
+            if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
+            try
+            {
+                var response = await _mediator.Send(new GetAbdmProfileSharesRequestModel { HospitalId = hospitalId, CounterId = counterId, Status = status });
+                if (!response.Success) return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching ABDM profile shares for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while fetching scanned profiles." });
+            }
+        }
+
+        [HttpPost("profile-shares/{profileShareId}/handle")]
+        public async Task<ActionResult<HandleAbdmProfileShareResponseModel>> HandleProfileShare(Guid profileShareId, [FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
+            try
+            {
+                var response = await _mediator.Send(new HandleAbdmProfileShareRequestModel
+                {
+                    HospitalId = hospitalId,
+                    ProfileShareId = profileShareId,
+                    LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext)
+                });
+                if (!response.Success) return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error handling ABDM profile share {ProfileShareId}.", profileShareId);
+                return StatusCode(500, new { Message = "An error occurred while updating the scanned profile." });
+            }
+        }
+
+        // Registers this API's public callback (bridge) URL with ABDM. The URL is platform-wide (one
+        // per ABDM client, not per hospital) and built from config, so re-running it is harmless.
+        [HttpPost("bridge/register")]
+        public async Task<IActionResult> RegisterBridgeUrl(CancellationToken cancellationToken)
+        {
+            var publicBase = _configuration["Abdm:PublicBaseUrl"];
+            var secret = _configuration["Abdm:CallbackSecret"];
+            if (string.IsNullOrWhiteSpace(publicBase) || string.IsNullOrWhiteSpace(secret) || secret.StartsWith('<'))
+                return BadRequest(new { Message = "Abdm:PublicBaseUrl and Abdm:CallbackSecret must be configured first." });
+
+            try
+            {
+                var bridgeUrl = $"{publicBase.TrimEnd('/')}/abdm-callback/{secret}";
+                var abdmResponse = await _profileShareService.RegisterBridgeUrlAsync(bridgeUrl, cancellationToken);
+                return Ok(new { Message = "Bridge URL registered with ABDM.", AbdmResponse = abdmResponse });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error registering ABDM bridge URL.");
+                return StatusCode(502, new { Message = ex.Message });
+            }
         }
 
         [HttpGet("accounts")]
@@ -68,11 +253,40 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // The consent wording shown before an Aadhaar-based ABHA enrolment. The server owns it (and its version).
+        [HttpGet("consent/text")]
+        public IActionResult GetConsentText() => Ok(new
+        {
+            code = AbhaConsentRules.Code,
+            version = AbhaConsentRules.Version,
+            text = AbhaConsentRules.Text,
+        });
+
+        // Records that the patient (or guardian) agreed; the returned consentId must accompany the Aadhaar OTP request.
+        [HttpPost("consent")]
+        public async Task<ActionResult<RecordAbhaConsentResponseModel>> RecordConsent([FromBody] RecordAbhaConsentRequestModel request)
+        {
+            try
+            {
+                request.CallerUserId = UserContextHelper.GetUserId(HttpContext.User) ?? Guid.Empty;
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success) return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error recording ABHA consent.");
+                return StatusCode(500, new { Message = "An error occurred while recording the consent." });
+            }
+        }
+
         [HttpPost("aadhaar/generate-otp")]
         public async Task<ActionResult<AbdmOtpTxnResponseModel>> GenerateAadhaarOtp([FromBody] GenerateAadhaarOtpRequestModel request)
         {
             try
             {
+                request.CallerUserId = UserContextHelper.GetUserId(HttpContext.User) ?? Guid.Empty;
                 var response = await _mediator.Send(request);
                 if (!response.Success) return BadRequest(new { response.Message });
                 return Ok(response);
@@ -186,6 +400,7 @@ namespace EasyHMSAPI.Api.Controllers
         {
             try
             {
+                request.CallerUserId = UserContextHelper.GetUserId(HttpContext.User) ?? Guid.Empty;
                 var response = await _mediator.Send(request);
                 if (!response.Success) return BadRequest(new { response.Message });
                 return Ok(response);
@@ -202,6 +417,7 @@ namespace EasyHMSAPI.Api.Controllers
         {
             try
             {
+                request.CallerUserId = UserContextHelper.GetUserId(HttpContext.User) ?? Guid.Empty;
                 request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
                 var response = await _mediator.Send(request);
                 if (!response.Success) return BadRequest(new { response.Message });

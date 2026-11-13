@@ -1,3 +1,5 @@
+using System.Linq;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.Handlers.CommandHandlers;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.Services.Interfaces;
@@ -106,6 +108,49 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             // Assert
             Assert.That(response.Success, Is.False);
             Assert.That(response.Message, Is.EqualTo("User account is not active"));
+        }
+
+        [Test]
+        public async Task Handle_LegacySha256Hash_LogsInAndIsUpgradedToSaltedHash()
+        {
+            var email = "legacy@example.com";
+            TestDataFactory.SeedUser(_context, email: email, password: "password123"); // seeded with the legacy unsalted hash
+            _jwtAuthServiceMock.Setup(x => x.GenerateJwtToken(It.IsAny<List<Claim>>())).Returns("t");
+            var before = _context.UserAuths.Single().HashedPassword;
+            Assert.That(PasswordHasher.IsModern(before), Is.False);
+
+            var response = await _handler.Handle(new UserLoginRequestModel { EmailOrPhone = email, Password = "password123", IsLoginWithOtp = false }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True);
+            var after = _context.UserAuths.Single().HashedPassword;
+            Assert.That(PasswordHasher.IsModern(after), Is.True, "hash should be upgraded on first successful login");
+            Assert.That(PasswordHasher.Verify("password123", after, _maskingServiceMock.Object), Is.True);
+
+            // ...and the upgraded hash keeps working.
+            var again = await _handler.Handle(new UserLoginRequestModel { EmailOrPhone = email, Password = "password123", IsLoginWithOtp = false }, CancellationToken.None);
+            Assert.That(again.Success, Is.True);
+        }
+
+        [Test]
+        public async Task Handle_FiveWrongPasswords_LocksTheAccountEvenForTheCorrectPassword()
+        {
+            var email = "lock@example.com";
+            TestDataFactory.SeedUser(_context, email: email, password: "password123");
+            _jwtAuthServiceMock.Setup(x => x.GenerateJwtToken(It.IsAny<List<Claim>>())).Returns("t");
+
+            for (var i = 0; i < 4; i++)
+            {
+                var r = await _handler.Handle(new UserLoginRequestModel { EmailOrPhone = email, Password = "nope", IsLoginWithOtp = false }, CancellationToken.None);
+                Assert.That(r.Message, Is.EqualTo("Invalid Password"));
+            }
+            var fifth = await _handler.Handle(new UserLoginRequestModel { EmailOrPhone = email, Password = "nope", IsLoginWithOtp = false }, CancellationToken.None);
+            Assert.That(fifth.Success, Is.False);
+            Assert.That(fifth.Message, Does.Contain("locked"));
+            Assert.That(_context.UserAuths.Single().IsLocked, Is.True);
+
+            var correct = await _handler.Handle(new UserLoginRequestModel { EmailOrPhone = email, Password = "password123", IsLoginWithOtp = false }, CancellationToken.None);
+            Assert.That(correct.Success, Is.False);
+            Assert.That(correct.AccessToken, Is.Null);
         }
     }
 }

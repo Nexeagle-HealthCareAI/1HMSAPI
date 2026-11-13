@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Common;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services;
@@ -30,10 +31,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             // Same idempotent mint check as UploadDischargeSummaryPdfHandler -- pre-setting it
             // here (before the PDF exists) is safe because that handler's own check tolerates
             // AccessToken already being set.
-            if (string.IsNullOrEmpty(summary.AccessToken))
+            var now = DateTime.UtcNow;
+            if (string.IsNullOrEmpty(summary.AccessToken) || DischargeLinkPolicy.IsExpired(summary.AccessTokenExpiresAt, now))
             {
-                summary.AccessToken = RandomNumberGenerator.GetHexString(40);
-                summary.UpdatedAt = DateTime.UtcNow;
+                summary.AccessToken = DischargeLinkPolicy.NewToken();
+                summary.AccessTokenExpiresAt = DischargeLinkPolicy.ExpiryFrom(now, _configuration);
+                summary.UpdatedAt = now;
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+            else if (summary.AccessTokenExpiresAt == null)
+            {
+                summary.AccessTokenExpiresAt = DischargeLinkPolicy.ExpiryFrom(now, _configuration);
+                summary.UpdatedAt = now;
                 await _context.SaveChangesAsync(cancellationToken);
             }
 

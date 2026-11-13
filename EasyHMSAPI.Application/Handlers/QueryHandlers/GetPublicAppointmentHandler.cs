@@ -26,7 +26,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
             var appt = await _context.Appointments
                 .Where(a => a.ApptId == request.AppointmentId)
-                .Select(a => new { a.ApptId, a.HospitalId, a.DoctorId, a.ApptDate, a.StartAt, a.CurrentStatusCode })
+                .Select(a => new { a.ApptId, a.HospitalId, a.DoctorId, a.ApptDate, a.StartAt, a.CurrentStatusCode, a.HospitalSeenAt })
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (appt == null)
@@ -49,12 +49,14 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                 Appointment = new PublicAppointmentSummary
                 {
                     AppointmentId = appt.ApptId,
+                    DoctorId = appt.DoctorId,
                     DoctorName = doctorName ?? "Doctor",
                     HospitalName = hospitalName ?? "Hospital",
                     ApptDate = appt.ApptDate,
                     StartAt = appt.StartAt,
                     Status = PublicAppointmentStatusLabels.ToPatientLabel(appt.CurrentStatusCode),
                     StatusCode = appt.CurrentStatusCode ?? string.Empty,
+                    HospitalSeenAt = appt.HospitalSeenAt,
                 },
             };
         }

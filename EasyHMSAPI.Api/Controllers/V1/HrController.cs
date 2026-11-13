@@ -1,4 +1,5 @@
 using EasyHMSAPI.Api.Common;
+using EasyHMSAPI.Application.Handlers.CommandHandlers;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
@@ -117,7 +118,14 @@ namespace EasyHMSAPI.Api.Controllers.V1
             [FromQuery] Guid hrPayrollRunId,
             [FromQuery] string format = "HDFC")
         {
-            var request = new ExportBankFileRequestModel { HrPayrollRunId = hrPayrollRunId, BankFormat = format };
+            var request = new ExportBankFileRequestModel
+            {
+                HrPayrollRunId = hrPayrollRunId,
+                BankFormat = format,
+                // Always the caller's own identity, never client-supplied: the handler authorizes against the
+                // hospital that owns the run (this request carries no hospitalId for HospitalAccessFilter).
+                LoggedInUserId = UserContextHelper.GetUserId(User) ?? Guid.Empty
+            };
             var result = await _mediator.Send(request);
 
             if (result.Success && result.FileBytes != null)
@@ -143,12 +151,50 @@ namespace EasyHMSAPI.Api.Controllers.V1
         [RequiresPermission("hr.manage_payroll")]
         public async Task<IActionResult> DispatchPayslips(Guid hrPayrollRunId)
         {
-            var result = await _mediator.Send(new DispatchPayslipsRequestModel { HrPayrollRunId = hrPayrollRunId });
+            var result = await _mediator.Send(new DispatchPayslipsRequestModel
+            {
+                HrPayrollRunId = hrPayrollRunId,
+                LoggedInUserId = UserContextHelper.GetUserId(User) ?? Guid.Empty
+            });
             if (!result.Success)
             {
                 return BadRequest(result);
             }
             return Ok(result);
+        }
+
+        // ─── Income-tax profile (Track A TDS) ──────────────────────────────────
+        [HttpPut("employees/{hrEmployeeId}/tax-profile")]
+        [RequiresPermission("hr.manage_payroll")]
+        public async Task<ActionResult<UpdateEmployeeTaxProfileResponseModel>> UpdateTaxProfile(
+            Guid hrEmployeeId, [FromBody] UpdateEmployeeTaxProfileRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId is required." });
+            request.HrEmployeeId = hrEmployeeId;
+            request.LoggedInUserName = User.Identity?.Name;
+            var result = await _mediator.Send(request);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+
+        // ─── Consultant Fee Config (Track B payroll) ───────────────────────────
+        [HttpGet("consultant-fee-config/{hrEmployeeId}")]
+        [RequiresPermission("hr.manage_payroll")]
+        public async Task<ActionResult<GetConsultantFeeConfigResponseModel>> GetConsultantFeeConfig(Guid hrEmployeeId)
+        {
+            var result = await _mediator.Send(new GetConsultantFeeConfigRequestModel { HrEmployeeId = hrEmployeeId });
+            return Ok(result);
+        }
+
+        [HttpPut("consultant-fee-config/{hrEmployeeId}")]
+        [RequiresPermission("hr.manage_payroll")]
+        public async Task<ActionResult<UpsertConsultantFeeConfigResponseModel>> UpsertConsultantFeeConfig(
+            Guid hrEmployeeId, [FromBody] UpsertConsultantFeeConfigRequestModel request)
+        {
+            request.HrEmployeeId = hrEmployeeId;
+            request.LoggedInUserName = User.Identity?.Name;
+            var result = await _mediator.Send(request);
+            return result.IsSuccess ? Ok(result) : BadRequest(result);
         }
 
         // ─── Leaves & Roster ──────────────────────────────────────────────────
@@ -244,27 +290,9 @@ namespace EasyHMSAPI.Api.Controllers.V1
             return Ok(result);
         }
 
-        // ─── Attendance & Biometrics ──────────────────────────────────────────
-
-        [HttpPost("biometric-punch")]
-        [AllowAnonymous] // Assuming hardware uses custom headers/auth
-        public async Task<ActionResult<ProcessBiometricPunchResponseModel>> BiometricPunch(
-            [FromBody] ProcessBiometricPunchRequestModel request,
-            [FromHeader(Name = "X-API-KEY")] string apiKey)
-        {
-            // Simple check for demonstration
-            if (apiKey != "ZKTeco-Hook-Secret")
-            {
-                return Unauthorized(new { message = "Invalid API Key" });
-            }
-
-            var result = await _mediator.Send(request);
-            if (result.Success)
-            {
-                return Ok(result);
-            }
-            return BadRequest(result);
-        }
+        // ─── Attendance ───────────────────────────────────────────────────────
+        // Biometric device scans are received by BiometricIngestController (per-device credentials) and
+        // ZktecoPushController; devices are managed in HrBiometricController.
 
         [HttpGet("attendance/exceptions")]
         [RequiresPermission("hr.view_dashboard")]
@@ -281,6 +309,57 @@ namespace EasyHMSAPI.Api.Controllers.V1
             };
             var result = await _mediator.Send(request);
             return Ok(result);
+        }
+
+        [HttpPut("attendance/{employeeId}/override")]
+        [RequiresPermission("hr.manage_employees")]
+        public async Task<ActionResult<SetAttendanceOverrideResponseModel>> SetAttendanceOverride(
+            Guid employeeId, [FromBody] SetAttendanceOverrideRequestModel request)
+        {
+            request.HrEmployeeId = employeeId;
+            request.LoggedInUserId = UserContextHelper.GetUserId(User) ?? Guid.Empty;
+            var result = await _mediator.Send(request);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+
+        // ─── Payroll calendar policy (weekly offs / holidays payable) ──────────
+        [HttpGet("payroll-settings")]
+        [RequiresPermission("hr.manage_employees", "hr.view_dashboard")]
+        public async Task<ActionResult<GetPayrollSettingsResponseModel>> GetPayrollSettings([FromQuery] Guid hospitalId, [FromQuery] int? year = null)
+        {
+            var result = await _mediator.Send(new GetPayrollSettingsRequestModel { HospitalId = hospitalId, Year = year });
+            return Ok(result);
+        }
+
+        [HttpPut("payroll-settings")]
+        [RequiresPermission("hr.manage_employees")]
+        public async Task<ActionResult<SimpleHrResponseModel>> SavePayrollSettings([FromQuery] Guid hospitalId, [FromBody] PayrollSettingsDto settings)
+        {
+            var result = await _mediator.Send(new SavePayrollSettingsRequestModel
+            {
+                HospitalId = hospitalId,
+                UserId = UserContextHelper.GetUserId(User) ?? Guid.Empty,
+                Settings = settings ?? new PayrollSettingsDto(),
+            });
+            return Ok(result);
+        }
+
+        [HttpPost("holidays")]
+        [RequiresPermission("hr.manage_employees")]
+        public async Task<ActionResult<SimpleHrResponseModel>> AddHoliday([FromQuery] Guid hospitalId, [FromBody] AddHolidayRequestModel request)
+        {
+            request.HospitalId = hospitalId;
+            request.UserId = UserContextHelper.GetUserId(User) ?? Guid.Empty;
+            var result = await _mediator.Send(request);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+
+        [HttpDelete("holidays/{holidayId:guid}")]
+        [RequiresPermission("hr.manage_employees")]
+        public async Task<ActionResult<SimpleHrResponseModel>> DeleteHoliday([FromQuery] Guid hospitalId, Guid holidayId)
+        {
+            var result = await _mediator.Send(new DeleteHolidayRequestModel { HospitalId = hospitalId, HrHolidayId = holidayId });
+            return result.Success ? Ok(result) : NotFound(result);
         }
 
         // ─── Dashboard & KPI ──────────────────────────────────────────────────

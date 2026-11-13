@@ -55,6 +55,25 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return new PharmacyRetailCheckoutResponseModel { Success = false, Message = "A patient is required to dispense medicine." };
                 }
 
+                // A repeated Idempotency-Key (double click, retry, offline replay) returns the first sale: no
+                // second stock issue, charge, invoice or payment.
+                if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
+                {
+                    var replay = await TryReplayAsync(request, cancellationToken);
+                    if (replay != null)
+                    {
+                        await tx.RollbackAsync(cancellationToken);
+                        return replay;
+                    }
+                }
+
+                var cart = await ValidateCartAsync(request, cancellationToken);
+                if (cart.Error != null)
+                {
+                    await tx.RollbackAsync(cancellationToken);
+                    return new PharmacyRetailCheckoutResponseModel { Success = false, Message = cart.Error };
+                }
+
                 Encounter encounter;
                 if (postToAdmissionDayBill)
                 {
@@ -134,20 +153,33 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         });
                     }
 
-                    // Look up ChargeId
-                    var invItem = await _context.InventoryItem.FindAsync(new object[] { item.InventoryItemId }, cancellationToken);
-                    if (invItem?.ChargeId != null)
+                    // Server-side pricing: every allocated batch is charged at ITS OWN MRP, else the Charge Master
+                    // default rate. The client's Rate is ignored, so a tampered or stale browser cannot sell below
+                    // price (or at zero); the discount % was already validated against the allowed cap.
+                    var invItem = cart.Items[item.InventoryItemId];
+                    var master = cart.Masters[invItem.ChargeId!.Value];
+                    var allocations = movementResponse.AllocatedBatchDetails;
+                    var splitAcrossBatches = allocations.Count > 1;
+
+                    if (allocations.Count == 0)
                     {
-                        chargeDetails.Add(new ChargeDetail
+                        if (master.DefaultRate <= 0)
                         {
-                            ChargeId = invItem.ChargeId,
-                            DisplayName = invItem.ItemName,
-                            Qty = item.Qty,
-                            Rate = item.Rate,
-                            DiscountPercent = item.DiscountPercent,
-                            CategoryCode = invItem.Category,
-                            SourceModule = BillingConstants.SourceModule.PharmacyCounter
-                        });
+                            await tx.RollbackAsync(cancellationToken);
+                            return new PharmacyRetailCheckoutResponseModel { Success = false, Message = $"No price is configured for {invItem.ItemName}. Set a default rate in the Charge Master." };
+                        }
+                        chargeDetails.Add(BuildChargeDetail(invItem, item, item.Qty, master.DefaultRate, null, false));
+                    }
+
+                    foreach (var detail in allocations)
+                    {
+                        var price = detail.Mrp is > 0 ? detail.Mrp.Value : (master.DefaultRate > 0 ? master.DefaultRate : (decimal?)null);
+                        if (price == null)
+                        {
+                            await tx.RollbackAsync(cancellationToken);
+                            return new PharmacyRetailCheckoutResponseModel { Success = false, Message = $"No price is configured for {invItem.ItemName} (set an MRP on batch {detail.BatchNumber} or a default rate in the Charge Master)." };
+                        }
+                        chargeDetails.Add(BuildChargeDetail(invItem, item, detail.AllocatedQty, price.Value, detail, splitAcrossBatches));
                     }
                 }
 
@@ -164,6 +196,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     PatientId = request.PatientId,
                     EncounterId = encounter.EncounterId,
                     Charges = chargeDetails,
+                    IdempotencyKey = string.IsNullOrWhiteSpace(request.IdempotencyKey) ? null : request.IdempotencyKey.Trim(),
                     LoggedInUserId = request.LoggedInUserId,
                     LoggedInUserName = request.LoggedInUserName
                 }, cancellationToken);
@@ -245,8 +278,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                     await _context.SaveChangesAsync(cancellationToken);
 
-                    // 5. Add Payment if applicable
-                    if (request.PaidAmount > 0)
+                    // 5. Add Payment if applicable. The server owns the total: PayInFull collects exactly the invoice
+                    // net; an explicit PaidAmount (credit / part payment) can never exceed it.
+                    var amountToCollect = request.PayInFull ? netAmount : Math.Min(request.PaidAmount, netAmount);
+                    if (amountToCollect > 0)
                     {
                         var paymentResponse = await _mediator.Send(new AddPaymentEventRequestModel
                         {
@@ -255,7 +290,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             EncounterId = encounter.EncounterId,
                             Payment = new PaymentDetail
                             {
-                                Amount = request.PaidAmount,
+                                Amount = amountToCollect,
                                 PaymentMode = request.PaymentMode ?? "CASH",
                                 PaymentType = BillingConstants.PaymentType.Payment,
                                 Description = "Retail Pharmacy POS Payment"
@@ -306,6 +341,100 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 _logger.LogError(ex, "Pharmacy Retail Checkout failed.");
                 return new PharmacyRetailCheckoutResponseModel { Success = false, Message = "An error occurred during checkout." };
             }
+        }
+
+        private sealed class CartValidation
+        {
+            public string? Error { get; init; }
+            public Dictionary<Guid, InventoryItem> Items { get; init; } = new();
+            public Dictionary<Guid, ChargeMaster> Masters { get; init; } = new();
+        }
+
+        // Everything that can be rejected without touching stock: shape of the cart, items that belong to this
+        // hospital, a charge for every item (an item with no charge would be dispensed free), and the discount
+        // cap (ChargeMaster.MaxDiscountPercent, else the hospital's pharmacy default).
+        private async Task<CartValidation> ValidateCartAsync(PharmacyRetailCheckoutCommand request, CancellationToken cancellationToken)
+        {
+            if (request.Items == null || request.Items.Count == 0)
+                return new CartValidation { Error = "The cart is empty." };
+            if (request.Items.Any(i => i.Qty <= 0))
+                return new CartValidation { Error = "Quantity must be greater than zero on every line." };
+            if (request.Items.Any(i => i.DiscountPercent < 0 || i.DiscountPercent > 100))
+                return new CartValidation { Error = "Discount must be between 0 and 100 %." };
+
+            var itemIds = request.Items.Select(i => i.InventoryItemId).Distinct().ToList();
+            var items = await _context.InventoryItem
+                .Where(i => i.HospitalId == request.HospitalId && itemIds.Contains(i.InventoryItemId))
+                .ToDictionaryAsync(i => i.InventoryItemId, cancellationToken);
+            if (items.Count != itemIds.Count)
+                return new CartValidation { Error = "One or more items were not found." };
+
+            var unbilled = items.Values.Where(i => !i.ChargeId.HasValue).Select(i => i.ItemName).ToList();
+            if (unbilled.Count > 0)
+                return new CartValidation { Error = $"These items have no charge configured and cannot be sold: {string.Join(", ", unbilled)}. Link them to a Charge Master entry first." };
+
+            var chargeIds = items.Values.Select(i => i.ChargeId!.Value).Distinct().ToList();
+            var masters = await _context.ChargeMaster
+                .Where(m => m.HospitalId == request.HospitalId && chargeIds.Contains(m.ChargeId))
+                .ToDictionaryAsync(m => m.ChargeId, cancellationToken);
+            var missing = items.Values.Where(i => !masters.ContainsKey(i.ChargeId!.Value)).Select(i => i.ItemName).ToList();
+            if (missing.Count > 0)
+                return new CartValidation { Error = $"The Charge Master entry for {string.Join(", ", missing)} was not found." };
+
+            var policyCap = await _context.BillingPolicy
+                .Where(p => p.HospitalId == request.HospitalId)
+                .Select(p => (decimal?)p.PharmacyMaxDiscountPercent)
+                .FirstOrDefaultAsync(cancellationToken) ?? 20m;
+
+            foreach (var line in request.Items)
+            {
+                var item = items[line.InventoryItemId];
+                var cap = masters[item.ChargeId!.Value].MaxDiscountPercent ?? policyCap;
+                if (line.DiscountPercent > cap)
+                    return new CartValidation { Error = $"Discount on {item.ItemName} cannot exceed {cap:0.##} %." };
+            }
+
+            return new CartValidation { Items = items, Masters = masters };
+        }
+
+        private static ChargeDetail BuildChargeDetail(InventoryItem invItem, PharmacyCartItem line, decimal qty, decimal rate, AllocatedBatchDetail? batch, bool splitAcrossBatches) => new()
+        {
+            ChargeId = invItem.ChargeId,
+            DisplayName = splitAcrossBatches && batch?.BatchNumber != null ? $"{invItem.ItemName} (Batch {batch.BatchNumber})" : invItem.ItemName,
+            Qty = qty,
+            Rate = rate,
+            DiscountPercent = line.DiscountPercent,
+            CategoryCode = invItem.Category,
+            SourceModule = BillingConstants.SourceModule.PharmacyCounter,
+            // The batch this line was dispensed from, so a later return can be tied to it.
+            SourceRefId = batch?.BatchId.ToString(),
+        };
+
+        private async Task<PharmacyRetailCheckoutResponseModel?> TryReplayAsync(PharmacyRetailCheckoutCommand request, CancellationToken cancellationToken)
+        {
+            var key = request.IdempotencyKey!.Trim();
+            var events = await _context.BillingChargeEvent
+                .AsNoTracking()
+                .Where(e => e.HospitalId == request.HospitalId && e.IdempotencyKey == key)
+                .ToListAsync(cancellationToken);
+            if (events.Count == 0) return null;
+
+            var eventIds = events.Select(e => e.ChargeEventId).ToList();
+            var invoice = await (from link in _context.BillingInvoiceChargeEvent
+                                 join inv in _context.BillingInvoice on link.InvoiceId equals inv.InvoiceId
+                                 where eventIds.Contains(link.ChargeEventId)
+                                 select inv).AsNoTracking().FirstOrDefaultAsync(cancellationToken);
+
+            return new PharmacyRetailCheckoutResponseModel
+            {
+                Success = true,
+                IsReplay = true,
+                Message = "This sale was already recorded.",
+                EncounterId = events[0].EncounterId,
+                ChargeEventId = events[0].ChargeEventId,
+                InvoiceId = invoice?.InvoiceId ?? Guid.Empty,
+                InvoiceNo = invoice?.InvoiceNo,
+            };
         }
     }
 }

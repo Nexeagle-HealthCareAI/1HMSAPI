@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Common;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.QueryResponseModels;
 using EasyHMSAPI.Domain.Context;
@@ -20,12 +21,11 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
         public async Task<GetHrLeaveRequestsResponseModel> Handle(GetHrLeaveRequestsRequestModel request, CancellationToken cancellationToken)
         {
-            // RBAC Check for Self-Service Isolation
-            var hasManageLeaves = await _context.UserRoles
-                .Include(ur => ur.Role)
-                .ThenInclude(r => r.RolePermissions)
-                .AnyAsync(ur => ur.UserID == request.LoggedInUserId &&
-                                ur.Role.RolePermissions.Any(p => p.PermissionKey == "hr.manage_leaves" && p.IsAllowed), cancellationToken);
+            // RBAC Check for Self-Service Isolation. Managing leaves is only meaningful AT a hospital: the old
+            // check accepted hr.manage_leaves on any role anywhere and, with hospitalId omitted (it is optional),
+            // returned every hospital's leave requests. No hospitalId now means "just my own leaves".
+            var hasManageLeaves = request.HospitalId.HasValue
+                && await CallerGuards.HasPermissionAtHospitalAsync(_context, request.LoggedInUserId, request.HospitalId.Value, "hr.manage_leaves", cancellationToken);
 
             var query = _context.HrLeaveRequest
                 .Include(l => l.HrEmployee)

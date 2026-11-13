@@ -8,6 +8,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
     [ExcludeFromCodeCoverage]
     public class UpsertDoctorFeeRequestModel : IRequest<UpsertDoctorFeeResponseModel>
     {
+        /// <summary>Stamped by the controller from the verified JWT; any client-supplied value is overwritten.</summary>
+        public Guid? CallerUserId { get; set; }
         [JsonIgnore]
         public Guid HospitalId { get; set; }
         public Guid DoctorId { get; set; }

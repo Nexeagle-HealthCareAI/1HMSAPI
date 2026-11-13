@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Domain.Context;
@@ -44,6 +45,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 appointment.CurrentStatusCode = request.ToStatus;
                 appointment.LastStatusCodeAt = DateTime.UtcNow;
                 appointment.StatusHistoryJson = JsonSerializer.Serialize(statusHistory);
+                AppointmentSeen.Mark(appointment, request.UserId);
 
                 _context.Appointments.Update(appointment);
                 await _context.SaveChangesAsync(cancellationToken);

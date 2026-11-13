@@ -16,6 +16,7 @@ namespace EasyHMSAPI.Api.Controllers
     [ApiController]
     [Route("blood-bank")]
     [Authorize]
+    [RequiresPermission("inventory", "ipd", "ot_board", "icu_board")]
     public class BloodBankController : ControllerBase
     {
         private readonly IMediator _mediator;

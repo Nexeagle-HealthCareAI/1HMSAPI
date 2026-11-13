@@ -193,6 +193,27 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        [HttpPost("checklist/addendum")]
+        public async Task<ActionResult<AddChecklistAddendumResponseModel>> AddChecklistAddendum([FromBody] AddChecklistAddendumRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty || request.SurgeryCaseId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and surgeryCaseId are required." });
+
+            try
+            {
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                if (!response.Success)
+                    return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in AddChecklistAddendum for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred while adding the addendum." });
+            }
+        }
+
         [HttpPost("intra-op")]
         public async Task<ActionResult<SaveIntraOpRecordResponseModel>> SaveIntraOp([FromBody] SaveIntraOpRecordRequestModel request)
         {

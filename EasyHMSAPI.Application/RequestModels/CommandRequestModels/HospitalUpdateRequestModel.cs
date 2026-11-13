@@ -7,6 +7,8 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModel
     [ExcludeFromCodeCoverage]
     public class HospitalUpdateRequestModel : MediatR.IRequest<HospitalUpdateResponseModel>
     {
+        /// <summary>Stamped by the controller from the verified JWT; any client-supplied value is overwritten.</summary>
+        public Guid? CallerUserId { get; set; }
         [JsonIgnore]
         public Guid HospitalId { get; set; }
         public string? Name { get; set; }

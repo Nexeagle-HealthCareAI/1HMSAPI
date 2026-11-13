@@ -96,6 +96,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(lead.Source, Is.EqualTo("DoctorDekho"));
             Assert.That(lead.LeadType, Is.EqualTo("DoctorProfileView"));
             Assert.That(lead.City, Is.EqualTo("Kolkata"));
+            Assert.That(lead.IpAddress, Is.EqualTo("1.2.3.0"));   // stored truncated; geo used the full IP
         }
 
         [Test]

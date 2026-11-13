@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Common;
 using EasyHMSAPI.Application.Helpers.Interfaces;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
@@ -29,8 +30,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (existingBed == null)
                     throw new KeyNotFoundException($"Bed with ID {request.BedId} not found.");
 
-                if (!request.IsActive && existingBed.StatusCode == "OCCUPIED")
+                var hasPatient = await BedOccupancy.HasActiveAssignmentAsync(_context, existingBed.BedId, cancellationToken);
+                if (!request.IsActive && (hasPatient || existingBed.StatusCode == "OCCUPIED"))
                     throw new InvalidOperationException($"Bed {existingBed.BedCode} is currently occupied and cannot be deactivated.");
+                // A bed with a patient in it stays OCCUPIED until they are discharged or transferred.
+                if (hasPatient && !string.IsNullOrEmpty(request.StatusCode) && !string.Equals(request.StatusCode, "OCCUPIED", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException($"Bed {existingBed.BedCode} has a patient in it. Discharge or transfer the patient before changing its status.");
 
                 // Reactivating a previously-deactivated bed puts it back into the active count —
                 // re-check the limit the same way a brand-new bed would be, so a hospital that's

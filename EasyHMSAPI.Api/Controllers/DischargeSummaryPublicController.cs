@@ -39,6 +39,8 @@ namespace EasyHMSAPI.Api.Controllers
             try
             {
                 var response = await _mediator.Send(new GetPublicDischargeSummaryPdfRequestModel { AccessToken = accessToken });
+                if (response.Expired)
+                    return StatusCode(StatusCodes.Status410Gone, new { response.Message });
                 if (!response.Success || string.IsNullOrEmpty(response.RedirectUrl))
                     return NotFound(new { response.Message });
 

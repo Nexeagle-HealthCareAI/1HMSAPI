@@ -18,6 +18,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
     [TestFixture]
     public class UploadImageCommandHandlerTests
     {
+        private static readonly Guid _unknownId = Guid.NewGuid();
         private AppDbContext _context = null!;
         private Mock<IBlobStorageService> _blobStorageServiceMock = null!;
         private Mock<IConfiguration> _configurationMock = null!;
@@ -62,6 +63,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var request = new UploadProfilePictureRequestModel
             {
                 UserId = user.UserID,
+                CallerUserId = user.UserID,
                 File = fileMock.Object
             };
 
@@ -80,7 +82,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         public async Task Handle_UserNotFound_ReturnsFailure()
         {
             // Arrange
-            var request = new UploadProfilePictureRequestModel { UserId = Guid.NewGuid() };
+            var request = new UploadProfilePictureRequestModel { UserId = _unknownId, CallerUserId = _unknownId };
 
             // Act
             var response = await _handler.Handle(request, CancellationToken.None);
@@ -101,11 +103,14 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             await _context.SaveChangesAsync();
 
             var fileMock = new Mock<IFormFile>();
+            var otherHospitalId = Guid.NewGuid();
+            var adminId = TestUtils.HrAuthSeed.SeedMember(_context, otherHospitalId, "admin_panel");
             var request = new UploadProfilePictureRequestModel
             {
                 UserId = user.UserID,
+                CallerUserId = adminId,
                 File = fileMock.Object,
-                HospitalId = Guid.NewGuid(),
+                HospitalId = otherHospitalId,
             };
 
             // Act
@@ -132,9 +137,11 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             _blobStorageServiceMock.Setup(x => x.UploadAsync(It.IsAny<string>(), It.IsAny<IFormFile>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync("http://blob.url/photo.jpg");
 
+            var adminId = TestUtils.HrAuthSeed.SeedMember(_context, hospital.HospitalID, "admin_panel");
             var request = new UploadProfilePictureRequestModel
             {
                 UserId = user.UserID,
+                CallerUserId = adminId,
                 File = fileMock.Object,
                 HospitalId = hospital.HospitalID,
             };

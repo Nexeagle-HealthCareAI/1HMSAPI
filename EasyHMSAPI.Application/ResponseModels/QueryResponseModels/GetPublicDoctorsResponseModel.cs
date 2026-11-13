@@ -15,8 +15,11 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public int TotalCount { get; set; }
     }
 
-    // Public-safe field set only — no LicenseNumber, MedicalCouncil, RegistrationYear, UserId,
-    // mobile/email, or anything queue/schedule-internal.
+    // Public-safe field set only — no RegistrationYear, UserId, the DOCTOR's own mobile/email, or
+    // anything queue/schedule-internal. RegistrationNumber/RegistrationCouncil (Doctor.LicenseNumber/
+    // MedicalCouncil) ARE exposed: they are public NMC-register facts and back the "Medically
+    // reviewed by" badge on Doctor Dekho's Health Wiki. (HospitalContact below is
+    // the hospital's published front-desk number — not any individual's — and is deliberate.)
     [ExcludeFromCodeCoverage]
     public class PublicDoctorInfo
     {
@@ -51,10 +54,19 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         // Drives the public "Verified profile" badge — set by a CMS admin only after manually
         // confirming this doctor's registration against the NMC's Indian Medical Register.
         public bool IsRegistrationVerified { get; set; }
+        // Doctor.LicenseNumber / Doctor.MedicalCouncil — the checkable registration claim
+        // (e.g. "BMC-12345" / "Bihar Medical Council"). Null/empty-trimmed when not on file.
+        public string? RegistrationNumber { get; set; }
+        public string? RegistrationCouncil { get; set; }
         // Same TimeOff > Override > Template precedence as the single-doctor
         // GetPublicDoctorAvailabilityHandler (see DoctorAvailabilityResolver), resolved for
         // today's date and batched per page so the directory grid never needs a per-card call.
         public bool IsAvailableToday { get; set; }
+        /// <summary>
+        /// Today's working hours in India time (IST), from the same TimeOff &gt; Override &gt; Template rules as
+        /// IsAvailableToday. Empty when the doctor isn't available today. Lets the app say "Open now · till 8 pm".
+        /// </summary>
+        public List<PublicShiftInfo> TodayHours { get; set; } = new();
         // Manual "online now" toggle (Doctor.IsOnlineNow) — a doctor/staff-set signal, separate
         // from IsAvailableToday's schedule-derived status. Drives a distinct "Online now" badge.
         public bool IsOnlineNow { get; set; }
@@ -70,6 +82,10 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? City { get; set; }
         public string? State { get; set; }
         public string? Pincode { get; set; }
+        // The hospital's own contact number (Hospital.Contact, falling back to AlternateContact when
+        // that is blank) so patients can call the hospital straight from the doctor card. Null when
+        // the hospital has neither on file — the frontend hides the phone row in that case.
+        public string? HospitalContact { get; set; }
         // GPS pin for a "get directions" link — inherited from the hospital, since a doctor
         // doesn't have their own address (see Hospital.Latitude/Longitude).
         public decimal? Latitude { get; set; }

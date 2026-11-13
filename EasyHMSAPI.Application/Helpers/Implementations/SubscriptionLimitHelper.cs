@@ -68,8 +68,13 @@ namespace EasyHMSAPI.Application.Helpers.Implementations
         // persists forever, so count only doctors whose linked User account isn't revoked
         // (mirrors the check DoctorCreateHandler/DeactivateUserHandler already use), so
         // deactivating someone actually frees their slot against the plan's doctor limit.
+        // A doctor belongs to a hospital through Doctor.HospitalId (where they were created) AND through a HospitalUser
+        // membership (a chain doctor added to another hospital keeps one Doctor row), so count both or a chain hospital
+        // would never see its shared doctors against its own plan.
         private Task<int> GetCurrentDoctorCountAsync(Guid hospitalId, CancellationToken cancellationToken) =>
-            _context.Doctors.CountAsync(d => d.HospitalId == hospitalId && d.User.UserStatusId != (int)UserStatusEnum.Revoked, cancellationToken);
+            _context.Doctors.CountAsync(d => d.User.UserStatusId != (int)UserStatusEnum.Revoked
+                && (d.HospitalId == hospitalId
+                    || _context.HospitalUsers.Any(hu => hu.UserID == d.UserID && hu.HospitalID == hospitalId)), cancellationToken);
 
         private Task<int> GetCurrentBedCountAsync(Guid hospitalId, CancellationToken cancellationToken) =>
             _context.BedMaster.CountAsync(b => b.HospitalId == hospitalId && b.IsActive, cancellationToken);

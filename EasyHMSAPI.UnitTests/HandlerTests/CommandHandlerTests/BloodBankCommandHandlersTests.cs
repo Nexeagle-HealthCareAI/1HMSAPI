@@ -127,8 +127,10 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
-        public async Task RecordTransfusion_NotYetExpiredBag_Succeeds()
+        public async Task RecordTransfusion_NotYetExpiredButUnreservedBag_IsStillRefused()
         {
+            // An in-date bag is not enough any more: it must be reserved with a compatible crossmatch
+            // (the full gate set is covered in TransfusionGateTests).
             var (hospitalId, bag, admission) = SeedBag(DateTime.UtcNow.AddDays(5), status: IpdConstants.BloodBagStatus.Available);
 
             var response = await _handler.Handle(new RecordTransfusionRequestModel
@@ -141,9 +143,10 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                 WitnessName = "Nurse A",
             }, CancellationToken.None);
 
-            Assert.That(response.Success, Is.True, response.Message);
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.Message, Does.Contain("Reserve and crossmatch"));
             var saved = _context.BloodBag.Single(b => b.BloodBagId == bag.BloodBagId);
-            Assert.That(saved.Status, Is.EqualTo(IpdConstants.BloodBagStatus.Transfused));
+            Assert.That(saved.Status, Is.EqualTo(IpdConstants.BloodBagStatus.Available));
         }
     }
 }

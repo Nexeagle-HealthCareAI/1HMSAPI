@@ -50,7 +50,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 cts.CancelAfter(RequestTimeout);
 
                 var response = await client.GetAsync(
-                    $"http://ip-api.com/json/{ipAddress}?fields=status,country,regionName,city",
+                    $"http://ip-api.com/json/{ipAddress}?fields=status,country,regionName,city,hosting",
                     cts.Token);
 
                 if (!response.IsSuccessStatusCode) return CacheAndReturn(cacheKey, null);
@@ -61,7 +61,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 if (payload == null || !string.Equals(payload.Status, "success", StringComparison.OrdinalIgnoreCase))
                     return CacheAndReturn(cacheKey, null);
 
-                return CacheAndReturn(cacheKey, new GeoIpResult(payload.Country, payload.RegionName, payload.City));
+                return CacheAndReturn(cacheKey, new GeoIpResult(payload.Country, payload.RegionName, payload.City, payload.Hosting));
             }
             catch (Exception ex)
             {
@@ -97,6 +97,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
             public string? Country { get; set; }
             public string? RegionName { get; set; }
             public string? City { get; set; }
+            public bool Hosting { get; set; }
         }
     }
 }
