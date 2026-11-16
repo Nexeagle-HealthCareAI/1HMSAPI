@@ -94,7 +94,14 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [TestCase("98911", null)]
         [TestCase("", null)]
         [TestCase(null, null)]
-        public void NormalizeMobile_AcceptsIndianNumbersOnly(string? input, string? expected) =>
+        [TestCase("+1 415 555 0123", "+14155550123")]
+        [TestCase("+44 7911 123456", "+447911123456")]
+        [TestCase("+65 8123 4567", "+6581234567")]
+        [TestCase("14155550123", null)]
+        [TestCase("+1234567", null)]
+        [TestCase("+0415555012", null)]
+        [TestCase("+1234567890123456", null)]
+        public void NormalizeMobile_AcceptsIndianAndPlusPrefixedInternationalNumbers(string? input, string? expected) =>
             Assert.That(ContributorSecurity.NormalizeMobile(input), Is.EqualTo(expected));
 
         [Test]
@@ -103,6 +110,13 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var m = ContributorSecurity.MaskMobile(Mobile);
             Assert.That(m, Is.EqualTo("+91 98••• ••002"));
             Assert.That(m, Does.Not.Contain(Mobile));
+        }
+
+        [Test]
+        public void MaskMobile_HidesTheMiddleOfAnInternationalNumber()
+        {
+            var m = ContributorSecurity.MaskMobile("+14155550123");
+            Assert.That(m, Is.EqualTo("+14••• ••123"));
         }
 
         [Test]

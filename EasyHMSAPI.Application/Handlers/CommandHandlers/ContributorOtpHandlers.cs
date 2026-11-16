@@ -47,7 +47,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         public async Task<ContributorOtpSendResponseModel> Handle(ContributorOtpSendRequestModel request, CancellationToken ct)
         {
             var mobile = ContributorSecurity.NormalizeMobile(request.Mobile);
-            if (mobile == null) return Fail(400, "Enter a 10-digit mobile number.");
+            if (mobile == null) return Fail(400, "Enter a valid WhatsApp number.");
 
             Guid? linkId = null;
             if (!string.IsNullOrWhiteSpace(request.InviteToken))
