@@ -21,11 +21,18 @@ namespace EasyHMSAPI.Application.Services
         // A hospital doctor passed from EasyHMS to Doctor Dekho: the code is used within seconds.
         public static readonly TimeSpan HandoffLifetime = TimeSpan.FromSeconds(60);
 
-        /// <summary>The 10-digit Indian mobile number, or null. Accepts +91 / 91 / 0 prefixes and separators.</summary>
+        /// <summary>
+        /// The 10-digit Indian mobile number, or "+" + country code + number for any other country, or null.
+        /// Accepts +91 / 91 / 0 prefixes and separators for Indian numbers. A number from another country must
+        /// start with "+" (E.164, 8-15 digits); it is stored with that "+" so it can never be mistaken for a
+        /// 10-digit Indian number that happens to start with the same digits.
+        /// </summary>
         public static string? NormalizeMobile(string? input)
         {
             if (string.IsNullOrWhiteSpace(input)) return null;
             var digits = new string(input.Where(char.IsDigit).ToArray());
+            if (input.TrimStart().StartsWith('+') && !digits.StartsWith("91"))
+                return digits.Length is >= 8 and <= 15 && digits[0] != '0' ? "+" + digits : null;
             if (digits.Length == 12 && digits.StartsWith("91")) digits = digits[2..];
             else if (digits.Length == 11 && digits.StartsWith('0')) digits = digits[1..];
             return digits.Length == 10 && digits[0] >= '6' ? digits : null;
@@ -33,7 +40,9 @@ namespace EasyHMSAPI.Application.Services
 
         /// <summary>"+91 98••• ••127": enough for the owner to recognise it, never the whole number.</summary>
         public static string MaskMobile(string mobile) =>
-            mobile.Length == 10 ? $"+91 {mobile[..2]}••• ••{mobile[^3..]}" : "••••••••••";
+            mobile.Length == 10 ? $"+91 {mobile[..2]}••• ••{mobile[^3..]}"
+            : mobile.StartsWith('+') && mobile.Length >= 9 ? $"+{mobile[1..3]}••• ••{mobile[^3..]}"
+            : "••••••••••";
 
         public static string NewOtpCode() => RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
 

@@ -568,10 +568,12 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
         // Normalizes a mobile number to E.164 style (no leading '+') as required by the Meta
         // Cloud API. Strips non-digits, removes a leading '0', and prepends the configured
-        // country code if not already present. Example: "9876543210" → "919876543210".
+        // country code if not already present. Example: "9876543210" → "919876543210"; "+14155550123" → "14155550123".
         private string NormalizeToE164(string mobileNumber)
         {
             var digits = new string(mobileNumber.Where(char.IsDigit).ToArray());
+            // A number written with "+" already carries its own country code (international contributors).
+            if (mobileNumber.TrimStart().StartsWith('+')) return digits;
             // Remove a single leading zero (local dialing prefix)
             if (digits.StartsWith("0") && digits.Length > 1)
                 digits = digits.Substring(1);

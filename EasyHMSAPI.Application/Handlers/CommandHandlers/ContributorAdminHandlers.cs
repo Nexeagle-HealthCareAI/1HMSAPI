@@ -40,7 +40,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             var name = request.FullName?.Trim();
             if (string.IsNullOrEmpty(name) || name.Length > 200) return ContributorAdmin.Fail(400, "fullName is required (max 200 chars).");
             var mobile = ContributorSecurity.NormalizeMobile(request.Mobile);
-            if (mobile == null) return ContributorAdmin.Fail(400, "mobile must be a 10-digit Indian mobile number.");
+            if (mobile == null) return ContributorAdmin.Fail(400, "mobile must be a valid WhatsApp number (10-digit Indian, or +country code for another country).");
             var type = request.Type?.Trim().ToUpperInvariant();
             if (type == null || !Invitable.Contains(type)) return ContributorAdmin.Fail(400, "type must be INDEPENDENT_DOCTOR, HEALTH_WORKER or WRITER.");
             if (ContributorInvites.BaseUrl(_configuration) == null)
