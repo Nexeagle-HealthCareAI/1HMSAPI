@@ -404,7 +404,9 @@ jobs:
           HEALTHWIKI_IMAGE_BUCKET: ${{ vars.PROD_HEALTHWIKI_BUCKET || 'nexeagle-healthwiki-prod' }}
           HEALTHWIKI_S3_ACCESS_KEY: ${{ secrets.PROD_HEALTHWIKI_S3_ACCESS_KEY }}
           HEALTHWIKI_S3_SECRET_KEY: ${{ secrets.PROD_HEALTHWIKI_S3_SECRET_KEY }}
-          WHATSAPP_BOT_BASE_URL: ${{ vars.WHATSAPP_BOT_BASE_URL }}
+          # The bot's public URL is not a secret; either a variable or (as set up on prod) a secret works. Prod only: the dev job
+          # keeps its own default so dev never points at the prod bot.
+          WHATSAPP_BOT_BASE_URL: ${{ vars.WHATSAPP_BOT_BASE_URL || secrets.WHATSAPP_BOT_BASE_URL }}
         run: |
           : "${DB_CONN:?PROD_DB_CONNECTION is empty}"
           : "${JWT_SECRET:?JWT_SECRET is empty}"
