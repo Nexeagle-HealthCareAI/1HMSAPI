@@ -9,6 +9,7 @@ using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace EasyHMSAPI.Application.Services
@@ -98,22 +99,37 @@ namespace EasyHMSAPI.Application.Services
         private static DateTime? Earlier(DateTime? a, DateTime? b) => a == null ? b : b == null ? a : a.Value < b.Value ? a : b;
 
         /// <summary>The HIU's push URL comes from outside. It must be https and must not point
-        /// back into our own network.</summary>
+        /// back into our own network.
+        /// A host name passes here; the address it resolves to is checked again when the push connects
+        /// (AbdmDataPushClient.CreateHandler), so a name pointing inside our network is refused there.</summary>
         public static bool IsSafePushUrl(string? url)
         {
             if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
                 return false;
             if (uri.IsLoopback || string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase))
                 return false;
-            if (IPAddress.TryParse(uri.Host, out var ip))
-            {
-                var b = ip.GetAddressBytes();
-                if (ip.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
-                    return false;
-                if (b[0] == 10 || b[0] == 127 || b[0] == 0 || (b[0] == 172 && b[1] >= 16 && b[1] <= 31) || (b[0] == 192 && b[1] == 168) || (b[0] == 169 && b[1] == 254))
-                    return false;
-            }
-            return true;
+            return !IPAddress.TryParse(uri.Host, out var ip) || IsPublicAddress(ip);
+        }
+
+        /// <summary>False for anything that is not a public internet address: loopback, private, link-local,
+        /// carrier-grade NAT, multicast, unspecified, and their IPv6 counterparts (IPv4-mapped included).</summary>
+        public static bool IsPublicAddress(IPAddress ip)
+        {
+            if (ip.IsIPv4MappedToIPv6)
+                ip = ip.MapToIPv4();
+            if (IPAddress.IsLoopback(ip))
+                return false;
+            var b = ip.GetAddressBytes();
+            if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                return !(b[0] == 0 || b[0] == 10 || b[0] == 127 || b[0] >= 224
+                    || (b[0] == 100 && b[1] >= 64 && b[1] <= 127)
+                    || (b[0] == 169 && b[1] == 254)
+                    || (b[0] == 172 && b[1] >= 16 && b[1] <= 31)
+                    || (b[0] == 192 && b[1] == 168));
+            if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
+                return !(ip.Equals(IPAddress.IPv6None) || ip.IsIPv6LinkLocal || ip.IsIPv6SiteLocal || ip.IsIPv6Multicast
+                    || (b[0] & 0xFE) == 0xFC);   // fc00::/7 unique local
+            return false;
         }
 
         public static string Md5Hex(string content) => Convert.ToHexString(MD5.HashData(Encoding.UTF8.GetBytes(content))).ToLowerInvariant();
@@ -239,14 +255,46 @@ namespace EasyHMSAPI.Application.Services
 
     public sealed class AbdmDataPushClient : IAbdmDataPushClient
     {
+        /// <summary>Whether the push carries our gateway token. Off unless set: the push goes to another facility's
+        /// server, and the token lets its holder call ABDM as us. Turn on only if the sandbox shows the push needs it.</summary>
+        public const string SendGatewayTokenKey = "Abdm:DataPushSendsGatewayToken";
+
         private readonly HttpClient _httpClient;
         private readonly IAbdmGatewayService _gateway;
+        private readonly bool _sendGatewayToken;
 
-        public AbdmDataPushClient(HttpClient httpClient, IAbdmGatewayService gateway)
+        public AbdmDataPushClient(HttpClient httpClient, IAbdmGatewayService gateway, IConfiguration configuration)
         {
             _httpClient = httpClient;
             _gateway = gateway;
+            _sendGatewayToken = string.Equals(configuration[SendGatewayTokenKey], "true", StringComparison.OrdinalIgnoreCase);
         }
+
+        /// <summary>The push client's handler: never follows a redirect, and connects only to a public address,
+        /// checked after the host name is resolved (so a name that points inside our network is refused).</summary>
+        public static SocketsHttpHandler CreateHandler() => new()
+        {
+            AllowAutoRedirect = false,
+            ConnectCallback = async (context, cancellationToken) =>
+            {
+                var addresses = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, cancellationToken);
+                var target = addresses.FirstOrDefault(AbdmDataFlowRules.IsPublicAddress)
+                    ?? throw new HttpRequestException("The data push address does not resolve to a public address.");
+                if (addresses.Any(a => !AbdmDataFlowRules.IsPublicAddress(a)))
+                    throw new HttpRequestException("The data push address resolves to a private address.");
+                var socket = new System.Net.Sockets.Socket(target.AddressFamily, System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp) { NoDelay = true };
+                try
+                {
+                    await socket.ConnectAsync(new IPEndPoint(target, context.DnsEndPoint.Port), cancellationToken);
+                    return new System.Net.Sockets.NetworkStream(socket, ownsSocket: true);
+                }
+                catch
+                {
+                    socket.Dispose();
+                    throw;
+                }
+            }
+        };
 
         public async Task<int> PushAsync(string url, string json, CancellationToken cancellationToken)
         {
@@ -254,7 +302,8 @@ namespace EasyHMSAPI.Application.Services
             {
                 Content = new StringContent(json, Encoding.UTF8, "application/json")
             };
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await _gateway.GetAccessTokenAsync(cancellationToken));
+            if (_sendGatewayToken)
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await _gateway.GetAccessTokenAsync(cancellationToken));
             using var response = await _httpClient.SendAsync(request, cancellationToken);
             return (int)response.StatusCode;
         }

@@ -149,6 +149,55 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public void OnlyPublicAddresses_AreConnectedTo()
+        {
+            foreach (var ip in new[] { "8.8.8.8", "151.185.45.77", "2606:4700:4700::1111" })
+                Assert.That(AbdmDataFlowRules.IsPublicAddress(System.Net.IPAddress.Parse(ip)), Is.True, ip);
+            foreach (var ip in new[] { "127.0.0.1", "10.1.2.3", "172.20.0.1", "192.168.0.1", "169.254.169.254", "100.64.0.1", "0.0.0.0", "224.0.0.1",
+                                       "::1", "fe80::1", "fd00::1", "::ffff:10.0.0.1", "::ffff:127.0.0.1" })
+                Assert.That(AbdmDataFlowRules.IsPublicAddress(System.Net.IPAddress.Parse(ip)), Is.False, ip);
+            Assert.That(AbdmDataFlowRules.IsSafePushUrl("https://[::ffff:10.0.0.1]/push"), Is.False);
+            Assert.That(AbdmDataFlowRules.IsSafePushUrl("https://100.64.1.1/push"), Is.False);
+        }
+
+        [Test]
+        public void ThePushClient_DoesNotFollowRedirects()
+        {
+            using var handler = AbdmDataPushClient.CreateHandler();
+            Assert.That(handler.AllowAutoRedirect, Is.False);
+            Assert.That(handler.ConnectCallback, Is.Not.Null, "the resolved address is checked when connecting");
+        }
+
+        [TestCase(null, false)]
+        [TestCase("false", false)]
+        [TestCase("true", true)]
+        public async Task OurGatewayToken_GoesToTheHiu_OnlyWhenSwitchedOn(string? setting, bool sent)
+        {
+            var seen = new List<System.Net.Http.HttpRequestMessage>();
+            var http = new System.Net.Http.HttpClient(new RecordingHandler(seen));
+            var gateway = new Mock<IAbdmGatewayService>();
+            gateway.Setup(g => g.GetAccessTokenAsync(It.IsAny<CancellationToken>())).ReturnsAsync("gateway-token");
+            var configuration = new Mock<Microsoft.Extensions.Configuration.IConfiguration>();
+            configuration.Setup(c => c[AbdmDataPushClient.SendGatewayTokenKey]).Returns(setting);
+
+            var status = await new AbdmDataPushClient(http, gateway.Object, configuration.Object).PushAsync(PushUrl, "{}", CancellationToken.None);
+
+            Assert.That(status, Is.EqualTo(202));
+            Assert.That(seen.Single().Headers.Authorization?.Parameter, sent ? Is.EqualTo("gateway-token") : Is.Null);
+        }
+
+        private sealed class RecordingHandler : System.Net.Http.HttpMessageHandler
+        {
+            private readonly List<System.Net.Http.HttpRequestMessage> _seen;
+            public RecordingHandler(List<System.Net.Http.HttpRequestMessage> seen) => _seen = seen;
+            protected override Task<System.Net.Http.HttpResponseMessage> SendAsync(System.Net.Http.HttpRequestMessage request, CancellationToken cancellationToken)
+            {
+                _seen.Add(request);
+                return Task.FromResult(new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.Accepted));
+            }
+        }
+
+        [Test]
         public void InRange_UsesTheNarrowerOfTheConsentAndTheRequest()
         {
             var consent = new AbdmConsent { DateFrom = new DateTime(2026, 1, 1), DateTo = new DateTime(2026, 12, 31) };

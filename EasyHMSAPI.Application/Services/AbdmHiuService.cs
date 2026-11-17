@@ -44,6 +44,9 @@ namespace EasyHMSAPI.Application.Services
         Task<bool> ReceiveDataAsync(string pushToken, string body, CancellationToken cancellationToken);
         /// <summary>Deletes records the consent no longer lets us keep. Returns how many went.</summary>
         Task<int> PurgeExpiredAsync(Guid hospitalId, CancellationToken cancellationToken);
+        /// <summary>For every hospital: deletes received records past their erase date, and closes transfers that
+        /// received nothing in time, throwing their key and push address away. Run regularly (AbdmHiuSweepBackgroundService).</summary>
+        Task<AbdmHiuSweep> SweepAsync(DateTime nowUtc, CancellationToken cancellationToken);
         /// <summary>Whether this user works at this hospital. Records from elsewhere are shown to nobody else.</summary>
         Task<bool> CanAccessAsync(Guid callerUserId, Guid hospitalId, CancellationToken cancellationToken);
         Task<IReadOnlyList<AbdmConsent>> ListConsentsAsync(Guid hospitalId, string? patientId, CancellationToken cancellationToken);
@@ -51,6 +54,8 @@ namespace EasyHMSAPI.Application.Services
         Task<IReadOnlyList<AbdmReceivedRecordSummary>> ListRecordsAsync(Guid hospitalId, string patientId, CancellationToken cancellationToken);
         Task<AbdmReceivedRecord?> GetRecordAsync(Guid hospitalId, Guid receivedRecordId, CancellationToken cancellationToken);
     }
+
+    public sealed record AbdmHiuSweep(int RecordsErased, int TransfersClosed);
 
     public sealed record AbdmReceivedRecordSummary(Guid ReceivedRecordId, string ConsentId, string? CareContextReference, string? HiType, string? Title, DateTime ReceivedAt, DateTime? EraseAt, string? FromFacility);
 
@@ -556,6 +561,33 @@ namespace EasyHMSAPI.Application.Services
                 }
             }
             return true;
+        }
+
+        /// <summary>How long an HIU transfer waits for its data push before its key and address are thrown away.</summary>
+        public static readonly TimeSpan TransferWindow = TimeSpan.FromHours(24);
+
+        public async Task<AbdmHiuSweep> SweepAsync(DateTime nowUtc, CancellationToken cancellationToken)
+        {
+            var expired = await _db.AbdmReceivedRecords.Where(r => r.EraseAt != null && r.EraseAt < nowUtc).ToListAsync(cancellationToken);
+            _db.AbdmReceivedRecords.RemoveRange(expired);
+
+            var cutoff = nowUtc - TransferWindow;
+            var stale = await _db.AbdmDataTransfers
+                .Where(t => t.Role == AbdmConsentRole.Hiu && t.Status == AbdmTransferStatus.Requested && t.RequestedAt < cutoff)
+                .ToListAsync(cancellationToken);
+            foreach (var transfer in stale)
+            {
+                transfer.Status = AbdmTransferStatus.Failed;
+                transfer.ErrorMessage = "No records arrived within 24 hours.";
+                transfer.CompletedAt = nowUtc;
+                transfer.PrivateKey = null;
+                transfer.Nonce = null;
+                transfer.PushToken = null;
+            }
+
+            if (expired.Count > 0 || stale.Count > 0)
+                await _db.SaveChangesAsync(cancellationToken);
+            return new AbdmHiuSweep(expired.Count, stale.Count);
         }
 
         public async Task<int> PurgeExpiredAsync(Guid hospitalId, CancellationToken cancellationToken)

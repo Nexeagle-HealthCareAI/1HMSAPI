@@ -313,6 +313,43 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task TheSweep_ErasesWhatIsPastItsDate_AndClosesTransfersThatNeverReceivedAnything()
+        {
+            var transfer = await GrantedAndRequestedAsync();
+            await Service().ReceiveDataAsync(transfer.PushToken!, Push(transfer), CancellationToken.None);
+            var kept = _db.AbdmReceivedRecords.Single();
+            var other = Guid.NewGuid();
+            _db.AbdmReceivedRecords.Add(new AbdmReceivedRecord
+            {
+                ReceivedRecordId = Guid.NewGuid(), HospitalId = other, ConsentId = "c-old", TransactionId = "t-old", PatientId = "X",
+                BundleJson = Bundle, ReceivedAt = DateTime.UtcNow.AddDays(-40), EraseAt = DateTime.UtcNow.AddMinutes(-5)
+            });
+            var stale = new AbdmDataTransfer
+            {
+                TransferId = Guid.NewGuid(), HospitalId = other, Role = AbdmConsentRole.Hiu, ConsentId = "c-stale", TransactionId = "t-stale",
+                Status = AbdmTransferStatus.Requested, PrivateKey = "key", Nonce = "nonce", PushToken = "token", RequestedAt = DateTime.UtcNow.AddHours(-25)
+            };
+            var fresh = new AbdmDataTransfer
+            {
+                TransferId = Guid.NewGuid(), HospitalId = other, Role = AbdmConsentRole.Hiu, ConsentId = "c-fresh", TransactionId = "t-fresh",
+                Status = AbdmTransferStatus.Requested, PrivateKey = "key", Nonce = "nonce", PushToken = "token2", RequestedAt = DateTime.UtcNow.AddHours(-1)
+            };
+            _db.AbdmDataTransfers.AddRange(stale, fresh);
+            _db.SaveChanges();
+
+            // Every hospital is swept, without anyone opening a list.
+            var sweep = await Service().SweepAsync(DateTime.UtcNow, CancellationToken.None);
+
+            Assert.That(sweep, Is.EqualTo(new AbdmHiuSweep(1, 1)));
+            Assert.That(_db.AbdmReceivedRecords.Select(r => r.ReceivedRecordId), Is.EqualTo(new[] { kept.ReceivedRecordId }));
+            Assert.That(stale.Status, Is.EqualTo(AbdmTransferStatus.Failed));
+            Assert.That(new[] { stale.PrivateKey, stale.Nonce, stale.PushToken }, Is.All.Null, "the key and the address are thrown away");
+            Assert.That(await Service().ReceiveDataAsync("token", "{}", CancellationToken.None), Is.False, "the closed address takes nothing");
+            Assert.That(fresh.Status, Is.EqualTo(AbdmTransferStatus.Requested));
+            Assert.That(fresh.PrivateKey, Is.EqualTo("key"));
+        }
+
+        [Test]
         public async Task AnotherHospital_SeesNoneOfIt()
         {
             var transfer = await GrantedAndRequestedAsync();
