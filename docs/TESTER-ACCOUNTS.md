@@ -28,6 +28,18 @@ Pick numbers nobody uses for real on Dev. A made-up number is fine: nothing is e
 
 ## Resetting a tester number
 
+### From the Dev UI (easiest)
+
+Sign in on https://1hms-dev.nexeagle.com with the tester number (the code is shown on the page), open the user menu
+(top right) and choose **Reset test account**. It shows what would be deleted (a dry run), and on **Reset and sign out**
+deletes it, signs out and returns to the login page, where the number can sign up again.
+
+The item only appears when `GET /internal/tester-accounts/me` says the signed-in user is a tester on a Development
+server. It calls `POST /internal/tester-accounts/reset-me` with the user's sign-in: the account is taken from the
+sign-in, never from the request, and no key is in the browser. Both routes answer 404 on production.
+
+### From a terminal
+
 ```bash
 TESTER_RESET_KEY=<the key> scripts/reset-tester.sh 9000000001            # shows what would go, asks, deletes
 TESTER_RESET_KEY=<the key> scripts/reset-tester.sh 9000000001 --dry-run  # only shows

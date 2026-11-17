@@ -27,4 +27,14 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public string Table { get; set; } = string.Empty;
         public int Rows { get; set; }
     }
+
+    [ExcludeFromCodeCoverage]
+    public class TesterAccountStatusResponseModel
+    {
+        /// <summary>False on any server but Development: the route then answers 404.</summary>
+        public bool Available { get; set; }
+        public bool IsTester { get; set; }
+        /// <summary>The tester's number with the middle hidden (90******01), for the confirm dialog.</summary>
+        public string? MaskedMobile { get; set; }
+    }
 }
