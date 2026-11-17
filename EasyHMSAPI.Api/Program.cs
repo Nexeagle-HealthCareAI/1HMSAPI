@@ -219,6 +219,7 @@ builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.HealthWikiMa
 builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.TrackingRetentionBackgroundService>();
 // Visit reminders and the after-visit message (Vita vision, Phase 4); off until the JobSettings row 'VisitMessages' is switched on.
 builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.VisitMessagesBackgroundService>();
+builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.AbdmHiuSweepBackgroundService>();
 // ABDM M1: ABHA creation (Aadhaar-OTP) + existing-ABHA login (Mobile/Aadhaar-OTP).
 // Own client with a 30 s timeout: the default 100 s turned a dead ABDM endpoint into a 100 s hang
 // at the counter. 30 s still leaves room for Aadhaar OTP calls, which go through UIDAI.
@@ -233,6 +234,12 @@ builder.Services.AddHttpClient<EasyHMSAPI.Application.Services.Interfaces.IAbdmP
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.IAbdmExchangeLog, EasyHMSAPI.Application.Services.AbdmExchangeLog>();
 builder.Services.AddHttpClient<EasyHMSAPI.Application.Services.Interfaces.IAbdmHieService, EasyHMSAPI.Application.Services.Implementations.AbdmHieService>(AbdmClient);
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.IAbdmLinkingService, EasyHMSAPI.Application.Services.AbdmLinkingService>();
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.IAbdmUserLinkingService, EasyHMSAPI.Application.Services.AbdmUserLinkingService>();
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.Fhir.IAbdmRecordSource, EasyHMSAPI.Application.Services.Fhir.AbdmRecordSource>();
+builder.Services.AddHttpClient<EasyHMSAPI.Application.Services.IAbdmDataPushClient, EasyHMSAPI.Application.Services.AbdmDataPushClient>(AbdmClient)
+    .ConfigurePrimaryHttpMessageHandler(EasyHMSAPI.Application.Services.AbdmDataPushClient.CreateHandler);
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.IAbdmDataFlowService, EasyHMSAPI.Application.Services.AbdmDataFlowService>();
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.IAbdmHiuService, EasyHMSAPI.Application.Services.AbdmHiuService>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.IAbdmCallbackProcessor, EasyHMSAPI.Application.Services.AbdmCallbackProcessor>();
 // HR biometric attendance: stores device scans and rebuilds attendance from them.
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IBiometricPunchIngestionService, EasyHMSAPI.Application.Services.Implementations.BiometricPunchIngestionService>();
