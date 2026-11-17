@@ -1,10 +1,11 @@
 using System.Security.Cryptography;
 using Org.BouncyCastle.Asn1.X9;
-using Org.BouncyCastle.Crypto.EC;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Math;
+using Org.BouncyCastle.Math.EC;
 using Org.BouncyCastle.Security;
 using Org.BouncyCastle.Utilities;
+using Org.BouncyCastle.Utilities.Encoders;
 using ECPoint = Org.BouncyCastle.Math.EC.ECPoint;
 
 namespace EasyHMSAPI.Application.Services
@@ -38,7 +39,25 @@ namespace EasyHMSAPI.Application.Services
         private const int IvBytes = 12;
         private const int TagBytes = 16;
 
-        private static readonly X9ECParameters Domain = CustomNamedCurves.GetByName("curve25519");
+        // BouncyCastle C# 2.x no longer lists "curve25519" in CustomNamedCurves (GetByName returns null), so the curve
+        // is built here from the parameters BouncyCastle Java's Curve25519 (which Fidelius uses) has: the Weierstrass
+        // form of curve25519 over p = 2^255 - 19, cofactor 8. AbdmFideliusTests' known answers pin these numbers.
+        private static readonly X9ECParameters Domain = Curve25519Weierstrass();
+
+        private static X9ECParameters Curve25519Weierstrass()
+        {
+            var p = BigInteger.Two.Pow(255).Subtract(BigInteger.ValueOf(19));
+            var a = new BigInteger("2AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA984914A144", 16);
+            var b = new BigInteger("7B425ED097B425ED097B425ED097B425ED097B425ED097B4260B5E9C7710C864", 16);
+            var n = new BigInteger("1000000000000000000000000000000014DEF9DEA2F79CD65812631A5CF5D3ED", 16);
+            var h = BigInteger.ValueOf(8);
+            var curve = new FpCurve(p, a, b, n, h);
+            var g = curve.DecodePoint(Hex.Decode(
+                "04" +
+                "2AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD245A" +
+                "20AE19A1B8A086B4E01EDD2C7748D14C923D4D7E6D7C61B229E9C5A27ECED3D9"));
+            return new X9ECParameters(curve, new X9ECPoint(g, false), n, h);
+        }
 
         /// <summary>A fresh key pair and nonce. One per transfer: that is what gives forward secrecy.</summary>
         public static AbdmKeyMaterial NewKeyMaterial()
