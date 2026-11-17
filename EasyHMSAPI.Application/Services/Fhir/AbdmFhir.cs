@@ -39,6 +39,7 @@ namespace EasyHMSAPI.Application.Services.Fhir
         private const string Loinc = "http://loinc.org";
         private const string Ucum = "http://unitsofmeasure.org";
         private const string OurSystem = "https://nexeagle.com/1hms/";
+        private const string NdhmIdentifierType = "https://nrces.in/ndhm/fhir/r4/CodeSystem/ndhm-identifier-type-code";
 
         // ---- the four record types -----------------------------------------------------------
 
@@ -46,8 +47,14 @@ namespace EasyHMSAPI.Application.Services.Fhir
         {
             var bundle = new Builder(context, "PrescriptionRecord", "440545006", "Prescription record", "Prescription");
             var entries = medicines.Where(m => !string.IsNullOrWhiteSpace(m.Name)).Select(m => bundle.Add(MedicationRequest(bundle, m))).ToList();
-            if (!string.IsNullOrWhiteSpace(diagnosis))
-                entries.Add(bundle.Add(Condition(bundle, diagnosis!, null, null)));
+            // The PrescriptionRecord section holds MedicationRequests only (closed slicing), so the diagnosis is each
+            // medicine's reason rather than an entry of its own.
+            if (!string.IsNullOrWhiteSpace(diagnosis) && entries.Count > 0)
+            {
+                var condition = bundle.Add(Condition(bundle, diagnosis!, null, null));
+                foreach (var request in entries)
+                    request["reasonReference"] = new JsonArray(bundle.ReferenceTo(condition));
+            }
             bundle.Section("Prescription record", "440545006", "Prescription record", entries, null);
             return bundle.Build();
         }
@@ -59,7 +66,6 @@ namespace EasyHMSAPI.Application.Services.Fhir
             var report = Resource("DiagnosticReport", "DiagnosticReportLab");
             report["identifier"] = new JsonArray(Identifier(OurSystem + "lab-report", reportNumber));
             report["status"] = "final";
-            report["category"] = new JsonArray(Concept("http://terminology.hl7.org/CodeSystem/v2-0074", "LAB", "Laboratory"));
             report["code"] = new JsonObject { ["text"] = string.IsNullOrEmpty(tests) ? "Laboratory report" : tests };
             report["subject"] = bundle.PatientReference();
             report["effectiveDateTime"] = Instant(context.WhenUtc);
@@ -67,6 +73,24 @@ namespace EasyHMSAPI.Application.Services.Fhir
             report["performer"] = new JsonArray(bundle.FacilityReference());
             report["resultsInterpreter"] = new JsonArray(bundle.AuthorReference());
             Put(report, "conclusion", conclusion);
+            // DiagnosticReportLab needs at least one result. We hold test names, not coded values: one Observation per test,
+            // named in text only (no invented LOINC), with the finding left to the report's conclusion.
+            var names = testNames.Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t.Trim()).Distinct().ToList();
+            if (names.Count == 0)
+                names.Add("Laboratory report");
+            var results = new JsonArray();
+            foreach (var name in names)
+            {
+                var result = Resource("Observation", "Observation");
+                result["status"] = "final";
+                result["code"] = new JsonObject { ["text"] = name };
+                result["subject"] = bundle.PatientReference();
+                result["effectiveDateTime"] = Instant(context.WhenUtc);
+                result["performer"] = new JsonArray(bundle.FacilityReference());
+                result["note"] = new JsonArray(new JsonObject { ["text"] = "See the report's conclusion for the finding." });
+                results.Add(bundle.ReferenceTo(bundle.Add(result)));
+            }
+            report["result"] = results;
             bundle.Section("Diagnostic report", "721981007", "Diagnostic studies report", new List<JsonObject> { bundle.Add(report) }, null);
             return bundle.Build();
         }
@@ -74,6 +98,13 @@ namespace EasyHMSAPI.Application.Services.Fhir
         public static JsonObject DischargeSummary(FhirContext context, FhirDischarge discharge)
         {
             var bundle = new Builder(context, "DischargeSummaryRecord", "373942005", "Discharge summary", "Discharge Summary");
+            var encounter = Resource("Encounter", "Encounter");
+            encounter["identifier"] = new JsonArray(Identifier(OurSystem + "admission", context.Reference));
+            encounter["status"] = "finished";
+            encounter["class"] = new JsonObject { ["system"] = "http://terminology.hl7.org/CodeSystem/v3-ActCode", ["code"] = "IMP", ["display"] = "inpatient encounter" };
+            encounter["subject"] = bundle.PatientReference();
+            encounter["period"] = new JsonObject { ["end"] = Instant(context.WhenUtc) };
+            bundle.SetEncounter(bundle.Add(encounter));
 
             if (!string.IsNullOrWhiteSpace(discharge.ChiefComplaint))
                 bundle.Section("Chief complaints", "422843007", "Chief complaint section",
@@ -129,6 +160,9 @@ namespace EasyHMSAPI.Application.Services.Fhir
             AddQuantity(bundle, signs, "ObservationVitalSigns", "vital-signs", vitals.RespiratoryRate, "9279-1", "Respiratory rate", "breaths/minute", "/min");
             AddQuantity(bundle, signs, "ObservationVitalSigns", "vital-signs", vitals.TempC, "8310-5", "Body temperature", "Cel", "Cel");
             AddQuantity(bundle, signs, "ObservationVitalSigns", "vital-signs", vitals.Spo2, "59408-5", "Oxygen saturation in Arterial blood by Pulse oximetry", "%", "%");
+            // FHIR's core oxygen saturation profile also requires LOINC 2708-6 alongside the pulse oximetry code.
+            if (Has(vitals.Spo2))
+                ((JsonArray)signs[^1]["code"]!["coding"]!).Add(new JsonObject { ["system"] = Loinc, ["code"] = "2708-6", ["display"] = "Oxygen saturation in Arterial blood" });
             if (signs.Count > 0)
                 bundle.Section("Vital Signs", null, null, signs, null);
 
@@ -270,6 +304,14 @@ namespace EasyHMSAPI.Application.Services.Fhir
 
         private static JsonObject Identifier(string system, string value) => new() { ["system"] = system, ["value"] = value };
 
+        private static JsonObject TypedIdentifier(string system, string value, string typeText, params (string System, string Code, string Display)[] types)
+        {
+            var codings = new JsonArray();
+            foreach (var t in types)
+                codings.Add(new JsonObject { ["system"] = t.System, ["code"] = t.Code, ["display"] = t.Display });
+            return new JsonObject { ["type"] = new JsonObject { ["coding"] = codings, ["text"] = typeText }, ["system"] = system, ["value"] = value };
+        }
+
         private static string Instant(DateTime utc) =>
             DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
 
@@ -329,10 +371,15 @@ namespace EasyHMSAPI.Application.Services.Fhir
                     ["system"] = OurSystem + "patient",
                     ["value"] = context.Patient.PatientId
                 });
+                // NRCeS requires identifier.type. Its own code system has HIN (ABHA number) and ABHA (ABHA address); the
+                // package's examples type the ABHA number as v2-0203 MR instead. Receivers are unconfirmed, so the ABHA
+                // number carries both codes (abdm-fhir skill, design.md "The example may use a shape the profile merely permits").
                 if (!string.IsNullOrWhiteSpace(context.Patient.AbhaNumber))
-                    identifiers.Add(Identifier("https://healthid.ndhm.gov.in/health-number", context.Patient.AbhaNumber!.Trim()));
+                    identifiers.Add(TypedIdentifier("https://healthid.ndhm.gov.in/health-number", context.Patient.AbhaNumber!.Trim(), "ABHA number",
+                        (NdhmIdentifierType, "HIN", "Health ID issued by NDHM"), ("http://terminology.hl7.org/CodeSystem/v2-0203", "MR", "Medical record number")));
                 if (!string.IsNullOrWhiteSpace(context.Patient.AbhaAddress))
-                    identifiers.Add(Identifier("https://healthid.ndhm.gov.in/phr-address", context.Patient.AbhaAddress!.Trim()));
+                    identifiers.Add(TypedIdentifier("https://healthid.ndhm.gov.in/phr-address", context.Patient.AbhaAddress!.Trim(), "ABHA address",
+                        (NdhmIdentifierType, "ABHA", "Ayushman Bharat Health Account (ABHA) ID")));
                 _patient["identifier"] = identifiers;
                 _patient["name"] = new JsonArray(new JsonObject { ["text"] = DisplayName(context.Patient.Name, context.Patient.PatientId) });
                 _patient["gender"] = FhirGender(context.Patient.Gender);
@@ -377,6 +424,8 @@ namespace EasyHMSAPI.Application.Services.Fhir
             public JsonObject PatientReference() => Reference(_patient, DisplayName(Context.Patient.Name, Context.Patient.PatientId));
             public JsonObject AuthorReference() => Reference(_author, DisplayName(Context.Author.Name, "Treating doctor"));
             public JsonObject FacilityReference() => Reference(_facility, Context.Facility.Name);
+            public JsonObject ReferenceTo(JsonObject resource) => Reference(resource, null);
+            public void SetEncounter(JsonObject encounter) => _composition["encounter"] = Reference(encounter, null);
 
             /// <summary>Adds a resource to the bundle and hands it back, so it can be put in a section.</summary>
             public JsonObject Add(JsonObject resource)
@@ -395,8 +444,13 @@ namespace EasyHMSAPI.Application.Services.Fhir
                 if (!string.IsNullOrWhiteSpace(narrative))
                     section["text"] = Narrative(narrative!);
                 var references = new JsonArray();
+                // Section entries carry their type: PrescriptionRecord and DiagnosticReportRecord slice on Reference.type.
                 foreach (var entry in entries)
-                    references.Add(Reference(entry, null));
+                {
+                    var reference = Reference(entry, null);
+                    reference["type"] = entry["resourceType"]!.GetValue<string>();
+                    references.Add(reference);
+                }
                 section["entry"] = references;
                 _sections.Add(section);
             }

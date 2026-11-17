@@ -81,6 +81,44 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(unknown["name"]![0]!["text"]!.GetValue<string>(), Is.EqualTo("P-2"));
         }
 
+        // What the HL7 validator with ndhm.in#6.5.0 required (2026-11-17); each line was an error before.
+        [Test]
+        public void TheNrcesProfilesRules_FoundByTheHl7Validator_AreKept()
+        {
+            // Patient.identifier.type is required: the ABHA number carries HIN and MR, the ABHA address carries ABHA.
+            var patient = Resources(AbdmFhir.Prescription(Context, new[] { Paracetamol }, null), "Patient").Single();
+            var types = ((JsonArray)patient["identifier"]!).Select(i => ((JsonArray)i!["type"]!["coding"]!).Select(c => c!["code"]!.GetValue<string>()).ToList()).ToList();
+            Assert.That(types, Is.EqualTo(new[] { new List<string> { "MR" }, new List<string> { "HIN", "MR" }, new List<string> { "ABHA" } }));
+
+            // Section entries say their type (PrescriptionRecord slices on it), and only MedicationRequests sit in the
+            // prescription section: the diagnosis is each medicine's reason.
+            var prescription = AbdmFhir.Prescription(Context, new[] { Paracetamol }, "Viral fever");
+            var section = ResourceAt(prescription, 0)["section"]![0]!["entry"]!.AsArray();
+            Assert.That(section.Select(e => e!["type"]!.GetValue<string>()), Is.EqualTo(new[] { "MedicationRequest" }));
+            var condition = Resources(prescription, "Condition").Single();
+            Assert.That(Resources(prescription, "MedicationRequest").Single()["reasonReference"]![0]!["reference"]!.GetValue<string>(),
+                Is.EqualTo("urn:uuid:" + condition["id"]!.GetValue<string>()));
+
+            // DiagnosticReportLab needs results; no category rather than an invented SNOMED code.
+            var lab = AbdmFhir.DiagnosticReport(Context, "LAB-0042", new[] { "CRP" }, "Raised.");
+            var report = Resources(lab, "DiagnosticReport").Single();
+            Assert.That(report.ContainsKey("category"), Is.False);
+            var result = Resources(lab, "Observation").Single();
+            Assert.That(result["code"]!["text"]!.GetValue<string>(), Is.EqualTo("CRP"));
+            Assert.That(((JsonObject)result["code"]!).ContainsKey("coding"), Is.False, "no LOINC is invented for a test we only hold by name");
+            Assert.That(report["result"]![0]!["reference"]!.GetValue<string>(), Is.EqualTo("urn:uuid:" + result["id"]!.GetValue<string>()));
+
+            // DischargeSummaryRecord needs Composition.encounter: a finished inpatient encounter.
+            var discharge = AbdmFhir.DischargeSummary(Context, new FhirDischarge(null, null, null, null, "Dengue fever", null, null, null, null, null, null, Array.Empty<FhirMedicine>()));
+            var encounter = Resources(discharge, "Encounter").Single();
+            Assert.That(encounter["class"]!["code"]!.GetValue<string>(), Is.EqualTo("IMP"));
+            Assert.That(ResourceAt(discharge, 0)["encounter"]!["reference"]!.GetValue<string>(), Is.EqualTo("urn:uuid:" + encounter["id"]!.GetValue<string>()));
+
+            // FHIR's oxygen saturation profile requires LOINC 2708-6 next to the pulse oximetry code.
+            var spo2 = Resources(AbdmFhir.WellnessRecord(Context, new FhirVitals(null, null, null, null, 97, null, null, null, null)), "Observation").Single();
+            Assert.That(((JsonArray)spo2["code"]!["coding"]!).Select(c => c!["code"]!.GetValue<string>()), Is.EqualTo(new[] { "59408-5", "2708-6" }));
+        }
+
         [Test]
         public void DiagnosticReport_NamesTheTests_AndKeepsTheConclusion()
         {
