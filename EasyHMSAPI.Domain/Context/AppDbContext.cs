@@ -175,6 +175,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<AbdmInbound> AbdmInbounds { get; set; }
         public DbSet<AbdmCareContext> AbdmCareContexts { get; set; }
         public DbSet<AbdmLinkToken> AbdmLinkTokens { get; set; }
+        public DbSet<AbdmLinkRequest> AbdmLinkRequests { get; set; }
         public DbSet<VitalReading> VitalReading { get; set; }
         public DbSet<FluidEntry> FluidEntry { get; set; }
         public DbSet<GlucoseReading> GlucoseReading { get; set; }
@@ -1247,6 +1248,17 @@ namespace EasyHMSAPI.Domain.Context
                 entity.HasKey(t => t.LinkTokenId);
                 entity.Property(t => t.ExpiresAt).HasColumnType("datetime2(3)");
                 entity.Property(t => t.ReceivedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<AbdmLinkRequest>(entity =>
+            {
+                entity.ToTable("AbdmLinkRequest");
+                entity.HasKey(r => r.LinkRequestId);
+                entity.HasIndex(r => new { r.HospitalId, r.TransactionId });
+                entity.HasIndex(r => r.LinkReferenceNumber);
+                entity.Property(r => r.OtpExpiresAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.UpdatedAt).HasColumnType("datetime2(3)");
             });
 
             modelBuilder.Entity<VitalReading>(entity =>

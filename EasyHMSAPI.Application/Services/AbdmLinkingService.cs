@@ -19,6 +19,10 @@ namespace EasyHMSAPI.Application.Services
         Task<AbdmCareContext> StartAsync(Guid hospitalId, string sourceType, Guid sourceId, string? userName, CancellationToken cancellationToken);
         Task OnLinkTokenAnsweredAsync(AbdmInbound inbound, CancellationToken cancellationToken);
         Task OnLinkAnsweredAsync(AbdmInbound inbound, CancellationToken cancellationToken);
+        /// <summary>The patient's recent visits and admissions that hold records and are not linked
+        /// (or being linked) yet, each with a care context row — created here when the visit has
+        /// none. This is what a discovery may offer.</summary>
+        Task<IReadOnlyList<AbdmCareContext>> UnlinkedForPatientAsync(Guid hospitalId, string patientId, CancellationToken cancellationToken);
     }
 
     /// <summary>
@@ -30,6 +34,8 @@ namespace EasyHMSAPI.Application.Services
     {
         private const string GenerateTokenPath = "/api/hiecm/v3/token/generate-token";
         private const string LinkCareContextPath = "/api/hiecm/hip/v3/link/carecontext";
+        // A discovery offers the most recent visits; older ones can still be linked from the visit itself.
+        private const int MaxDiscoverablePerKind = 25;
 
         private readonly AppDbContext _db;
         private readonly IAbdmHieService _hie;
@@ -212,6 +218,71 @@ namespace EasyHMSAPI.Application.Services
             careContext.LinkExchangeId ??= exchange.ExchangeId;
             careContext.UpdatedAt = DateTime.UtcNow;
             await SaveIfStillOursAsync(cancellationToken);
+        }
+
+        public async Task<IReadOnlyList<AbdmCareContext>> UnlinkedForPatientAsync(Guid hospitalId, string patientId, CancellationToken cancellationToken)
+        {
+            var existing = await _db.AbdmCareContexts
+                .Where(c => c.HospitalId == hospitalId && c.PatientId == patientId)
+                .ToListAsync(cancellationToken);
+
+            var visits = await _db.Appointments
+                .Where(a => a.HospitalId == hospitalId && a.PatientId == patientId)
+                .OrderByDescending(a => a.ApptDate)
+                .Select(a => new { Id = a.ApptId, When = a.ApptDate })
+                .Take(MaxDiscoverablePerKind)
+                .ToListAsync(cancellationToken);
+            var admissions = await _db.Admission
+                .Where(a => a.HospitalId == hospitalId && a.PatientId == patientId)
+                .OrderByDescending(a => a.AdmittedAt)
+                .Select(a => new { Id = a.AdmissionId, When = a.AdmittedAt })
+                .Take(MaxDiscoverablePerKind)
+                .ToListAsync(cancellationToken);
+
+            var sources = visits.Select(v => (Type: AbdmCareContextSource.Opd, v.Id, v.When))
+                .Concat(admissions.Select(a => (Type: AbdmCareContextSource.Ipd, a.Id, a.When)))
+                .ToList();
+
+            var now = DateTime.UtcNow;
+            var unlinked = new List<AbdmCareContext>();
+            foreach (var source in sources)
+            {
+                var careContext = existing.FirstOrDefault(c => c.SourceType == source.Type && c.SourceId == source.Id);
+                // Linked already, or the hospital's own link is in flight: not ours to offer again.
+                if (careContext != null && careContext.LinkStatus is not (AbdmLinkStatus.NotLinked or AbdmLinkStatus.Failed))
+                    continue;
+
+                var hiTypes = await HiTypesAsync(hospitalId, source.Type, source.Id, cancellationToken);
+                if (hiTypes.Count == 0)
+                    continue;
+
+                if (careContext == null)
+                {
+                    careContext = new AbdmCareContext
+                    {
+                        CareContextId = Guid.NewGuid(),
+                        HospitalId = hospitalId,
+                        PatientId = patientId,
+                        SourceType = source.Type,
+                        SourceId = source.Id,
+                        ReferenceNumber = AbdmCareContextRules.ReferenceNumber(source.Type, source.Id),
+                        Display = AbdmCareContextRules.Display(source.Type, source.When),
+                        LinkStatus = AbdmLinkStatus.NotLinked,
+                        CreatedAt = now,
+                        UpdatedAt = now
+                    };
+                    _db.AbdmCareContexts.Add(careContext);
+                }
+                var joined = string.Join(',', hiTypes);
+                if (careContext.HiTypes != joined)
+                {
+                    careContext.HiTypes = joined;
+                    careContext.UpdatedAt = now;
+                }
+                unlinked.Add(careContext);
+            }
+            await _db.SaveChangesAsync(cancellationToken);
+            return unlinked;
         }
 
         // ---- steps ---------------------------------------------------------------------------

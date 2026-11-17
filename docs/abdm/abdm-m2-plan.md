@@ -39,3 +39,11 @@ logged REQUEST-ID, safe errors, one 401 retry) are reused by every M2 call.
 ## Test commands
 
 `dotnet test EasyHMSAPI.UnitTests --filter "FullyQualifiedName~Abdm"`; web `npx tsc -p tsconfig.app.json --noEmit` and `npx vite build`. Sandbox evidence for every journey needs the bridge URL registered and a HIP ID linked to the client ID.
+
+## Phase 4 as built (2026-11-17, not yet compiled or run: written without a .NET SDK)
+
+- `AbdmUserLinkingService` answers `discover`, `init` and `confirm`; `AbdmCallbackProcessor` routes to it. Rules are in `AbdmDiscoveryRules` (pure, unit tested in `AbdmUserLinkingTests`).
+- Matching: a verified ABHA number/address equal to the ABHA on our record is enough; otherwise a verified mobile plus agreeing gender, year of birth and name. Two candidates is no match unless the typed patient ID (MR) picks one. A typed ID alone never matches.
+- Offered: the 25 most recent visits and 25 most recent admissions that hold records and are not linked or being linked (`IAbdmLinkingService.UnlinkedForPatientAsync`, which creates the care context rows).
+- OTP: six digits to the mobile on our record via `IWhatsAppMessagingService.SendOtpAsync`, 10 minutes, 3 attempts, stored as a salted SHA-256 only. New table `AbdmLinkRequest` (1HMSDatabase `create_tables_abdm_link_request.sql`).
+- To confirm against the sandbox, because NHA's references do not state them: the bodies ABDM sends for `init` (care contexts are read from any `careContexts[].referenceNumber`) and `confirm` (`linkRefNumber`, `token`), and the error codes we answer with (no patient ABDM-1010, no unlinked records ABDM-1012, unknown transaction ABDM-1017, records not offered ABDM-1057, bad link reference ABDM-1056, OTP wrong or expired ABDM-1036, OTP not sent ABDM-1004).
