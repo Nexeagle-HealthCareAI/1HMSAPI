@@ -55,6 +55,8 @@ namespace EasyHMSAPI.Domain.Entities
         public const string Denied = "DENIED";
         public const string Revoked = "REVOKED";
         public const string Expired = "EXPIRED";
+        /// <summary>HIU only: ABDM refused the consent request itself.</summary>
+        public const string Failed = "FAILED";
     }
 
     /// <summary>One transfer of records under a consent: out of this hospital (HIP) or into it (HIU).</summary>
@@ -75,6 +77,8 @@ namespace EasyHMSAPI.Domain.Entities
         /// arrives. Cleared as soon as the records are in.</summary>
         public string? PrivateKey { get; set; }
         public string? Nonce { get; set; }
+        /// <summary>HIU only: the unguessable last segment of the data push URL given for this transfer.</summary>
+        public string? PushToken { get; set; }
         public DateTime RequestedAt { get; set; }
         public DateTime? CompletedAt { get; set; }
     }
