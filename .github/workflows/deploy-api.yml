@@ -303,6 +303,12 @@ jobs:
             # Tester numbers that skip the patient OTP daily cap (comma-separated 10-digit mobiles). Set the repository variable
             # PATIENT_OTP_TESTER_MOBILES under Settings → Secrets and variables → Actions → Variables; empty = no exceptions.
             add 'PatientAuth__UnlimitedOtpMobiles'       "${{ vars.PATIENT_OTP_TESTER_MOBILES }}"
+            # Reusable test accounts for staff sign-up and onboarding (docs/TESTER-ACCOUNTS.md), dev only. For the numbers in the
+            # repository variable STAFF_TESTER_MOBILES (comma-separated 10-digit mobiles) the code is shown on the page and no
+            # WhatsApp is sent; POST /internal/tester-accounts/reset wipes one so it can register again. That call needs the
+            # secret DEV_TESTER_RESET_KEY (any long random string); without it the reset route answers 404.
+            add 'StaffAuth__TesterMobiles'               "${{ vars.STAFF_TESTER_MOBILES }}"
+            add 'StaffAuth__TesterResetKey'              "${{ secrets.DEV_TESTER_RESET_KEY }}"
             add 'HealthWiki__ImageBucket'                "$HEALTHWIKI_IMAGE_BUCKET"
             add 'HealthWiki__ImageAccessKey'             "$HEALTHWIKI_S3_ACCESS_KEY"
             add 'HealthWiki__ImageSecretKey'             "$HEALTHWIKI_S3_SECRET_KEY"

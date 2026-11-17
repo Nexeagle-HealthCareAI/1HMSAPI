@@ -23,6 +23,8 @@ namespace EasyHMSAPI.Application.Services.Implementations
         private readonly string _countryCode;
         // Language the Health Wiki templates were created in. "en" is English; "en_US" would be English (US) in WhatsApp Manager.
         private readonly string _healthWikiLanguage;
+        // Tester numbers of a Development server (StaffAuth:TesterMobiles): nothing is ever sent to them. Empty everywhere else.
+        private readonly IReadOnlyCollection<string> _testerMobiles;
 
         public WhatsAppMessagingService(HttpClient httpClient, IConfiguration configuration, ILogger<WhatsAppMessagingService> logger)
         {
@@ -34,6 +36,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
             _countryCode = configuration["WhatsApp:CountryCode"] ?? "91";
             var language = configuration["HealthWiki:TemplateLanguage"]?.Trim();
             _healthWikiLanguage = string.IsNullOrEmpty(language) || language.StartsWith("<") ? "en" : language;
+            _testerMobiles = TesterAccounts.Mobiles(configuration);
         }
 
         private bool IsEnabled => !string.IsNullOrEmpty(_isEnabled) && _isEnabled.Trim().ToLower() == "true";
@@ -45,6 +48,14 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
         private async Task<WhatsAppSendResult> SendForResultAsync(string methodName, string to, object payload)
         {
+            // A tester number may be made up, so a message to it could reach a stranger: it is dropped here, for every template.
+            // Reported as accepted so the flow under test carries on as it would for a real number.
+            if (_testerMobiles.Count > 0 && _testerMobiles.Contains(TesterAccounts.Normalize(to)))
+            {
+                _logger.LogInformation("WhatsApp {Method} not sent to tester number {Mobile} (StaffAuth:TesterMobiles)", methodName, MaskMobile(to));
+                return new WhatsAppSendResult { Accepted = true };
+            }
+
             try
             {
                 var json = JsonSerializer.Serialize(payload);

@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Data.Enums;
 using EasyHMSAPI.Domain.Context;
@@ -63,8 +64,11 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
             // SMS/Twilio delivery has been removed — WhatsApp is the primary OTP channel, with
             // email as a fallback for users without a reachable WhatsApp number.
-            bool whatsappSent = await _whatsAppMessagingService.SendOtpAsync(user.MobileNumber, newGeneratedOtp);
-            bool emailSent = !string.IsNullOrEmpty(user.Email) && await _emailService.SendOtpEmailAsync(user.Email, newGeneratedOtp);
+            // A tester number on a Development server (StaffAuth:TesterMobiles) gets the code on the page instead: nothing is
+            // sent, so registration and onboarding can be tested again and again without a phone. See TesterAccounts.
+            bool isTester = TesterAccounts.IsTester(_configuration, user.MobileNumber);
+            bool whatsappSent = !isTester && await _whatsAppMessagingService.SendOtpAsync(user.MobileNumber, newGeneratedOtp);
+            bool emailSent = !isTester && !string.IsNullOrEmpty(user.Email) && await _emailService.SendOtpEmailAsync(user.Email, newGeneratedOtp);
 
             response.IsWhatsappSent = whatsappSent;
             response.IsWhatsappSent = whatsappSent;
@@ -86,6 +90,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             userAuth.FailedLoginAttempts = 0;
             userAuth.IsLocked = false;
             await _context.SaveChangesAsync(cancellationToken);
+
+            if (isTester)
+            {
+                response.Success = true;
+                response.DevCode = newGeneratedOtp;
+                response.Message = "Test number on a development server: the code is shown on the page. It expires in 3 minutes.";
+                return response;
+            }
 
             if (sentChannels.Count == 0)
             {
