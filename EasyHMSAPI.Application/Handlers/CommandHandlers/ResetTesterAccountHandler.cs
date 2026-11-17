@@ -78,6 +78,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             if (!TesterAccounts.IsDevelopment(_configuration))
                 return Fail(response, 404, "Not found.");
 
+            // From the Dev UI the signed-in tester resets their own account: the number comes from their user row, never from the page.
+            if (request.UserId is Guid ownId)
+            {
+                var own = await _context.Users.AsNoTracking()
+                    .Where(u => u.UserID == ownId)
+                    .Select(u => u.MobileNumber)
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (own == null)
+                    return Fail(response, 404, "Your account was not found. It may already have been reset.");
+                request.MobileNumber = own;
+            }
+
             var mobile = TesterAccounts.Normalize(request.MobileNumber);
             if (mobile.Length != 10)
                 return Fail(response, 400, "A 10-digit mobile number is required.");
@@ -321,6 +333,37 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             response.Success = false;
             response.StatusCode = statusCode;
             response.Message = message;
+            return response;
+        }
+    }
+
+    /// <summary>Whether the signed-in user is a tester number on this Development server (TesterAccounts).</summary>
+    public class TesterAccountStatusHandler : IRequestHandler<TesterAccountStatusRequestModel, TesterAccountStatusResponseModel>
+    {
+        private readonly AppDbContext _context;
+        private readonly IConfiguration _configuration;
+
+        public TesterAccountStatusHandler(AppDbContext context, IConfiguration configuration)
+        {
+            _context = context;
+            _configuration = configuration;
+        }
+
+        public async Task<TesterAccountStatusResponseModel> Handle(TesterAccountStatusRequestModel request, CancellationToken cancellationToken)
+        {
+            var response = new TesterAccountStatusResponseModel { Available = TesterAccounts.IsDevelopment(_configuration) };
+            if (!response.Available) return response;
+
+            var mobile = await _context.Users.AsNoTracking()
+                .Where(u => u.UserID == request.UserId)
+                .Select(u => u.MobileNumber)
+                .FirstOrDefaultAsync(cancellationToken);
+            response.IsTester = TesterAccounts.IsTester(_configuration, mobile);
+            if (response.IsTester)
+            {
+                var m = TesterAccounts.Normalize(mobile);
+                response.MaskedMobile = m.Substring(0, 2) + new string('*', 6) + m.Substring(8);
+            }
             return response;
         }
     }

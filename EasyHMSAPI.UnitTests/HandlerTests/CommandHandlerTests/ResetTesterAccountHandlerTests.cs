@@ -103,6 +103,13 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             _context.Dispose();
         }
 
+        private static IConfiguration Config(string environment = "Development") =>
+            new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ASPNETCORE_ENVIRONMENT"] = environment,
+                ["StaffAuth:TesterMobiles"] = Tester,
+            }).Build();
+
         private Task<ResetTesterAccountResponseModel> Reset(string mobile = Tester, bool dryRun = false, string environment = "Development", string? maxRows = null)
         {
             var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
@@ -122,6 +129,52 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             _context.HospitalUsers.Add(new HospitalUser { HospitalUserID = Guid.NewGuid(), HospitalID = hospital.HospitalID, UserID = user.UserID });
             _context.SaveChanges();
             return (user, hospital);
+        }
+
+        [Test]
+        public async Task SignedInTester_ResetsOwnAccount_FromTheirUserRow()
+        {
+            var (user, _) = SeedTesterWithHospital();
+            var handler = new ResetTesterAccountHandler(_context, Config(), NullLogger<ResetTesterAccountHandler>.Instance) { Sql = _sql };
+
+            // A number in the body is ignored: the account comes from the sign-in.
+            var r = await handler.Handle(new ResetTesterAccountRequestModel { UserId = user.UserID, MobileNumber = "9876543210" }, CancellationToken.None);
+
+            Assert.That(r.Success, Is.True, r.Message);
+            Assert.That(r.AccountFound, Is.True);
+            Assert.That(_sql.Deleted, Does.Contain("Users"));
+        }
+
+        [Test]
+        public async Task SignedInUserWhoIsNotATester_IsRefused()
+        {
+            var real = TestDataFactory.SeedUser(_context, phone: "9876543210", email: "real@example.com");
+            var handler = new ResetTesterAccountHandler(_context, Config(), NullLogger<ResetTesterAccountHandler>.Instance) { Sql = _sql };
+
+            var r = await handler.Handle(new ResetTesterAccountRequestModel { UserId = real.UserID, MobileNumber = Tester }, CancellationToken.None);
+
+            Assert.That(r.Success, Is.False);
+            Assert.That(r.StatusCode, Is.EqualTo(400));
+            Assert.That(_sql.Statements, Is.Empty);
+        }
+
+        [Test]
+        public async Task Status_SaysTester_OnlyOnDevelopment()
+        {
+            var (user, _) = SeedTesterWithHospital();
+            var real = TestDataFactory.SeedUser(_context, phone: "9876543210", email: "real@example.com");
+
+            var dev = new TesterAccountStatusHandler(_context, Config());
+            var mine = await dev.Handle(new TesterAccountStatusRequestModel { UserId = user.UserID }, CancellationToken.None);
+            var other = await dev.Handle(new TesterAccountStatusRequestModel { UserId = real.UserID }, CancellationToken.None);
+            var prod = await new TesterAccountStatusHandler(_context, Config("Production")).Handle(new TesterAccountStatusRequestModel { UserId = user.UserID }, CancellationToken.None);
+
+            Assert.That(mine.Available && mine.IsTester, Is.True);
+            Assert.That(mine.MaskedMobile, Is.EqualTo("90******01"));
+            Assert.That(other.IsTester, Is.False);
+            Assert.That(other.MaskedMobile, Is.Null);
+            Assert.That(prod.Available, Is.False);
+            Assert.That(prod.IsTester, Is.False);
         }
 
         [Test]
