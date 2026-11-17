@@ -16,13 +16,15 @@ namespace EasyHMSAPI.Application.Services
         private readonly AppDbContext _db;
         private readonly IAbdmLinkingService _linking;
         private readonly IAbdmUserLinkingService _userLinking;
+        private readonly IAbdmDataFlowService _dataFlow;
         private readonly ILogger<AbdmCallbackProcessor> _logger;
 
-        public AbdmCallbackProcessor(AppDbContext db, IAbdmLinkingService linking, IAbdmUserLinkingService userLinking, ILogger<AbdmCallbackProcessor> logger)
+        public AbdmCallbackProcessor(AppDbContext db, IAbdmLinkingService linking, IAbdmUserLinkingService userLinking, IAbdmDataFlowService dataFlow, ILogger<AbdmCallbackProcessor> logger)
         {
             _db = db;
             _linking = linking;
             _userLinking = userLinking;
+            _dataFlow = dataFlow;
             _logger = logger;
         }
 
@@ -45,10 +47,13 @@ namespace EasyHMSAPI.Application.Services
                     await _userLinking.OnInitAsync(inbound, cancellationToken);
                 else if (path.EndsWith("link/care-context/confirm", StringComparison.OrdinalIgnoreCase))
                     await _userLinking.OnConfirmAsync(inbound, cancellationToken);
+                else if (path.EndsWith("consent/request/hip/notify", StringComparison.OrdinalIgnoreCase))
+                    await _dataFlow.OnConsentNotifyAsync(inbound, cancellationToken);
+                else if (path.EndsWith("hip/health-information/request", StringComparison.OrdinalIgnoreCase))
+                    await _dataFlow.OnHealthInformationRequestAsync(inbound, cancellationToken);
                 else if (!path.EndsWith("links/context/on-notify", StringComparison.OrdinalIgnoreCase)
                     && !path.EndsWith("patients/sms/on-notify", StringComparison.OrdinalIgnoreCase))
-                    // Consent and data requests are built in later
-                    // phases. Left unprocessed on purpose: "ABDM asked and we have not replied" is a
+                    // Anything else is left unprocessed on purpose: "ABDM asked and we have not replied" is a
                     // state the panel shows, not silence.
                     return;
             }

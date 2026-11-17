@@ -176,6 +176,9 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<AbdmCareContext> AbdmCareContexts { get; set; }
         public DbSet<AbdmLinkToken> AbdmLinkTokens { get; set; }
         public DbSet<AbdmLinkRequest> AbdmLinkRequests { get; set; }
+        public DbSet<AbdmConsent> AbdmConsents { get; set; }
+        public DbSet<AbdmDataTransfer> AbdmDataTransfers { get; set; }
+        public DbSet<AbdmReceivedRecord> AbdmReceivedRecords { get; set; }
         public DbSet<VitalReading> VitalReading { get; set; }
         public DbSet<FluidEntry> FluidEntry { get; set; }
         public DbSet<GlucoseReading> GlucoseReading { get; set; }
@@ -1248,6 +1251,36 @@ namespace EasyHMSAPI.Domain.Context
                 entity.HasKey(t => t.LinkTokenId);
                 entity.Property(t => t.ExpiresAt).HasColumnType("datetime2(3)");
                 entity.Property(t => t.ReceivedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<AbdmConsent>(entity =>
+            {
+                entity.ToTable("AbdmConsent");
+                entity.HasKey(c => c.ConsentRowId);
+                entity.HasIndex(c => new { c.HospitalId, c.Role, c.ConsentId }).IsUnique();
+                entity.Property(c => c.DateFrom).HasColumnType("datetime2(3)");
+                entity.Property(c => c.DateTo).HasColumnType("datetime2(3)");
+                entity.Property(c => c.ExpiresAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.CreatedAt).HasColumnType("datetime2(3)");
+                entity.Property(c => c.UpdatedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<AbdmDataTransfer>(entity =>
+            {
+                entity.ToTable("AbdmDataTransfer");
+                entity.HasKey(t => t.TransferId);
+                entity.HasIndex(t => new { t.HospitalId, t.TransactionId });
+                entity.Property(t => t.RequestedAt).HasColumnType("datetime2(3)");
+                entity.Property(t => t.CompletedAt).HasColumnType("datetime2(3)");
+            });
+
+            modelBuilder.Entity<AbdmReceivedRecord>(entity =>
+            {
+                entity.ToTable("AbdmReceivedRecord");
+                entity.HasKey(r => r.ReceivedRecordId);
+                entity.HasIndex(r => new { r.HospitalId, r.PatientId });
+                entity.Property(r => r.ReceivedAt).HasColumnType("datetime2(3)");
+                entity.Property(r => r.EraseAt).HasColumnType("datetime2(3)");
             });
 
             modelBuilder.Entity<AbdmLinkRequest>(entity =>
