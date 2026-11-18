@@ -37,6 +37,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 {
                     result = await _abha.VerifyLoginOtpAsync(request.TxnId, request.Otp, request.LoginHint, cancellationToken);
                 }
+                var byAddress = string.Equals(request.LoginHint, AbdmLoginRules.HintAbhaAddress, StringComparison.OrdinalIgnoreCase);
+                // Nothing came back to verify against: never show this as a verified account.
+                if (!byAddress && string.IsNullOrWhiteSpace(result.AbhaNumber))
+                    return new AbdmProfileResponseModel { Success = false, Message = "ABDM did not return an ABHA account for this OTP. Check the OTP and try again." };
                 string? linkToken = null;
                 if (request.CallerUserId != Guid.Empty && request.HospitalId != Guid.Empty && !string.IsNullOrWhiteSpace(result.AbhaNumber))
                     linkToken = _proofs.Issue(request.CallerUserId, request.HospitalId,

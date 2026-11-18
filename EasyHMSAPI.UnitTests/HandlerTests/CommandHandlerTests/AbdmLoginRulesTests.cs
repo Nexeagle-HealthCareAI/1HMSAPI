@@ -153,6 +153,24 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public async Task ALoginThatReturnsNoAccount_IsNeverShownAsVerified()
+        {
+            // Found on the sandbox on 2026-11-18: a wrong OTP on an ABHA-number login showed a green tick
+            // with an empty profile and the "address has no ABHA number" note.
+            var abha = new Mock<IAbdmAbhaService>();
+            abha.Setup(a => a.VerifyLoginOtpAsync("txn-9", "111111", "abha-number", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new AbdmProfileResult { TxnId = "txn-9", AbhaNumber = "", FullName = "" });
+
+            var response = await new VerifyAbdmLoginOtpHandler(abha.Object, new Mock<IAbhaLinkProofStore>().Object).Handle(
+                new VerifyAbdmLoginOtpRequestModel { HospitalId = Guid.NewGuid(), CallerUserId = Guid.NewGuid(), TxnId = "txn-9", Otp = "111111", LoginHint = "abha-number" }, CancellationToken.None);
+
+            Assert.That(response.Success, Is.False);
+            Assert.That(response.LinkToken, Is.Null);
+            Assert.That(response.Message, Does.Contain("OTP"));
+            Assert.That(AbdmLoginRules.Failure(Json("{\"txnId\":\"t\",\"authResult\":\"failed\",\"message\":\"Please enter a valid OTP. Entered OTP is either expired or incorrect.\",\"accounts\":[]}")), Does.StartWith("Please enter a valid OTP"));
+        }
+
+        [Test]
         public void TheAccountBehindAnAddress_IsReadFromTheProfile_OrFromTheAccountsListed()
         {
             var profile = AbdmLoginRules.ReadAddressProfile(Json(
