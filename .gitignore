@@ -28,3 +28,6 @@ Thumbs.db
 
 # Local secret overrides (never commit real credentials)
 appsettings.*.local.json
+
+# ABDM functional test run: the virtual environment the test scripts create
+abdm-ft/.venv/
