@@ -50,6 +50,13 @@ namespace EasyHMSAPI.Application.Services
             return fresh;
         }
 
+        /// <summary>ABDM refusing the transaction a resend was sent under ("Invalid Transaction Id").
+        /// Seen on the sandbox for an Aadhaar OTP resend that followed ABDM's own page, so the
+        /// resend then goes out as a new request.</summary>
+        public static bool IsInvalidTransaction(AbdmException refusal) =>
+            refusal.StatusCode == 400
+            && refusal.Message.Replace(" ", string.Empty).Contains("InvalidTransaction", StringComparison.OrdinalIgnoreCase);
+
         public const string AddressSearchPath = "/phr/web/login/abha/search";
         public const string AddressRequestOtpPath = "/phr/web/login/abha/request/otp";
         public const string AddressVerifyPath = "/phr/web/login/abha/verify";

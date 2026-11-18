@@ -143,6 +143,16 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public void ARefusedResendTransaction_IsRecognised_SoTheResendCanGoOutAsANewRequest()
+        {
+            // The sandbox's words on 2026-11-18, as our own message carries them.
+            Assert.That(AbdmLoginRules.IsInvalidTransaction(new AbdmException("txnId: Invalid Transaction Id Reference: d98bbf56", null, 400, "r")), Is.True);
+            Assert.That(AbdmLoginRules.IsInvalidTransaction(new AbdmException("Invalid TransactionId (ABDM-1017). Reference: r", "ABDM-1017", 400, "r")), Is.True);
+            Assert.That(AbdmLoginRules.IsInvalidTransaction(new AbdmException("Invalid LoginId Reference: r", null, 400, "r")), Is.False);
+            Assert.That(AbdmLoginRules.IsInvalidTransaction(new AbdmException("txnId: Invalid Transaction Id", null, 500, "r")), Is.False);
+        }
+
+        [Test]
         public void TheAccountBehindAnAddress_IsReadFromTheProfile_OrFromTheAccountsListed()
         {
             var profile = AbdmLoginRules.ReadAddressProfile(Json(
