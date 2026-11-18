@@ -61,19 +61,27 @@ namespace EasyHMSAPI.Application.Services.Implementations
                     : throw new InvalidOperationException("Abdm:AbhaBaseUrlProd must be configured before ABDM can be used in Production.");
         }
 
-        public async Task<AbdmOtpTxnResult> GenerateAadhaarOtpAsync(string aadhaarNumber, CancellationToken cancellationToken)
+        public Task<AbdmOtpTxnResult> GenerateAadhaarOtpAsync(string aadhaarNumber, CancellationToken cancellationToken) =>
+            RequestAadhaarOtpAsync(aadhaarNumber, string.Empty, cancellationToken);
+
+        public Task<AbdmOtpTxnResult> ResendAadhaarOtpAsync(string aadhaarNumber, string txnId, CancellationToken cancellationToken) =>
+            RequestAadhaarOtpAsync(aadhaarNumber, txnId, cancellationToken);
+
+        // txnId is empty on the first call; a previous txnId makes it a resend (ABDM's operation page says so).
+        private async Task<AbdmOtpTxnResult> RequestAadhaarOtpAsync(string aadhaarNumber, string txnId, CancellationToken cancellationToken)
         {
             var encrypted = await _encryptionService.EncryptAsync(aadhaarNumber, cancellationToken);
             var payload = new
             {
-                txnId = "",
+                txnId,
                 scope = new[] { "abha-enrol" },
                 loginHint = "aadhaar",
                 loginId = encrypted,
                 otpSystem = "aadhaar"
             };
             var doc = await PostAsync("/enrollment/request/otp", payload, cancellationToken);
-            return ReadOtpTxnResult(doc);
+            // A resend answer may leave the txnId out: it is still the one we sent.
+            return ReadOtpTxnResult(doc, string.IsNullOrEmpty(txnId) ? null : txnId);
         }
 
         public async Task<AbdmEnrollResult> VerifyAadhaarOtpAsync(string txnId, string otp, string mobile, CancellationToken cancellationToken)

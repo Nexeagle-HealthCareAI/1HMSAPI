@@ -176,6 +176,30 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(_context.AbhaConsent.Single().OtpRequestCount, Is.EqualTo(1));
         }
 
+        [Test]
+        public async Task AResend_GoesOutUnderTheTransactionWeStored_NotANewOne_AndStillCountsAgainstTheCap()
+        {
+            var id = await RecordConsent();
+            _abha.Setup(a => a.GenerateAadhaarOtpAsync(TestAadhaar, It.IsAny<CancellationToken>())).ReturnsAsync(new AbdmOtpTxnResult { TxnId = "txn-first" });
+            _abha.Setup(a => a.ResendAadhaarOtpAsync(TestAadhaar, "txn-first", It.IsAny<CancellationToken>())).ReturnsAsync(new AbdmOtpTxnResult { TxnId = "txn-first" });
+
+            // A resend with nothing sent yet is simply the first request.
+            var first = OtpRequest(id);
+            first.Resend = true;
+            Assert.That((await OtpHandler().Handle(first, CancellationToken.None)).TxnId, Is.EqualTo("txn-first"));
+            _abha.Verify(a => a.GenerateAadhaarOtpAsync(TestAadhaar, It.IsAny<CancellationToken>()), Times.Once);
+
+            var again = OtpRequest(id);
+            again.Resend = true;
+            var resent = await OtpHandler().Handle(again, CancellationToken.None);
+
+            Assert.That(resent.Success, Is.True, resent.Message);
+            Assert.That(resent.TxnId, Is.EqualTo("txn-first"));
+            _abha.Verify(a => a.ResendAadhaarOtpAsync(TestAadhaar, "txn-first", It.IsAny<CancellationToken>()), Times.Once);
+            _abha.Verify(a => a.GenerateAadhaarOtpAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+            Assert.That(_context.AbhaConsent.Single().OtpRequestCount, Is.EqualTo(2));
+        }
+
         // ---------------------------------------------------------------- A-01 server-verified linking
 
         private AbdmProfileResult AbdmProfile(string number = "91-1234-5678-9012") => new()
