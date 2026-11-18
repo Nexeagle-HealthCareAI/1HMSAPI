@@ -651,8 +651,7 @@ namespace EasyHMSAPI.Application.Services
             }
 
             transfer.RecordCount += stored;
-            // ABDM's example numbers a one-page transfer 0 of 1, and other providers count from 1,
-            // so the last page is known by either count.
+            // ABDM's example numbers a one-page transfer 0 of 1; longer ones end at n of n (IsLastPage).
             var lastPage = AbdmDataFlowRules.IsLastPage(page.PageNumber, page.PageCount);
             if (lastPage)
             {
@@ -721,8 +720,9 @@ namespace EasyHMSAPI.Application.Services
                 .ToListAsync(cancellationToken);
             foreach (var transfer in stale)
             {
-                transfer.Status = AbdmTransferStatus.Failed;
-                transfer.ErrorMessage = "No records arrived within 24 hours.";
+                // Records that did arrive are kept: a sender counting pages from 0 never sends an "n of n" page.
+                transfer.Status = transfer.RecordCount > 0 ? AbdmTransferStatus.Transferred : AbdmTransferStatus.Failed;
+                transfer.ErrorMessage = transfer.RecordCount > 0 ? null : "No records arrived within 24 hours.";
                 transfer.CompletedAt = nowUtc;
                 transfer.PrivateKey = null;
                 transfer.Nonce = null;

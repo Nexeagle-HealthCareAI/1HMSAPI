@@ -361,7 +361,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [TestCase(0, 1, true)]
         [TestCase(1, 1, true)]
         [TestCase(1, 3, false)]
-        [TestCase(2, 3, true, Description = "last page when counted from 0")]
+        [TestCase(2, 3, false, Description = "the page before the last when counted from 1, so not the end")]
         [TestCase(3, 3, true, Description = "last page when counted from 1")]
         public void TheLastPage_IsKnown_WhicheverWayTheSenderCounts(int pageNumber, int pageCount, bool last) =>
             Assert.That(AbdmDataFlowRules.IsLastPage(pageNumber, pageCount), Is.EqualTo(last));

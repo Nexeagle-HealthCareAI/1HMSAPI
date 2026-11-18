@@ -60,10 +60,12 @@ namespace EasyHMSAPI.Application.Services
             return pages;
         }
 
-        /// <summary>Whether a pushed page ends its transfer, for senders that count pages from 1
-        /// (n of n) and for those that count from 0 (n-1 of n).</summary>
+        /// <summary>Whether a pushed page ends its transfer: n of n, or a one-page transfer whichever way it is
+        /// numbered (ABDM's example is 0 of 1). n-1 of n is not taken as the end: from a sender that counts from 1
+        /// (ours does) it is the page before the last, and closing there would turn the last page away. A sender
+        /// that counts from 0 over several pages leaves the transfer open; the sweep closes it, keeping its records.</summary>
         public static bool IsLastPage(int pageNumber, int pageCount) =>
-            pageCount <= 1 || pageNumber >= pageCount - 1;
+            pageCount <= 1 || pageNumber >= pageCount;
 
         public static DateTime? Date(string? value) =>
             DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var parsed) ? parsed : null;

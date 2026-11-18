@@ -90,7 +90,7 @@ Built against ABDM's own M1 case list (`.claude/skills/abdm-m1/references/test.m
 - `on-discover` is the one HIP answer whose page names `X-HIU-ID` as the facility header. It now carries the facility id as both `X-HIP-ID` and `X-HIU-ID`.
 - An ABHA address is `^[a-zA-Z0-9][a-zA-Z0-9_.]+[a-zA-Z0-9]@(abdm|sbx)$`; the desk and the server now use exactly this.
 - The data push sends the gateway token by default (`Abdm:DataPushSendsGatewayToken`, set to `false` to stop): the transfer page says the token is mandatory.
-- As HIU, the last page is recognised whether the sender counts pages from 0 (ABDM's example is 0 of 1) or from 1.
+- As HIU, a transfer ends at page n of n, or at its only page whichever way that is numbered (ABDM's example is 0 of 1). n-1 of n is not taken as the end: from a sender counting from 1, ours included, it is the page before the last. A sender counting from 0 over several pages leaves the transfer open; the hourly sweep closes it after 24 hours as Transferred, keeping its records (ABDM is not sent the data-received notice in that case).
 - Confirmed as built, no change: the discover, init, health-information request, on-request, transfer and notify bodies; the checksum is MD5 of the bundle before encryption; curve and parameters strings.
 
 **Still to confirm on the sandbox**
