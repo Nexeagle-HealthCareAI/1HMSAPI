@@ -109,6 +109,19 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public void AnAnswerThatNamesTheTxnIdAsTheFault_IsReadAsAMessage_AndAnUnreadableOneIsKeptForTheLog()
+        {
+            // Found on the sandbox on 2026-11-18: a refused resend showed only "HTTP 400".
+            Assert.That(AbdmHttp.ParseError("{\"txnId\":\"Invalid Transaction Id\",\"timestamp\":\"2026-11-18 15:43:00\"}").Message, Is.EqualTo("txnId: Invalid Transaction Id"));
+            Assert.That(AbdmHttp.ParseError("{\"txnId\":\"37d8d312-35a0-41e7-a6e4-1074eb18a5fa\",\"timestamp\":\"x\"}").Message, Is.Null);
+
+            var unread = AbdmHttp.ToException(Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance, "POST", "/p", 400, "{\"txnId\":\"37d8d312-35a0-41e7-a6e4-1074eb18a5fa\",\"status\":400}", "r");
+            Assert.That(unread.UnreadBody, Does.Contain("status"));
+            var read = AbdmHttp.ToException(Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance, "POST", "/p", 400, "{\"message\":\"Invalid LoginId\"}", "r");
+            Assert.That(read.UnreadBody, Is.Null);
+        }
+
+        [Test]
         public void HasCode_MatchesWithOrWithoutSeparator()
         {
             var ex = new AbdmException("x", AbdmHttp.NormaliseCode("ABDM-1114: "), 400, "r");

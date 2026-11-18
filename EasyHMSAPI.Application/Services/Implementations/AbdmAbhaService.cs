@@ -589,7 +589,9 @@ namespace EasyHMSAPI.Application.Services.Implementations
             }
             catch (AbdmException ex)
             {
-                await _calls.RecordAsync(_callScope.HospitalId, ex.RequestId, path, ex.StatusCode, ex.Code, ex.Message, sentAt, cancellationToken);
+                // When ABDM's answer held nothing readable, the log keeps the start of it so the cause can be found.
+                var detail = ex.UnreadBody == null ? ex.Message : $"{ex.Message} ABDM answered: {ex.UnreadBody}";
+                await _calls.RecordAsync(_callScope.HospitalId, ex.RequestId, path, ex.StatusCode, ex.Code, detail, sentAt, cancellationToken);
                 throw;
             }
         }
