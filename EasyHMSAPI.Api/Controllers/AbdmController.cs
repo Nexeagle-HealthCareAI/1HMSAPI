@@ -347,11 +347,11 @@ namespace EasyHMSAPI.Api.Controllers
         }
 
         [HttpGet("abha-address/suggestions")]
-        public async Task<ActionResult<AbdmAddressSuggestionsResponseModel>> GetAbhaAddressSuggestions([FromQuery] string txnId)
+        public async Task<ActionResult<AbdmAddressSuggestionsResponseModel>> GetAbhaAddressSuggestions([FromQuery] string txnId, [FromQuery] Guid? hospitalId = null)
         {
             try
             {
-                var response = await _mediator.Send(new GetAbhaAddressSuggestionsRequestModel { TxnId = txnId });
+                var response = await _mediator.Send(new GetAbhaAddressSuggestionsRequestModel { TxnId = txnId, HospitalId = hospitalId });
                 if (!response.Success) return BadRequest(new { response.Message });
                 return Ok(response);
             }
