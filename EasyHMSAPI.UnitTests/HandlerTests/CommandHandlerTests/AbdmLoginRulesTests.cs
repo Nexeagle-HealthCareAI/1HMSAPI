@@ -110,6 +110,16 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public void TheMobileOtpAfterCreation_IsVerifiedOnAbdmsPath_WithItsScope()
+        {
+            // Found on the sandbox on 2026-11-18: "/enrollment/auth/byAbdm/verify" with no scope was refused with 400.
+            Assert.That(AbdmLoginRules.EnrolMobileVerifyPath, Is.EqualTo("/enrollment/auth/byAbdm"));
+            Assert.That(AbdmLoginRules.EnrolMobileVerifyScope, Is.EqualTo(new[] { "abha-enrol", "mobile-verify" }));
+            Assert.That(AbdmLoginRules.Failure(Json("{\"txnId\":\"t\",\"authResult\":\"success\",\"message\":\"Mobile number is now successfully linked to your Account\"}")), Is.Null);
+            Assert.That(AbdmLoginRules.Failure(Json("{\"txnId\":\"t\",\"authResult\":\"failed\",\"message\":\"OTP expired\"}")), Is.EqualTo("OTP expired"));
+        }
+
+        [Test]
         public void TheAccountBehindAnAddress_IsReadFromTheProfile_OrFromTheAccountsListed()
         {
             var profile = AbdmLoginRules.ReadAddressProfile(Json(
