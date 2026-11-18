@@ -168,10 +168,10 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(handler.ConnectCallback, Is.Not.Null, "the resolved address is checked when connecting");
         }
 
-        [TestCase(null, false)]
+        [TestCase(null, true)]
         [TestCase("false", false)]
         [TestCase("true", true)]
-        public async Task OurGatewayToken_GoesToTheHiu_OnlyWhenSwitchedOn(string? setting, bool sent)
+        public async Task OurGatewayToken_GoesToTheHiu_UnlessSwitchedOff(string? setting, bool sent)
         {
             var seen = new List<System.Net.Http.HttpRequestMessage>();
             var http = new System.Net.Http.HttpClient(new RecordingHandler(seen));
@@ -357,6 +357,14 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
     
         // ---------------------------------------------------------------- pages
+
+        [TestCase(0, 1, true)]
+        [TestCase(1, 1, true)]
+        [TestCase(1, 3, false)]
+        [TestCase(2, 3, true, Description = "last page when counted from 0")]
+        [TestCase(3, 3, true, Description = "last page when counted from 1")]
+        public void TheLastPage_IsKnown_WhicheverWayTheSenderCounts(int pageNumber, int pageCount, bool last) =>
+            Assert.That(AbdmDataFlowRules.IsLastPage(pageNumber, pageCount), Is.EqualTo(last));
 
         [Test]
         public void ATransfer_IsCutIntoPages_ByCountAndBySize()

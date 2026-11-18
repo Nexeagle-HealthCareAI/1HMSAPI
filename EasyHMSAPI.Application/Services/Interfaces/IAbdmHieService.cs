@@ -4,6 +4,8 @@ namespace EasyHMSAPI.Application.Services.Interfaces
     {
         Hip,
         Hiu,
+        /// <summary>X-HIP-ID and X-HIU-ID, both with the facility id.</summary>
+        HipAndHiu,
         None
     }
 

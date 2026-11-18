@@ -93,9 +93,9 @@ namespace EasyHMSAPI.Application.Services.Implementations
                         request.Content = new StringContent(JsonSerializer.Serialize(call.Body, JsonOptions), Encoding.UTF8, "application/json");
                     request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
                     AbdmHttp.AddStandardHeaders(request, _cmId, requestId);
-                    if (call.FacilityHeader == AbdmFacilityHeader.Hip)
+                    if (call.FacilityHeader is AbdmFacilityHeader.Hip or AbdmFacilityHeader.HipAndHiu)
                         request.Headers.Add("X-HIP-ID", hipId);
-                    else if (call.FacilityHeader == AbdmFacilityHeader.Hiu)
+                    if (call.FacilityHeader is AbdmFacilityHeader.Hiu or AbdmFacilityHeader.HipAndHiu)
                         request.Headers.Add("X-HIU-ID", hipId);
                     if (!string.IsNullOrWhiteSpace(call.LinkToken))
                         request.Headers.Add("X-LINK-TOKEN", call.LinkToken);

@@ -105,8 +105,9 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             patient = new[] { new { referenceNumber = PatientId, display = "Asha Rao", careContexts = new[] { new { referenceNumber = reference ?? Reference } }, hiType = "Prescription", count = 1 } }
         });
 
+        // ABDM documents confirmation.token as an integer, so that is what the tests send.
         private static string ConfirmBody(string linkReference, string otp) =>
-            JsonSerializer.Serialize(new { confirmation = new { linkRefNumber = linkReference, token = otp } });
+            JsonSerializer.Serialize(new { confirmation = new { token = int.Parse(otp), linkRefNumber = linkReference } });
 
         private static JsonElement Body(AbdmHieCall call) => JsonDocument.Parse(JsonSerializer.Serialize(call.Body)).RootElement;
 
@@ -194,6 +195,16 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(AbdmDiscoveryRules.OtpMatches("123456", "ref-2", hash), Is.False);
             Assert.That(AbdmDiscoveryRules.OtpMatches(null, "ref-1", hash), Is.False);
             Assert.That(AbdmDiscoveryRules.NewOtp(), Has.Length.EqualTo(6));
+            Assert.That(AbdmDiscoveryRules.NewOtp(), Does.Not.StartWith("0"));
+        }
+
+        [Test]
+        public void TheConfirmOtp_IsReadAsANumberOrAsText()
+        {
+            Assert.That(AbdmDiscoveryRules.ConfirmToken("{\"confirmation\":{\"token\":123456,\"linkRefNumber\":\"r\"}}"), Is.EqualTo("123456"));
+            Assert.That(AbdmDiscoveryRules.ConfirmToken("{\"confirmation\":{\"token\":\"123456\",\"linkRefNumber\":\"r\"}}"), Is.EqualTo("123456"));
+            Assert.That(AbdmDiscoveryRules.ConfirmToken("{\"confirmation\":{\"token\":12345,\"linkRefNumber\":\"r\"}}"), Is.EqualTo("012345"));
+            Assert.That(AbdmDiscoveryRules.ConfirmToken("{\"confirmation\":{\"linkRefNumber\":\"r\"}}"), Is.Null);
         }
 
         // ---------------------------------------------------------------- discover
@@ -290,7 +301,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var body = Body(call);
             Assert.That(body.GetProperty("response").GetProperty("requestId").GetString(), Is.EqualTo("req-init"));
             Assert.That(body.GetProperty("link").GetProperty("referenceNumber").GetString(), Is.EqualTo(linkReference));
-            Assert.That(body.GetProperty("link").GetProperty("meta").GetProperty("communicationHint").GetString(), Is.EqualTo("******3210"));
+            Assert.That(body.GetProperty("link").GetProperty("meta").GetProperty("communicationHint").GetString(), Is.EqualTo("XXXXXX3210"));
             Assert.That(JsonSerializer.Serialize(call.Body), Does.Not.Contain(_otp!));
         }
 

@@ -651,7 +651,9 @@ namespace EasyHMSAPI.Application.Services
             }
 
             transfer.RecordCount += stored;
-            var lastPage = page.PageNumber >= page.PageCount;
+            // ABDM's example numbers a one-page transfer 0 of 1, and other providers count from 1,
+            // so the last page is known by either count.
+            var lastPage = AbdmDataFlowRules.IsLastPage(page.PageNumber, page.PageCount);
             if (lastPage)
             {
                 transfer.Status = stored > 0 || page.Entries.Count == 0 ? AbdmTransferStatus.Transferred : AbdmTransferStatus.Failed;
