@@ -26,6 +26,8 @@ namespace EasyHMSAPI.Application.Services.Models
     {
         public string TxnId { get; set; } = string.Empty;
         public List<string> Suggestions { get; set; } = new();
+        /// <summary>"@sbx" on the sandbox, "@abdm" on live: what ABDM puts after the chosen name.</summary>
+        public string AddressSuffix { get; set; } = "@abdm";
     }
 
     /// <summary>Profile snapshot for an existing ABHA holder logging in / linking (mobile or

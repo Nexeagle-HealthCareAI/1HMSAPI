@@ -21,6 +21,11 @@ namespace EasyHMSAPI.Application.Services.Implementations
     public class AbdmAbhaService : IAbdmAbhaService
     {
         private const string XTokenCachePrefix = "Abdm:XToken:";
+        // What the Aadhaar step told us about the person, kept for the steps that follow it.
+        private const string EnrolProfileCachePrefix = "Abdm:EnrolProfile:";
+        private const string EnrolTokenCachePrefix = "Abdm:EnrolToken:";
+        private const string EnrolMobileCachePrefix = "Abdm:EnrolMobile:";
+        private static readonly TimeSpan EnrolMemory = TimeSpan.FromMinutes(20);
 
         private readonly HttpClient _httpClient;
         private readonly IAbdmGatewayService _gatewayService;
@@ -105,7 +110,9 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 consent = new { code = "abha-enrollment", version = "1.4" }
             };
             var doc = await PostAsync("/enrollment/enrol/byAadhaar", payload, cancellationToken);
-            return ReadEnrollResult(doc, txnId);
+            var result = ReadEnrollResult(doc, txnId);
+            RememberEnrolment(result, txnId);
+            return result;
         }
 
         public async Task<AbdmOtpTxnResult> GenerateMobileOtpAsync(string txnId, string mobile, CancellationToken cancellationToken)
@@ -120,7 +127,11 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 otpSystem = "abdm"
             };
             var doc = await PostAsync("/enrollment/request/otp", payload, cancellationToken);
-            return ReadOtpTxnResult(doc, fallbackTxnId: txnId);
+            var sent = ReadOtpTxnResult(doc, fallbackTxnId: txnId);
+            // Which mobile this OTP is proving, for the verify that follows.
+            if (!string.IsNullOrWhiteSpace(sent.TxnId))
+                _cache.Set(EnrolMobileCachePrefix + sent.TxnId, mobile, EnrolMemory);
+            return sent;
         }
 
         public async Task<AbdmEnrollResult> VerifyMobileOtpAsync(string txnId, string otp, CancellationToken cancellationToken)
@@ -140,7 +151,15 @@ namespace EasyHMSAPI.Application.Services.Implementations
             var failure = AbdmLoginRules.Failure(doc.RootElement);
             if (failure != null)
                 throw new InvalidOperationException(failure);
-            return ReadEnrollResult(doc, txnId);
+            var result = ReadEnrollResult(doc, txnId);
+            // The answer names the account only as accounts[].ABHANumber.
+            if (string.IsNullOrWhiteSpace(result.AbhaNumber)
+                && doc.RootElement.TryGetProperty("accounts", out var accounts) && accounts.ValueKind == JsonValueKind.Array)
+                result.AbhaNumber = accounts.EnumerateArray().Select(a => ReadString(a, "ABHANumber", "abhaNumber")).FirstOrDefault(n => n != null) ?? string.Empty;
+            _cache.TryGetValue(EnrolMobileCachePrefix + txnId, out string? verifiedMobile);
+            AbdmLoginRules.FillFromEnrolment(result, Remembered(result.AbhaNumber), verifiedMobile);
+            RememberEnrolment(result, txnId);
+            return result;
         }
 
         public async Task<AbdmAddressSuggestionsResult> GetAbhaAddressSuggestionsAsync(string txnId, CancellationToken cancellationToken)
@@ -152,7 +171,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 return request;
             }, cancellationToken);
 
-            var result = new AbdmAddressSuggestionsResult { TxnId = txnId };
+            var result = new AbdmAddressSuggestionsResult { TxnId = txnId, AddressSuffix = "@" + _cmId };
             if (doc.RootElement.TryGetProperty("abhaAddressList", out var list) && list.ValueKind == JsonValueKind.Array)
                 result.Suggestions = list.EnumerateArray().Select(e => e.GetString() ?? string.Empty).Where(s => s.Length > 0).ToList();
             return result;
@@ -165,6 +184,15 @@ namespace EasyHMSAPI.Application.Services.Implementations
             var result = ReadEnrollResult(doc, txnId);
             if (string.IsNullOrWhiteSpace(result.AbhaAddress))
                 result.AbhaAddress = abhaAddress;
+            // This answer carries the number and address only: the name, sex, birth date and mobile
+            // came with the Aadhaar step. The session token is carried over too, so the card can be
+            // shown under this transaction.
+            AbdmLoginRules.FillFromEnrolment(result, Remembered(result.AbhaNumber));
+            if (_cache.TryGetValue(EnrolTokenCachePrefix + AbdmLoginRules.AbhaDigits(result.AbhaNumber), out string? xToken))
+            {
+                CacheXToken(result.TxnId, xToken);
+                CacheXToken(txnId, xToken);
+            }
             return result;
         }
 
@@ -620,6 +648,22 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 }
             }
             return null;
+        }
+
+        private AbdmEnrollResult? Remembered(string? abhaNumber)
+        {
+            var digits = AbdmLoginRules.AbhaDigits(abhaNumber);
+            return digits.Length > 0 && _cache.TryGetValue(EnrolProfileCachePrefix + digits, out AbdmEnrollResult? profile) ? profile : null;
+        }
+
+        private void RememberEnrolment(AbdmEnrollResult result, string txnId)
+        {
+            var digits = AbdmLoginRules.AbhaDigits(result.AbhaNumber);
+            if (digits.Length == 0)
+                return;
+            _cache.Set(EnrolProfileCachePrefix + digits, result, EnrolMemory);
+            if (_cache.TryGetValue(XTokenCachePrefix + txnId, out string? xToken) && !string.IsNullOrWhiteSpace(xToken))
+                _cache.Set(EnrolTokenCachePrefix + digits, xToken, EnrolMemory);
         }
 
         private void CacheXToken(string txnId, string? xToken)
