@@ -32,6 +32,9 @@ namespace EasyHMSAPI.Application.Services
         public string? Code { get; }
         public int StatusCode { get; }
         public string RequestId { get; }
+        /// <summary>The start of ABDM's own answer when nothing readable could be taken from it.
+        /// For the activity log only, never for a screen.</summary>
+        public string? UnreadBody { get; init; }
 
         public bool HasCode(string code) =>
             Code != null && string.Equals(Code, AbdmHttp.NormaliseCode(code), StringComparison.OrdinalIgnoreCase);
@@ -181,7 +184,10 @@ namespace EasyHMSAPI.Application.Services
             var (code, message) = ParseError(body);
             logger.LogWarning("ABDM {Method} {Path} failed: HTTP {Status}, code {Code}, REQUEST-ID {RequestId}, body {Body}",
                 method, path, statusCode, code ?? "none", requestId, Truncate(body, MaxLoggedBodyLength));
-            return new AbdmException(BuildUserMessage(code, message, statusCode, requestId), code, statusCode, requestId);
+            return new AbdmException(BuildUserMessage(code, message, statusCode, requestId), code, statusCode, requestId)
+            {
+                UnreadBody = string.IsNullOrWhiteSpace(message) && !string.IsNullOrWhiteSpace(body) ? Truncate(body.Trim(), 300) : null
+            };
         }
 
         private static string ReadRequestId(HttpRequestMessage request) =>
@@ -214,7 +220,11 @@ namespace EasyHMSAPI.Application.Services
         private static string? ReadFieldMap(JsonElement root)
         {
             var parts = root.EnumerateObject()
-                .Where(p => p.Value.ValueKind == JsonValueKind.String && !NonMessageFields.Contains(p.Name) && !string.IsNullOrWhiteSpace(p.Value.GetString()))
+                // "txnId" is normally just the id echoed back, but ABDM also names a field this way
+                // ({"txnId":"Invalid Transaction Id"}), so a txnId that is not an id is a message.
+                .Where(p => p.Value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(p.Value.GetString())
+                    && (!NonMessageFields.Contains(p.Name)
+                        || (string.Equals(p.Name, "txnId", StringComparison.OrdinalIgnoreCase) && !Guid.TryParse(p.Value.GetString(), out _))))
                 .Select(p => $"{p.Name}: {p.Value.GetString()}")
                 .ToList();
             return parts.Count == 0 ? null : string.Join("; ", parts);
