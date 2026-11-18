@@ -303,6 +303,10 @@ namespace EasyHMSAPI.Application.Services.Implementations
             var doc = await PostAsync("/profile/login/verify", payload, cancellationToken);
 
             var root = doc.RootElement;
+            // A wrong or expired OTP is answered with 200 and authResult "failed": it is not a login.
+            var failure = AbdmLoginRules.Failure(root);
+            if (failure != null)
+                throw new InvalidOperationException(failure);
             if (root.TryGetProperty("token", out var tokenEl) && tokenEl.ValueKind == JsonValueKind.String)
                 CacheXToken(txnId, tokenEl.GetString());
 
@@ -521,6 +525,10 @@ namespace EasyHMSAPI.Application.Services.Implementations
             var doc = await PostAsync("/profile/login/verify", payload, cancellationToken);
 
             var root = doc.RootElement;
+            // A wrong or expired OTP is answered with 200 and authResult "failed": it is not a login.
+            var failure = AbdmLoginRules.Failure(root);
+            if (failure != null)
+                throw new InvalidOperationException(failure);
             if (root.TryGetProperty("token", out var tokenEl) && tokenEl.ValueKind == JsonValueKind.String)
                 CacheXToken(txnId, tokenEl.GetString());
 
