@@ -41,11 +41,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 if (account != null)
                 {
-                    account.AbhaAddress = result.AbhaAddress ?? account.AbhaAddress;
-                    account.FullName = result.FullName ?? account.FullName;
-                    account.Gender = result.Gender ?? account.Gender;
-                    account.DateOfBirth = result.DateOfBirth ?? account.DateOfBirth;
-                    account.Mobile = result.Mobile ?? account.Mobile;
+                    // An empty value never wipes what is already on record.
+                    static string? Keep(string? now, string? before) => string.IsNullOrWhiteSpace(now) ? before : now;
+                    account.AbhaAddress = Keep(result.AbhaAddress, account.AbhaAddress);
+                    account.FullName = Keep(result.FullName, account.FullName) ?? string.Empty;
+                    account.Gender = Keep(result.Gender, account.Gender);
+                    account.DateOfBirth = Keep(result.DateOfBirth, account.DateOfBirth);
+                    account.Mobile = Keep(result.Mobile, account.Mobile);
                 }
                 else
                 {

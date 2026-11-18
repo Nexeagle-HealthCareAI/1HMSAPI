@@ -24,6 +24,32 @@ namespace EasyHMSAPI.Application.Services
         public const string EnrolMobileVerifyPath = "/enrollment/auth/byAbdm";
         public static readonly string[] EnrolMobileVerifyScope = { "abha-enrol", "mobile-verify" };
 
+        /// <summary>The digits of an ABHA number, so "91-1234-5678-9012" and "91123456789012" are one key.</summary>
+        public static string AbhaDigits(string? abhaNumber) => new((abhaNumber ?? string.Empty).Where(char.IsDigit).ToArray());
+
+        /// <summary>ABDM sends the person's name, sex, birth date and mobile once, with the Aadhaar
+        /// step. The later answers (mobile verified, address created) carry only the ABHA number, so
+        /// what they leave empty is filled from what the Aadhaar step gave. A mobile verified in its
+        /// own step wins over an empty one.</summary>
+        public static AbdmEnrollResult FillFromEnrolment(AbdmEnrollResult fresh, AbdmEnrollResult? remembered, string? verifiedMobile = null)
+        {
+            static string? Keep(string? now, string? before) => string.IsNullOrWhiteSpace(now) ? before : now;
+            if (remembered != null)
+            {
+                fresh.AbhaNumber = Keep(fresh.AbhaNumber, remembered.AbhaNumber) ?? string.Empty;
+                fresh.AbhaAddress = Keep(fresh.AbhaAddress, remembered.AbhaAddress);
+                fresh.FullName = Keep(fresh.FullName, remembered.FullName) ?? string.Empty;
+                fresh.Gender = Keep(fresh.Gender, remembered.Gender);
+                fresh.DateOfBirth = Keep(fresh.DateOfBirth, remembered.DateOfBirth);
+                fresh.Mobile = Keep(fresh.Mobile, remembered.Mobile);
+                fresh.IsNew = fresh.IsNew || remembered.IsNew;
+            }
+            if (!string.IsNullOrWhiteSpace(verifiedMobile))
+                fresh.Mobile = verifiedMobile;
+            fresh.MobileVerified = fresh.MobileVerified || !string.IsNullOrWhiteSpace(fresh.Mobile);
+            return fresh;
+        }
+
         public const string AddressSearchPath = "/phr/web/login/abha/search";
         public const string AddressRequestOtpPath = "/phr/web/login/abha/request/otp";
         public const string AddressVerifyPath = "/phr/web/login/abha/verify";

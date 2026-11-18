@@ -120,6 +120,29 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public void WhatTheAadhaarStepToldUs_FillsTheLaterAnswers_ThatCarryOnlyTheNumber()
+        {
+            // Found on the sandbox on 2026-11-18: a created ABHA was saved as "Unknown" with no mobile.
+            var remembered = new AbdmEnrollResult { AbhaNumber = "91-1234-5678-9012", FullName = "Asha Rao", Gender = "F", DateOfBirth = "05-08-1990", IsNew = true };
+
+            var afterMobile = AbdmLoginRules.FillFromEnrolment(new AbdmEnrollResult { AbhaNumber = "91-1234-5678-9012" }, remembered, "9876543210");
+            Assert.That(afterMobile.FullName, Is.EqualTo("Asha Rao"));
+            Assert.That(afterMobile.Mobile, Is.EqualTo("9876543210"));
+            Assert.That(afterMobile.MobileVerified, Is.True);
+
+            var afterAddress = AbdmLoginRules.FillFromEnrolment(new AbdmEnrollResult { AbhaNumber = "91123456789012", AbhaAddress = "asha@sbx" }, afterMobile);
+            Assert.That(afterAddress.FullName, Is.EqualTo("Asha Rao"));
+            Assert.That(afterAddress.Gender, Is.EqualTo("F"));
+            Assert.That(afterAddress.DateOfBirth, Is.EqualTo("05-08-1990"));
+            Assert.That(afterAddress.Mobile, Is.EqualTo("9876543210"));
+            Assert.That(afterAddress.AbhaAddress, Is.EqualTo("asha@sbx"));
+            Assert.That(afterAddress.IsNew, Is.True);
+
+            Assert.That(AbdmLoginRules.AbhaDigits("91-1234-5678-9012"), Is.EqualTo(AbdmLoginRules.AbhaDigits("91123456789012")));
+            Assert.That(AbdmLoginRules.FillFromEnrolment(new AbdmEnrollResult { AbhaNumber = "1" }, null).FullName, Is.Empty);
+        }
+
+        [Test]
         public void TheAccountBehindAnAddress_IsReadFromTheProfile_OrFromTheAccountsListed()
         {
             var profile = AbdmLoginRules.ReadAddressProfile(Json(
