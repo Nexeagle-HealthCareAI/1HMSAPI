@@ -162,7 +162,14 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // ------------------------------------------------------------
 // MediatR
 // ------------------------------------------------------------
-builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(UserLoginHandler).Assembly));
+builder.Services.AddMediatR(cfg =>
+{
+    cfg.RegisterServicesFromAssembly(typeof(UserLoginHandler).Assembly);
+    // Notes which hospital a request is for, so ABHA (M1) calls land in that hospital's activity log.
+    cfg.AddOpenBehavior(typeof(EasyHMSAPI.Application.Services.AbdmHospitalScopeBehavior<,>));
+});
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.AbdmCallScope>();
+builder.Services.AddSingleton<EasyHMSAPI.Application.Services.IAbdmM1CallLog, EasyHMSAPI.Application.Services.AbdmM1CallLog>();
 
 // ------------------------------------------------------------
 // Custom Services

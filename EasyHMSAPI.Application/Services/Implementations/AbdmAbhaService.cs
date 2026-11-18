@@ -32,6 +32,8 @@ namespace EasyHMSAPI.Application.Services.Implementations
         private readonly IAbdmEncryptionService _encryptionService;
         private readonly IMemoryCache _cache;
         private readonly ILogger<AbdmAbhaService> _logger;
+        private readonly IAbdmM1CallLog _calls;
+        private readonly AbdmCallScope _callScope;
         private readonly string _abhaBaseUrl;
         private readonly string _cmId;
         private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
@@ -43,8 +45,12 @@ namespace EasyHMSAPI.Application.Services.Implementations
             IMemoryCache cache,
             IConfiguration configuration,
             IHostEnvironment environment,
-            ILogger<AbdmAbhaService> logger)
+            ILogger<AbdmAbhaService> logger,
+            IAbdmM1CallLog calls,
+            AbdmCallScope callScope)
         {
+            _calls = calls;
+            _callScope = callScope;
             _httpClient = httpClient;
             _gatewayService = gatewayService;
             _encryptionService = encryptionService;
@@ -562,9 +568,35 @@ namespace EasyHMSAPI.Application.Services.Implementations
             return request;
         }
 
+        /// <summary>Sends the call and writes it to the hospital's activity log with its REQUEST-ID
+        /// and outcome, so each M1 test case can be traced.</summary>
+        private async Task<AbdmResponse> SendLoggedAsync(Func<Task<HttpRequestMessage>> buildRequest, CancellationToken cancellationToken)
+        {
+            string? path = null;
+            var sentAt = DateTime.UtcNow;
+            async Task<HttpRequestMessage> Build()
+            {
+                var request = await buildRequest();
+                path = request.RequestUri?.AbsolutePath;
+                return request;
+            }
+
+            try
+            {
+                var response = await AbdmHttp.SendAsync(_httpClient, _gatewayService, _logger, Build, cancellationToken);
+                await _calls.RecordAsync(_callScope.HospitalId, response.RequestId, path, response.StatusCode, null, null, sentAt, cancellationToken);
+                return response;
+            }
+            catch (AbdmException ex)
+            {
+                await _calls.RecordAsync(_callScope.HospitalId, ex.RequestId, path, ex.StatusCode, ex.Code, ex.Message, sentAt, cancellationToken);
+                throw;
+            }
+        }
+
         private async Task<JsonDocument> SendAsync(Func<Task<HttpRequestMessage>> buildRequest, CancellationToken cancellationToken)
         {
-            var response = await AbdmHttp.SendAsync(_httpClient, _gatewayService, _logger, buildRequest, cancellationToken);
+            var response = await SendLoggedAsync(buildRequest, cancellationToken);
             var body = response.BodyText;
             return JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
         }
@@ -574,7 +606,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
         /// unchanged so the caller doesn't have to guess between image/png and application/pdf.</summary>
         private async Task<AbdmBinaryResult> SendBinaryAsync(Func<Task<HttpRequestMessage>> buildRequest, CancellationToken cancellationToken)
         {
-            var response = await AbdmHttp.SendAsync(_httpClient, _gatewayService, _logger, buildRequest, cancellationToken);
+            var response = await SendLoggedAsync(buildRequest, cancellationToken);
             return new AbdmBinaryResult
             {
                 Content = response.Body,
