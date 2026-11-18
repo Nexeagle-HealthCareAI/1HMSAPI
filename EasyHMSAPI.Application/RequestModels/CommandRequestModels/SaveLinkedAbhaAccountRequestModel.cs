@@ -13,6 +13,10 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public Guid HospitalId { get; set; }
         /// <summary>From login/verify-otp. Required: the account is saved from the profile ABDM returned for that token.</summary>
         public string? LinkToken { get; set; }
+        /// <summary>Instead of a LinkToken: a profile the patient shared by scanning this hospital's
+        /// counter QR. ABDM delivered that profile to us, so it needs no OTP; it is read from our
+        /// own record of the share, never from this request.</summary>
+        public Guid? ProfileShareId { get; set; }
         // The fields below are accepted for older clients but IGNORED: nothing the client sends is stored.
         public string AbhaNumber { get; set; } = string.Empty;
         public string? AbhaAddress { get; set; }

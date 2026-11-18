@@ -2,6 +2,7 @@ using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace EasyHMSAPI.Application.Services
@@ -23,6 +24,13 @@ namespace EasyHMSAPI.Application.Services
         /// (or being linked) yet, each with a care context row — created here when the visit has
         /// none. This is what a discovery may offer.</summary>
         Task<IReadOnlyList<AbdmCareContext>> UnlinkedForPatientAsync(Guid hospitalId, string patientId, CancellationToken cancellationToken);
+        /// <summary>Tells ABDM that a linked visit or admission now holds a kind of record it did not
+        /// hold when it was linked (a lab report that came back later, a discharge summary signed
+        /// since). False when nothing new was found, so nothing was sent.</summary>
+        Task<bool> NotifyChangedAsync(Guid hospitalId, Guid careContextId, CancellationToken cancellationToken);
+        /// <summary>NotifyChangedAsync for every recently linked care context of every hospital.
+        /// Returns how many notices went out. Run regularly (AbdmHiuSweepBackgroundService).</summary>
+        Task<int> NotifyChangedSweepAsync(DateTime nowUtc, CancellationToken cancellationToken);
     }
 
     /// <summary>
@@ -34,6 +42,13 @@ namespace EasyHMSAPI.Application.Services
     {
         private const string GenerateTokenPath = "/api/hiecm/v3/token/generate-token";
         private const string LinkCareContextPath = "/api/hiecm/hip/v3/link/carecontext";
+        private const string ContextNotifyPath = "/api/hiecm/hip/v3/link/context/notify";
+        private const string SmsNotifyPath = "/api/hiecm/hip/v3/link/patient/links/sms/notify2";
+        /// <summary>Set to "false" to stop the SMS ABDM sends the patient after a visit is linked.</summary>
+        public const string SendLinkSmsKey = "Abdm:SendLinkSms";
+        /// <summary>How long after linking a care context is still checked for new kinds of record.</summary>
+        public static readonly TimeSpan ChangeWindow = TimeSpan.FromDays(90);
+        private const int MaxChangeChecksPerSweep = 200;
         // A discovery offers the most recent visits; older ones can still be linked from the visit itself.
         private const int MaxDiscoverablePerKind = 25;
 
@@ -41,11 +56,14 @@ namespace EasyHMSAPI.Application.Services
         private readonly IAbdmHieService _hie;
         private readonly ILogger<AbdmLinkingService> _logger;
 
-        public AbdmLinkingService(AppDbContext db, IAbdmHieService hie, ILogger<AbdmLinkingService> logger)
+        private readonly bool _sendLinkSms;
+
+        public AbdmLinkingService(AppDbContext db, IAbdmHieService hie, ILogger<AbdmLinkingService> logger, IConfiguration? configuration = null)
         {
             _db = db;
             _hie = hie;
             _logger = logger;
+            _sendLinkSms = !string.Equals(configuration?[SendLinkSmsKey], "false", StringComparison.OrdinalIgnoreCase);
         }
 
         public async Task<AbdmCareContext> StartAsync(Guid hospitalId, string sourceType, Guid sourceId, string? userName, CancellationToken cancellationToken)
@@ -217,7 +235,111 @@ namespace EasyHMSAPI.Application.Services
             careContext.LinkedAt = DateTime.UtcNow;
             careContext.LinkExchangeId ??= exchange.ExchangeId;
             careContext.UpdatedAt = DateTime.UtcNow;
-            await SaveIfStillOursAsync(cancellationToken);
+            if (await SaveIfStillOursAsync(cancellationToken))
+                await TrySendLinkSmsAsync(careContext, cancellationToken);
+        }
+
+        // ---- after linking: the SMS, and later changes ---------------------------------------
+
+        /// <summary>Asks ABDM to text the patient that records were linked, with its link to the ABHA
+        /// app. Sent once, when the hospital links a visit. A failure never undoes the link.</summary>
+        private async Task TrySendLinkSmsAsync(AbdmCareContext careContext, CancellationToken cancellationToken)
+        {
+            if (!_sendLinkSms)
+                return;
+            try
+            {
+                var mobile = AbdmCareContextRules.Mobile10(await _db.PatientRegistrations.AsNoTracking()
+                    .Where(p => p.HospitalId == careContext.HospitalId && p.PatientId == careContext.PatientId)
+                    .Select(p => p.Mobile)
+                    .FirstOrDefaultAsync(cancellationToken));
+                if (mobile == null)
+                    return;
+                var hipId = await _db.AbdmFacilities.AsNoTracking().Where(f => f.HospitalId == careContext.HospitalId).Select(f => f.HipId).FirstOrDefaultAsync(cancellationToken);
+                var hospitalName = await _db.Hospitals.AsNoTracking().Where(h => h.HospitalID == careContext.HospitalId).Select(h => h.Name).FirstOrDefaultAsync(cancellationToken);
+                await _hie.SendAsync(new AbdmHieCall
+                {
+                    Kind = "link-sms",
+                    Path = SmsNotifyPath,
+                    HospitalId = careContext.HospitalId,
+                    SubjectRef = careContext.ReferenceNumber,
+                    ExpectsCallback = true,
+                    FacilityHeader = AbdmFacilityHeader.None,
+                    Body = new { notification = new { phoneNo = mobile, hip = new { id = hipId, name = hospitalName } } }
+                }, cancellationToken);
+            }
+            catch (AbdmException ex)
+            {
+                _logger.LogWarning("ABDM link SMS for care context {Reference} was refused: {Code}.", careContext.ReferenceNumber, ex.Code ?? "none");
+            }
+        }
+
+        public async Task<bool> NotifyChangedAsync(Guid hospitalId, Guid careContextId, CancellationToken cancellationToken)
+        {
+            var careContext = await _db.AbdmCareContexts.FirstOrDefaultAsync(
+                c => c.HospitalId == hospitalId && c.CareContextId == careContextId && c.LinkStatus == AbdmLinkStatus.Linked, cancellationToken);
+            if (careContext == null || string.IsNullOrWhiteSpace(careContext.AbhaAddress))
+                return false;
+
+            var now = await HiTypesAsync(hospitalId, careContext.SourceType, careContext.SourceId, cancellationToken);
+            var added = AbdmCareContextRules.AddedHiTypes(careContext.HiTypes, now);
+            if (added.Count == 0)
+                return false;
+
+            // Recorded first: if the notice is refused it is not sent again every hour, and the
+            // refusal is on the exchange list with its reason.
+            careContext.HiTypes = string.Join(',', AbdmCareContextRules.MergeHiTypes(careContext.HiTypes, now));
+            careContext.UpdatedAt = DateTime.UtcNow;
+            if (!await SaveIfStillOursAsync(cancellationToken))
+                return false;
+
+            var hipId = await _db.AbdmFacilities.AsNoTracking().Where(f => f.HospitalId == hospitalId).Select(f => f.HipId).FirstOrDefaultAsync(cancellationToken);
+            try
+            {
+                await _hie.SendAsync(new AbdmHieCall
+                {
+                    Kind = "link-context-notify",
+                    Path = ContextNotifyPath,
+                    HospitalId = hospitalId,
+                    SubjectRef = careContext.ReferenceNumber,
+                    ExpectsCallback = true,
+                    Body = new
+                    {
+                        notification = new
+                        {
+                            patient = new { id = careContext.AbhaAddress },
+                            careContext = new { patientReference = careContext.PatientId, careContextReference = careContext.ReferenceNumber },
+                            hiTypes = added,
+                            date = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", System.Globalization.CultureInfo.InvariantCulture),
+                            hip = new { id = hipId }
+                        }
+                    }
+                }, cancellationToken);
+                return true;
+            }
+            catch (AbdmException ex)
+            {
+                _logger.LogWarning("ABDM was not told that care context {Reference} changed: {Code}.", careContext.ReferenceNumber, ex.Code ?? "none");
+                return false;
+            }
+        }
+
+        public async Task<int> NotifyChangedSweepAsync(DateTime nowUtc, CancellationToken cancellationToken)
+        {
+            var since = nowUtc - ChangeWindow;
+            var recent = await _db.AbdmCareContexts.AsNoTracking()
+                .Where(c => c.LinkStatus == AbdmLinkStatus.Linked && c.LinkedAt != null && c.LinkedAt >= since && c.AbhaAddress != null)
+                .OrderByDescending(c => c.LinkedAt)
+                .Select(c => new { c.HospitalId, c.CareContextId })
+                .Take(MaxChangeChecksPerSweep)
+                .ToListAsync(cancellationToken);
+            var sent = 0;
+            foreach (var item in recent)
+            {
+                if (await NotifyChangedAsync(item.HospitalId, item.CareContextId, cancellationToken))
+                    sent++;
+            }
+            return sent;
         }
 
         public async Task<IReadOnlyList<AbdmCareContext>> UnlinkedForPatientAsync(Guid hospitalId, string patientId, CancellationToken cancellationToken)

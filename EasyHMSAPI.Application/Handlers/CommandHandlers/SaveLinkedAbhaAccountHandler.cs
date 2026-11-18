@@ -29,6 +29,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
             // The profile must come from ABDM (verified by OTP in this session), not from the request body. One use per token.
             var verified = _proofs.Consume(request.LinkToken, request.CallerUserId, request.HospitalId);
+            var source = "Login";
+            if (verified == null && request.ProfileShareId is Guid shareId && shareId != Guid.Empty)
+            {
+                // A counter-QR share: ABDM sent us this profile after the patient agreed in their ABHA app.
+                var share = await _context.AbdmProfileShares.AsNoTracking().FirstOrDefaultAsync(
+                    s => s.ProfileShareId == shareId && s.HospitalId == request.HospitalId, cancellationToken);
+                if (share == null || string.IsNullOrWhiteSpace(share.AbhaNumber))
+                    return new SaveAbhaAccountResponseModel { Success = false, Message = "That counter scan was not found, or it carries no ABHA number." };
+                verified = new VerifiedAbhaProfile(share.AbhaNumber!, share.AbhaAddress, share.FullName, share.Gender, share.DateOfBirth, share.Mobile);
+                source = "ScanShare";
+            }
             if (verified == null)
                 return new SaveAbhaAccountResponseModel { Success = false, Message = "Verify the ABHA with an OTP first. The verification has expired or was already used." };
 
@@ -56,7 +67,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 Gender = verified.Gender,
                 DateOfBirth = verified.DateOfBirth,
                 Mobile = verified.Mobile,
-                Source = "Login",
+                Source = source,
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = request.LoggedInUserName
             };

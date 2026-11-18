@@ -28,6 +28,9 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         private IAbhaLinkProofStore _proofs = null!;
         private Guid _hospitalId, _staff, _otherStaff;
 
+        // A number that passes the check digit, worked out here so that no Aadhaar-looking number is written in the repository.
+        private static readonly string TestAadhaar = Enumerable.Range(0, 10).Select(d => "23456789012" + d).First(AbdmLoginRules.IsValidAadhaar);
+
         [SetUp]
         public void SetUp()
         {
@@ -62,7 +65,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 
         private GenerateAadhaarOtpRequestModel OtpRequest(Guid? consentId, Guid? caller = null, Guid? hospital = null) => new()
         {
-            HospitalId = hospital ?? _hospitalId, AadhaarNumber = "123456789012", ConsentId = consentId, CallerUserId = caller ?? _staff,
+            HospitalId = hospital ?? _hospitalId, AadhaarNumber = TestAadhaar, ConsentId = consentId, CallerUserId = caller ?? _staff,
         };
 
         [Test]
@@ -105,7 +108,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task Otp_WithValidConsent_Proceeds_AndTheConsentRecordsTheUse()
         {
-            _abha.Setup(a => a.GenerateAadhaarOtpAsync("123456789012", It.IsAny<CancellationToken>())).ReturnsAsync(new AbdmOtpTxnResult { TxnId = "txn-1" });
+            _abha.Setup(a => a.GenerateAadhaarOtpAsync(TestAadhaar, It.IsAny<CancellationToken>())).ReturnsAsync(new AbdmOtpTxnResult { TxnId = "txn-1" });
             var id = await RecordConsent();
 
             var response = await OtpHandler().Handle(OtpRequest(id), CancellationToken.None);
@@ -224,6 +227,46 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 
             Assert.That(noToken.Success, Is.False);
             Assert.That(madeUp.Success, Is.False);
+            Assert.That(_context.AbhaAccount.Any(), Is.False);
+        }
+
+        [Test]
+        public async Task Link_FromACounterScan_StoresWhatAbdmDelivered_AndNeedsNoOtp()
+        {
+            var shareId = Guid.NewGuid();
+            _context.AbdmProfileShares.Add(new AbdmProfileShare
+            {
+                ProfileShareId = shareId, HospitalId = _hospitalId, HipId = "IN2810014366", RequestId = "r-1", ReceivedAt = DateTime.UtcNow,
+                AbhaNumber = "91-1234-5678-9012", AbhaAddress = "asha@abdm", FullName = "Asha Rao", Gender = "F", DateOfBirth = "1990-01-01", Mobile = "9876543210",
+            });
+            _context.SaveChanges();
+            var request = LinkRequest(null);
+            request.ProfileShareId = shareId;
+
+            var response = await LinkHandler().Handle(request, CancellationToken.None);
+
+            Assert.That(response.Success, Is.True, response.Message);
+            var saved = _context.AbhaAccount.Single();
+            Assert.That(saved.AbhaNumber, Is.EqualTo("91-1234-5678-9012"));
+            Assert.That(saved.FullName, Is.EqualTo("Asha Rao"), "from the share, not from the request");
+            Assert.That(saved.Source, Is.EqualTo("ScanShare"));
+        }
+
+        [Test]
+        public async Task Link_FromAnotherHospitalsScan_OrAScanWithNoAbhaNumber_IsRefused()
+        {
+            var elsewhere = Guid.NewGuid();
+            var noNumber = Guid.NewGuid();
+            _context.AbdmProfileShares.Add(new AbdmProfileShare { ProfileShareId = elsewhere, HospitalId = Guid.NewGuid(), HipId = "x", RequestId = "r-1", ReceivedAt = DateTime.UtcNow, AbhaNumber = "91-1234-5678-9012" });
+            _context.AbdmProfileShares.Add(new AbdmProfileShare { ProfileShareId = noNumber, HospitalId = _hospitalId, HipId = "x", RequestId = "r-2", ReceivedAt = DateTime.UtcNow, AbhaAddress = "asha@abdm" });
+            _context.SaveChanges();
+
+            foreach (var id in new[] { elsewhere, noNumber, Guid.NewGuid() })
+            {
+                var request = LinkRequest(null);
+                request.ProfileShareId = id;
+                Assert.That((await LinkHandler().Handle(request, CancellationToken.None)).Success, Is.False);
+            }
             Assert.That(_context.AbhaAccount.Any(), Is.False);
         }
 

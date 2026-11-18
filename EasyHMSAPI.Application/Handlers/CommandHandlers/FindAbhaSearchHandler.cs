@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
@@ -18,6 +19,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         {
             if (string.IsNullOrWhiteSpace(request.Value))
                 return new AbdmFindAbhaSearchResponseModel { Success = false, Message = "Enter a mobile or Aadhaar number." };
+            if (string.Equals(request.SearchBy, AbdmLoginRules.HintAadhaar, StringComparison.OrdinalIgnoreCase) && !AbdmLoginRules.IsValidAadhaar(request.Value))
+                return new AbdmFindAbhaSearchResponseModel { Success = false, Message = "That is not a valid Aadhaar number. Check the 12 digits and try again." };
 
             try
             {
