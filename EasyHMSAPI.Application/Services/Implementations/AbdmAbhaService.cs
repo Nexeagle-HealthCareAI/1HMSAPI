@@ -160,13 +160,70 @@ namespace EasyHMSAPI.Application.Services.Implementations
             var encrypted = await _encryptionService.EncryptAsync(loginId, cancellationToken);
             var payload = new
             {
-                scope = new[] { "abha-login", loginHint == "aadhaar" ? "aadhaar-verify" : "mobile-verify" },
+                // The second element follows where the OTP goes, not how the account was named: an
+                // ABHA number can be verified by an OTP to the Aadhaar mobile too (VRFY_ABHA_101).
+                scope = AbdmLoginRules.Scope(loginHint, otpSystem),
                 loginHint,
                 loginId = encrypted,
-                otpSystem
+                otpSystem = AbdmLoginRules.NormaliseOtpSystem(otpSystem, loginHint)
             };
             var doc = await PostAsync("/profile/login/request/otp", payload, cancellationToken);
             return ReadOtpTxnResult(doc);
+        }
+
+        // ---- Verify by ABHA address (VRFY_ABHA_102 and 202): its own three calls on the same host ----
+
+        public async Task<AbdmOtpTxnResult> RequestAbhaAddressLoginOtpAsync(string abhaAddress, string otpSystem, CancellationToken cancellationToken)
+        {
+            // Search first: an address nobody holds is answered here ("User not found", ABDM-1211),
+            // before any OTP is asked for.
+            await PostAsync(AbdmLoginRules.AddressSearchPath, new { abhaAddress }, cancellationToken);
+
+            var encrypted = await _encryptionService.EncryptAsync(abhaAddress, cancellationToken);
+            var payload = new
+            {
+                scope = AbdmLoginRules.Scope(AbdmLoginRules.HintAbhaAddress, otpSystem),
+                loginHint = AbdmLoginRules.HintAbhaAddress,
+                loginId = encrypted,
+                otpSystem = AbdmLoginRules.NormaliseOtpSystem(otpSystem, null)
+            };
+            var doc = await PostAsync(AbdmLoginRules.AddressRequestOtpPath, payload, cancellationToken);
+            return ReadOtpTxnResult(doc);
+        }
+
+        public async Task<AbdmProfileResult> VerifyAbhaAddressLoginOtpAsync(string txnId, string otp, string otpSystem, string abhaAddress, CancellationToken cancellationToken)
+        {
+            var encryptedOtp = await _encryptionService.EncryptAsync(otp, cancellationToken);
+            var payload = new
+            {
+                scope = AbdmLoginRules.Scope(AbdmLoginRules.HintAbhaAddress, otpSystem),
+                authData = new
+                {
+                    authMethods = new[] { "otp" },
+                    otp = new { txnId, otpValue = encryptedOtp }
+                }
+            };
+            using var verified = await PostAsync(AbdmLoginRules.AddressVerifyPath, payload, cancellationToken);
+            var failure = AbdmLoginRules.Failure(verified.RootElement);
+            if (failure != null)
+                throw new InvalidOperationException(failure);
+
+            var token = AbdmLoginRules.ReadToken(verified.RootElement);
+            if (string.IsNullOrWhiteSpace(token))
+                return AbdmLoginRules.ReadAddressProfile(verified.RootElement, txnId, abhaAddress);
+            CacheXToken(txnId, token);
+
+            using var profile = await SendAsync(() => BuildRequestAsync(HttpMethod.Get, AbdmLoginRules.AddressProfilePath, null, cancellationToken, token), cancellationToken);
+            var result = AbdmLoginRules.ReadAddressProfile(profile.RootElement, txnId, abhaAddress);
+            if (string.IsNullOrWhiteSpace(result.AbhaNumber))
+            {
+                // Some profile answers leave the number out; the verify answer lists the accounts.
+                var fromVerify = AbdmLoginRules.ReadAddressProfile(verified.RootElement, txnId, abhaAddress);
+                result.AbhaNumber = fromVerify.AbhaNumber;
+                if (string.IsNullOrWhiteSpace(result.FullName))
+                    result.FullName = fromVerify.FullName;
+            }
+            return result;
         }
 
         public async Task<AbdmProfileResult> VerifyLoginOtpAsync(string txnId, string otp, string loginHint, CancellationToken cancellationToken)
@@ -340,7 +397,8 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
         public async Task<AbdmOtpTxnResult> RequestDeactivateOtpAsync(string sessionTxnId, string abhaNumber, string otpSystem, CancellationToken cancellationToken)
         {
-            var encrypted = await _encryptionService.EncryptAsync(abhaNumber, cancellationToken);
+            // With its dashes: ABDM refuses the bare 14 digits.
+            var encrypted = await _encryptionService.EncryptAsync(AbdmLoginRules.DashedAbhaNumber(abhaNumber) ?? abhaNumber, cancellationToken);
             var payload = new
             {
                 scope = new[] { "abha-profile", "de-activate" },
@@ -371,7 +429,8 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
         public async Task<AbdmOtpTxnResult> RequestReactivateOtpAsync(string abhaNumber, CancellationToken cancellationToken)
         {
-            var encrypted = await _encryptionService.EncryptAsync(abhaNumber, cancellationToken);
+            // With its dashes: ABDM refuses the bare 14 digits.
+            var encrypted = await _encryptionService.EncryptAsync(AbdmLoginRules.DashedAbhaNumber(abhaNumber) ?? abhaNumber, cancellationToken);
             var payload = new
             {
                 scope = new[] { "abha-login", "mobile-verify", "re-activate" },

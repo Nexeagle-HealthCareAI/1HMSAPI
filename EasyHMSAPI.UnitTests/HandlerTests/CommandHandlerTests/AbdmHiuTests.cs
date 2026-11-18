@@ -360,5 +360,139 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(await Service().GetRecordAsync(other, _db.AbdmReceivedRecords.Single().ReceivedRecordId, CancellationToken.None), Is.Null);
             Assert.That(await Service().ListConsentsAsync(other, null, CancellationToken.None), Is.Empty);
         }
+    
+        // ---------------------------------------------------------------- checking where a request stands
+
+        private AbdmHiuService ServiceWith(Mock<IAbdmDataPushClient> push)
+        {
+            var configuration = new Mock<IConfiguration>();
+            configuration.Setup(c => c["Abdm:PublicBaseUrl"]).Returns("https://api.example.org");
+            return new AbdmHiuService(_db, _hie.Object, configuration.Object, NullLogger<AbdmHiuService>.Instance, push.Object);
+        }
+
+        private async Task<AbdmConsent> AskedAsync()
+        {
+            var service = Service();
+            await service.RequestConsentAsync(Ask(), CancellationToken.None);
+            await service.OnConsentInitAnsweredAsync(Answer("consent-init", new { consentRequest = new { id = "creq-1" }, response = new { requestId = "x" } }), CancellationToken.None);
+            return _db.AbdmConsents.Single();
+        }
+
+        [Test]
+        public async Task AStatusAnswerThatCarriesArtefacts_IsFollowedUp_AndTheRecordsAreAskedForOnce()
+        {
+            var consent = await AskedAsync();
+            _calls.Clear();
+
+            var check = await Service().CheckAsync(_hospitalId, consent.ConsentRowId, CancellationToken.None);
+
+            Assert.That(check.ConsentAsked, Is.True);
+            Assert.That(check.TransferStatus, Is.Null);
+            var ask = _calls.Single();
+            Assert.That(ask.Path, Does.EndWith("consent/v3/request/status"));
+            Assert.That(ask.FacilityHeader, Is.EqualTo(AbdmFacilityHeader.Hiu));
+            Assert.That(Body(ask).GetProperty("consentRequestId").GetString(), Is.EqualTo("creq-1"));
+
+            var answer = Answer("consent-status", new { consentRequest = new { id = "creq-1", status = "GRANTED", consentArtefacts = new[] { new { id = "art-1" } } }, response = new { requestId = "x" } });
+            await Service().OnConsentStatusAnsweredAsync(answer, CancellationToken.None);
+
+            var row = _db.AbdmConsents.Single();
+            Assert.That(row.Status, Is.EqualTo(AbdmConsentStatus.Granted));
+            Assert.That(row.ConsentId, Is.EqualTo("art-1"));
+            Assert.That(_calls.Count(c => c.Kind == "consent-fetch"), Is.EqualTo(1));
+
+            // The same answer again (a second check) fetches nothing twice.
+            await Service().OnConsentStatusAnsweredAsync(answer, CancellationToken.None);
+            Assert.That(_calls.Count(c => c.Kind == "consent-fetch"), Is.EqualTo(1));
+        }
+
+        [TestCase("REQUESTED", AbdmConsentStatus.Requested, Description = "the patient has not answered: nothing changes")]
+        [TestCase("GRANTED", AbdmConsentStatus.Requested, Description = "not an answer ABDM lists here, and no artefact to fetch: nothing changes")]
+        [TestCase("REVOKED", AbdmConsentStatus.Revoked)]
+        [TestCase("DENIED", AbdmConsentStatus.Denied)]
+        [TestCase("EXPIRED", AbdmConsentStatus.Expired)]
+        public async Task AStatusAnswer_IsWrittenToTheRequest(string answered, string expected)
+        {
+            var consent = await AskedAsync();
+            await Service().CheckAsync(_hospitalId, consent.ConsentRowId, CancellationToken.None);
+
+            await Service().OnConsentStatusAnsweredAsync(Answer("consent-status", new { consentRequest = new { id = "creq-1", status = answered }, response = new { requestId = "x" } }), CancellationToken.None);
+
+            Assert.That(_db.AbdmConsents.Single().Status, Is.EqualTo(expected));
+            Assert.That(_calls.Any(c => c.Kind == "consent-fetch"), Is.False);
+        }
+
+        [Test]
+        public async Task ACheck_AlsoReadsTheStateOfTheTransfer_WithAGet()
+        {
+            await GrantedAndRequestedAsync();
+            _calls.Clear();
+            _hie.Setup(h => h.SendAsync(It.Is<AbdmHieCall>(c => c.Kind == "hi-request-status"), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((AbdmHieCall call, CancellationToken _) =>
+                {
+                    _calls.Add(call);
+                    return new AbdmHieResult { ExchangeId = Guid.NewGuid(), RequestId = "r", HttpStatus = 200, Body = "{\"transactionId\":\"txn-5\",\"status\":\"Transferred\"}" };
+                });
+
+            var check = await Service().CheckAsync(_hospitalId, _db.AbdmConsents.Single().ConsentRowId, CancellationToken.None);
+
+            Assert.That(check.TransferStatus, Is.EqualTo("TRANSFERRED"));
+            var status = _calls.Single(c => c.Kind == "hi-request-status");
+            Assert.That(status.Method, Is.EqualTo(System.Net.Http.HttpMethod.Get));
+            Assert.That(status.Path, Does.EndWith("health-information/request/status/txn-5"));
+        }
+
+        [Test]
+        public void CheckingAnotherHospitalsRequest_IsRefused()
+        {
+            Assert.ThrowsAsync<AbdmHiuRefusedException>(() => Service().CheckAsync(_hospitalId, Guid.NewGuid(), CancellationToken.None));
+            Assert.That(_calls, Is.Empty);
+        }
+
+        // ---------------------------------------------------------------- a record sent as a link
+
+        [Test]
+        public async Task ARecordSentAsALink_IsFetched_Decrypted_AndKept()
+        {
+            var transfer = await GrantedAndRequestedAsync();
+            var inline = JsonDocument.Parse(Push(transfer)).RootElement;
+            var encrypted = inline.GetProperty("entries")[0].GetProperty("content").GetString()!;
+            var body = JsonSerializer.Serialize(new
+            {
+                pageNumber = 1, pageCount = 1, transactionId = transfer.TransactionId,
+                entries = new[] { new { link = "https://records.other-hospital.example/r/1", media = "application/fhir+json", checksum = "x", careContextReference = "EP-1" } },
+                keyMaterial = JsonSerializer.Deserialize<object>(inline.GetProperty("keyMaterial").GetRawText())
+            });
+            var push = new Mock<IAbdmDataPushClient>();
+            push.Setup(p => p.FetchAsync("https://records.other-hospital.example/r/1", It.IsAny<CancellationToken>())).ReturnsAsync(encrypted);
+
+            Assert.That(await ServiceWith(push).ReceiveDataAsync(transfer.PushToken!, body, CancellationToken.None), Is.True);
+
+            Assert.That(_db.AbdmReceivedRecords.Single().BundleJson, Is.EqualTo(Bundle));
+            Assert.That(_db.AbdmDataTransfers.Single().Status, Is.EqualTo(AbdmTransferStatus.Transferred));
+        }
+
+        [Test]
+        public async Task ALinkThatCannotBeRead_IsReportedAsNotReceived_AndNothingIsKept()
+        {
+            var transfer = await GrantedAndRequestedAsync();
+            var inline = JsonDocument.Parse(Push(transfer)).RootElement;
+            var body = JsonSerializer.Serialize(new
+            {
+                pageNumber = 1, pageCount = 1, transactionId = transfer.TransactionId,
+                entries = new[] { new { link = "https://10.0.0.5/r/1", media = "application/fhir+json", checksum = "x", careContextReference = "EP-1" } },
+                keyMaterial = JsonSerializer.Deserialize<object>(inline.GetProperty("keyMaterial").GetRawText())
+            });
+            var push = new Mock<IAbdmDataPushClient>();
+            push.Setup(p => p.FetchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync((string?)null);
+            _calls.Clear();
+
+            await ServiceWith(push).ReceiveDataAsync(transfer.PushToken!, body, CancellationToken.None);
+
+            Assert.That(_db.AbdmReceivedRecords.Any(), Is.False);
+            Assert.That(_db.AbdmDataTransfers.Single().Status, Is.EqualTo(AbdmTransferStatus.Failed));
+            var told = Body(_calls.Single(c => c.Kind == "hiu-hi-notify")).GetProperty("notification").GetProperty("statusNotification");
+            Assert.That(told.GetProperty("statusResponses")[0].GetProperty("hiStatus").GetString(), Is.EqualTo("ERRORED"));
+        }
     }
 }

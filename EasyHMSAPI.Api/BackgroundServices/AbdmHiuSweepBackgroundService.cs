@@ -31,6 +31,11 @@ namespace EasyHMSAPI.Api.BackgroundServices
                     var sweep = await scope.ServiceProvider.GetRequiredService<IAbdmHiuService>().SweepAsync(DateTime.UtcNow, stoppingToken);
                     if (sweep.RecordsErased > 0 || sweep.TransfersClosed > 0)
                         _logger.LogInformation("ABDM HIU sweep: {Records} received record(s) erased, {Transfers} transfer(s) closed.", sweep.RecordsErased, sweep.TransfersClosed);
+
+                    // HIP side: tell ABDM about records that were added to a visit after it was linked.
+                    var notices = await scope.ServiceProvider.GetRequiredService<IAbdmLinkingService>().NotifyChangedSweepAsync(DateTime.UtcNow, stoppingToken);
+                    if (notices > 0)
+                        _logger.LogInformation("ABDM sweep: {Notices} linked care context(s) reported as changed.", notices);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {

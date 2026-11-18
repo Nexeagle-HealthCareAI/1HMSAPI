@@ -36,6 +36,14 @@ namespace EasyHMSAPI.Application.Services.Interfaces
         /// ABDM validates strictly (a mismatch is rejected as "Invalid Scope").</param>
         Task<AbdmProfileResult> VerifyLoginOtpAsync(string txnId, string otp, string loginHint, CancellationToken cancellationToken);
 
+        /// <summary>Verify by ABHA address (name@abdm): checks the address exists, then sends the OTP
+        /// to the Aadhaar mobile ("aadhaar") or the ABHA mobile ("abdm").</summary>
+        Task<AbdmOtpTxnResult> RequestAbhaAddressLoginOtpAsync(string abhaAddress, string otpSystem, CancellationToken cancellationToken);
+
+        /// <summary>Completes an ABHA address login and reads the account behind it. The ABHA number
+        /// is empty when the address has no ABHA number linked.</summary>
+        Task<AbdmProfileResult> VerifyAbhaAddressLoginOtpAsync(string txnId, string otp, string otpSystem, string abhaAddress, CancellationToken cancellationToken);
+
         // ---- Profile updates — require a freshly-verified session (a TxnId from
         // VerifyLoginOtpAsync/VerifyAadhaarOtpAsync/VerifyMobileOtpAsync whose cached X-Token is
         // still valid, ~20 min) since ABDM requires live holder consent for any profile change. ----

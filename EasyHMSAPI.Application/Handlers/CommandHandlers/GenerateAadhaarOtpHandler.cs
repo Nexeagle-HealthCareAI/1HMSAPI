@@ -21,8 +21,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         public async Task<AbdmOtpTxnResponseModel> Handle(GenerateAadhaarOtpRequestModel request, CancellationToken cancellationToken)
         {
             var aadhaar = (request.AadhaarNumber ?? string.Empty).Replace(" ", string.Empty);
-            if (aadhaar.Length != 12 || !aadhaar.All(char.IsDigit))
-                return new AbdmOtpTxnResponseModel { Success = false, Message = "Enter a valid 12-digit Aadhaar number." };
+            // The check digit too: a mistyped number is refused here, before any call (CRT_ABHA_104).
+            if (!AbdmLoginRules.IsValidAadhaar(aadhaar))
+                return new AbdmOtpTxnResponseModel { Success = false, Message = "That is not a valid Aadhaar number. Check the 12 digits and try again." };
 
             // Consent first, enforced here and not only in the wizard: a direct API call cannot skip it or burn ABDM OTP quota.
             var now = DateTime.UtcNow;

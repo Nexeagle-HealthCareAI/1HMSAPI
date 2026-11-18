@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Services.Models;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services;
@@ -24,7 +25,18 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
             try
             {
-                var result = await _abha.VerifyLoginOtpAsync(request.TxnId, request.Otp, request.LoginHint, cancellationToken);
+                AbdmProfileResult result;
+                if (string.Equals(request.LoginHint, AbdmLoginRules.HintAbhaAddress, StringComparison.OrdinalIgnoreCase))
+                {
+                    var address = AbdmLoginRules.NormaliseAbhaAddress(request.LoginId);
+                    if (address == null)
+                        return new AbdmProfileResponseModel { Success = false, Message = "Enter the ABHA address the OTP was sent for, like name@abdm." };
+                    result = await _abha.VerifyAbhaAddressLoginOtpAsync(request.TxnId, request.Otp, request.OtpSystem ?? AbdmLoginRules.OtpAbdm, address, cancellationToken);
+                }
+                else
+                {
+                    result = await _abha.VerifyLoginOtpAsync(request.TxnId, request.Otp, request.LoginHint, cancellationToken);
+                }
                 string? linkToken = null;
                 if (request.CallerUserId != Guid.Empty && request.HospitalId != Guid.Empty && !string.IsNullOrWhiteSpace(result.AbhaNumber))
                     linkToken = _proofs.Issue(request.CallerUserId, request.HospitalId,
@@ -33,6 +45,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 {
                     LinkToken = linkToken,
                     Success = true,
+                    // Verified, but an address with no ABHA number behind it cannot be kept on a patient record.
+                    Message = string.IsNullOrWhiteSpace(result.AbhaNumber)
+                        ? "Verified, but this ABHA address has no ABHA number linked to it, so it cannot be saved against the patient. Ask the patient to link their ABHA number in the ABHA app, or verify by ABHA number instead."
+                        : null,
                     TxnId = result.TxnId,
                     AbhaNumber = result.AbhaNumber,
                     AbhaAddress = result.AbhaAddress,

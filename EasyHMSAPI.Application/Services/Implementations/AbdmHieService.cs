@@ -88,10 +88,9 @@ namespace EasyHMSAPI.Application.Services.Implementations
                     await _log.RecordAttemptAsync(exchange, requestId, cancellationToken);
 
                     var accessToken = await _gateway.GetAccessTokenAsync(cancellationToken);
-                    var request = new HttpRequestMessage(HttpMethod.Post, _host + call.Path)
-                    {
-                        Content = new StringContent(JsonSerializer.Serialize(call.Body, JsonOptions), Encoding.UTF8, "application/json")
-                    };
+                    var request = new HttpRequestMessage(call.Method, _host + call.Path);
+                    if (call.Method != HttpMethod.Get)
+                        request.Content = new StringContent(JsonSerializer.Serialize(call.Body, JsonOptions), Encoding.UTF8, "application/json");
                     request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
                     AbdmHttp.AddStandardHeaders(request, _cmId, requestId);
                     if (call.FacilityHeader == AbdmFacilityHeader.Hip)

@@ -54,4 +54,37 @@ logged REQUEST-ID, safe errors, one 401 retry) are reused by every M2 call.
 - **Phase 6** `Services/Fhir/AbdmFhir` (plain JSON, no `Hl7.Fhir.R4`) and `AbdmRecordSource`: Prescription, DiagnosticReport, DischargeSummary, WellnessRecord. **Tier 2 done 2026-11-17**: all four record types validate with 0 errors against the HL7 validator 7.0.6 with `ndhm.in#6.5.0` (warnings: no per-resource narrative). Tier 1 (`validate`) not run: it needs ABDM's docs tool. Lab results are sent as the report with its conclusion, not as coded Observations.
 - **Phase 7** `AbdmDataFlowService`: consent notify → on-notify; health-information request → on-request → push to `dataPushUrl` → notify. Tables `AbdmConsent`, `AbdmDataTransfer`. To confirm in the sandbox: the request and transfer body shapes, the checksum (MD5 of the plain bundle), and whether the push needs the gateway bearer token (not sent unless `Abdm:DataPushSendsGatewayToken` is `true`: the push goes to another facility). The push client follows no redirect and connects only to a public address, checked after DNS.
 - **M3** `AbdmHiuService`, `AbdmHiuController` (`abdm/hiu/*`), `AbdmHiuDataController` (`abdm-hiu/data-push/{token}`): consent init → on-init → notify → on-notify + fetch → on-fetch → health-information request → on-request → data push → notify. Received bundles are stored in `AbdmReceivedRecord` until the consent's `dataEraseAt`, and removed on revocation; `AbdmHiuSweepBackgroundService` erases past-date records hourly for every hospital and closes transfers that received nothing within 24 hours (key and push address discarded). The data push address is per transfer and does not contain the bridge secret.
-- Not built: `consent/v3/request/status` and `health-information/request/status` polling, `link/context/notify`, `sms/notify2`, paging beyond one page when sending, and entries delivered by `link` instead of inline content when receiving.
+- These were not built on 2026-11-17 and are now (see the last section): the two status calls, `link/context/notify`, `sms/notify2`, paging when sending, and entries delivered by `link`.
+
+## Gaps closed for the licence review (2026-11-18, compiled and unit tested; not yet run on the sandbox)
+
+Built against ABDM's own M1 case list (`.claude/skills/abdm-m1/references/test.md`) and the M2 / M3 operation lists. 237 ABDM unit tests pass.
+
+**M1**
+- **Verify by ABHA address** (VRFY_ABHA_102 Aadhaar OTP, VRFY_ABHA_202 mobile OTP): `/phr/web/login/abha/search` → `request/otp` → `verify` → `profile/abha-profile`, scope `abha-address-login`. `AbdmLoginRules` holds the scope and parsing; the desk picks where the OTP goes. An address with no ABHA number behind it verifies but cannot be saved, and says so.
+- **ABHA number by Aadhaar OTP** (VRFY_ABHA_101): the request scope now follows where the OTP goes (it was always `mobile-verify` for an ABHA number), and the screen offers the choice.
+- **Aadhaar check digit** (CRT_ABHA_104, VRFY_ABHA_401): Verhoeff, in the browser and again on the server, before any call.
+- **Resend OTP on the verify screen** (VRFY_ABHA_305): at most 2, 60 seconds apart, as on the create screen.
+- **"Just scanned at the counter" on the verify screen** now saves: `accounts/link` accepts `profileShareId` and reads the profile from our own record of the share (hospital-scoped), since a scan has no OTP proof.
+
+**M2**
+- **SMS after linking**: `link/patient/links/sms/notify2` once a hospital-initiated link is confirmed, with the patient's mobile and the facility name. `Abdm:SendLinkSms=false` turns it off. A refusal never undoes the link.
+- **A record added after linking**: `link/context/notify` with only the new record types. Checked hourly for care contexts linked in the last 90 days (`NotifyChangedSweepAsync`), and `NotifyChangedAsync` for one.
+- **Pages**: a transfer is sent as numbered pages of at most 20 records or about 4 MB, each with the same key material; a page the HIU refuses fails the transfer and ABDM is told.
+
+**M3**
+- **Where a request stands**: `consent/v3/request/status` (answer on `hiu/consent/request/on-status`) and `GET health-information/request/status/{transactionId}`, behind `POST abdm/hiu/consents/{id}/check` and a "Check with ABDM" button. An approval whose notice was lost is picked up, and its records are asked for once.
+- **A record sent as a link** is fetched (public addresses only, no redirects, 25 MB limit) and decrypted like an inline one.
+
+**Checked against ABDM's operation pages on 2026-11-18** (docs.abdm.gov.in, each operation's `.md` page)
+- ABHA address login: the verify answer carries `authResult`, `users[]` (`abhaAddress`, `fullName`, `abhaNumber`, `status`, `kycStatus`) and `tokens.token`; an expired OTP is also a 200, told by `authResult`. `abha-profile` returns `abhaAddress`, `fullName`, `abhaNumber`, `dateOfBirth` (and day / month / year), `gender`, `mobile`, `email`. The code reads exactly these.
+- `link/context/notify`: `careContext.patientReference` is "a patient identifier with which patient is registered in the facility", so our patient id is right (the example's ABHA address is a placeholder).
+- `sms/notify2` takes no `X-HIP-ID`, as sent.
+- `on-status`: `consentRequest.id` and `consentRequest.status`, as read. **Its statuses are REQUESTED, DENIED, EXPIRED and REVOKED only: no approval and no artefact ids.** So a status check recovers a refusal, expiry or withdrawal whose notice was lost, but not an approval; a GRANTED with no artefact is ignored.
+- From the portal's "Build with AI" rules: an ABHA number is encrypted with its dashes (the login, deactivate and reactivate calls now add them when typed without); error codes are compared with or without the trailing ": " (`AbdmHttp.NormaliseCode`, already so); the callback URL and credentials are one set for the bridge, not per hospital (already so); no number that passes the Aadhaar check digit is written in a test (the tests work one out).
+
+**Still to confirm on the sandbox**
+- `sms/notify2`: whether `phoneNo` wants ten digits (sent) or a +91 form. The page says only "the mobile number".
+- Everything end to end: none of this has been run against the sandbox.
+
+**Still not built**: OPD consultation note and immunisation record as their own record types (prescriptions, lab reports, discharge summaries and vitals are).

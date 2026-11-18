@@ -311,5 +311,114 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(careContext.LinkStatus, Is.EqualTo(AbdmLinkStatus.TokenRequested));
             Assert.That(careContext.LastErrorCode, Is.Null);
         }
+    
+        // ---------------------------------------------------------------- after linking
+
+        private async Task LinkedAsync(string? mobile = "9876543210")
+        {
+            AcceptEverySend();
+            _db.PatientRegistrations.Single().Mobile = mobile;
+            _db.Hospitals.Add(new Hospital { HospitalID = _hospitalId, Name = "City Hospital", Type = "Hospital", RegistrationNumber = "R-1", City = "Pune", Contact = "x", Country = "IN", Location = "x", Pincode = "411001", State = "MH" });
+            _db.AbdmLinkTokens.Add(new AbdmLinkToken { LinkTokenId = Guid.NewGuid(), HospitalId = _hospitalId, HipId = HipId, AbhaAddress = AbhaAddress, Token = Jwt(DateTime.UtcNow.AddHours(6)), ReceivedAt = DateTime.UtcNow });
+            _db.SaveChanges();
+            await Service().StartAsync(_hospitalId, "OPD", _apptId, "desk", CancellationToken.None);
+            await Service().OnLinkAnsweredAsync(Answer("link-carecontext", "{\"response\":{\"requestId\":\"x\"}}"), CancellationToken.None);
+        }
+
+        [Test]
+        public async Task OnceLinked_AbdmIsAskedToTextThePatient_Once()
+        {
+            await LinkedAsync("+91 98765 43210");
+
+            var sms = _calls.Single(c => c.Kind == "link-sms");
+            Assert.That(sms.Path, Does.EndWith("link/patient/links/sms/notify2"));
+            var notification = JsonDocument.Parse(JsonSerializer.Serialize(sms.Body)).RootElement.GetProperty("notification");
+            Assert.That(notification.GetProperty("phoneNo").GetString(), Is.EqualTo("9876543210"));
+            Assert.That(notification.GetProperty("hip").GetProperty("id").GetString(), Is.EqualTo(HipId));
+            Assert.That(notification.GetProperty("hip").GetProperty("name").GetString(), Is.EqualTo("City Hospital"));
+
+            // A second delivery of the same answer changes nothing and texts nobody again.
+            await Service().OnLinkAnsweredAsync(Answer("link-carecontext", "{\"response\":{\"requestId\":\"x\"}}"), CancellationToken.None);
+            Assert.That(_calls.Count(c => c.Kind == "link-sms"), Is.EqualTo(1));
+        }
+
+        [Test]
+        public async Task NoUsableMobile_NoText_AndTheLinkStillStands()
+        {
+            await LinkedAsync(mobile: "12345");
+
+            Assert.That(_calls.Any(c => c.Kind == "link-sms"), Is.False);
+            Assert.That(Row().LinkStatus, Is.EqualTo(AbdmLinkStatus.Linked));
+        }
+
+        [Test]
+        public async Task ARefusedText_DoesNotUndoTheLink()
+        {
+            await LinkedAsync(mobile: null);
+            _db.PatientRegistrations.Single().Mobile = "9876543210";
+            var row = Row();
+            row.LinkStatus = AbdmLinkStatus.LinkRequested;
+            _db.SaveChanges();
+            _hie.Setup(h => h.SendAsync(It.Is<AbdmHieCall>(c => c.Kind == "link-sms"), It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new AbdmException("refused", "ABDM-9999", 400, "r"));
+
+            await Service().OnLinkAnsweredAsync(Answer("link-carecontext", "{\"response\":{\"requestId\":\"x\"}}"), CancellationToken.None);
+
+            Assert.That(Row().LinkStatus, Is.EqualTo(AbdmLinkStatus.Linked));
+        }
+
+        [Test]
+        public async Task ARecordAddedAfterLinking_IsReportedOnce_AndOnlyTheNewKind()
+        {
+            await LinkedAsync(mobile: null);
+            _calls.Clear();
+
+            Assert.That(await Service().NotifyChangedAsync(_hospitalId, Row().CareContextId, CancellationToken.None), Is.False, "nothing new yet");
+            Assert.That(_calls, Is.Empty);
+
+            _db.AppointmentVitals.Add(new AppointmentVitals { VitalId = Guid.NewGuid(), HospitalId = _hospitalId, PatientId = PatientId, ApptId = _apptId, VitalsJson = "{}", RecordedAt = DateTime.UtcNow });
+            _db.SaveChanges();
+
+            Assert.That(await Service().NotifyChangedSweepAsync(DateTime.UtcNow, CancellationToken.None), Is.EqualTo(1));
+            var notice = _calls.Single();
+            Assert.That(notice.Path, Does.EndWith("hip/v3/link/context/notify"));
+            var body = JsonDocument.Parse(JsonSerializer.Serialize(notice.Body)).RootElement.GetProperty("notification");
+            Assert.That(body.GetProperty("patient").GetProperty("id").GetString(), Is.EqualTo(AbhaAddress));
+            Assert.That(body.GetProperty("careContext").GetProperty("careContextReference").GetString(), Is.EqualTo($"OPD-{_apptId:N}"));
+            Assert.That(body.GetProperty("hiTypes").EnumerateArray().Select(t => t.GetString()), Is.EqualTo(new[] { "WellnessRecord" }));
+            Assert.That(body.GetProperty("hip").GetProperty("id").GetString(), Is.EqualTo(HipId));
+            Assert.That(Row().HiTypes, Is.EqualTo("Prescription,WellnessRecord"));
+
+            Assert.That(await Service().NotifyChangedSweepAsync(DateTime.UtcNow, CancellationToken.None), Is.EqualTo(0), "told once");
+            Assert.That(_calls.Count, Is.EqualTo(1));
+        }
+
+        [Test]
+        public async Task AVisitThatIsNotLinked_OrWasLinkedLongAgo_IsNotReported()
+        {
+            await LinkedAsync(mobile: null);
+            _db.AppointmentVitals.Add(new AppointmentVitals { VitalId = Guid.NewGuid(), HospitalId = _hospitalId, PatientId = PatientId, ApptId = _apptId, VitalsJson = "{}", RecordedAt = DateTime.UtcNow });
+            var row = Row();
+            row.LinkedAt = DateTime.UtcNow - AbdmLinkingService.ChangeWindow - TimeSpan.FromDays(1);
+            _db.SaveChanges();
+            _calls.Clear();
+
+            Assert.That(await Service().NotifyChangedSweepAsync(DateTime.UtcNow, CancellationToken.None), Is.EqualTo(0));
+
+            row.LinkedAt = DateTime.UtcNow;
+            row.LinkStatus = AbdmLinkStatus.Failed;
+            _db.SaveChanges();
+            Assert.That(await Service().NotifyChangedAsync(_hospitalId, row.CareContextId, CancellationToken.None), Is.False);
+            Assert.That(_calls, Is.Empty);
+        }
+
+        [TestCase("9876543210", "9876543210")]
+        [TestCase("+91 98765-43210", "9876543210")]
+        [TestCase("09876543210", "9876543210")]
+        [TestCase("1234567890", null)]
+        [TestCase("98765", null)]
+        [TestCase(null, null)]
+        public void AMobile_IsTenDigits_OrNothing(string? typed, string? expected) =>
+            Assert.That(AbdmCareContextRules.Mobile10(typed), Is.EqualTo(expected));
     }
 }
