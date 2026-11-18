@@ -19,6 +19,11 @@ namespace EasyHMSAPI.Application.Services
         public const string OtpAadhaar = "aadhaar";
         public const string OtpAbdm = "abdm";
 
+        /// <summary>Verifying the mobile OTP after an ABHA is created (ABDM's "After ABHA creation -
+        /// verify mobile OTP"). The path has no "/verify" at the end and the scope is required.</summary>
+        public const string EnrolMobileVerifyPath = "/enrollment/auth/byAbdm";
+        public static readonly string[] EnrolMobileVerifyScope = { "abha-enrol", "mobile-verify" };
+
         public const string AddressSearchPath = "/phr/web/login/abha/search";
         public const string AddressRequestOtpPath = "/phr/web/login/abha/request/otp";
         public const string AddressVerifyPath = "/phr/web/login/abha/verify";

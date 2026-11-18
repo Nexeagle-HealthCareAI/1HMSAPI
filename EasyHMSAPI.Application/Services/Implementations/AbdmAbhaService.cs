@@ -128,13 +128,18 @@ namespace EasyHMSAPI.Application.Services.Implementations
             var encryptedOtp = await _encryptionService.EncryptAsync(otp, cancellationToken);
             var payload = new
             {
+                scope = AbdmLoginRules.EnrolMobileVerifyScope,
                 authData = new
                 {
                     authMethods = new[] { "otp" },
                     otp = new { txnId, otpValue = encryptedOtp }
                 }
             };
-            var doc = await PostAsync("/enrollment/auth/byAbdm/verify", payload, cancellationToken);
+            var doc = await PostAsync(AbdmLoginRules.EnrolMobileVerifyPath, payload, cancellationToken);
+            // A wrong or expired OTP is also a 200 here; authResult tells them apart.
+            var failure = AbdmLoginRules.Failure(doc.RootElement);
+            if (failure != null)
+                throw new InvalidOperationException(failure);
             return ReadEnrollResult(doc, txnId);
         }
 
