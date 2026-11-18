@@ -83,7 +83,18 @@ Built against ABDM's own M1 case list (`.claude/skills/abdm-m1/references/test.m
 - `on-status`: `consentRequest.id` and `consentRequest.status`, as read. **Its statuses are REQUESTED, DENIED, EXPIRED and REVOKED only: no approval and no artefact ids.** So a status check recovers a refusal, expiry or withdrawal whose notice was lost, but not an approval; a GRANTED with no artefact is ignored.
 - From the portal's "Build with AI" rules: an ABHA number is encrypted with its dashes (the login, deactivate and reactivate calls now add them when typed without); error codes are compared with or without the trailing ": " (`AbdmHttp.NormaliseCode`, already so); the callback URL and credentials are one set for the bridge, not per hospital (already so); no number that passes the Aadhaar check digit is written in a test (the tests work one out).
 
+**Patient-initiated linking and the data transfer, checked against ABDM's pages on 2026-11-18** (compiled and unit tested)
+- **Bug fixed: the confirm OTP.** ABDM documents `confirmation.token` as an integer. We read it only as text, so every OTP would have been refused. It is now read either way and padded to six digits; our OTP never starts with 0, because a number cannot carry a leading zero.
+- `communicationHint` is now `XXXXXX3210`: ABDM's pattern for the field has no asterisk.
+- "No patient here" is answered with `ABDM-1001` (No data found), not `ABDM-1010`, which ABDM publishes as "Validation failed". The other codes match their published messages: 1012, 1017, 1057, 1056, 1036, 1004.
+- `on-discover` is the one HIP answer whose page names `X-HIU-ID` as the facility header. It now carries the facility id as both `X-HIP-ID` and `X-HIU-ID`.
+- An ABHA address is `^[a-zA-Z0-9][a-zA-Z0-9_.]+[a-zA-Z0-9]@(abdm|sbx)$`; the desk and the server now use exactly this.
+- The data push sends the gateway token by default (`Abdm:DataPushSendsGatewayToken`, set to `false` to stop): the transfer page says the token is mandatory.
+- As HIU, a transfer ends at page n of n, or at its only page whichever way that is numbered (ABDM's example is 0 of 1). n-1 of n is not taken as the end: from a sender counting from 1, ours included, it is the page before the last. A sender counting from 0 over several pages leaves the transfer open; the hourly sweep closes it after 24 hours as Transferred, keeping its records (ABDM is not sent the data-received notice in that case).
+- Confirmed as built, no change: the discover, init, health-information request, on-request, transfer and notify bodies; the checksum is MD5 of the bundle before encryption; curve and parameters strings.
+
 **Still to confirm on the sandbox**
+- Whether the transfer's `pageNumber` starts at 0 or 1. We send from 1; ABDM's only example is `0` of `1`.
 - `sms/notify2`: whether `phoneNo` wants ten digits (sent) or a +91 form. The page says only "the mobile number".
 - Everything end to end: none of this has been run against the sandbox.
 

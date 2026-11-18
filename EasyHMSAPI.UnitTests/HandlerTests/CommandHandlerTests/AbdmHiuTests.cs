@@ -120,7 +120,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         /// <summary>What the other facility would push: the bundle encrypted for our key.</summary>
-        private string Push(AbdmDataTransfer transfer, string? content = null)
+        private string Push(AbdmDataTransfer transfer, string? content = null, int pageNumber = 1, int pageCount = 1)
         {
             var request = Body(_calls.Single(c => c.Kind == "hi-request")).GetProperty("hiRequest").GetProperty("keyMaterial");
             var hip = AbdmFidelius.NewKeyMaterial();
@@ -128,7 +128,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
                 request.GetProperty("dhPublicKey").GetProperty("keyValue").GetString()!, request.GetProperty("nonce").GetString()!);
             return JsonSerializer.Serialize(new
             {
-                pageNumber = 1, pageCount = 1, transactionId = transfer.TransactionId,
+                pageNumber, pageCount, transactionId = transfer.TransactionId,
                 entries = new[] { new { content = content ?? encrypted, media = "application/fhir+json", checksum = "x", careContextReference = "EP-1" } },
                 keyMaterial = new { cryptoAlg = "ECDH", curve = "curve25519", dhPublicKey = new { expiry = "2099-01-01T00:00:00.000Z", parameters = "x", keyValue = hip.PublicKey }, nonce = hip.Nonce }
             });
@@ -347,6 +347,40 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(await Service().ReceiveDataAsync("token", "{}", CancellationToken.None), Is.False, "the closed address takes nothing");
             Assert.That(fresh.Status, Is.EqualTo(AbdmTransferStatus.Requested));
             Assert.That(fresh.PrivateKey, Is.EqualTo("key"));
+        }
+
+        [Test]
+        public async Task ATransferCountedFrom1_StaysOpenUntilItsLastPage()
+        {
+            var transfer = await GrantedAndRequestedAsync();
+            var token = transfer.PushToken!;
+
+            Assert.That(await Service().ReceiveDataAsync(token, Push(transfer, pageNumber: 1, pageCount: 3), CancellationToken.None), Is.True);
+            Assert.That(await Service().ReceiveDataAsync(token, Push(transfer, pageNumber: 2, pageCount: 3), CancellationToken.None), Is.True);
+            Assert.That(transfer.Status, Is.EqualTo(AbdmTransferStatus.Requested), "page 2 of 3 is not the end");
+            Assert.That(await Service().ReceiveDataAsync(token, Push(transfer, pageNumber: 3, pageCount: 3), CancellationToken.None), Is.True);
+
+            Assert.That(transfer.Status, Is.EqualTo(AbdmTransferStatus.Transferred));
+            Assert.That(_db.AbdmReceivedRecords.Count(), Is.EqualTo(3));
+            Assert.That(transfer.PushToken, Is.Null, "the address closes after the last page");
+        }
+
+        [Test]
+        public async Task TheSweep_KeepsWhatArrived_WhenASenderNeverSentAnNofNPage()
+        {
+            var transfer = await GrantedAndRequestedAsync();
+            // Counted from 0: page 1 of 3 is the second page, and the third never says "3 of 3".
+            await Service().ReceiveDataAsync(transfer.PushToken!, Push(transfer, pageNumber: 0, pageCount: 3), CancellationToken.None);
+            await Service().ReceiveDataAsync(transfer.PushToken!, Push(transfer, pageNumber: 2, pageCount: 3), CancellationToken.None);
+            Assert.That(transfer.Status, Is.EqualTo(AbdmTransferStatus.Requested));
+
+            var sweep = await Service().SweepAsync(DateTime.UtcNow.AddHours(25), CancellationToken.None);
+
+            Assert.That(sweep.TransfersClosed, Is.EqualTo(1));
+            Assert.That(transfer.Status, Is.EqualTo(AbdmTransferStatus.Transferred));
+            Assert.That(transfer.ErrorMessage, Is.Null);
+            Assert.That(_db.AbdmReceivedRecords.Count(), Is.EqualTo(2), "nothing that arrived is lost");
+            Assert.That(new[] { transfer.PrivateKey, transfer.Nonce, transfer.PushToken }, Is.All.Null);
         }
 
         [Test]

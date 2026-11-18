@@ -60,6 +60,13 @@ namespace EasyHMSAPI.Application.Services
             return pages;
         }
 
+        /// <summary>Whether a pushed page ends its transfer: n of n, or a one-page transfer whichever way it is
+        /// numbered (ABDM's example is 0 of 1). n-1 of n is not taken as the end: from a sender that counts from 1
+        /// (ours does) it is the page before the last, and closing there would turn the last page away. A sender
+        /// that counts from 0 over several pages leaves the transfer open; the sweep closes it, keeping its records.</summary>
+        public static bool IsLastPage(int pageNumber, int pageCount) =>
+            pageCount <= 1 || pageNumber >= pageCount;
+
         public static DateTime? Date(string? value) =>
             DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var parsed) ? parsed : null;
 
@@ -285,8 +292,10 @@ namespace EasyHMSAPI.Application.Services
 
     public sealed class AbdmDataPushClient : IAbdmDataPushClient
     {
-        /// <summary>Whether the push carries our gateway token. Off unless set: the push goes to another facility's
-        /// server, and the token lets its holder call ABDM as us. Turn on only if the sandbox shows the push needs it.</summary>
+        /// <summary>Whether the push carries our gateway token. On unless set to "false": ABDM's page for the
+        /// transfer says "Authorisation token is mandatory for this API" and names the sessions token. The push goes
+        /// to another facility's server and the token lets its holder call ABDM as us until it expires, which is why
+        /// the push only ever goes to a public https address and never follows a redirect.</summary>
         public const string SendGatewayTokenKey = "Abdm:DataPushSendsGatewayToken";
 
         private readonly HttpClient _httpClient;
@@ -297,7 +306,7 @@ namespace EasyHMSAPI.Application.Services
         {
             _httpClient = httpClient;
             _gateway = gateway;
-            _sendGatewayToken = string.Equals(configuration[SendGatewayTokenKey], "true", StringComparison.OrdinalIgnoreCase);
+            _sendGatewayToken = !string.Equals(configuration[SendGatewayTokenKey], "false", StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>The push client's handler: never follows a redirect, and connects only to a public address,

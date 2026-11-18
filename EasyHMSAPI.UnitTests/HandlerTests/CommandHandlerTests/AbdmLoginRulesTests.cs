@@ -90,6 +90,8 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [TestCase("@abdm", null)]
         [TestCase("as@abdm", null, Description = "too short")]
         [TestCase("asha rao@abdm", null)]
+        [TestCase("asha@gmail", null, Description = "only @abdm and @sbx are ABHA addresses")]
+        [TestCase("asha.@abdm", null, Description = "must end with a letter or digit")]
         [TestCase("91-1234-5678-9012", null)]
         [TestCase(null, null)]
         public void AnAbhaAddress_IsCleanedOrRefused(string? typed, string? expected) =>

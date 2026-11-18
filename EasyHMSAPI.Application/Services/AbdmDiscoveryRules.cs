@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -233,7 +234,48 @@ namespace EasyHMSAPI.Application.Services
             }
         }
 
-        public static string NewOtp() => RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
+        /// <summary>Six digits that never start with 0: ABDM passes the OTP on as a JSON number,
+        /// which cannot carry a leading zero.</summary>
+        public static string NewOtp() => RandomNumberGenerator.GetInt32(100_000, 1_000_000).ToString(CultureInfo.InvariantCulture);
+
+        /// <summary>The OTP in a confirm request. ABDM documents confirmation.token as an integer;
+        /// text is read too, and a number is padded back to six digits.</summary>
+        public static string? ConfirmToken(string? body)
+        {
+            if (string.IsNullOrWhiteSpace(body))
+                return null;
+            try
+            {
+                using var doc = JsonDocument.Parse(body);
+                return FindToken(doc.RootElement);
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+        }
+
+        private static string? FindToken(JsonElement element)
+        {
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var property in element.EnumerateObject())
+                {
+                    if (!string.Equals(property.Name, "token", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    if (property.Value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(property.Value.GetString()))
+                        return property.Value.GetString()!.Trim();
+                    if (property.Value.ValueKind == JsonValueKind.Number && property.Value.TryGetInt64(out var number) && number is >= 0 and < 1_000_000)
+                        return number.ToString("D6", CultureInfo.InvariantCulture);
+                }
+                foreach (var property in element.EnumerateObject())
+                {
+                    var found = FindToken(property.Value);
+                    if (found != null) return found;
+                }
+            }
+            return null;
+        }
 
         /// <summary>The OTP is stored only as this hash, salted with the link reference it belongs to.</summary>
         public static string OtpHash(string otp, string linkReference) =>
@@ -247,11 +289,12 @@ namespace EasyHMSAPI.Application.Services
                 Encoding.ASCII.GetBytes(OtpHash(supplied, linkReference)), Encoding.ASCII.GetBytes(storedHash));
         }
 
-        /// <summary>"******3210": enough for the patient to know which phone to look at.</summary>
+        /// <summary>"XXXXXX3210": enough for the patient to know which phone to look at. ABDM's
+        /// pattern for communicationHint has no asterisk, so the mask is written with X.</summary>
         public static string MaskedMobile(string? mobile)
         {
             var ten = Mobile10(mobile);
-            return ten == null ? "your registered mobile" : "******" + ten[^4..];
+            return ten == null ? "your registered mobile" : "XXXXXX" + ten[^4..];
         }
 
         public static IReadOnlyList<string> SplitReferences(string? joined) =>

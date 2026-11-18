@@ -60,7 +60,7 @@ namespace EasyHMSAPI.Application.Services
             return digits.Length == 14 ? $"{digits[..2]}-{digits[2..6]}-{digits[6..10]}-{digits[10..]}" : null;
         }
 
-        private static readonly Regex AddressPattern = new(@"^[a-z0-9](?:[a-z0-9._]{2,30})@[a-z]{2,10}$", RegexOptions.Compiled);
+        private static readonly Regex AddressPattern = new(@"^[a-z0-9][a-z0-9_.]+[a-z0-9]@(abdm|sbx)$", RegexOptions.Compiled);
 
         /// <summary>name@abdm (or name@sbx in the sandbox), lower-cased and trimmed; null when it is not one.</summary>
         public static string? NormaliseAbhaAddress(string? value)

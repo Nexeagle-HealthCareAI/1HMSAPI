@@ -38,7 +38,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
             try
             {
-                var result = await _abha.GenerateAadhaarOtpAsync(aadhaar, cancellationToken);
+                // A resend goes out under the transaction the first request opened (ABDM: "send a previous txnId to resend the OTP").
+                var result = request.Resend && !string.IsNullOrWhiteSpace(consent.TxnId)
+                    ? await _abha.ResendAadhaarOtpAsync(aadhaar, consent.TxnId!, cancellationToken)
+                    : await _abha.GenerateAadhaarOtpAsync(aadhaar, cancellationToken);
                 consent.TxnId = result.TxnId;
                 await _context.SaveChangesAsync(cancellationToken);
                 return new AbdmOtpTxnResponseModel { Success = true, Message = result.Message ?? "OTP sent to the Aadhaar-linked mobile number.", TxnId = result.TxnId };
