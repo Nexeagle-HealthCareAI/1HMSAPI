@@ -75,8 +75,21 @@ namespace EasyHMSAPI.Application.Services.Implementations
         public Task<AbdmOtpTxnResult> GenerateAadhaarOtpAsync(string aadhaarNumber, CancellationToken cancellationToken) =>
             RequestAadhaarOtpAsync(aadhaarNumber, string.Empty, cancellationToken);
 
-        public Task<AbdmOtpTxnResult> ResendAadhaarOtpAsync(string aadhaarNumber, string txnId, CancellationToken cancellationToken) =>
-            RequestAadhaarOtpAsync(aadhaarNumber, txnId, cancellationToken);
+        public async Task<AbdmOtpTxnResult> ResendAadhaarOtpAsync(string aadhaarNumber, string txnId, CancellationToken cancellationToken)
+        {
+            try
+            {
+                return await RequestAadhaarOtpAsync(aadhaarNumber, txnId, cancellationToken);
+            }
+            catch (AbdmException refused) when (AbdmLoginRules.IsInvalidTransaction(refused))
+            {
+                // ABDM's page says to send the previous txnId to resend, but the sandbox answered
+                // "Invalid Transaction Id" to exactly that (2026-11-18). The person still needs an
+                // OTP, so ask once more as a new request; the caller takes the new txnId.
+                _logger.LogWarning("ABDM refused the Aadhaar OTP resend under its transaction; sending a new request instead.");
+                return await RequestAadhaarOtpAsync(aadhaarNumber, string.Empty, cancellationToken);
+            }
+        }
 
         // txnId is empty on the first call; a previous txnId makes it a resend (ABDM's operation page says so).
         private async Task<AbdmOtpTxnResult> RequestAadhaarOtpAsync(string aadhaarNumber, string txnId, CancellationToken cancellationToken)
