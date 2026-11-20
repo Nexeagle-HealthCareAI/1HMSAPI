@@ -56,6 +56,7 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             var response = await new RecordAbhaConsentHandler(_context).Handle(new RecordAbhaConsentRequestModel
             {
                 HospitalId = _hospitalId, CallerUserId = caller ?? _staff, ConsentVersion = AbhaConsentRules.Version, GivenBy = givenBy, SubjectName = "Asha", LoggedInUserName = "Front desk",
+                Declarations = AbhaConsentRules.AadhaarFlowDeclarations, WorkerConfirmed = true, BeneficiaryConfirmed = true,
             }, CancellationToken.None);
             Assert.That(response.Success, Is.True, response.Message);
             return response.ConsentId!.Value;
@@ -78,8 +79,31 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(saved.HospitalId, Is.EqualTo(_hospitalId));
             Assert.That(saved.GivenBy, Is.EqualTo("GUARDIAN"));
             Assert.That(saved.ConsentVersion, Is.EqualTo(AbhaConsentRules.Version));
-            Assert.That(saved.ConsentTextSnapshot, Is.EqualTo(AbhaConsentRules.Text));
+            Assert.That(saved.ConsentTextSnapshot, Does.Contain(AbhaConsentRules.Text));
+            Assert.That(saved.ConsentTextSnapshot, Does.Contain("[ ] " + AbhaConsentRules.Declarations[1]));
+            Assert.That(saved.ConsentTextSnapshot, Does.Contain("[x] " + AbhaConsentRules.Declarations[4]));
+            Assert.That(saved.ConsentTextSnapshot, Does.Contain("I, Front desk, confirm"));
+            Assert.That(saved.ConsentTextSnapshot, Does.Contain("I, Asha, have been explained"));
             Assert.That(saved.ConsentTextSha256, Is.EqualTo(AbhaConsentRules.TextSha256()));
+        }
+
+        [Test]
+        public async Task RecordingConsent_NeedsEveryDeclarationAndBothConfirmations_AndNoGovernmentWording()
+        {
+            var handler = new RecordAbhaConsentHandler(_context);
+            RecordAbhaConsentRequestModel Req(bool[]? declarations, bool worker = true, bool beneficiary = true) => new()
+            {
+                HospitalId = _hospitalId, CallerUserId = _staff, ConsentVersion = AbhaConsentRules.Version, GivenBy = "PATIENT",
+                Declarations = declarations, WorkerConfirmed = worker, BeneficiaryConfirmed = beneficiary,
+            };
+
+            Assert.That((await handler.Handle(Req(null), CancellationToken.None)).Success, Is.False);
+            Assert.That((await handler.Handle(Req(new[] { true, false, false, true, true }), CancellationToken.None)).Success, Is.False);
+            Assert.That((await handler.Handle(Req(new[] { true, true, true, true, true }), CancellationToken.None)).Message, Does.Contain("other than Aadhaar"));
+            Assert.That((await handler.Handle(Req(AbhaConsentRules.AadhaarFlowDeclarations, worker: false), CancellationToken.None)).Success, Is.False);
+            Assert.That((await handler.Handle(Req(AbhaConsentRules.AadhaarFlowDeclarations, beneficiary: false), CancellationToken.None)).Success, Is.False);
+            Assert.That(_context.AbhaConsent.Any(), Is.False);
+            Assert.That(AbhaConsentRules.Declarations.Any(d => d.Contains("government", StringComparison.OrdinalIgnoreCase)), Is.False, "a private entity drops the word");
         }
 
         [Test]
@@ -87,7 +111,8 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         {
             var handler = new RecordAbhaConsentHandler(_context);
             RecordAbhaConsentRequestModel Req(Guid caller, string? version = null, string? givenBy = "PATIENT") => new()
-            { HospitalId = _hospitalId, CallerUserId = caller, ConsentVersion = version ?? AbhaConsentRules.Version, GivenBy = givenBy };
+            { HospitalId = _hospitalId, CallerUserId = caller, ConsentVersion = version ?? AbhaConsentRules.Version, GivenBy = givenBy,
+              Declarations = AbhaConsentRules.AadhaarFlowDeclarations, WorkerConfirmed = true, BeneficiaryConfirmed = true };
 
             Assert.That((await handler.Handle(Req(Guid.NewGuid()), CancellationToken.None)).Success, Is.False, "not a member of the hospital");
             Assert.That((await handler.Handle(Req(_staff, version: "0.9"), CancellationToken.None)).Message, Does.Contain("out of date"));

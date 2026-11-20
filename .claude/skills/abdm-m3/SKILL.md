@@ -22,7 +22,7 @@ can_orchestrate: false
 
 Generated from the ABDM Developer Portal on 2026-09-16, catalogue version 2026.09.16. Every fact below comes from a page in that portal, which is the place to look when this file does not carry enough.
 
-This file is a snapshot. Re-download the whole folder from https://docs.abdm.gov.in/skills/abdm-m3/ when it is older than the work you are doing: this router and every file under references/ that it links to. Fetching this file alone leaves those links pointing at files you do not have.
+This file is a snapshot. Re-download the whole folder from the portal's /skills/abdm-m3/ path when it is older than the work you are doing: this router and every file under references/ that it links to. Fetching this file alone leaves those links pointing at files you do not have.
 If the abdm-docs MCP server is connected, trust its answers over this file: it serves the current catalogue and stamps every response with its catalogue_version, which you can compare against the version above.
 
 ## What you can do with M3
@@ -39,8 +39,26 @@ What it cannot do yet matters as much. Read **Before anything else** below befor
 - "Raise a consent request and fetch the records it covers"
 - "What has to be in place before my first M3 call?"
 - "My M3 call failed. Here is the response: what is wrong, and how do I fix it?"
+- "Walk me through the M3 test cases before go-live"
 
 Loaded with no task? Say in three lines what this skill does. Offer the prompts above. Then ask what the person is building, and whether the code for it exists yet.
+
+## The plan file
+
+Integration work starts from a plan file and keeps it current. Before the first change to the codebase and the first sandbox call:
+
+1. Look for `INTEGRATION-PLAN.md` at the root of the repository. If it exists, read it, say in one line where the work stands, and resume from the first step that is not `done`.
+2. If it does not exist, scope the work first: the goal, the role, the modules and the skill that carries each, the routes the interview switched on, and what is out of scope. Write the file with every step `pending` and its exit condition, show it to the person, and start when they agree.
+3. After every step, update the file at once: its status, the evidence that proves its exit condition (a request id, a passing test, a file changed), the date, and the count and percentage of steps `done`.
+
+| Status | Means |
+|---|---|
+| `pending` | Not started |
+| `in progress` | The step being worked on now. One at a time |
+| `done` | Its exit condition was observed, and the evidence is in the file |
+| `blocked` | Waiting on something only the person can give. The file names it and asks one question |
+
+The last steps are the module's functional test cases. Their run log is its own file, linked from the plan. Never write a secret to the plan: no token, client secret, OTP, password or patient identifier.
 
 ## What is in this folder
 
@@ -48,13 +66,15 @@ Loaded with no task? Say in three lines what this skill does. Offer the prompts 
 - **Design.** What the journey around the calls has to do, and what a screen is forbidden to claim. [references/design.md](references/design.md)
 - **Integrate.** 16 operations, with their hosts and headers. [references/integrate.md](references/integrate.md)
 - **Debug.** The specification's examples return no error code for this module. [references/debug.md](references/debug.md)
+- **Test.** The functional test cases, one loop each, run as API or UI tests, with results written into NHA's workbook and the final test report once every mandatory case passes. Never hands-off: a tester enters every Aadhaar number, mobile number and OTP. [references/test.md](references/test.md)
+- **Test matrix.** Each of the 16 NHA cases with its marking for each entity type and its Expected Result, and the operations and journeys the sheet lists for its group. Read it before building. [references/test-matrix.md](references/test-matrix.md)
 
 This file is the map. Each line above is a file beside it, opened one at a time rather than read through.
 
 ## Before anything else
 
-- Treat every request and response shape in this skill as unconfirmed until the sandbox has answered you. Check a response before you rely on its shape.
-- The design section is different in kind. Its rules come from building a working front desk against the sandbox, and each atom it cites names what was observed and the date it was seen.
+- Paste the sandbox response at every step and check it against the shape this skill gives before you build on it. A step is done when its response is observed.
+- The design section's rules come from building a working front desk against the sandbox, and each atom it cites names what was observed and the date it was seen.
 - One consent request produces one artefact per HIP, so store the request id and every artefact id. Taking the first element is the bug that silently drops half a fetch.
 - You act as the HIU. The HIE-CM holds the consent and asks the patient on your behalf. No artefact, no records.
 - The patient must be known to you by ABHA address before you can raise a request.

@@ -15,6 +15,11 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         /// <summary>PATIENT or GUARDIAN.</summary>
         public string? GivenBy { get; set; }
         public string? SubjectName { get; set; }
+        /// <summary>The five declarations as ticked on screen, in order (CRT_ABHA_102).</summary>
+        public bool[]? Declarations { get; set; }
+        /// <summary>The healthcare worker's and the beneficiary's confirmations.</summary>
+        public bool WorkerConfirmed { get; set; }
+        public bool BeneficiaryConfirmed { get; set; }
         [JsonIgnore]
         public Guid CallerUserId { get; set; }
         [JsonIgnore]

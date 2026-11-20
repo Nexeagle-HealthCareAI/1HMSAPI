@@ -33,7 +33,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     DateOfBirth = result.DateOfBirth,
                     Mobile = result.Mobile,
                     Email = result.Email,
-                    ProfilePhoto = result.ProfilePhoto
+                    ProfilePhoto = result.ProfilePhoto,
+                    Address = result.Address,
+                    State = result.State,
+                    District = result.District,
+                    City = result.City,
+                    Pincode = result.Pincode,
+                    KycVerified = result.KycVerified
                 };
             }
             catch (InvalidOperationException ex)

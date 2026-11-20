@@ -49,6 +49,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
                 return new AbdmOtpTxnResponseModel { Success = true, Message = result.Message ?? "OTP sent.", TxnId = result.TxnId };
             }
+            catch (InvalidOperationException ex) when (AbdmLoginRules.IsNoAbha(ex)
+                && (string.Equals(request.LoginHint, AbdmLoginRules.HintMobile, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(request.LoginHint, AbdmLoginRules.HintAadhaar, StringComparison.OrdinalIgnoreCase)))
+            {
+                return new AbdmOtpTxnResponseModel { Success = false, NotFound = true, Message = AbdmLoginRules.NoAbhaMessage(request.LoginHint) };
+            }
             catch (InvalidOperationException ex)
             {
                 return new AbdmOtpTxnResponseModel { Success = false, Message = ex.Message };

@@ -10,5 +10,8 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         /// <summary>Pass this with the Aadhaar OTP request.</summary>
         public Guid? ConsentId { get; set; }
         public DateTime? ExpiresAt { get; set; }
+        /// <summary>Shown on screen as the stored record: when, and who confirmed.</summary>
+        public DateTime? RecordedAt { get; set; }
+        public string? RecordedBy { get; set; }
     }
 }

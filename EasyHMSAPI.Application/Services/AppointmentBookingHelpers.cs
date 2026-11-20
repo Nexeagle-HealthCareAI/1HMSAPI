@@ -51,6 +51,11 @@ namespace EasyHMSAPI.Application.Services
                     .FirstOrDefaultAsync(cancellationToken);
             }
 
+            // An ABHA already on a patient here opens that patient: no second patient id is made for
+            // it (ABDM M1, TAGGING_UNIQUEPATIENTID_UNIQUEABHANUMBER).
+            var abhaHolder = await Handlers.CommandHandlers.AbhaPatientLookup.HolderAsync(context, hospitalId, patientInfo.AbhaId, cancellationToken);
+            patient ??= abhaHolder;
+
             // Find patient by both mobile and name
             patient ??= await context.PatientRegistrations
                 .Where(x => x.Mobile == patientInfo.Mobile && x.FullName == patientInfo.FullName)
@@ -90,7 +95,12 @@ namespace EasyHMSAPI.Application.Services
                 if (!string.IsNullOrEmpty(patientInfo.EmergencyContactPhone)) patient.EmergencyContactPhone = patientInfo.EmergencyContactPhone;
                 if (!string.IsNullOrEmpty(patientInfo.GuardianName)) patient.GuardianName = patientInfo.GuardianName;
                 if (!string.IsNullOrEmpty(patientInfo.GuardianRelation)) patient.GuardianRelation = patientInfo.GuardianRelation;
-                if (!string.IsNullOrEmpty(patientInfo.AbhaId)) patient.AbhaId = patientInfo.AbhaId;
+                // One ABHA per patient: never put an ABHA another patient holds on this one, and never
+                // replace a different ABHA this patient already holds.
+                if (!string.IsNullOrEmpty(patientInfo.AbhaId)
+                    && (abhaHolder == null || abhaHolder.RegistrationId == patient.RegistrationId)
+                    && (string.IsNullOrWhiteSpace(patient.AbhaId) || AbhaPatientRules.SameAbha(patient.AbhaId, patientInfo.AbhaId)))
+                    patient.AbhaId = AbhaPatientRules.FormatAbhaNumber(patientInfo.AbhaId);
                 if (patientInfo.MarketingConsent == true && !patient.MarketingConsent)
                 {
                     patient.MarketingConsent = true;
@@ -139,7 +149,7 @@ namespace EasyHMSAPI.Application.Services
             }
         }
 
-        private static async Task<string> GenerateNewPatientIdAsync(AppDbContext context)
+        internal static async Task<string> GenerateNewPatientIdAsync(AppDbContext context)
         {
             // Generate a unique PatientId: PTID + 8-digit random number
             string newId;

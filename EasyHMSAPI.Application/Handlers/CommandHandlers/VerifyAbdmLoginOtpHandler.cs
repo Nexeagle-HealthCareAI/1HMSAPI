@@ -43,8 +43,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return new AbdmProfileResponseModel { Success = false, Message = "ABDM did not return an ABHA account for this OTP. Check the OTP and try again." };
                 string? linkToken = null;
                 if (request.CallerUserId != Guid.Empty && request.HospitalId != Guid.Empty && !string.IsNullOrWhiteSpace(result.AbhaNumber))
-                    linkToken = _proofs.Issue(request.CallerUserId, request.HospitalId,
-                        new VerifiedAbhaProfile(result.AbhaNumber!, result.AbhaAddress, result.FullName, result.Gender, result.DateOfBirth, result.Mobile));
+                    linkToken = _proofs.Issue(request.CallerUserId, request.HospitalId, AbhaPatientRules.ToVerified(result));
                 return new AbdmProfileResponseModel
                 {
                     LinkToken = linkToken,
@@ -60,7 +59,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     Gender = result.Gender,
                     DateOfBirth = result.DateOfBirth,
                     Mobile = result.Mobile,
-                    Email = result.Email
+                    Email = result.Email,
+                    ProfilePhoto = result.ProfilePhoto,
+                    Address = result.Address,
+                    State = result.State,
+                    District = result.District,
+                    City = result.City,
+                    Pincode = result.Pincode,
+                    KycVerified = result.KycVerified
                 };
             }
             catch (InvalidOperationException ex)

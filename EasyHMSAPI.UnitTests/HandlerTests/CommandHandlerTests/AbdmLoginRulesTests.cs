@@ -21,6 +21,45 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
     {
         private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement;
 
+        // ---------------------------------------------------------------- no ABHA on the mobile or Aadhaar (VRFY_ABHA_303, 403)
+
+        [Test]
+        public void NoAbha_IsTold_InTheFixedWordsTheCasesQuote()
+        {
+            Assert.That(AbdmLoginRules.IsNoAbha(new AbdmException("User not found", "ABDM-1114", 400, "r")), Is.True);
+            Assert.That(AbdmLoginRules.IsNoAbha(new AbdmException("anything", null, 404, "r")), Is.True);
+            Assert.That(AbdmLoginRules.IsNoAbha(new AbdmException("Invalid OTP", null, 400, "r")), Is.False);
+            Assert.That(AbdmLoginRules.NoAbhaMessage("mobile"), Does.StartWith("ABHA details not found."));
+            Assert.That(AbdmLoginRules.NoAbhaMessage("aadhaar"), Is.EqualTo("NO ABHA user registered with this Aadhaar Number"));
+        }
+
+        [Test]
+        public async Task AMobileWithNoAbha_IsReportedAsNotFound_NotAsAnError()
+        {
+            var abha = new Mock<IAbdmAbhaService>();
+            abha.Setup(a => a.FindAbhaSearchAsync(It.IsAny<string>(), "mobile", It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new AbdmException("User not found", null, 400, "r"));
+            var res = await new FindAbhaSearchHandler(abha.Object).Handle(new FindAbhaSearchRequestModel { Value = "9000000001", SearchBy = "mobile" }, CancellationToken.None);
+            Assert.That(res.Success, Is.False);
+            Assert.That(res.NotFound, Is.True);
+            Assert.That(res.Message, Is.EqualTo(AbdmLoginRules.NoAbhaOnMobile));
+        }
+
+        // ---------------------------------------------------------------- communication mobile (CRT_ABHA_109)
+
+        [TestCase("9000000001", "9000000001", true, Description = "same number")]
+        [TestCase("+91 9000000001", "9000000001", true, Description = "country code")]
+        [TestCase("******0001", "9000000001", true, Description = "masked, shown digits match")]
+        [TestCase("XXXXXX0001", "9000000001", true)]
+        [TestCase("9000000002", "9000000001", false, Description = "the existing ABHA's own mobile")]
+        [TestCase("******0002", "9000000001", false)]
+        [TestCase("**********", "9000000001", false, Description = "nothing shown proves nothing")]
+        [TestCase(null, "9000000001", false, Description = "mobile left off: not the Aadhaar one")]
+        [TestCase("", "9000000001", false)]
+        [TestCase("9000000001", "", false)]
+        public void TheTypedMobile_IsVerified_OnlyWhenAbdmReturnsThatSameNumber(string? returned, string typed, bool same) =>
+            Assert.That(AbdmLoginRules.SameMobile(returned, typed), Is.EqualTo(same));
+
         // ---------------------------------------------------------------- Aadhaar check digit
 
         [TestCase("123412341234", false, Description = "starts with 1")]

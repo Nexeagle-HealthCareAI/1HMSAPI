@@ -130,6 +130,10 @@ namespace EasyHMSAPI.Application.Services.Implementations
             };
             var doc = await PostAsync("/enrollment/enrol/byAadhaar", payload, cancellationToken);
             var result = ReadEnrollResult(doc, txnId);
+            // The typed mobile is verified here only when ABDM put that same number on the profile.
+            // For an Aadhaar that already holds an ABHA the profile carries that ABHA's own mobile,
+            // so a different communication mobile still needs its own OTP (CRT_ABHA_109).
+            result.MobileVerified = AbdmLoginRules.SameMobile(result.Mobile, mobile);
             RememberEnrolment(result, txnId);
             return result;
         }
@@ -275,6 +279,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
             using var profile = await SendAsync(() => BuildRequestAsync(HttpMethod.Get, AbdmLoginRules.AddressProfilePath, null, cancellationToken, token), cancellationToken);
             var result = AbdmLoginRules.ReadAddressProfile(profile.RootElement, txnId, abhaAddress);
+            AbdmLoginRules.ApplyFullProfile(profile.RootElement, result);
             if (string.IsNullOrWhiteSpace(result.AbhaNumber))
             {
                 // Some profile answers leave the number out; the verify answer lists the accounts.
@@ -316,7 +321,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
             if (root.TryGetProperty("accounts", out var accounts) && accounts.ValueKind == JsonValueKind.Array && accounts.GetArrayLength() > 0)
                 account = accounts[0];
 
-            return new AbdmProfileResult
+            var result = new AbdmProfileResult
             {
                 TxnId = txnId,
                 AbhaNumber = ReadString(account, "ABHANumber", "abhaNumber", "healthIdNumber") ?? string.Empty,
@@ -327,6 +332,8 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 Mobile = ReadString(account, "mobile"),
                 Email = ReadString(account, "email")
             };
+            await FillFullProfileAsync(result, tokenEl.ValueKind == JsonValueKind.String ? tokenEl.GetString() : null, cancellationToken);
+            return result;
         }
 
         // ---- Profile updates (require a live, freshly-verified session — see interface docs) ----
@@ -387,7 +394,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
         {
             var doc = await SendAsync(() => BuildRequestAsync(HttpMethod.Get, "/profile/account", null, cancellationToken, RequireXToken(sessionTxnId)), cancellationToken);
             var root = doc.RootElement;
-            return new AbdmProfileResult
+            var result = new AbdmProfileResult
             {
                 TxnId = sessionTxnId,
                 AbhaNumber = ReadString(root, "ABHANumber", "abhaNumber", "healthIdNumber") ?? string.Empty,
@@ -399,6 +406,8 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 Email = ReadString(root, "email"),
                 ProfilePhoto = ReadString(root, "profilePhoto")
             };
+            AbdmLoginRules.ApplyFullProfile(root, result);
+            return result;
         }
 
         public async Task<AbdmBinaryResult> GetQrCodeAsync(string sessionTxnId, CancellationToken cancellationToken)
@@ -435,7 +444,8 @@ namespace EasyHMSAPI.Application.Services.Implementations
                         Index = candidate.TryGetProperty("index", out var idx) && idx.TryGetInt32(out var i) ? i : 0,
                         AbhaNumber = ReadString(candidate, "ABHANumber", "abhaNumber") ?? string.Empty,
                         Name = ReadString(candidate, "name"),
-                        Gender = ReadString(candidate, "gender")
+                        Gender = ReadString(candidate, "gender"),
+                        AbhaAddress = ReadString(candidate, "preferredAbhaAddress", "abhaAddress", "healthId")
                     });
                 }
             }
@@ -536,7 +546,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
             if (root.TryGetProperty("accounts", out var accounts) && accounts.ValueKind == JsonValueKind.Array && accounts.GetArrayLength() > 0)
                 account = accounts[0];
 
-            return new AbdmProfileResult
+            var result = new AbdmProfileResult
             {
                 TxnId = txnId,
                 AbhaNumber = ReadString(account, "ABHANumber", "abhaNumber", "healthIdNumber") ?? string.Empty,
@@ -547,6 +557,28 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 Mobile = ReadString(account, "mobile"),
                 Email = ReadString(account, "email")
             };
+            await FillFullProfileAsync(result, tokenEl.ValueKind == JsonValueKind.String ? tokenEl.GetString() : null, cancellationToken);
+            return result;
+        }
+
+        /// <summary>A login's verify answer is a summary. The full profile (address, state, district,
+        /// photo, KYC) comes from GET /profile/account with that login's token, and fills the
+        /// registration form (VRFY_ABHA_101, 201, 305). The login stands without it.</summary>
+        private async Task FillFullProfileAsync(AbdmProfileResult result, string? xToken, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(xToken)) return;
+            try
+            {
+                using var full = await SendAsync(() => BuildRequestAsync(HttpMethod.Get, "/profile/account", null, cancellationToken, xToken), cancellationToken);
+                var fullAbha = ReadString(full.RootElement, "ABHANumber", "abhaNumber");
+                // Never fill one ABHA's form from another's profile.
+                if (fullAbha == null || string.IsNullOrWhiteSpace(result.AbhaNumber) || AbdmLoginRules.AbhaDigits(fullAbha) == AbdmLoginRules.AbhaDigits(result.AbhaNumber))
+                    AbdmLoginRules.ApplyFullProfile(full.RootElement, result);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "ABHA login verified, but the full profile could not be read.");
+            }
         }
 
         // ---- HTTP plumbing -------------------------------------------------------------------
@@ -672,8 +704,19 @@ namespace EasyHMSAPI.Application.Services.Implementations
             var fullName = ReadString(profile, "name")
                 ?? string.Join(' ', new[] { firstName, middleName, lastName }.Where(s => !string.IsNullOrWhiteSpace(s)));
 
+            // The Aadhaar step carries the address, state, district, pincode and photo too.
+            var full = new AbdmProfileResult();
+            AbdmLoginRules.ApplyFullProfile(profile, full);
+
             return new AbdmEnrollResult
             {
+                Email = full.Email,
+                Address = full.Address,
+                State = full.State,
+                District = full.District,
+                City = full.City,
+                Pincode = full.Pincode,
+                ProfilePhoto = full.ProfilePhoto,
                 TxnId = ReadString(root, "txnId") ?? txnId,
                 AbhaNumber = ReadString(profile, "abhaNumber", "ABHANumber", "healthIdNumber") ?? string.Empty,
                 AbhaAddress = ReadString(profile, "healthId", "preferredAbhaAddress", "abhaAddress"),

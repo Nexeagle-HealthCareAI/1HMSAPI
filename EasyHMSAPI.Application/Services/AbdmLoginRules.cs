@@ -27,6 +27,28 @@ namespace EasyHMSAPI.Application.Services
         /// <summary>The digits of an ABHA number, so "91-1234-5678-9012" and "91123456789012" are one key.</summary>
         public static string AbhaDigits(string? abhaNumber) => new((abhaNumber ?? string.Empty).Where(char.IsDigit).ToArray());
 
+        /// <summary>Whether the mobile ABDM put on the profile is the one typed for communication
+        /// (CRT_ABHA_109). A mobile coming back on enrol/byAadhaar is not proof the typed one is
+        /// verified: for an Aadhaar that already holds an ABHA, ABDM returns that ABHA's own mobile.
+        /// Only the same number counts; a masked answer counts when every digit it shows matches.
+        /// Anything else needs the separate mobile OTP.</summary>
+        public static bool SameMobile(string? returned, string? typed)
+        {
+            static string Last10(string digits) => digits.Length > 10 ? digits[^10..] : digits;
+            var t = Last10(new string((typed ?? string.Empty).Where(char.IsDigit).ToArray()));
+            if (t.Length != 10 || string.IsNullOrWhiteSpace(returned)) return false;
+            var r = returned.Trim();
+            if (r.All(c => char.IsDigit(c) || c == '+' || c == ' ' || c == '-'))
+                return Last10(new string(r.Where(char.IsDigit).ToArray())) == t;
+            // Masked, such as "******9858" or "XXXXXX9858": compare position by position from the end.
+            var shown = new string(r.Where(c => char.IsDigit(c) || char.IsLetter(c) || c == '*').ToArray());
+            if (shown.Length > 10) shown = shown[^10..];
+            if (shown.Length != 10 || !shown.Any(char.IsDigit)) return false;
+            for (var i = 0; i < 10; i++)
+                if (char.IsDigit(shown[i]) && shown[i] != t[i]) return false;
+            return true;
+        }
+
         /// <summary>ABDM sends the person's name, sex, birth date and mobile once, with the Aadhaar
         /// step. The later answers (mobile verified, address created) carry only the ABHA number, so
         /// what they leave empty is filled from what the Aadhaar step gave. A mobile verified in its
@@ -42,6 +64,13 @@ namespace EasyHMSAPI.Application.Services
                 fresh.Gender = Keep(fresh.Gender, remembered.Gender);
                 fresh.DateOfBirth = Keep(fresh.DateOfBirth, remembered.DateOfBirth);
                 fresh.Mobile = Keep(fresh.Mobile, remembered.Mobile);
+                fresh.Email = Keep(fresh.Email, remembered.Email);
+                fresh.Address = Keep(fresh.Address, remembered.Address);
+                fresh.State = Keep(fresh.State, remembered.State);
+                fresh.District = Keep(fresh.District, remembered.District);
+                fresh.City = Keep(fresh.City, remembered.City);
+                fresh.Pincode = Keep(fresh.Pincode, remembered.Pincode);
+                fresh.ProfilePhoto = Keep(fresh.ProfilePhoto, remembered.ProfilePhoto);
                 fresh.IsNew = fresh.IsNew || remembered.IsNew;
             }
             if (!string.IsNullOrWhiteSpace(verifiedMobile))
@@ -49,6 +78,24 @@ namespace EasyHMSAPI.Application.Services
             fresh.MobileVerified = fresh.MobileVerified || !string.IsNullOrWhiteSpace(fresh.Mobile);
             return fresh;
         }
+
+        /// <summary>The fixed texts M1 quotes when no ABHA is found: VRFY_ABHA_303 for a mobile,
+        /// VRFY_ABHA_403 for an Aadhaar. These are the product's own words, shown as the cases write them.</summary>
+        public const string NoAbhaOnMobile = "ABHA details not found. We did not find any ABHA number linked to this mobile number. Please use an ABHA-linked mobile number.";
+        public const string NoAbhaOnAadhaar = "NO ABHA user registered with this Aadhaar Number";
+
+        /// <summary>ABDM's answer meaning "no ABHA for this mobile or Aadhaar" (a 404, or a refusal
+        /// such as "User not found"), as opposed to any other refusal, which is shown as it came.</summary>
+        public static bool IsNoAbha(Exception ex)
+        {
+            if (ex is AbdmException { StatusCode: 404 }) return true;
+            var m = ex.Message.ToLowerInvariant();
+            return m.Contains("not found") || m.Contains("no abha") || m.Contains("not registered") || m.Contains("does not exist")
+                || m.Contains("no account") || m.Contains("no user");
+        }
+
+        public static string NoAbhaMessage(string? searchBy) =>
+            string.Equals(searchBy, HintAadhaar, StringComparison.OrdinalIgnoreCase) ? NoAbhaOnAadhaar : NoAbhaOnMobile;
 
         /// <summary>ABDM refusing the transaction a resend was sent under ("Invalid Transaction Id").
         /// Seen on the sandbox for an Aadhaar OTP resend that followed ABDM's own page, so the
@@ -174,6 +221,40 @@ namespace EasyHMSAPI.Application.Services
                 Mobile = Text(account, "mobile"),
                 Email = Text(account, "email")
             };
+        }
+
+        /// <summary>Fills what a full ABHA profile answer (GET /profile/account, or the ABHAProfile of
+        /// enrol/byAadhaar) carries beyond the login summary: address, state, district, town,
+        /// pincode, photo and KYC. A value already read is kept when the answer leaves it out.</summary>
+        public static void ApplyFullProfile(JsonElement profile, AbdmProfileResult result)
+        {
+            if (profile.ValueKind != JsonValueKind.Object) return;
+            static string? Keep(string? now, string? before) => string.IsNullOrWhiteSpace(now) ? before : now;
+            var name = Text(profile, "name", "fullName");
+            if (name == null)
+            {
+                var parts = new[] { Text(profile, "firstName"), Text(profile, "middleName"), Text(profile, "lastName") }.Where(s => s != null).ToArray();
+                if (parts.Length > 0) name = string.Join(' ', parts);
+            }
+            result.FullName = Keep(name, result.FullName) ?? string.Empty;
+            result.AbhaNumber = Keep(Text(profile, "ABHANumber", "abhaNumber", "healthIdNumber"), result.AbhaNumber) ?? string.Empty;
+            result.AbhaAddress = Keep(Text(profile, "preferredAbhaAddress", "healthId", "abhaAddress"), result.AbhaAddress);
+            result.Gender = Keep(Text(profile, "gender"), result.Gender);
+            result.DateOfBirth = Keep(Text(profile, "dob", "dateOfBirth") ?? BirthDate(profile), result.DateOfBirth);
+            result.Mobile = Keep(Text(profile, "mobile"), result.Mobile);
+            result.Email = Keep(Text(profile, "email"), result.Email);
+            result.ProfilePhoto = Keep(Text(profile, "profilePhoto", "photo"), result.ProfilePhoto);
+            result.Address = Keep(Text(profile, "address"), result.Address);
+            result.State = Keep(Text(profile, "stateName"), result.State);
+            result.District = Keep(Text(profile, "districtName"), result.District);
+            result.City = Keep(Text(profile, "townName", "subdistrictName", "subDistrictName", "villageName"), result.City);
+            result.Pincode = Keep(Text(profile, "pincode", "pinCode"), result.Pincode);
+            if (profile.TryGetProperty("kycVerified", out var kyc))
+            {
+                if (kyc.ValueKind == JsonValueKind.True) result.KycVerified = true;
+                else if (kyc.ValueKind == JsonValueKind.False) result.KycVerified = false;
+                else if (kyc.ValueKind == JsonValueKind.String && bool.TryParse(kyc.GetString(), out var k)) result.KycVerified = k;
+            }
         }
 
         private static string? BirthDate(JsonElement account)
