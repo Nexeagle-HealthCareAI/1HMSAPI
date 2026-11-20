@@ -255,11 +255,15 @@ namespace EasyHMSAPI.Api.Controllers
 
         // The consent wording shown before an Aadhaar-based ABHA enrolment. The server owns it (and its version).
         [HttpGet("consent/text")]
-        public IActionResult GetConsentText() => Ok(new
+        public async Task<IActionResult> GetConsentText() => Ok(new
         {
             code = AbhaConsentRules.Code,
             version = AbhaConsentRules.Version,
             text = AbhaConsentRules.Text,
+            declarations = AbhaConsentRules.Declarations,
+            // The worker's confirmation names the person logged in; nobody types it.
+            workerConfirmation = AbhaConsentRules.WorkerConfirmation(await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext)),
+            beneficiaryConfirmationTemplate = AbhaConsentRules.BeneficiaryConfirmation("{name}"),
         });
 
         // Records that the patient (or guardian) agreed; the returned consentId must accompany the Aadhaar OTP request.
