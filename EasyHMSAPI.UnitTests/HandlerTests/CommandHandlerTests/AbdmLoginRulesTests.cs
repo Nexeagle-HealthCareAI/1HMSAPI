@@ -21,6 +21,21 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
     {
         private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement;
 
+        // ---------------------------------------------------------------- communication mobile (CRT_ABHA_109)
+
+        [TestCase("9000000001", "9000000001", true, Description = "same number")]
+        [TestCase("+91 9000000001", "9000000001", true, Description = "country code")]
+        [TestCase("******0001", "9000000001", true, Description = "masked, shown digits match")]
+        [TestCase("XXXXXX0001", "9000000001", true)]
+        [TestCase("9000000002", "9000000001", false, Description = "the existing ABHA's own mobile")]
+        [TestCase("******0002", "9000000001", false)]
+        [TestCase("**********", "9000000001", false, Description = "nothing shown proves nothing")]
+        [TestCase(null, "9000000001", false, Description = "mobile left off: not the Aadhaar one")]
+        [TestCase("", "9000000001", false)]
+        [TestCase("9000000001", "", false)]
+        public void TheTypedMobile_IsVerified_OnlyWhenAbdmReturnsThatSameNumber(string? returned, string typed, bool same) =>
+            Assert.That(AbdmLoginRules.SameMobile(returned, typed), Is.EqualTo(same));
+
         // ---------------------------------------------------------------- Aadhaar check digit
 
         [TestCase("123412341234", false, Description = "starts with 1")]

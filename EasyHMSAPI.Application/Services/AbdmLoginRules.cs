@@ -27,6 +27,28 @@ namespace EasyHMSAPI.Application.Services
         /// <summary>The digits of an ABHA number, so "91-1234-5678-9012" and "91123456789012" are one key.</summary>
         public static string AbhaDigits(string? abhaNumber) => new((abhaNumber ?? string.Empty).Where(char.IsDigit).ToArray());
 
+        /// <summary>Whether the mobile ABDM put on the profile is the one typed for communication
+        /// (CRT_ABHA_109). A mobile coming back on enrol/byAadhaar is not proof the typed one is
+        /// verified: for an Aadhaar that already holds an ABHA, ABDM returns that ABHA's own mobile.
+        /// Only the same number counts; a masked answer counts when every digit it shows matches.
+        /// Anything else needs the separate mobile OTP.</summary>
+        public static bool SameMobile(string? returned, string? typed)
+        {
+            static string Last10(string digits) => digits.Length > 10 ? digits[^10..] : digits;
+            var t = Last10(new string((typed ?? string.Empty).Where(char.IsDigit).ToArray()));
+            if (t.Length != 10 || string.IsNullOrWhiteSpace(returned)) return false;
+            var r = returned.Trim();
+            if (r.All(c => char.IsDigit(c) || c == '+' || c == ' ' || c == '-'))
+                return Last10(new string(r.Where(char.IsDigit).ToArray())) == t;
+            // Masked, such as "******9858" or "XXXXXX9858": compare position by position from the end.
+            var shown = new string(r.Where(c => char.IsDigit(c) || char.IsLetter(c) || c == '*').ToArray());
+            if (shown.Length > 10) shown = shown[^10..];
+            if (shown.Length != 10 || !shown.Any(char.IsDigit)) return false;
+            for (var i = 0; i < 10; i++)
+                if (char.IsDigit(shown[i]) && shown[i] != t[i]) return false;
+            return true;
+        }
+
         /// <summary>ABDM sends the person's name, sex, birth date and mobile once, with the Aadhaar
         /// step. The later answers (mobile verified, address created) carry only the ABHA number, so
         /// what they leave empty is filled from what the Aadhaar step gave. A mobile verified in its

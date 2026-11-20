@@ -130,6 +130,10 @@ namespace EasyHMSAPI.Application.Services.Implementations
             };
             var doc = await PostAsync("/enrollment/enrol/byAadhaar", payload, cancellationToken);
             var result = ReadEnrollResult(doc, txnId);
+            // The typed mobile is verified here only when ABDM put that same number on the profile.
+            // For an Aadhaar that already holds an ABHA the profile carries that ABHA's own mobile,
+            // so a different communication mobile still needs its own OTP (CRT_ABHA_109).
+            result.MobileVerified = AbdmLoginRules.SameMobile(result.Mobile, mobile);
             RememberEnrolment(result, txnId);
             return result;
         }
