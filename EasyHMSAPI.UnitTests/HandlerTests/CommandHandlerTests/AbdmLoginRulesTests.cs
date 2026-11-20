@@ -21,6 +21,30 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
     {
         private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement;
 
+        // ---------------------------------------------------------------- no ABHA on the mobile or Aadhaar (VRFY_ABHA_303, 403)
+
+        [Test]
+        public void NoAbha_IsTold_InTheFixedWordsTheCasesQuote()
+        {
+            Assert.That(AbdmLoginRules.IsNoAbha(new AbdmException("User not found", "ABDM-1114", 400, "r")), Is.True);
+            Assert.That(AbdmLoginRules.IsNoAbha(new AbdmException("anything", null, 404, "r")), Is.True);
+            Assert.That(AbdmLoginRules.IsNoAbha(new AbdmException("Invalid OTP", null, 400, "r")), Is.False);
+            Assert.That(AbdmLoginRules.NoAbhaMessage("mobile"), Does.StartWith("ABHA details not found."));
+            Assert.That(AbdmLoginRules.NoAbhaMessage("aadhaar"), Is.EqualTo("NO ABHA user registered with this Aadhaar Number"));
+        }
+
+        [Test]
+        public async Task AMobileWithNoAbha_IsReportedAsNotFound_NotAsAnError()
+        {
+            var abha = new Mock<IAbdmAbhaService>();
+            abha.Setup(a => a.FindAbhaSearchAsync(It.IsAny<string>(), "mobile", It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new AbdmException("User not found", null, 400, "r"));
+            var res = await new FindAbhaSearchHandler(abha.Object).Handle(new FindAbhaSearchRequestModel { Value = "9000000001", SearchBy = "mobile" }, CancellationToken.None);
+            Assert.That(res.Success, Is.False);
+            Assert.That(res.NotFound, Is.True);
+            Assert.That(res.Message, Is.EqualTo(AbdmLoginRules.NoAbhaOnMobile));
+        }
+
         // ---------------------------------------------------------------- communication mobile (CRT_ABHA_109)
 
         [TestCase("9000000001", "9000000001", true, Description = "same number")]

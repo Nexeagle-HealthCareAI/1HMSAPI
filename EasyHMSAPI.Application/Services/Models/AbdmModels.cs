@@ -20,6 +20,14 @@ namespace EasyHMSAPI.Application.Services.Models
         public string? Mobile { get; set; }
         public bool MobileVerified { get; set; }
         public bool IsNew { get; set; }
+        public string? Email { get; set; }
+        // The rest of the profile, as ABDM returns it (VRFY_ABHA_101, 305): what fills the registration form.
+        public string? Address { get; set; }
+        public string? State { get; set; }
+        public string? District { get; set; }
+        public string? City { get; set; }
+        public string? Pincode { get; set; }
+        public string? ProfilePhoto { get; set; }
     }
 
     public class AbdmAddressSuggestionsResult
@@ -48,6 +56,14 @@ namespace EasyHMSAPI.Application.Services.Models
         public string? Email { get; set; }
         // Only populated by GetProfileAsync (§9 Get Profile) — base64 JPEG, as returned by ABDM.
         public string? ProfilePhoto { get; set; }
+        // The rest of the profile, as ABDM returns it (VRFY_ABHA_101, 305): what fills the registration form.
+        public string? Address { get; set; }
+        public string? State { get; set; }
+        public string? District { get; set; }
+        public string? City { get; set; }
+        public string? Pincode { get; set; }
+        /// <summary>Whether the ABHA is KYC verified. A non-KYC ABHA cannot download a card.</summary>
+        public bool? KycVerified { get; set; }
     }
 
     /// <summary>Result of a plain (non-OTP) profile field update, e.g. email.</summary>
@@ -74,6 +90,7 @@ namespace EasyHMSAPI.Application.Services.Models
         public string AbhaNumber { get; set; } = string.Empty;
         public string? Name { get; set; }
         public string? Gender { get; set; }
+        public string? AbhaAddress { get; set; }
     }
 
     public class AbdmFindAbhaSearchResult

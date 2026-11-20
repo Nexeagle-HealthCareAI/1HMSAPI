@@ -13,5 +13,7 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string AbhaAddress { get; set; } = string.Empty;
         [JsonIgnore]
         public string? LoggedInUserName { get; set; }
+        [JsonIgnore]
+        public Guid CallerUserId { get; set; }
     }
 }

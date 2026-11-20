@@ -22,5 +22,11 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public string? LinkToken { get; set; }
         // Only populated when this came from GetAbdmProfileHandler (§9 Get Profile) — base64 JPEG.
         public string? ProfilePhoto { get; set; }
+        public string? Address { get; set; }
+        public string? State { get; set; }
+        public string? District { get; set; }
+        public string? City { get; set; }
+        public string? Pincode { get; set; }
+        public bool? KycVerified { get; set; }
     }
 }

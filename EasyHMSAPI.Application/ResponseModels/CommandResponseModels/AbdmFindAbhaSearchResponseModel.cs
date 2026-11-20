@@ -9,6 +9,7 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public string AbhaNumber { get; set; } = string.Empty;
         public string? Name { get; set; }
         public string? Gender { get; set; }
+        public string? AbhaAddress { get; set; }
     }
 
     /// <summary>§7.6 Find ABHA — search step. A mobile/Aadhaar number can be linked to more than one
@@ -20,5 +21,7 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public string? Message { get; set; }
         public string? TxnId { get; set; }
         public List<AbdmFindAbhaCandidateModel> Candidates { get; set; } = new();
+        /// <summary>No ABHA on this mobile or Aadhaar: the screen offers to create one (VRFY_ABHA_303).</summary>
+        public bool NotFound { get; set; }
     }
 }

@@ -303,6 +303,7 @@ namespace EasyHMSAPI.Api.Controllers
         {
             try
             {
+                request.CallerUserId = UserContextHelper.GetUserId(HttpContext.User) ?? Guid.Empty;
                 var response = await _mediator.Send(request);
                 if (!response.Success) return BadRequest(new { response.Message });
                 return Ok(response);
@@ -335,6 +336,7 @@ namespace EasyHMSAPI.Api.Controllers
         {
             try
             {
+                request.CallerUserId = UserContextHelper.GetUserId(HttpContext.User) ?? Guid.Empty;
                 var response = await _mediator.Send(request);
                 if (!response.Success) return BadRequest(new { response.Message });
                 return Ok(response);
@@ -367,6 +369,7 @@ namespace EasyHMSAPI.Api.Controllers
         {
             try
             {
+                request.CallerUserId = UserContextHelper.GetUserId(HttpContext.User) ?? Guid.Empty;
                 request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
                 var response = await _mediator.Send(request);
                 if (!response.Success) return BadRequest(new { response.Message });
@@ -385,7 +388,7 @@ namespace EasyHMSAPI.Api.Controllers
             try
             {
                 var response = await _mediator.Send(request);
-                if (!response.Success) return BadRequest(new { response.Message });
+                if (!response.Success) return response.NotFound ? NotFound(response) : BadRequest(new { response.Message });
                 return Ok(response);
             }
             catch (Exception ex)
@@ -427,6 +430,44 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 _logger.LogError(ex, "Error saving linked ABHA account.");
                 return StatusCode(500, new { Message = "An error occurred while saving the ABHA account." });
+            }
+        }
+
+        // ---- Register a patient from a verified ABHA (M1: VRFY_ABHA_306, 308, CRT_ABHA_116, tagging) ----
+
+        [HttpPost("patients/match")]
+        public async Task<ActionResult<MatchAbhaPatientResponseModel>> MatchAbhaPatient([FromBody] MatchAbhaPatientRequestModel request)
+        {
+            try
+            {
+                request.CallerUserId = UserContextHelper.GetUserId(HttpContext.User) ?? Guid.Empty;
+                var response = await _mediator.Send(request);
+                if (!response.Success) return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error matching an ABHA to patients.");
+                return StatusCode(500, new { Message = "An error occurred while looking for the patient." });
+            }
+        }
+
+        [HttpPost("patients/register")]
+        public async Task<ActionResult<RegisterAbhaPatientResponseModel>> RegisterAbhaPatient([FromBody] RegisterAbhaPatientRequestModel request)
+        {
+            try
+            {
+                request.CallerUserId = UserContextHelper.GetUserId(HttpContext.User) ?? Guid.Empty;
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                // An ABHA already on another patient is a 409 carrying that patient's ID.
+                if (!response.Success) return response.AlreadyLinkedPatientId != null ? Conflict(response) : BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error registering a patient from an ABHA.");
+                return StatusCode(500, new { Message = "An error occurred while registering the patient." });
             }
         }
 
@@ -543,7 +584,7 @@ namespace EasyHMSAPI.Api.Controllers
             try
             {
                 var response = await _mediator.Send(request);
-                if (!response.Success) return BadRequest(new { response.Message });
+                if (!response.Success) return response.NotFound ? NotFound(response) : BadRequest(new { response.Message });
                 return Ok(response);
             }
             catch (Exception ex)
