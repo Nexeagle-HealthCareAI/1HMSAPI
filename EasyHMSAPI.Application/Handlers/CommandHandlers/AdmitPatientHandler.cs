@@ -67,6 +67,10 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                                 .FirstOrDefaultAsync(p => p.PatientId == request.PatientId && p.HospitalId == request.HospitalId, cancellationToken);
                         }
 
+                        // An ABHA already on a patient here opens that patient (ABDM M1 tagging case).
+                        var abhaHolder = await AbhaPatientLookup.HolderAsync(_context, request.HospitalId, request.AbhaId, cancellationToken);
+                        patient ??= abhaHolder;
+
                         var admissionType = NormalizeType(request.AdmissionType);
                         var isEmergency = admissionType == "EMERGENCY";
 
@@ -104,7 +108,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                             _context.PatientRegistrations.Add(patient);
                         }
 
+                        // One ABHA per patient: an ABHA another patient holds, or one different from
+                        // the ABHA this patient holds, is not written onto this record.
+                        var keepAbha = patient!.AbhaId;
                         ApplyDemographics(patient!, request);
+                        if (!string.IsNullOrWhiteSpace(request.AbhaId)
+                            && ((abhaHolder != null && abhaHolder.RegistrationId != patient.RegistrationId)
+                                || (!string.IsNullOrWhiteSpace(keepAbha) && !AbhaPatientRules.SameAbha(keepAbha, request.AbhaId))))
+                            patient.AbhaId = keepAbha;
                         if (string.IsNullOrWhiteSpace(patient!.FullName))
                             patient.FullName = SynthesizeUnknownName(request.Sex, request.Age);
 

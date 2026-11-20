@@ -9,5 +9,6 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public string? Message { get; set; }
         public string? TxnId { get; set; }
         public List<string> Suggestions { get; set; } = new();
+        public string AddressSuffix { get; set; } = "@abdm";
     }
 }

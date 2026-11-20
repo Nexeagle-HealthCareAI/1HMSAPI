@@ -22,7 +22,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             try
             {
                 var result = await _abha.GetAbhaAddressSuggestionsAsync(request.TxnId, cancellationToken);
-                return new AbdmAddressSuggestionsResponseModel { Success = true, TxnId = result.TxnId, Suggestions = result.Suggestions };
+                return new AbdmAddressSuggestionsResponseModel { Success = true, TxnId = result.TxnId, Suggestions = result.Suggestions, AddressSuffix = result.AddressSuffix };
             }
             catch (InvalidOperationException ex)
             {

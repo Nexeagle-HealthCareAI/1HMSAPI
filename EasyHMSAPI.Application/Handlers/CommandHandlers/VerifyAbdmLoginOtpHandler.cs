@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Services.Models;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services;
@@ -24,15 +25,33 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
             try
             {
-                var result = await _abha.VerifyLoginOtpAsync(request.TxnId, request.Otp, request.LoginHint, cancellationToken);
+                AbdmProfileResult result;
+                if (string.Equals(request.LoginHint, AbdmLoginRules.HintAbhaAddress, StringComparison.OrdinalIgnoreCase))
+                {
+                    var address = AbdmLoginRules.NormaliseAbhaAddress(request.LoginId);
+                    if (address == null)
+                        return new AbdmProfileResponseModel { Success = false, Message = "Enter the ABHA address the OTP was sent for, like name@abdm." };
+                    result = await _abha.VerifyAbhaAddressLoginOtpAsync(request.TxnId, request.Otp, request.OtpSystem ?? AbdmLoginRules.OtpAbdm, address, cancellationToken);
+                }
+                else
+                {
+                    result = await _abha.VerifyLoginOtpAsync(request.TxnId, request.Otp, request.LoginHint, cancellationToken);
+                }
+                var byAddress = string.Equals(request.LoginHint, AbdmLoginRules.HintAbhaAddress, StringComparison.OrdinalIgnoreCase);
+                // Nothing came back to verify against: never show this as a verified account.
+                if (!byAddress && string.IsNullOrWhiteSpace(result.AbhaNumber))
+                    return new AbdmProfileResponseModel { Success = false, Message = "ABDM did not return an ABHA account for this OTP. Check the OTP and try again." };
                 string? linkToken = null;
                 if (request.CallerUserId != Guid.Empty && request.HospitalId != Guid.Empty && !string.IsNullOrWhiteSpace(result.AbhaNumber))
-                    linkToken = _proofs.Issue(request.CallerUserId, request.HospitalId,
-                        new VerifiedAbhaProfile(result.AbhaNumber!, result.AbhaAddress, result.FullName, result.Gender, result.DateOfBirth, result.Mobile));
+                    linkToken = _proofs.Issue(request.CallerUserId, request.HospitalId, AbhaPatientRules.ToVerified(result));
                 return new AbdmProfileResponseModel
                 {
                     LinkToken = linkToken,
                     Success = true,
+                    // Verified, but an address with no ABHA number behind it cannot be kept on a patient record.
+                    Message = string.IsNullOrWhiteSpace(result.AbhaNumber)
+                        ? "Verified, but this ABHA address has no ABHA number linked to it, so it cannot be saved against the patient. Ask the patient to link their ABHA number in the ABHA app, or verify by ABHA number instead."
+                        : null,
                     TxnId = result.TxnId,
                     AbhaNumber = result.AbhaNumber,
                     AbhaAddress = result.AbhaAddress,
@@ -40,7 +59,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     Gender = result.Gender,
                     DateOfBirth = result.DateOfBirth,
                     Mobile = result.Mobile,
-                    Email = result.Email
+                    Email = result.Email,
+                    ProfilePhoto = result.ProfilePhoto,
+                    Address = result.Address,
+                    State = result.State,
+                    District = result.District,
+                    City = result.City,
+                    Pincode = result.Pincode,
+                    KycVerified = result.KycVerified
                 };
             }
             catch (InvalidOperationException ex)

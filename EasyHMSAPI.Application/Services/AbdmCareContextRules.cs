@@ -36,6 +36,34 @@ namespace EasyHMSAPI.Application.Services
             return types;
         }
 
+        private static List<string> SplitTypes(string? stored) =>
+            (stored ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+        /// <summary>The record types a linked care context holds now that ABDM was not told about.</summary>
+        public static IReadOnlyList<string> AddedHiTypes(string? toldAbdm, IReadOnlyList<string> now)
+        {
+            var told = SplitTypes(toldAbdm);
+            return now.Where(t => !told.Contains(t, StringComparer.OrdinalIgnoreCase)).ToList();
+        }
+
+        /// <summary>Everything ABDM has been told, plus what is there now. A type is never dropped:
+        /// ABDM has no notice for a record that went away.</summary>
+        public static IReadOnlyList<string> MergeHiTypes(string? toldAbdm, IReadOnlyList<string> now)
+        {
+            var merged = SplitTypes(toldAbdm);
+            merged.AddRange(AddedHiTypes(toldAbdm, now));
+            return merged;
+        }
+
+        /// <summary>A patient's mobile as ten digits, dropping +91 or a leading 0. Null when it is not one.</summary>
+        public static string? Mobile10(string? value)
+        {
+            var digits = Digits(value);
+            if (digits.Length == 12 && digits.StartsWith("91", StringComparison.Ordinal)) digits = digits[2..];
+            if (digits.Length == 11 && digits[0] == '0') digits = digits[1..];
+            return digits.Length == 10 && digits[0] is >= '6' and <= '9' ? digits : null;
+        }
+
         /// <summary>ABDM's M / F / O. Null when the value is unknown — never guessed.</summary>
         public static string? GenderCode(string? value) =>
             value?.Trim().ToUpperInvariant() switch

@@ -168,10 +168,10 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(handler.ConnectCallback, Is.Not.Null, "the resolved address is checked when connecting");
         }
 
-        [TestCase(null, false)]
+        [TestCase(null, true)]
         [TestCase("false", false)]
         [TestCase("true", true)]
-        public async Task OurGatewayToken_GoesToTheHiu_OnlyWhenSwitchedOn(string? setting, bool sent)
+        public async Task OurGatewayToken_GoesToTheHiu_UnlessSwitchedOff(string? setting, bool sent)
         {
             var seen = new List<System.Net.Http.HttpRequestMessage>();
             var http = new System.Net.Http.HttpClient(new RecordingHandler(seen));
@@ -354,6 +354,73 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(status.GetProperty("sessionStatus").GetString(), Is.EqualTo("FAILED"));
             Assert.That(status.GetProperty("statusResponses")[0].GetProperty("hiStatus").GetString(), Is.EqualTo("ERRORED"));
             Assert.That(_db.AbdmDataTransfers.Single().Status, Is.EqualTo(AbdmTransferStatus.Failed));
+        }
+    
+        // ---------------------------------------------------------------- pages
+
+        [TestCase(0, 1, true)]
+        [TestCase(1, 1, true)]
+        [TestCase(1, 3, false)]
+        [TestCase(2, 3, false, Description = "the page before the last when counted from 1, so not the end")]
+        [TestCase(3, 3, true, Description = "last page when counted from 1")]
+        public void TheLastPage_IsKnown_WhicheverWayTheSenderCounts(int pageNumber, int pageCount, bool last) =>
+            Assert.That(AbdmDataFlowRules.IsLastPage(pageNumber, pageCount), Is.EqualTo(last));
+
+        [Test]
+        public void ATransfer_IsCutIntoPages_ByCountAndBySize()
+        {
+            Assert.That(AbdmDataFlowRules.Pages(Array.Empty<int>()), Is.EqualTo(new[] { (0, 0) }), "nothing to send is still one page");
+            Assert.That(AbdmDataFlowRules.Pages(new[] { 10, 10, 10 }), Is.EqualTo(new[] { (0, 3) }));
+            Assert.That(AbdmDataFlowRules.Pages(new[] { 10, 10, 10, 10, 10 }, maxEntries: 2), Is.EqualTo(new[] { (0, 2), (2, 2), (4, 1) }));
+            Assert.That(AbdmDataFlowRules.Pages(new[] { 60, 60, 30, 200, 10 }, maxEntries: 20, maxChars: 100), Is.EqualTo(new[] { (0, 1), (1, 2), (3, 1), (4, 1) }),
+                "a record larger than the limit goes alone");
+        }
+
+        [Test]
+        public async Task ManyRecords_GoAsNumberedPages_EachWithTheSameKey_AndAllCanBeRead()
+        {
+            var many = Enumerable.Range(1, AbdmDataFlowRules.PageMaxEntries + 5).Select(i => new AbdmBuiltRecord("Prescription", $"{{\"n\":{i}}}")).ToArray();
+            _records.Setup(r => r.BuildAsync(It.IsAny<AbdmCareContext>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => new AbdmBuiltRecords { WhenUtc = _visitDate, Records = many });
+            var pushed = new List<string>();
+            _push.Setup(p => p.PushAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((string _, string json, CancellationToken _) => { pushed.Add(json); return 202; });
+            await GrantAsync(ConsentBody());
+
+            await Service().OnHealthInformationRequestAsync(Inbound("req-data", RequestBody()), CancellationToken.None);
+
+            Assert.That(pushed.Count, Is.EqualTo(2));
+            var pages = pushed.Select(p => JsonDocument.Parse(p).RootElement).ToList();
+            Assert.That(pages.Select(p => p.GetProperty("pageNumber").GetInt32()), Is.EqualTo(new[] { 1, 2 }));
+            Assert.That(pages.Select(p => p.GetProperty("pageCount").GetInt32()), Is.EqualTo(new[] { 2, 2 }));
+            Assert.That(pages.Select(p => p.GetProperty("entries").GetArrayLength()), Is.EqualTo(new[] { AbdmDataFlowRules.PageMaxEntries, 5 }));
+            Assert.That(pages[0].GetProperty("keyMaterial").GetRawText(), Is.EqualTo(pages[1].GetProperty("keyMaterial").GetRawText()));
+
+            var keys = pages[1].GetProperty("keyMaterial");
+            var last = AbdmFidelius.Decrypt(pages[1].GetProperty("entries")[4].GetProperty("content").GetString()!, HiuPrivate, HiuNonce,
+                keys.GetProperty("dhPublicKey").GetProperty("keyValue").GetString()!, keys.GetProperty("nonce").GetString()!);
+            Assert.That(last, Is.EqualTo($"{{\"n\":{AbdmDataFlowRules.PageMaxEntries + 5}}}"));
+            Assert.That(_db.AbdmDataTransfers.Single().RecordCount, Is.EqualTo(AbdmDataFlowRules.PageMaxEntries + 5));
+        }
+
+        [Test]
+        public async Task WhenALaterPageIsNotAccepted_TheTransferIsReportedFailed()
+        {
+            var many = Enumerable.Range(1, AbdmDataFlowRules.PageMaxEntries + 1).Select(i => new AbdmBuiltRecord("Prescription", $"{{\"n\":{i}}}")).ToArray();
+            _records.Setup(r => r.BuildAsync(It.IsAny<AbdmCareContext>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => new AbdmBuiltRecords { WhenUtc = _visitDate, Records = many });
+            var sent = 0;
+            _push.Setup(p => p.PushAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => ++sent == 1 ? 202 : 500);
+            await GrantAsync(ConsentBody());
+            _calls.Clear();
+
+            await Service().OnHealthInformationRequestAsync(Inbound("req-data", RequestBody()), CancellationToken.None);
+
+            var transfer = _db.AbdmDataTransfers.Single();
+            Assert.That(transfer.Status, Is.EqualTo(AbdmTransferStatus.Failed));
+            Assert.That(transfer.ErrorMessage, Does.Contain("page 2 of 2"));
+            Assert.That(Body(_calls.Last()).GetProperty("notification").GetProperty("statusNotification").GetProperty("sessionStatus").GetString(), Is.EqualTo("FAILED"));
         }
     }
 }

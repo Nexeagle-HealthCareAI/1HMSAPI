@@ -98,6 +98,28 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        /// <summary>For a request that has waited too long: asks ABDM where it stands. The answer
+        /// arrives on a callback, so the list shows it a moment later.</summary>
+        [HttpPost("consents/{consentRowId:guid}/check")]
+        public async Task<IActionResult> CheckConsent(Guid consentRowId, [FromQuery] Guid hospitalId, CancellationToken cancellationToken)
+        {
+            if (!await AllowedAsync(hospitalId, cancellationToken)) return Forbid();
+            try
+            {
+                var check = await _hiu.CheckAsync(hospitalId, consentRowId, cancellationToken);
+                return Ok(new { success = true, consentAsked = check.ConsentAsked, transferStatus = check.TransferStatus, message = check.Message });
+            }
+            catch (AbdmHiuRefusedException ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking ABDM consent {ConsentRowId} for hospital {HospitalId}.", consentRowId, hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while checking with ABDM." });
+            }
+        }
+
         [HttpGet("consents")]
         public async Task<IActionResult> GetConsents([FromQuery] Guid hospitalId, [FromQuery] string? patientId, CancellationToken cancellationToken)
         {

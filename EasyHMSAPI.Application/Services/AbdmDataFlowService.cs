@@ -33,6 +33,40 @@ namespace EasyHMSAPI.Application.Services
         public const string ConsentExpiredCode = "ABDM-1061";
         public const string InvalidRequestCode = "ABDM-1031";
 
+        /// <summary>How a transfer is cut into pages: at most this many records, and about this much
+        /// encrypted text, in one POST. A single record larger than the limit still goes, alone.</summary>
+        public const int PageMaxEntries = 20;
+        public const int PageMaxChars = 4_000_000;
+
+        /// <summary>The pages of a transfer as (first entry, how many), in order. Never empty: a
+        /// transfer with nothing to send is one page with no entries, so the HIU still hears the end.</summary>
+        public static IReadOnlyList<(int Start, int Count)> Pages(IReadOnlyList<int> entrySizes, int maxEntries = PageMaxEntries, int maxChars = PageMaxChars)
+        {
+            var pages = new List<(int Start, int Count)>();
+            int start = 0, count = 0, chars = 0;
+            for (var i = 0; i < entrySizes.Count; i++)
+            {
+                if (count > 0 && (count >= maxEntries || chars + entrySizes[i] > maxChars))
+                {
+                    pages.Add((start, count));
+                    start = i;
+                    count = 0;
+                    chars = 0;
+                }
+                count++;
+                chars += entrySizes[i];
+            }
+            pages.Add((start, count));
+            return pages;
+        }
+
+        /// <summary>Whether a pushed page ends its transfer: n of n, or a one-page transfer whichever way it is
+        /// numbered (ABDM's example is 0 of 1). n-1 of n is not taken as the end: from a sender that counts from 1
+        /// (ours does) it is the page before the last, and closing there would turn the last page away. A sender
+        /// that counts from 0 over several pages leaves the transfer open; the sweep closes it, keeping its records.</summary>
+        public static bool IsLastPage(int pageNumber, int pageCount) =>
+            pageCount <= 1 || pageNumber >= pageCount;
+
         public static DateTime? Date(string? value) =>
             DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var parsed) ? parsed : null;
 
@@ -251,12 +285,17 @@ namespace EasyHMSAPI.Application.Services
     {
         /// <summary>Returns the HTTP status. Throws only on a network failure.</summary>
         Task<int> PushAsync(string url, string json, CancellationToken cancellationToken);
+        /// <summary>HIU side: reads an encrypted record a facility sent as a link instead of inline.
+        /// Null when the address is not usable, the answer is not a success, or it is too large.</summary>
+        Task<string?> FetchAsync(string url, CancellationToken cancellationToken);
     }
 
     public sealed class AbdmDataPushClient : IAbdmDataPushClient
     {
-        /// <summary>Whether the push carries our gateway token. Off unless set: the push goes to another facility's
-        /// server, and the token lets its holder call ABDM as us. Turn on only if the sandbox shows the push needs it.</summary>
+        /// <summary>Whether the push carries our gateway token. On unless set to "false": ABDM's page for the
+        /// transfer says "Authorisation token is mandatory for this API" and names the sessions token. The push goes
+        /// to another facility's server and the token lets its holder call ABDM as us until it expires, which is why
+        /// the push only ever goes to a public https address and never follows a redirect.</summary>
         public const string SendGatewayTokenKey = "Abdm:DataPushSendsGatewayToken";
 
         private readonly HttpClient _httpClient;
@@ -267,7 +306,7 @@ namespace EasyHMSAPI.Application.Services
         {
             _httpClient = httpClient;
             _gateway = gateway;
-            _sendGatewayToken = string.Equals(configuration[SendGatewayTokenKey], "true", StringComparison.OrdinalIgnoreCase);
+            _sendGatewayToken = !string.Equals(configuration[SendGatewayTokenKey], "false", StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>The push client's handler: never follows a redirect, and connects only to a public address,
@@ -295,6 +334,30 @@ namespace EasyHMSAPI.Application.Services
                 }
             }
         };
+
+        /// <summary>The largest record read from a link: more than this is refused, not buffered.</summary>
+        public const int MaxFetchBytes = 25 * 1024 * 1024;
+
+        public async Task<string?> FetchAsync(string url, CancellationToken cancellationToken)
+        {
+            if (!AbdmDataFlowRules.IsSafePushUrl(url))
+                return null;
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            if (!response.IsSuccessStatusCode || response.Content.Headers.ContentLength > MaxFetchBytes)
+                return null;
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var buffer = new MemoryStream();
+            var chunk = new byte[81920];
+            int read;
+            while ((read = await stream.ReadAsync(chunk, cancellationToken)) > 0)
+            {
+                if (buffer.Length + read > MaxFetchBytes)
+                    return null;
+                buffer.Write(chunk, 0, read);
+            }
+            return Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length).Trim().Trim('"');
+        }
 
         public async Task<int> PushAsync(string url, string json, CancellationToken cancellationToken)
         {
@@ -458,6 +521,7 @@ namespace EasyHMSAPI.Application.Services
 
             var keys = AbdmFidelius.NewKeyMaterial();
             var entries = new List<object>();
+            var sizes = new List<int>();
             var statuses = new List<object>();
             try
             {
@@ -468,9 +532,11 @@ namespace EasyHMSAPI.Application.Services
                         continue;
                     foreach (var record in built.Records)
                     {
+                        var content = AbdmFidelius.Encrypt(record.Json, keys.PrivateKey, keys.Nonce, request.PublicKey!, request.Nonce!);
+                        sizes.Add(content.Length);
                         entries.Add(new
                         {
-                            content = AbdmFidelius.Encrypt(record.Json, keys.PrivateKey, keys.Nonce, request.PublicKey!, request.Nonce!),
+                            content,
                             media = "application/fhir+json",
                             checksum = AbdmDataFlowRules.Md5Hex(record.Json),
                             careContextReference = careContext.ReferenceNumber
@@ -480,29 +546,35 @@ namespace EasyHMSAPI.Application.Services
                         statuses.Add(new { careContextReference = careContext.ReferenceNumber, hiStatus = "DELIVERED", description = "Data sent successfully" });
                 }
 
-                var payload = JsonSerializer.Serialize(new
+                // Every page carries the same key material: one key pair and nonce per transfer.
+                var keyMaterial = new
                 {
-                    pageNumber = 1,
-                    pageCount = 1,
-                    transactionId = request.TransactionId,
-                    entries,
-                    keyMaterial = new
+                    cryptoAlg = AbdmFidelius.CryptoAlg,
+                    curve = AbdmFidelius.Curve,
+                    dhPublicKey = new
                     {
-                        cryptoAlg = AbdmFidelius.CryptoAlg,
-                        curve = AbdmFidelius.Curve,
-                        dhPublicKey = new
-                        {
-                            expiry = DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
-                            parameters = AbdmFidelius.Parameters,
-                            keyValue = keys.PublicKey
-                        },
-                        nonce = keys.Nonce
-                    }
-                }, JsonOptions);
+                        expiry = DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture),
+                        parameters = AbdmFidelius.Parameters,
+                        keyValue = keys.PublicKey
+                    },
+                    nonce = keys.Nonce
+                };
+                var pages = AbdmDataFlowRules.Pages(sizes);
+                for (var page = 0; page < pages.Count; page++)
+                {
+                    var payload = JsonSerializer.Serialize(new
+                    {
+                        pageNumber = page + 1,
+                        pageCount = pages.Count,
+                        transactionId = request.TransactionId,
+                        entries = entries.Skip(pages[page].Start).Take(pages[page].Count),
+                        keyMaterial
+                    }, JsonOptions);
 
-                var status = await _push.PushAsync(request.DataPushUrl!, payload, cancellationToken);
-                if (status < 200 || status >= 300)
-                    throw new InvalidOperationException($"The HIU's data push URL answered HTTP {status}.");
+                    var status = await _push.PushAsync(request.DataPushUrl!, payload, cancellationToken);
+                    if (status < 200 || status >= 300)
+                        throw new InvalidOperationException($"The HIU's data push URL answered HTTP {status} on page {page + 1} of {pages.Count}.");
+                }
 
                 transfer.Status = AbdmTransferStatus.Transferred;
                 transfer.RecordCount = entries.Count;

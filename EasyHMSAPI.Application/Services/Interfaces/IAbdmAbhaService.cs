@@ -13,6 +13,10 @@ namespace EasyHMSAPI.Application.Services.Interfaces
     {
         Task<AbdmOtpTxnResult> GenerateAadhaarOtpAsync(string aadhaarNumber, CancellationToken cancellationToken);
 
+        /// <summary>Resends the Aadhaar OTP of an enrolment already started: the same call, carrying
+        /// the txnId the first request returned.</summary>
+        Task<AbdmOtpTxnResult> ResendAadhaarOtpAsync(string aadhaarNumber, string txnId, CancellationToken cancellationToken);
+
         /// <param name="mobile">Primary mobile number for the account — mandatory on this call per
         /// the integrator guide, regardless of whether it matches the Aadhaar-linked mobile. If it
         /// doesn't match, ABDM returns a null profile mobile and this same number still needs
@@ -35,6 +39,14 @@ namespace EasyHMSAPI.Application.Services.Interfaces
         /// txnId — determines the second scope element ("aadhaar-verify" vs "mobile-verify"), which
         /// ABDM validates strictly (a mismatch is rejected as "Invalid Scope").</param>
         Task<AbdmProfileResult> VerifyLoginOtpAsync(string txnId, string otp, string loginHint, CancellationToken cancellationToken);
+
+        /// <summary>Verify by ABHA address (name@abdm): checks the address exists, then sends the OTP
+        /// to the Aadhaar mobile ("aadhaar") or the ABHA mobile ("abdm").</summary>
+        Task<AbdmOtpTxnResult> RequestAbhaAddressLoginOtpAsync(string abhaAddress, string otpSystem, CancellationToken cancellationToken);
+
+        /// <summary>Completes an ABHA address login and reads the account behind it. The ABHA number
+        /// is empty when the address has no ABHA number linked.</summary>
+        Task<AbdmProfileResult> VerifyAbhaAddressLoginOtpAsync(string txnId, string otp, string otpSystem, string abhaAddress, CancellationToken cancellationToken);
 
         // ---- Profile updates — require a freshly-verified session (a TxnId from
         // VerifyLoginOtpAsync/VerifyAadhaarOtpAsync/VerifyMobileOtpAsync whose cached X-Token is

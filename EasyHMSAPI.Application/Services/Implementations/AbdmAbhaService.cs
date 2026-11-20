@@ -21,12 +21,19 @@ namespace EasyHMSAPI.Application.Services.Implementations
     public class AbdmAbhaService : IAbdmAbhaService
     {
         private const string XTokenCachePrefix = "Abdm:XToken:";
+        // What the Aadhaar step told us about the person, kept for the steps that follow it.
+        private const string EnrolProfileCachePrefix = "Abdm:EnrolProfile:";
+        private const string EnrolTokenCachePrefix = "Abdm:EnrolToken:";
+        private const string EnrolMobileCachePrefix = "Abdm:EnrolMobile:";
+        private static readonly TimeSpan EnrolMemory = TimeSpan.FromMinutes(20);
 
         private readonly HttpClient _httpClient;
         private readonly IAbdmGatewayService _gatewayService;
         private readonly IAbdmEncryptionService _encryptionService;
         private readonly IMemoryCache _cache;
         private readonly ILogger<AbdmAbhaService> _logger;
+        private readonly IAbdmM1CallLog _calls;
+        private readonly AbdmCallScope _callScope;
         private readonly string _abhaBaseUrl;
         private readonly string _cmId;
         private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
@@ -38,8 +45,12 @@ namespace EasyHMSAPI.Application.Services.Implementations
             IMemoryCache cache,
             IConfiguration configuration,
             IHostEnvironment environment,
-            ILogger<AbdmAbhaService> logger)
+            ILogger<AbdmAbhaService> logger,
+            IAbdmM1CallLog calls,
+            AbdmCallScope callScope)
         {
+            _calls = calls;
+            _callScope = callScope;
             _httpClient = httpClient;
             _gatewayService = gatewayService;
             _encryptionService = encryptionService;
@@ -61,19 +72,40 @@ namespace EasyHMSAPI.Application.Services.Implementations
                     : throw new InvalidOperationException("Abdm:AbhaBaseUrlProd must be configured before ABDM can be used in Production.");
         }
 
-        public async Task<AbdmOtpTxnResult> GenerateAadhaarOtpAsync(string aadhaarNumber, CancellationToken cancellationToken)
+        public Task<AbdmOtpTxnResult> GenerateAadhaarOtpAsync(string aadhaarNumber, CancellationToken cancellationToken) =>
+            RequestAadhaarOtpAsync(aadhaarNumber, string.Empty, cancellationToken);
+
+        public async Task<AbdmOtpTxnResult> ResendAadhaarOtpAsync(string aadhaarNumber, string txnId, CancellationToken cancellationToken)
+        {
+            try
+            {
+                return await RequestAadhaarOtpAsync(aadhaarNumber, txnId, cancellationToken);
+            }
+            catch (AbdmException refused) when (AbdmLoginRules.IsInvalidTransaction(refused))
+            {
+                // ABDM's page says to send the previous txnId to resend, but the sandbox answered
+                // "Invalid Transaction Id" to exactly that (2026-11-18). The person still needs an
+                // OTP, so ask once more as a new request; the caller takes the new txnId.
+                _logger.LogWarning("ABDM refused the Aadhaar OTP resend under its transaction; sending a new request instead.");
+                return await RequestAadhaarOtpAsync(aadhaarNumber, string.Empty, cancellationToken);
+            }
+        }
+
+        // txnId is empty on the first call; a previous txnId makes it a resend (ABDM's operation page says so).
+        private async Task<AbdmOtpTxnResult> RequestAadhaarOtpAsync(string aadhaarNumber, string txnId, CancellationToken cancellationToken)
         {
             var encrypted = await _encryptionService.EncryptAsync(aadhaarNumber, cancellationToken);
             var payload = new
             {
-                txnId = "",
+                txnId,
                 scope = new[] { "abha-enrol" },
                 loginHint = "aadhaar",
                 loginId = encrypted,
                 otpSystem = "aadhaar"
             };
             var doc = await PostAsync("/enrollment/request/otp", payload, cancellationToken);
-            return ReadOtpTxnResult(doc);
+            // A resend answer may leave the txnId out: it is still the one we sent.
+            return ReadOtpTxnResult(doc, string.IsNullOrEmpty(txnId) ? null : txnId);
         }
 
         public async Task<AbdmEnrollResult> VerifyAadhaarOtpAsync(string txnId, string otp, string mobile, CancellationToken cancellationToken)
@@ -97,7 +129,13 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 consent = new { code = "abha-enrollment", version = "1.4" }
             };
             var doc = await PostAsync("/enrollment/enrol/byAadhaar", payload, cancellationToken);
-            return ReadEnrollResult(doc, txnId);
+            var result = ReadEnrollResult(doc, txnId);
+            // The typed mobile is verified here only when ABDM put that same number on the profile.
+            // For an Aadhaar that already holds an ABHA the profile carries that ABHA's own mobile,
+            // so a different communication mobile still needs its own OTP (CRT_ABHA_109).
+            result.MobileVerified = AbdmLoginRules.SameMobile(result.Mobile, mobile);
+            RememberEnrolment(result, txnId);
+            return result;
         }
 
         public async Task<AbdmOtpTxnResult> GenerateMobileOtpAsync(string txnId, string mobile, CancellationToken cancellationToken)
@@ -112,7 +150,11 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 otpSystem = "abdm"
             };
             var doc = await PostAsync("/enrollment/request/otp", payload, cancellationToken);
-            return ReadOtpTxnResult(doc, fallbackTxnId: txnId);
+            var sent = ReadOtpTxnResult(doc, fallbackTxnId: txnId);
+            // Which mobile this OTP is proving, for the verify that follows.
+            if (!string.IsNullOrWhiteSpace(sent.TxnId))
+                _cache.Set(EnrolMobileCachePrefix + sent.TxnId, mobile, EnrolMemory);
+            return sent;
         }
 
         public async Task<AbdmEnrollResult> VerifyMobileOtpAsync(string txnId, string otp, CancellationToken cancellationToken)
@@ -120,14 +162,27 @@ namespace EasyHMSAPI.Application.Services.Implementations
             var encryptedOtp = await _encryptionService.EncryptAsync(otp, cancellationToken);
             var payload = new
             {
+                scope = AbdmLoginRules.EnrolMobileVerifyScope,
                 authData = new
                 {
                     authMethods = new[] { "otp" },
                     otp = new { txnId, otpValue = encryptedOtp }
                 }
             };
-            var doc = await PostAsync("/enrollment/auth/byAbdm/verify", payload, cancellationToken);
-            return ReadEnrollResult(doc, txnId);
+            var doc = await PostAsync(AbdmLoginRules.EnrolMobileVerifyPath, payload, cancellationToken);
+            // A wrong or expired OTP is also a 200 here; authResult tells them apart.
+            var failure = AbdmLoginRules.Failure(doc.RootElement);
+            if (failure != null)
+                throw new InvalidOperationException(failure);
+            var result = ReadEnrollResult(doc, txnId);
+            // The answer names the account only as accounts[].ABHANumber.
+            if (string.IsNullOrWhiteSpace(result.AbhaNumber)
+                && doc.RootElement.TryGetProperty("accounts", out var accounts) && accounts.ValueKind == JsonValueKind.Array)
+                result.AbhaNumber = accounts.EnumerateArray().Select(a => ReadString(a, "ABHANumber", "abhaNumber")).FirstOrDefault(n => n != null) ?? string.Empty;
+            _cache.TryGetValue(EnrolMobileCachePrefix + txnId, out string? verifiedMobile);
+            AbdmLoginRules.FillFromEnrolment(result, Remembered(result.AbhaNumber), verifiedMobile);
+            RememberEnrolment(result, txnId);
+            return result;
         }
 
         public async Task<AbdmAddressSuggestionsResult> GetAbhaAddressSuggestionsAsync(string txnId, CancellationToken cancellationToken)
@@ -139,7 +194,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 return request;
             }, cancellationToken);
 
-            var result = new AbdmAddressSuggestionsResult { TxnId = txnId };
+            var result = new AbdmAddressSuggestionsResult { TxnId = txnId, AddressSuffix = "@" + _cmId };
             if (doc.RootElement.TryGetProperty("abhaAddressList", out var list) && list.ValueKind == JsonValueKind.Array)
                 result.Suggestions = list.EnumerateArray().Select(e => e.GetString() ?? string.Empty).Where(s => s.Length > 0).ToList();
             return result;
@@ -152,6 +207,15 @@ namespace EasyHMSAPI.Application.Services.Implementations
             var result = ReadEnrollResult(doc, txnId);
             if (string.IsNullOrWhiteSpace(result.AbhaAddress))
                 result.AbhaAddress = abhaAddress;
+            // This answer carries the number and address only: the name, sex, birth date and mobile
+            // came with the Aadhaar step. The session token is carried over too, so the card can be
+            // shown under this transaction.
+            AbdmLoginRules.FillFromEnrolment(result, Remembered(result.AbhaNumber));
+            if (_cache.TryGetValue(EnrolTokenCachePrefix + AbdmLoginRules.AbhaDigits(result.AbhaNumber), out string? xToken))
+            {
+                CacheXToken(result.TxnId, xToken);
+                CacheXToken(txnId, xToken);
+            }
             return result;
         }
 
@@ -160,13 +224,71 @@ namespace EasyHMSAPI.Application.Services.Implementations
             var encrypted = await _encryptionService.EncryptAsync(loginId, cancellationToken);
             var payload = new
             {
-                scope = new[] { "abha-login", loginHint == "aadhaar" ? "aadhaar-verify" : "mobile-verify" },
+                // The second element follows where the OTP goes, not how the account was named: an
+                // ABHA number can be verified by an OTP to the Aadhaar mobile too (VRFY_ABHA_101).
+                scope = AbdmLoginRules.Scope(loginHint, otpSystem),
                 loginHint,
                 loginId = encrypted,
-                otpSystem
+                otpSystem = AbdmLoginRules.NormaliseOtpSystem(otpSystem, loginHint)
             };
             var doc = await PostAsync("/profile/login/request/otp", payload, cancellationToken);
             return ReadOtpTxnResult(doc);
+        }
+
+        // ---- Verify by ABHA address (VRFY_ABHA_102 and 202): its own three calls on the same host ----
+
+        public async Task<AbdmOtpTxnResult> RequestAbhaAddressLoginOtpAsync(string abhaAddress, string otpSystem, CancellationToken cancellationToken)
+        {
+            // Search first: an address nobody holds is answered here ("User not found", ABDM-1211),
+            // before any OTP is asked for.
+            await PostAsync(AbdmLoginRules.AddressSearchPath, new { abhaAddress }, cancellationToken);
+
+            var encrypted = await _encryptionService.EncryptAsync(abhaAddress, cancellationToken);
+            var payload = new
+            {
+                scope = AbdmLoginRules.Scope(AbdmLoginRules.HintAbhaAddress, otpSystem),
+                loginHint = AbdmLoginRules.HintAbhaAddress,
+                loginId = encrypted,
+                otpSystem = AbdmLoginRules.NormaliseOtpSystem(otpSystem, null)
+            };
+            var doc = await PostAsync(AbdmLoginRules.AddressRequestOtpPath, payload, cancellationToken);
+            return ReadOtpTxnResult(doc);
+        }
+
+        public async Task<AbdmProfileResult> VerifyAbhaAddressLoginOtpAsync(string txnId, string otp, string otpSystem, string abhaAddress, CancellationToken cancellationToken)
+        {
+            var encryptedOtp = await _encryptionService.EncryptAsync(otp, cancellationToken);
+            var payload = new
+            {
+                scope = AbdmLoginRules.Scope(AbdmLoginRules.HintAbhaAddress, otpSystem),
+                authData = new
+                {
+                    authMethods = new[] { "otp" },
+                    otp = new { txnId, otpValue = encryptedOtp }
+                }
+            };
+            using var verified = await PostAsync(AbdmLoginRules.AddressVerifyPath, payload, cancellationToken);
+            var failure = AbdmLoginRules.Failure(verified.RootElement);
+            if (failure != null)
+                throw new InvalidOperationException(failure);
+
+            var token = AbdmLoginRules.ReadToken(verified.RootElement);
+            if (string.IsNullOrWhiteSpace(token))
+                return AbdmLoginRules.ReadAddressProfile(verified.RootElement, txnId, abhaAddress);
+            CacheXToken(txnId, token);
+
+            using var profile = await SendAsync(() => BuildRequestAsync(HttpMethod.Get, AbdmLoginRules.AddressProfilePath, null, cancellationToken, token), cancellationToken);
+            var result = AbdmLoginRules.ReadAddressProfile(profile.RootElement, txnId, abhaAddress);
+            AbdmLoginRules.ApplyFullProfile(profile.RootElement, result);
+            if (string.IsNullOrWhiteSpace(result.AbhaNumber))
+            {
+                // Some profile answers leave the number out; the verify answer lists the accounts.
+                var fromVerify = AbdmLoginRules.ReadAddressProfile(verified.RootElement, txnId, abhaAddress);
+                result.AbhaNumber = fromVerify.AbhaNumber;
+                if (string.IsNullOrWhiteSpace(result.FullName))
+                    result.FullName = fromVerify.FullName;
+            }
+            return result;
         }
 
         public async Task<AbdmProfileResult> VerifyLoginOtpAsync(string txnId, string otp, string loginHint, CancellationToken cancellationToken)
@@ -186,6 +308,10 @@ namespace EasyHMSAPI.Application.Services.Implementations
             var doc = await PostAsync("/profile/login/verify", payload, cancellationToken);
 
             var root = doc.RootElement;
+            // A wrong or expired OTP is answered with 200 and authResult "failed": it is not a login.
+            var failure = AbdmLoginRules.Failure(root);
+            if (failure != null)
+                throw new InvalidOperationException(failure);
             if (root.TryGetProperty("token", out var tokenEl) && tokenEl.ValueKind == JsonValueKind.String)
                 CacheXToken(txnId, tokenEl.GetString());
 
@@ -195,7 +321,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
             if (root.TryGetProperty("accounts", out var accounts) && accounts.ValueKind == JsonValueKind.Array && accounts.GetArrayLength() > 0)
                 account = accounts[0];
 
-            return new AbdmProfileResult
+            var result = new AbdmProfileResult
             {
                 TxnId = txnId,
                 AbhaNumber = ReadString(account, "ABHANumber", "abhaNumber", "healthIdNumber") ?? string.Empty,
@@ -206,6 +332,8 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 Mobile = ReadString(account, "mobile"),
                 Email = ReadString(account, "email")
             };
+            await FillFullProfileAsync(result, tokenEl.ValueKind == JsonValueKind.String ? tokenEl.GetString() : null, cancellationToken);
+            return result;
         }
 
         // ---- Profile updates (require a live, freshly-verified session — see interface docs) ----
@@ -266,7 +394,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
         {
             var doc = await SendAsync(() => BuildRequestAsync(HttpMethod.Get, "/profile/account", null, cancellationToken, RequireXToken(sessionTxnId)), cancellationToken);
             var root = doc.RootElement;
-            return new AbdmProfileResult
+            var result = new AbdmProfileResult
             {
                 TxnId = sessionTxnId,
                 AbhaNumber = ReadString(root, "ABHANumber", "abhaNumber", "healthIdNumber") ?? string.Empty,
@@ -278,6 +406,8 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 Email = ReadString(root, "email"),
                 ProfilePhoto = ReadString(root, "profilePhoto")
             };
+            AbdmLoginRules.ApplyFullProfile(root, result);
+            return result;
         }
 
         public async Task<AbdmBinaryResult> GetQrCodeAsync(string sessionTxnId, CancellationToken cancellationToken)
@@ -314,7 +444,8 @@ namespace EasyHMSAPI.Application.Services.Implementations
                         Index = candidate.TryGetProperty("index", out var idx) && idx.TryGetInt32(out var i) ? i : 0,
                         AbhaNumber = ReadString(candidate, "ABHANumber", "abhaNumber") ?? string.Empty,
                         Name = ReadString(candidate, "name"),
-                        Gender = ReadString(candidate, "gender")
+                        Gender = ReadString(candidate, "gender"),
+                        AbhaAddress = ReadString(candidate, "preferredAbhaAddress", "abhaAddress", "healthId")
                     });
                 }
             }
@@ -340,7 +471,8 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
         public async Task<AbdmOtpTxnResult> RequestDeactivateOtpAsync(string sessionTxnId, string abhaNumber, string otpSystem, CancellationToken cancellationToken)
         {
-            var encrypted = await _encryptionService.EncryptAsync(abhaNumber, cancellationToken);
+            // With its dashes: ABDM refuses the bare 14 digits.
+            var encrypted = await _encryptionService.EncryptAsync(AbdmLoginRules.DashedAbhaNumber(abhaNumber) ?? abhaNumber, cancellationToken);
             var payload = new
             {
                 scope = new[] { "abha-profile", "de-activate" },
@@ -371,7 +503,8 @@ namespace EasyHMSAPI.Application.Services.Implementations
 
         public async Task<AbdmOtpTxnResult> RequestReactivateOtpAsync(string abhaNumber, CancellationToken cancellationToken)
         {
-            var encrypted = await _encryptionService.EncryptAsync(abhaNumber, cancellationToken);
+            // With its dashes: ABDM refuses the bare 14 digits.
+            var encrypted = await _encryptionService.EncryptAsync(AbdmLoginRules.DashedAbhaNumber(abhaNumber) ?? abhaNumber, cancellationToken);
             var payload = new
             {
                 scope = new[] { "abha-login", "mobile-verify", "re-activate" },
@@ -402,6 +535,10 @@ namespace EasyHMSAPI.Application.Services.Implementations
             var doc = await PostAsync("/profile/login/verify", payload, cancellationToken);
 
             var root = doc.RootElement;
+            // A wrong or expired OTP is answered with 200 and authResult "failed": it is not a login.
+            var failure = AbdmLoginRules.Failure(root);
+            if (failure != null)
+                throw new InvalidOperationException(failure);
             if (root.TryGetProperty("token", out var tokenEl) && tokenEl.ValueKind == JsonValueKind.String)
                 CacheXToken(txnId, tokenEl.GetString());
 
@@ -409,7 +546,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
             if (root.TryGetProperty("accounts", out var accounts) && accounts.ValueKind == JsonValueKind.Array && accounts.GetArrayLength() > 0)
                 account = accounts[0];
 
-            return new AbdmProfileResult
+            var result = new AbdmProfileResult
             {
                 TxnId = txnId,
                 AbhaNumber = ReadString(account, "ABHANumber", "abhaNumber", "healthIdNumber") ?? string.Empty,
@@ -420,6 +557,28 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 Mobile = ReadString(account, "mobile"),
                 Email = ReadString(account, "email")
             };
+            await FillFullProfileAsync(result, tokenEl.ValueKind == JsonValueKind.String ? tokenEl.GetString() : null, cancellationToken);
+            return result;
+        }
+
+        /// <summary>A login's verify answer is a summary. The full profile (address, state, district,
+        /// photo, KYC) comes from GET /profile/account with that login's token, and fills the
+        /// registration form (VRFY_ABHA_101, 201, 305). The login stands without it.</summary>
+        private async Task FillFullProfileAsync(AbdmProfileResult result, string? xToken, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(xToken)) return;
+            try
+            {
+                using var full = await SendAsync(() => BuildRequestAsync(HttpMethod.Get, "/profile/account", null, cancellationToken, xToken), cancellationToken);
+                var fullAbha = ReadString(full.RootElement, "ABHANumber", "abhaNumber");
+                // Never fill one ABHA's form from another's profile.
+                if (fullAbha == null || string.IsNullOrWhiteSpace(result.AbhaNumber) || AbdmLoginRules.AbhaDigits(fullAbha) == AbdmLoginRules.AbhaDigits(result.AbhaNumber))
+                    AbdmLoginRules.ApplyFullProfile(full.RootElement, result);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "ABHA login verified, but the full profile could not be read.");
+            }
         }
 
         // ---- HTTP plumbing -------------------------------------------------------------------
@@ -462,9 +621,37 @@ namespace EasyHMSAPI.Application.Services.Implementations
             return request;
         }
 
+        /// <summary>Sends the call and writes it to the hospital's activity log with its REQUEST-ID
+        /// and outcome, so each M1 test case can be traced.</summary>
+        private async Task<AbdmResponse> SendLoggedAsync(Func<Task<HttpRequestMessage>> buildRequest, CancellationToken cancellationToken)
+        {
+            string? path = null;
+            var sentAt = DateTime.UtcNow;
+            async Task<HttpRequestMessage> Build()
+            {
+                var request = await buildRequest();
+                path = request.RequestUri?.AbsolutePath;
+                return request;
+            }
+
+            try
+            {
+                var response = await AbdmHttp.SendAsync(_httpClient, _gatewayService, _logger, Build, cancellationToken);
+                await _calls.RecordAsync(_callScope.HospitalId, response.RequestId, path, response.StatusCode, null, null, sentAt, cancellationToken);
+                return response;
+            }
+            catch (AbdmException ex)
+            {
+                // When ABDM's answer held nothing readable, the log keeps the start of it so the cause can be found.
+                var detail = ex.UnreadBody == null ? ex.Message : $"{ex.Message} ABDM answered: {ex.UnreadBody}";
+                await _calls.RecordAsync(_callScope.HospitalId, ex.RequestId, path, ex.StatusCode, ex.Code, detail, sentAt, cancellationToken);
+                throw;
+            }
+        }
+
         private async Task<JsonDocument> SendAsync(Func<Task<HttpRequestMessage>> buildRequest, CancellationToken cancellationToken)
         {
-            var response = await AbdmHttp.SendAsync(_httpClient, _gatewayService, _logger, buildRequest, cancellationToken);
+            var response = await SendLoggedAsync(buildRequest, cancellationToken);
             var body = response.BodyText;
             return JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
         }
@@ -474,7 +661,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
         /// unchanged so the caller doesn't have to guess between image/png and application/pdf.</summary>
         private async Task<AbdmBinaryResult> SendBinaryAsync(Func<Task<HttpRequestMessage>> buildRequest, CancellationToken cancellationToken)
         {
-            var response = await AbdmHttp.SendAsync(_httpClient, _gatewayService, _logger, buildRequest, cancellationToken);
+            var response = await SendLoggedAsync(buildRequest, cancellationToken);
             return new AbdmBinaryResult
             {
                 Content = response.Body,
@@ -517,8 +704,19 @@ namespace EasyHMSAPI.Application.Services.Implementations
             var fullName = ReadString(profile, "name")
                 ?? string.Join(' ', new[] { firstName, middleName, lastName }.Where(s => !string.IsNullOrWhiteSpace(s)));
 
+            // The Aadhaar step carries the address, state, district, pincode and photo too.
+            var full = new AbdmProfileResult();
+            AbdmLoginRules.ApplyFullProfile(profile, full);
+
             return new AbdmEnrollResult
             {
+                Email = full.Email,
+                Address = full.Address,
+                State = full.State,
+                District = full.District,
+                City = full.City,
+                Pincode = full.Pincode,
+                ProfilePhoto = full.ProfilePhoto,
                 TxnId = ReadString(root, "txnId") ?? txnId,
                 AbhaNumber = ReadString(profile, "abhaNumber", "ABHANumber", "healthIdNumber") ?? string.Empty,
                 AbhaAddress = ReadString(profile, "healthId", "preferredAbhaAddress", "abhaAddress"),
@@ -548,6 +746,22 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 }
             }
             return null;
+        }
+
+        private AbdmEnrollResult? Remembered(string? abhaNumber)
+        {
+            var digits = AbdmLoginRules.AbhaDigits(abhaNumber);
+            return digits.Length > 0 && _cache.TryGetValue(EnrolProfileCachePrefix + digits, out AbdmEnrollResult? profile) ? profile : null;
+        }
+
+        private void RememberEnrolment(AbdmEnrollResult result, string txnId)
+        {
+            var digits = AbdmLoginRules.AbhaDigits(result.AbhaNumber);
+            if (digits.Length == 0)
+                return;
+            _cache.Set(EnrolProfileCachePrefix + digits, result, EnrolMemory);
+            if (_cache.TryGetValue(XTokenCachePrefix + txnId, out string? xToken) && !string.IsNullOrWhiteSpace(xToken))
+                _cache.Set(EnrolTokenCachePrefix + digits, xToken, EnrolMemory);
         }
 
         private void CacheXToken(string txnId, string? xToken)

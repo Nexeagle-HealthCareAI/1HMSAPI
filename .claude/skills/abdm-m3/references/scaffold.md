@@ -8,6 +8,8 @@ Every journey below is an OODA loop, not a recipe: observe the actual state (las
 
 Loop limit: 8 passes per step. Hitting the limit is an escalation: state what was observed, what was tried, and which operation page to read, then ask one question.
 
+Before building, read `references/test-matrix.md` in this skill. Its APIs are the ones the sheet lists for the group a case sits in, so a case may not call all of them. Build every journey that a case mandatory for your entity type needs, and build each mandatory case's Expected Result into the screen, not only its calls. The test run uses it to know what each case exercises.
+
 ## Before the first journey, when the codebase already exists
 
 Skip this section only for a system that does not exist yet. Otherwise it runs first, and its exit condition is a written plan, not a call.
@@ -369,7 +371,7 @@ Inbound to your bridge at `/api/v3/hiu/health-information/on-request`. Acknowled
 
 **Exit condition (Observe until this is true)**
 
-A 200 response. The specification gives no body for it, so read what comes back.
+A 200 response to `POST /api/v3/hiu/health-information/on-request` in `m3-callbacks`, whose body the specification does not give: read what comes back.
 
 ## Where the detail is
 

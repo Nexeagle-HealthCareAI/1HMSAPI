@@ -57,6 +57,8 @@ namespace EasyHMSAPI.Application.Services
                     await _hiu.OnConsentInitAnsweredAsync(inbound, cancellationToken);
                 else if (path.EndsWith("hiu/consent/request/notify", StringComparison.OrdinalIgnoreCase))
                     await _hiu.OnConsentNotifyAsync(inbound, cancellationToken);
+                else if (path.EndsWith("hiu/consent/request/on-status", StringComparison.OrdinalIgnoreCase))
+                    await _hiu.OnConsentStatusAnsweredAsync(inbound, cancellationToken);
                 else if (path.EndsWith("hiu/consent/on-fetch", StringComparison.OrdinalIgnoreCase))
                     await _hiu.OnConsentFetchedAsync(inbound, cancellationToken);
                 else if (path.EndsWith("hiu/health-information/on-request", StringComparison.OrdinalIgnoreCase))

@@ -19,7 +19,7 @@ can_orchestrate: false
 
 Generated from the ABDM Developer Portal on 2026-09-16, catalogue version 2026.09.16.
 
-This file is a snapshot. Re-download the whole folder from https://docs.abdm.gov.in/skills/abdm-fhir/ when it is older than the work you are doing: this router and every file under references/ that it links to. Fetching this file alone leaves those links pointing at files you do not have.
+This file is a snapshot. Re-download the whole folder from the portal's /skills/abdm-fhir/ path when it is older than the work you are doing: this router and every file under references/ that it links to. Fetching this file alone leaves those links pointing at files you do not have.
 
 ## What this skill covers
 
@@ -36,10 +36,27 @@ Open one when the work calls for it. This file is the map, not the material.
 
 Loaded with no task? Say in three lines what this skill does. Offer the prompts above. Then ask what the person is building, and whether the code for it exists yet.
 
+## The plan file
+
+Integration work starts from a plan file and keeps it current. Before the first change to the codebase and the first sandbox call:
+
+1. Look for `INTEGRATION-PLAN.md` at the root of the repository. If it exists, read it, say in one line where the work stands, and resume from the first step that is not `done`.
+2. If it does not exist, scope the work first: the goal, the role, the modules and the skill that carries each, the routes the interview switched on, and what is out of scope. Write the file with every step `pending` and its exit condition, show it to the person, and start when they agree.
+3. After every step, update the file at once: its status, the evidence that proves its exit condition (a request id, a passing test, a file changed), the date, and the count and percentage of steps `done`.
+
+| Status | Means |
+|---|---|
+| `pending` | Not started |
+| `in progress` | The step being worked on now. One at a time |
+| `done` | Its exit condition was observed, and the evidence is in the file |
+| `blocked` | Waiting on something only the person can give. The file names it and asks one question |
+
+The last steps are the module's functional test cases. Their run log is its own file, linked from the plan. Never write a secret to the plan: no token, client secret, OTP, password or patient identifier.
+
 ## Before anything else
 
-- Treat every request and response shape in this skill as unconfirmed until the sandbox has answered you. Check a response before you rely on its shape.
-- The design section is different in kind. Its rules come from building a working front desk against the sandbox, and each atom it cites names what was observed and the date it was seen.
+- Paste the sandbox response at every step and check it against the shape this skill gives before you build on it. A step is done when its response is observed.
+- The design section's rules come from building a working front desk against the sandbox, and each atom it cites names what was observed and the date it was seen.
 - A bundle that validates is not a bundle ABDM accepts. The NRCES profiles are the floor, and the milestone the bundle travels under adds its own rules on top.
 
 ## Practices that hold across every call

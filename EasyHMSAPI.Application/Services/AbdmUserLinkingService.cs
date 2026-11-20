@@ -29,9 +29,12 @@ namespace EasyHMSAPI.Application.Services
         private const string OnInitPath = "/api/hiecm/user-initiated-linking/v3/link/care-context/on-init";
         private const string OnConfirmPath = "/api/hiecm/user-initiated-linking/v3/link/care-context/on-confirm";
 
-        // Error codes from NHA's list for the module (abdm-m2 debug reference). NHA does not say
-        // which code each refusal should carry, so these are the closest by meaning.
-        public const string NoPatientCode = "ABDM-1010";
+        // Error codes from ABDM's M2 error page (read 2026-11-18). ABDM does not say which code
+        // each refusal should carry, so these are the closest by their published message:
+        // 1001 "No data found", 1012 "No records found against the ABHA Address", 1017 "Invalid
+        // TransactionId", 1057 "Invalid Care Contexts", 1056 "Invalid Link Reference Number",
+        // 1036 "Data does not matched", 1004 "SMS Gateway is unavailable".
+        public const string NoPatientCode = "ABDM-1001";
         public const string NoRecordsCode = "ABDM-1012";
         public const string InvalidTransactionCode = "ABDM-1017";
         public const string InvalidCareContextsCode = "ABDM-1057";
@@ -97,6 +100,9 @@ namespace EasyHMSAPI.Application.Services
                 Kind = "on-discover",
                 Path = OnDiscoverPath,
                 HospitalId = hospitalId,
+                // ABDM's page for on-discover names X-HIU-ID as the facility header, unlike every
+                // other HIP call, so this one answer carries the facility id under both names.
+                FacilityHeader = AbdmFacilityHeader.HipAndHiu,
                 SubjectRef = request.AbhaAddress ?? match.Patient.PatientId,
                 ExpectsCallback = false,
                 Body = new
@@ -235,7 +241,7 @@ namespace EasyHMSAPI.Application.Services
                 return;
             var hospitalId = inbound.HospitalId.Value;
             var linkReference = AbdmCareContextRules.FindString(inbound.RawBody, "linkRefNumber");
-            var token = AbdmCareContextRules.FindString(inbound.RawBody, "token");
+            var token = AbdmDiscoveryRules.ConfirmToken(inbound.RawBody);
 
             var linkRequest = linkReference == null ? null : await _db.AbdmLinkRequests
                 .FirstOrDefaultAsync(r => r.HospitalId == hospitalId && r.LinkReferenceNumber == linkReference, cancellationToken);
@@ -352,6 +358,7 @@ namespace EasyHMSAPI.Application.Services
                 Kind = kind,
                 Path = path,
                 HospitalId = inbound.HospitalId!.Value,
+                FacilityHeader = kind == "on-discover" ? AbdmFacilityHeader.HipAndHiu : AbdmFacilityHeader.Hip,
                 SubjectRef = code,
                 ExpectsCallback = false,
                 Body = transactionId == null

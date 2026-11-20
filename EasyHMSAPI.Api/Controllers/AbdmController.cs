@@ -255,11 +255,15 @@ namespace EasyHMSAPI.Api.Controllers
 
         // The consent wording shown before an Aadhaar-based ABHA enrolment. The server owns it (and its version).
         [HttpGet("consent/text")]
-        public IActionResult GetConsentText() => Ok(new
+        public async Task<IActionResult> GetConsentText() => Ok(new
         {
             code = AbhaConsentRules.Code,
             version = AbhaConsentRules.Version,
             text = AbhaConsentRules.Text,
+            declarations = AbhaConsentRules.Declarations,
+            // The worker's confirmation names the person logged in; nobody types it.
+            workerConfirmation = AbhaConsentRules.WorkerConfirmation(await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext)),
+            beneficiaryConfirmationTemplate = AbhaConsentRules.BeneficiaryConfirmation("{name}"),
         });
 
         // Records that the patient (or guardian) agreed; the returned consentId must accompany the Aadhaar OTP request.
@@ -303,6 +307,7 @@ namespace EasyHMSAPI.Api.Controllers
         {
             try
             {
+                request.CallerUserId = UserContextHelper.GetUserId(HttpContext.User) ?? Guid.Empty;
                 var response = await _mediator.Send(request);
                 if (!response.Success) return BadRequest(new { response.Message });
                 return Ok(response);
@@ -335,6 +340,7 @@ namespace EasyHMSAPI.Api.Controllers
         {
             try
             {
+                request.CallerUserId = UserContextHelper.GetUserId(HttpContext.User) ?? Guid.Empty;
                 var response = await _mediator.Send(request);
                 if (!response.Success) return BadRequest(new { response.Message });
                 return Ok(response);
@@ -347,11 +353,11 @@ namespace EasyHMSAPI.Api.Controllers
         }
 
         [HttpGet("abha-address/suggestions")]
-        public async Task<ActionResult<AbdmAddressSuggestionsResponseModel>> GetAbhaAddressSuggestions([FromQuery] string txnId)
+        public async Task<ActionResult<AbdmAddressSuggestionsResponseModel>> GetAbhaAddressSuggestions([FromQuery] string txnId, [FromQuery] Guid? hospitalId = null)
         {
             try
             {
-                var response = await _mediator.Send(new GetAbhaAddressSuggestionsRequestModel { TxnId = txnId });
+                var response = await _mediator.Send(new GetAbhaAddressSuggestionsRequestModel { TxnId = txnId, HospitalId = hospitalId });
                 if (!response.Success) return BadRequest(new { response.Message });
                 return Ok(response);
             }
@@ -367,6 +373,7 @@ namespace EasyHMSAPI.Api.Controllers
         {
             try
             {
+                request.CallerUserId = UserContextHelper.GetUserId(HttpContext.User) ?? Guid.Empty;
                 request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
                 var response = await _mediator.Send(request);
                 if (!response.Success) return BadRequest(new { response.Message });
@@ -385,7 +392,7 @@ namespace EasyHMSAPI.Api.Controllers
             try
             {
                 var response = await _mediator.Send(request);
-                if (!response.Success) return BadRequest(new { response.Message });
+                if (!response.Success) return response.NotFound ? NotFound(response) : BadRequest(new { response.Message });
                 return Ok(response);
             }
             catch (Exception ex)
@@ -427,6 +434,44 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 _logger.LogError(ex, "Error saving linked ABHA account.");
                 return StatusCode(500, new { Message = "An error occurred while saving the ABHA account." });
+            }
+        }
+
+        // ---- Register a patient from a verified ABHA (M1: VRFY_ABHA_306, 308, CRT_ABHA_116, tagging) ----
+
+        [HttpPost("patients/match")]
+        public async Task<ActionResult<MatchAbhaPatientResponseModel>> MatchAbhaPatient([FromBody] MatchAbhaPatientRequestModel request)
+        {
+            try
+            {
+                request.CallerUserId = UserContextHelper.GetUserId(HttpContext.User) ?? Guid.Empty;
+                var response = await _mediator.Send(request);
+                if (!response.Success) return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error matching an ABHA to patients.");
+                return StatusCode(500, new { Message = "An error occurred while looking for the patient." });
+            }
+        }
+
+        [HttpPost("patients/register")]
+        public async Task<ActionResult<RegisterAbhaPatientResponseModel>> RegisterAbhaPatient([FromBody] RegisterAbhaPatientRequestModel request)
+        {
+            try
+            {
+                request.CallerUserId = UserContextHelper.GetUserId(HttpContext.User) ?? Guid.Empty;
+                request.LoggedInUserName = await UserContextHelper.GetCurrentUserFullNameAsync(HttpContext);
+                var response = await _mediator.Send(request);
+                // An ABHA already on another patient is a 409 carrying that patient's ID.
+                if (!response.Success) return response.AlreadyLinkedPatientId != null ? Conflict(response) : BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error registering a patient from an ABHA.");
+                return StatusCode(500, new { Message = "An error occurred while registering the patient." });
             }
         }
 
@@ -543,7 +588,7 @@ namespace EasyHMSAPI.Api.Controllers
             try
             {
                 var response = await _mediator.Send(request);
-                if (!response.Success) return BadRequest(new { response.Message });
+                if (!response.Success) return response.NotFound ? NotFound(response) : BadRequest(new { response.Message });
                 return Ok(response);
             }
             catch (Exception ex)

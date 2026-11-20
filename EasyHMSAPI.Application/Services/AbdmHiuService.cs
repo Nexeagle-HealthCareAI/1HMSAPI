@@ -39,6 +39,12 @@ namespace EasyHMSAPI.Application.Services
         Task OnConsentNotifyAsync(AbdmInbound inbound, CancellationToken cancellationToken);
         Task OnConsentFetchedAsync(AbdmInbound inbound, CancellationToken cancellationToken);
         Task OnDataRequestAnsweredAsync(AbdmInbound inbound, CancellationToken cancellationToken);
+        /// <summary>Asks ABDM where a consent request stands (the answer comes on a callback and is
+        /// applied by OnConsentStatusAnsweredAsync), and reads the state of its latest transfer.
+        /// For a refusal, expiry or withdrawal whose notification never reached us; ABDM's
+        /// specification does not list an approval among the answers.</summary>
+        Task<AbdmHiuCheck> CheckAsync(Guid hospitalId, Guid consentRowId, CancellationToken cancellationToken);
+        Task OnConsentStatusAnsweredAsync(AbdmInbound inbound, CancellationToken cancellationToken);
         /// <summary>A facility pushed encrypted records to the URL we gave for one transfer.
         /// False when the token names no transfer that is waiting.</summary>
         Task<bool> ReceiveDataAsync(string pushToken, string body, CancellationToken cancellationToken);
@@ -56,6 +62,10 @@ namespace EasyHMSAPI.Application.Services
     }
 
     public sealed record AbdmHiuSweep(int RecordsErased, int TransfersClosed);
+
+    /// <summary>What a status check did: whether ABDM was asked about the consent, and what it says
+    /// about the latest transfer of records (its own word, e.g. "TRANSFERRED"), when there is one.</summary>
+    public sealed record AbdmHiuCheck(bool ConsentAsked, string? TransferStatus, string? Message);
 
     public sealed record AbdmReceivedRecordSummary(Guid ReceivedRecordId, string ConsentId, string? CareContextReference, string? HiType, string? Title, DateTime ReceivedAt, DateTime? EraseAt, string? FromFacility);
 
@@ -75,6 +85,8 @@ namespace EasyHMSAPI.Application.Services
         private const string ConsentFetchPath = "/api/hiecm/consent/v3/fetch";
         private const string DataRequestPath = "/api/hiecm/data-flow/v3/health-information/request";
         private const string DataNotifyPath = "/api/hiecm/data-flow/v3/health-information/notify";
+        private const string ConsentStatusPath = "/api/hiecm/consent/v3/request/status";
+        private const string DataStatusPath = "/api/hiecm/data-flow/v3/health-information/request/status/";
         private const string PendingPrefix = "pending:";
         private const string Iso = "yyyy-MM-ddTHH:mm:ss.fffZ";
 
@@ -99,8 +111,11 @@ namespace EasyHMSAPI.Application.Services
         private readonly IConfiguration _configuration;
         private readonly ILogger<AbdmHiuService> _logger;
 
-        public AbdmHiuService(AppDbContext db, IAbdmHieService hie, IConfiguration configuration, ILogger<AbdmHiuService> logger)
+        private readonly IAbdmDataPushClient? _push;
+
+        public AbdmHiuService(AppDbContext db, IAbdmHieService hie, IConfiguration configuration, ILogger<AbdmHiuService> logger, IAbdmDataPushClient? push = null)
         {
+            _push = push;
             _db = db;
             _hie = hie;
             _configuration = configuration;
@@ -248,6 +263,54 @@ namespace EasyHMSAPI.Application.Services
             var status = (AbdmCareContextRules.FindString(inbound.RawBody, "status") ?? string.Empty).Trim().ToUpperInvariant();
             var artefactIds = ArtefactIds(inbound.RawBody);
 
+            var (rows, _) = await ApplyDecisionAsync(hospitalId, requestId, status, artefactIds, cancellationToken);
+
+            await _hie.SendAsync(new AbdmHieCall
+            {
+                Kind = "hiu-consent-on-notify",
+                Path = ConsentOnNotifyPath,
+                HospitalId = hospitalId,
+                SubjectRef = requestId,
+                ExpectsCallback = false,
+                FacilityHeader = AbdmFacilityHeader.Hiu,
+                Body = new
+                {
+                    acknowledgement = artefactIds.Select(id => new { status = "OK", consentId = id }).ToArray(),
+                    response = new { requestId = inbound.HeaderRequestId }
+                }
+            }, cancellationToken);
+
+            if (rows.Count == 0 || status != AbdmConsentStatus.Granted)
+                return;
+            foreach (var artefactId in artefactIds)
+            {
+                try
+                {
+                    await _hie.SendAsync(new AbdmHieCall
+                    {
+                        Kind = "consent-fetch",
+                        Path = ConsentFetchPath,
+                        HospitalId = hospitalId,
+                        SubjectRef = artefactId,
+                        ExpectsCallback = true,
+                        FacilityHeader = AbdmFacilityHeader.Hiu,
+                        Body = new { consentId = artefactId }
+                    }, cancellationToken);
+                }
+                catch (AbdmException ex)
+                {
+                    _logger.LogWarning("ABDM consent fetch for {ConsentId} was refused: {Code}.", artefactId, ex.Code ?? "none");
+                }
+            }
+        }
+
+        /// <summary>Writes a decision on a consent request (granted as these artefacts, denied,
+        /// revoked, expired) to our rows for it. Returns the rows, and the artefacts that became
+        /// granted just now: only those still need their detail and their records fetched.</summary>
+        private async Task<(List<AbdmConsent> Rows, List<string> NewlyGranted)> ApplyDecisionAsync(
+            Guid hospitalId, string? requestId, string status, IReadOnlyList<string> artefactIds, CancellationToken cancellationToken)
+        {
+            var newlyGranted = new List<string>();
             var rows = requestId == null ? new List<AbdmConsent>() : await _db.AbdmConsents
                 .Where(c => c.HospitalId == hospitalId && c.Role == AbdmConsentRole.Hiu && c.ConsentRequestId == requestId)
                 .ToListAsync(cancellationToken);
@@ -272,6 +335,8 @@ namespace EasyHMSAPI.Application.Services
                         _db.AbdmConsents.Add(row);
                         rows.Add(row);
                     }
+                    if (row.ConsentId != artefactId || row.Status != AbdmConsentStatus.Granted)
+                        newlyGranted.Add(artefactId);
                     row.ConsentId = artefactId;
                     row.Status = AbdmConsentStatus.Granted;
                     row.UpdatedAt = now;
@@ -294,25 +359,98 @@ namespace EasyHMSAPI.Application.Services
                 }
             }
             await _db.SaveChangesAsync(cancellationToken);
+            return (rows, newlyGranted);
+        }
 
-            await _hie.SendAsync(new AbdmHieCall
+        // ---- 2b. asking where a request stands, when no notification came --------------------
+
+        public async Task<AbdmHiuCheck> CheckAsync(Guid hospitalId, Guid consentRowId, CancellationToken cancellationToken)
+        {
+            var consent = await _db.AbdmConsents.AsNoTracking().FirstOrDefaultAsync(
+                c => c.HospitalId == hospitalId && c.Role == AbdmConsentRole.Hiu && c.ConsentRowId == consentRowId, cancellationToken);
+            if (consent == null)
+                throw new AbdmHiuRefusedException("That consent request was not found.");
+
+            var asked = false;
+            string? message = null;
+            if (!string.IsNullOrWhiteSpace(consent.ConsentRequestId))
             {
-                Kind = "hiu-consent-on-notify",
-                Path = ConsentOnNotifyPath,
-                HospitalId = hospitalId,
-                SubjectRef = requestId,
-                ExpectsCallback = false,
-                FacilityHeader = AbdmFacilityHeader.Hiu,
-                Body = new
+                try
                 {
-                    acknowledgement = artefactIds.Select(id => new { status = "OK", consentId = id }).ToArray(),
-                    response = new { requestId = inbound.HeaderRequestId }
+                    await _hie.SendAsync(new AbdmHieCall
+                    {
+                        Kind = "consent-status",
+                        Path = ConsentStatusPath,
+                        HospitalId = hospitalId,
+                        SubjectRef = consent.ConsentRequestId,
+                        ExpectsCallback = true,
+                        FacilityHeader = AbdmFacilityHeader.Hiu,
+                        Body = new { consentRequestId = consent.ConsentRequestId }
+                    }, cancellationToken);
+                    asked = true;
                 }
-            }, cancellationToken);
+                catch (AbdmException ex)
+                {
+                    message = Short(ex.Message);
+                }
+            }
+            else
+            {
+                message = "ABDM has not accepted this request yet, so there is nothing to check.";
+            }
 
-            if (rows.Count == 0 || status != AbdmConsentStatus.Granted)
+            // The latest transfer under this consent, if ABDM gave it a transaction id.
+            var transactionId = await _db.AbdmDataTransfers.AsNoTracking()
+                .Where(t => t.HospitalId == hospitalId && t.Role == AbdmConsentRole.Hiu && t.ConsentId == consent.ConsentId && t.TransactionId != "")
+                .OrderByDescending(t => t.RequestedAt)
+                .Select(t => t.TransactionId)
+                .FirstOrDefaultAsync(cancellationToken);
+            string? transferStatus = null;
+            if (!string.IsNullOrWhiteSpace(transactionId))
+            {
+                try
+                {
+                    var answer = await _hie.SendAsync(new AbdmHieCall
+                    {
+                        Kind = "hi-request-status",
+                        Method = HttpMethod.Get,
+                        Path = DataStatusPath + Uri.EscapeDataString(transactionId),
+                        HospitalId = hospitalId,
+                        SubjectRef = transactionId,
+                        ExpectsCallback = false,
+                        FacilityHeader = AbdmFacilityHeader.None
+                    }, cancellationToken);
+                    transferStatus = AbdmCareContextRules.FindString(answer.Body, "status")?.Trim().ToUpperInvariant();
+                }
+                catch (AbdmException ex)
+                {
+                    message ??= Short(ex.Message);
+                }
+            }
+            return new AbdmHiuCheck(asked, transferStatus, message);
+        }
+
+        public async Task OnConsentStatusAnsweredAsync(AbdmInbound inbound, CancellationToken cancellationToken)
+        {
+            var exchange = await _db.AbdmExchanges.AsNoTracking().FirstOrDefaultAsync(e => e.RequestId == inbound.AnswersRequestId, cancellationToken);
+            if (exchange?.HospitalId == null || exchange.ErrorCode != null)
                 return;
-            foreach (var artefactId in artefactIds)
+            var hospitalId = exchange.HospitalId.Value;
+            // The request we asked about, whatever the answer calls it.
+            var requestId = AbdmDataFlowRules.FindIn(inbound.RawBody, "consentRequest", "id") ?? exchange.SubjectRef;
+            var status = (AbdmDataFlowRules.FindIn(inbound.RawBody, "consentRequest", "status") ?? string.Empty).Trim().ToUpperInvariant();
+            var artefactIds = ArtefactIds(inbound.RawBody);
+            // "REQUESTED" is no decision: the patient has not answered yet. ABDM's specification lists
+            // only REQUESTED, DENIED, EXPIRED and REVOKED here; an approval is told by the notification,
+            // with its artefacts. A "GRANTED" with no artefact gives us nothing to fetch, so it changes nothing.
+            if (requestId == null || status.Length == 0 || status == AbdmConsentStatus.Requested
+                || (status == AbdmConsentStatus.Granted && artefactIds.Count == 0))
+                return;
+
+            var (rows, newlyGranted) = await ApplyDecisionAsync(hospitalId, requestId, status, artefactIds, cancellationToken);
+            if (rows.Count == 0)
+                return;
+            foreach (var artefactId in newlyGranted)
             {
                 try
                 {
@@ -480,9 +618,13 @@ namespace EasyHMSAPI.Application.Services
             {
                 try
                 {
-                    if (entry.Content == null || page.PublicKey == null || page.Nonce == null)
-                        throw new CryptographicException("The entry carries no inline content or the page carries no key material.");
-                    var bundle = AbdmFidelius.Decrypt(entry.Content, transfer.PrivateKey, transfer.Nonce, page.PublicKey, page.Nonce);
+                    // A facility may send a record as a link to the encrypted text instead of the text itself.
+                    var content = entry.Content;
+                    if (content == null && entry.Link != null && _push != null)
+                        content = await _push.FetchAsync(entry.Link, cancellationToken);
+                    if (content == null || page.PublicKey == null || page.Nonce == null)
+                        throw new CryptographicException("The entry carries no readable content or the page carries no key material.");
+                    var bundle = AbdmFidelius.Decrypt(content, transfer.PrivateKey, transfer.Nonce, page.PublicKey, page.Nonce);
                     var (title, hiType) = Describe(bundle);
                     _db.AbdmReceivedRecords.Add(new AbdmReceivedRecord
                     {
@@ -501,7 +643,7 @@ namespace EasyHMSAPI.Application.Services
                     stored++;
                     statuses.Add(new { careContextReference = entry.CareContextReference, hiStatus = "OK", description = "Data received successfully" });
                 }
-                catch (Exception ex) when (ex is CryptographicException or FormatException or JsonException)
+                catch (Exception ex) when (ex is CryptographicException or FormatException or JsonException or HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
                 {
                     _logger.LogWarning("ABDM transfer {TransactionId}: one entry could not be read ({Error}).", transfer.TransactionId, ex.GetType().Name);
                     statuses.Add(new { careContextReference = entry.CareContextReference, hiStatus = "ERRORED", description = "Data could not be read" });
@@ -509,7 +651,8 @@ namespace EasyHMSAPI.Application.Services
             }
 
             transfer.RecordCount += stored;
-            var lastPage = page.PageNumber >= page.PageCount;
+            // ABDM's example numbers a one-page transfer 0 of 1; longer ones end at n of n (IsLastPage).
+            var lastPage = AbdmDataFlowRules.IsLastPage(page.PageNumber, page.PageCount);
             if (lastPage)
             {
                 transfer.Status = stored > 0 || page.Entries.Count == 0 ? AbdmTransferStatus.Transferred : AbdmTransferStatus.Failed;
@@ -577,8 +720,9 @@ namespace EasyHMSAPI.Application.Services
                 .ToListAsync(cancellationToken);
             foreach (var transfer in stale)
             {
-                transfer.Status = AbdmTransferStatus.Failed;
-                transfer.ErrorMessage = "No records arrived within 24 hours.";
+                // Records that did arrive are kept: a sender counting pages from 0 never sends an "n of n" page.
+                transfer.Status = transfer.RecordCount > 0 ? AbdmTransferStatus.Transferred : AbdmTransferStatus.Failed;
+                transfer.ErrorMessage = transfer.RecordCount > 0 ? null : "No records arrived within 24 hours.";
                 transfer.CompletedAt = nowUtc;
                 transfer.PrivateKey = null;
                 transfer.Nonce = null;
@@ -666,10 +810,13 @@ namespace EasyHMSAPI.Application.Services
             try
             {
                 using var doc = JsonDocument.Parse(body);
-                if (doc.RootElement.ValueKind == JsonValueKind.Object
-                    && doc.RootElement.TryGetProperty("notification", out var notification) && notification.ValueKind == JsonValueKind.Object
-                    && notification.TryGetProperty("consentArtefacts", out var artefacts) && artefacts.ValueKind == JsonValueKind.Array)
+                // A notification carries them under "notification", a status answer under "consentRequest".
+                foreach (var parentName in new[] { "notification", "consentRequest" })
                 {
+                    if (doc.RootElement.ValueKind != JsonValueKind.Object
+                        || !doc.RootElement.TryGetProperty(parentName, out var parent) || parent.ValueKind != JsonValueKind.Object
+                        || !parent.TryGetProperty("consentArtefacts", out var artefacts) || artefacts.ValueKind != JsonValueKind.Array)
+                        continue;
                     foreach (var artefact in artefacts.EnumerateArray())
                     {
                         if (artefact.ValueKind == JsonValueKind.Object && artefact.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String
@@ -685,7 +832,7 @@ namespace EasyHMSAPI.Application.Services
             return ids.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         }
 
-        private sealed record PushEntry(string? Content, string? CareContextReference);
+        private sealed record PushEntry(string? Content, string? CareContextReference, string? Link = null);
         private sealed record PushPage(int PageNumber, int PageCount, string? PublicKey, string? Nonce, IReadOnlyList<PushEntry> Entries);
 
         private static PushPage ParsePush(string body)
@@ -707,7 +854,8 @@ namespace EasyHMSAPI.Application.Services
                             if (item.ValueKind != JsonValueKind.Object) continue;
                             entries.Add(new PushEntry(
                                 item.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.String ? content.GetString() : null,
-                                item.TryGetProperty("careContextReference", out var reference) && reference.ValueKind == JsonValueKind.String ? reference.GetString() : null));
+                                item.TryGetProperty("careContextReference", out var reference) && reference.ValueKind == JsonValueKind.String ? reference.GetString() : null,
+                                item.TryGetProperty("link", out var link) && link.ValueKind == JsonValueKind.String ? link.GetString() : null));
                         }
                     }
                 }

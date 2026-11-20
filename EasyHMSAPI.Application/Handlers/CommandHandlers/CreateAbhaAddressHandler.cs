@@ -1,5 +1,6 @@
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.Services.Interfaces;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
@@ -14,11 +15,13 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
     {
         private readonly IAbdmAbhaService _abha;
         private readonly AppDbContext _context;
+        private readonly IAbhaLinkProofStore _proofs;
 
-        public CreateAbhaAddressHandler(IAbdmAbhaService abha, AppDbContext context)
+        public CreateAbhaAddressHandler(IAbdmAbhaService abha, AppDbContext context, IAbhaLinkProofStore proofs)
         {
             _abha = abha;
             _context = context;
+            _proofs = proofs;
         }
 
         public async Task<AbdmEnrollResponseModel> Handle(CreateAbhaAddressRequestModel request, CancellationToken cancellationToken)
@@ -41,11 +44,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
 
                 if (account != null)
                 {
-                    account.AbhaAddress = result.AbhaAddress ?? account.AbhaAddress;
-                    account.FullName = result.FullName ?? account.FullName;
-                    account.Gender = result.Gender ?? account.Gender;
-                    account.DateOfBirth = result.DateOfBirth ?? account.DateOfBirth;
-                    account.Mobile = result.Mobile ?? account.Mobile;
+                    // An empty value never wipes what is already on record.
+                    static string? Keep(string? now, string? before) => string.IsNullOrWhiteSpace(now) ? before : now;
+                    account.AbhaAddress = Keep(result.AbhaAddress, account.AbhaAddress);
+                    account.FullName = Keep(result.FullName, account.FullName) ?? string.Empty;
+                    account.Gender = Keep(result.Gender, account.Gender);
+                    account.DateOfBirth = Keep(result.DateOfBirth, account.DateOfBirth);
+                    account.Mobile = Keep(result.Mobile, account.Mobile);
+                    account.Email = Keep(result.Email, account.Email);
                 }
                 else
                 {
@@ -67,20 +73,12 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 }
                 await _context.SaveChangesAsync(cancellationToken);
 
-                return new AbdmEnrollResponseModel
-                {
-                    Success = true,
-                    TxnId = result.TxnId,
-                    AbhaNumber = result.AbhaNumber,
-                    AbhaAddress = result.AbhaAddress,
-                    FullName = result.FullName,
-                    Gender = result.Gender,
-                    DateOfBirth = result.DateOfBirth,
-                    Mobile = result.Mobile,
-                    MobileVerified = result.MobileVerified,
-                    IsNew = result.IsNew,
-                    AbhaAccountId = account.AbhaAccountId
-                };
+                string? linkToken = null;
+                if (request.CallerUserId != Guid.Empty && request.HospitalId != Guid.Empty && !string.IsNullOrWhiteSpace(result.AbhaNumber))
+                    linkToken = _proofs.Issue(request.CallerUserId, request.HospitalId, AbhaPatientRules.ToVerified(result));
+                var response = AbhaPatientRules.EnrolResponse(result, result.MobileVerified, linkToken);
+                response.AbhaAccountId = account.AbhaAccountId;
+                return response;
             }
             catch (InvalidOperationException ex)
             {

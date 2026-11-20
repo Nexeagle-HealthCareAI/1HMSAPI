@@ -4,6 +4,8 @@ namespace EasyHMSAPI.Application.Services.Interfaces
     {
         Hip,
         Hiu,
+        /// <summary>X-HIP-ID and X-HIU-ID, both with the facility id.</summary>
+        HipAndHiu,
         None
     }
 
@@ -15,6 +17,8 @@ namespace EasyHMSAPI.Application.Services.Interfaces
         /// <summary>Path under the HIE-CM host, e.g. "/api/hiecm/v3/token/generate-token".</summary>
         public string Path { get; init; } = string.Empty;
         public object Body { get; init; } = new { };
+        /// <summary>POST unless set. A GET sends no body.</summary>
+        public HttpMethod Method { get; init; } = HttpMethod.Post;
         public Guid HospitalId { get; init; }
         /// <summary>What the call is about (ABHA address, care context reference), for the panel.</summary>
         public string? SubjectRef { get; init; }

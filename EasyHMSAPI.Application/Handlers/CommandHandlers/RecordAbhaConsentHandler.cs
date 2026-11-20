@@ -33,6 +33,17 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             var subject = string.IsNullOrWhiteSpace(request.SubjectName) ? null : request.SubjectName.Trim();
             if (subject is { Length: > 200 }) subject = subject[..200];
 
+            // Nothing is sent until the declarations and both confirmations are in (CRT_ABHA_102).
+            var ticked = request.Declarations ?? Array.Empty<bool>();
+            if (ticked.Length != AbhaConsentRules.Declarations.Length)
+                return new RecordAbhaConsentResponseModel { Success = false, Message = "Tick each declaration of the consent." };
+            if (ticked[1])
+                return new RecordAbhaConsentResponseModel { Success = false, Message = "Creating an ABHA with a document other than Aadhaar is not offered here. Untick the second declaration to go on with Aadhaar." };
+            if (!ticked.Where((t, i) => AbhaConsentRules.AadhaarFlowDeclarations[i]).All(t => t))
+                return new RecordAbhaConsentResponseModel { Success = false, Message = "Tick each declaration of the consent." };
+            if (!request.WorkerConfirmed || !request.BeneficiaryConfirmed)
+                return new RecordAbhaConsentResponseModel { Success = false, Message = "Both confirmations are needed: the healthcare worker's and the beneficiary's." };
+
             var now = DateTime.UtcNow;
             var consent = new AbhaConsent
             {
@@ -44,7 +55,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 ConsentCode = AbhaConsentRules.Code,
                 ConsentVersion = AbhaConsentRules.Version,
                 ConsentTextSha256 = AbhaConsentRules.TextSha256(),
-                ConsentTextSnapshot = AbhaConsentRules.Text,
+                ConsentTextSnapshot = AbhaConsentRules.Record(ticked, request.LoggedInUserName, subject, now),
                 GivenBy = givenBy,
                 SubjectName = subject,
                 CreatedAt = now,
@@ -58,6 +69,8 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 Message = "Consent recorded.",
                 ConsentId = consent.AbhaConsentId,
                 ExpiresAt = now + AbhaConsentRules.Lifetime,
+                RecordedAt = now,
+                RecordedBy = request.LoggedInUserName,
             };
         }
     }

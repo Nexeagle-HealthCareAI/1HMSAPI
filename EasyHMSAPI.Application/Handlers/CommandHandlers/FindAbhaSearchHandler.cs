@@ -1,3 +1,4 @@
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
 using EasyHMSAPI.Application.Services.Interfaces;
@@ -18,12 +19,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
         {
             if (string.IsNullOrWhiteSpace(request.Value))
                 return new AbdmFindAbhaSearchResponseModel { Success = false, Message = "Enter a mobile or Aadhaar number." };
+            if (string.Equals(request.SearchBy, AbdmLoginRules.HintAadhaar, StringComparison.OrdinalIgnoreCase) && !AbdmLoginRules.IsValidAadhaar(request.Value))
+                return new AbdmFindAbhaSearchResponseModel { Success = false, Message = "That is not a valid Aadhaar number. Check the 12 digits and try again." };
 
             try
             {
                 var result = await _abha.FindAbhaSearchAsync(request.Value, request.SearchBy, cancellationToken);
                 if (result.Candidates.Count == 0)
-                    return new AbdmFindAbhaSearchResponseModel { Success = false, Message = "No ABHA number found for this value." };
+                    return new AbdmFindAbhaSearchResponseModel { Success = false, NotFound = true, Message = AbdmLoginRules.NoAbhaMessage(request.SearchBy) };
 
                 return new AbdmFindAbhaSearchResponseModel
                 {
@@ -34,9 +37,14 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                         Index = c.Index,
                         AbhaNumber = c.AbhaNumber,
                         Name = c.Name,
-                        Gender = c.Gender
+                        Gender = c.Gender,
+                        AbhaAddress = c.AbhaAddress
                     }).ToList()
                 };
+            }
+            catch (InvalidOperationException ex) when (AbdmLoginRules.IsNoAbha(ex))
+            {
+                return new AbdmFindAbhaSearchResponseModel { Success = false, NotFound = true, Message = AbdmLoginRules.NoAbhaMessage(request.SearchBy) };
             }
             catch (InvalidOperationException ex)
             {
