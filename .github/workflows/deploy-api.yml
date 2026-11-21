@@ -49,6 +49,8 @@
 #                           With DEV_ABDM_PUBLIC_BASE_URL (variable, default https://1hms-dev-api.nexeagle.com,
 #                           Abdm:PublicBaseUrl) it makes <base>/abdm-callback/<secret>. Without both, no ABDM
 #                           answer (M2, M3, Share Profile) ever reaches Dev.
+#     ABDM_CALLBACK_SECRET_PROD Abdm:CallbackSecret on Prod, its own random value, never the Dev one.
+#                           With PROD_ABDM_PUBLIC_BASE_URL (variable, default https://1hms-api.nexeagle.com).
 #     ABDM_CLIENTID_PROD     Abdm:ABDM_ClientId_Prod     (ABDM production — add once NHA issues
 #     ABDM_CLIENTSECRET_PROD Abdm:ABDM_ClientSecret_Prod  production credentials; see also the
 #                           ABDM_GATEWAY_BASE_URL_PROD/ABDM_ABHA_BASE_URL_PROD vars below — ABDM
@@ -403,6 +405,8 @@ jobs:
           ABDM_GATEWAY_URL:   ${{ vars.ABDM_GATEWAY_BASE_URL_PROD }}
           ABDM_ABHA_URL:      ${{ vars.ABDM_ABHA_BASE_URL_PROD }}
           ABDM_CERT_URL:      ${{ vars.ABDM_CERT_URL_PROD }}
+          ABDM_PUBLIC_BASE_URL: ${{ vars.PROD_ABDM_PUBLIC_BASE_URL || 'https://1hms-api.nexeagle.com' }}
+          ABDM_CALLBACK_SECRET: ${{ secrets.ABDM_CALLBACK_SECRET_PROD }}
           INVITATION_URL:  ${{ vars.PROD_INVITATION_URL || 'http://151.185.45.67:81/user-onboarding?token=' }}
           STORAGE_PROVIDER: ${{ vars.STORAGE_PROVIDER || 'S3' }}
           S3_SERVICE_URL:  ${{ secrets.PROD_S3_SERVICE_URL }}
@@ -451,6 +455,8 @@ jobs:
           add 'Abdm__GatewayBaseUrlProd'                "$ABDM_GATEWAY_URL"
           add 'Abdm__AbhaBaseUrlProd'                   "$ABDM_ABHA_URL"
           add 'Abdm__CertUrlProd'                       "$ABDM_CERT_URL"
+          add 'Abdm__PublicBaseUrl'                     "$ABDM_PUBLIC_BASE_URL"
+          add 'Abdm__CallbackSecret'                    "$ABDM_CALLBACK_SECRET"
           add 'Invitation__RegistrationBaseUrl'       "$INVITATION_URL"
           add 'Storage__Provider'                     "$STORAGE_PROVIDER"
           add 'Storage__S3__ServiceUrl'               "$S3_SERVICE_URL"
