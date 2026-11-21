@@ -10,5 +10,10 @@ namespace EasyHMSAPI.Application.Services.Interfaces
 
         /// <summary>PATCHes ABDM's bridge URL registration; returns ABDM's response body verbatim.</summary>
         Task<string> RegisterBridgeUrlAsync(string bridgeUrl, CancellationToken cancellationToken);
+
+        /// <summary>Links a facility to our bridge (our client ID) as a HIP and an HIU, with ABDM's
+        /// facility registry (POST /v1/bridges/MutipleHRPAddUpdateServices). Without it ABDM answers
+        /// every M2 call for the facility with ABDM-1035 "Invalid HIP ID". Returns ABDM's body.</summary>
+        Task<string> LinkFacilityServicesAsync(string facilityId, string facilityName, string hipName, CancellationToken cancellationToken);
     }
 }
