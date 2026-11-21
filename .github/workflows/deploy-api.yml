@@ -44,6 +44,13 @@
 #                           falls back to a placeholder key and every translate call fails)
 #     ABDM_CLIENTID_DEV      Abdm:ABDM_ClientId_Dev      (ABDM sandbox — dev.abdm.gov.in)
 #     ABDM_CLIENTSECRET_DEV  Abdm:ABDM_ClientSecret_Dev
+#     ABDM_CALLBACK_SECRET_DEV  Abdm:CallbackSecret — a long random value; it is the last part of the
+#                           callback (bridge) URL ABDM posts to, so keep it out of logs and screenshots.
+#                           With DEV_ABDM_PUBLIC_BASE_URL (variable, default https://1hms-dev-api.nexeagle.com,
+#                           Abdm:PublicBaseUrl) it makes <base>/abdm-callback/<secret>. Without both, no ABDM
+#                           answer (M2, M3, Share Profile) ever reaches Dev.
+#     ABDM_CALLBACK_SECRET_PROD Abdm:CallbackSecret on Prod, its own random value, never the Dev one.
+#                           With PROD_ABDM_PUBLIC_BASE_URL (variable, default https://1hms-api.nexeagle.com).
 #     ABDM_CLIENTID_PROD     Abdm:ABDM_ClientId_Prod     (ABDM production — add once NHA issues
 #     ABDM_CLIENTSECRET_PROD Abdm:ABDM_ClientSecret_Prod  production credentials; see also the
 #                           ABDM_GATEWAY_BASE_URL_PROD/ABDM_ABHA_BASE_URL_PROD vars below — ABDM
@@ -230,6 +237,8 @@ jobs:
           GROQ_KEY:        ${{ secrets.GROQ_API_KEY }}
           ABDM_CLIENT_ID:     ${{ secrets.ABDM_CLIENTID_DEV }}
           ABDM_CLIENT_SECRET: ${{ secrets.ABDM_CLIENTSECRET_DEV }}
+          ABDM_PUBLIC_BASE_URL: ${{ vars.DEV_ABDM_PUBLIC_BASE_URL || 'https://1hms-dev-api.nexeagle.com' }}
+          ABDM_CALLBACK_SECRET: ${{ secrets.ABDM_CALLBACK_SECRET_DEV }}
           INVITATION_URL:  ${{ vars.DEV_INVITATION_URL || 'http://151.185.45.77:81/user-onboarding?token=' }}
           STORAGE_PROVIDER: ${{ vars.STORAGE_PROVIDER || 'S3' }}
           S3_SERVICE_URL:  ${{ secrets.DEV_S3_SERVICE_URL }}
@@ -253,7 +262,7 @@ jobs:
           password: ${{ secrets.DEV_SSH_PASSWORD }}
           port: 22
           command_timeout: 10m
-          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,JWT_ISSUER,JWT_AUDIENCE,OTP_PEPPER,SMTP_PW,TWILIO_SID,TWILIO_TOKEN,TWILIO_PHONE,WHATSAPP_TOKEN,WHATSAPP_ENABLED,WHATSAPP_API_URL,OPENAI_KEY,DEEPGRAM_KEY,GROQ_KEY,ABDM_CLIENT_ID,ABDM_CLIENT_SECRET,INVITATION_URL,STORAGE_PROVIDER,S3_SERVICE_URL,S3_ACCESS_KEY,S3_SECRET_KEY,S3_BUCKET,S3_PREFIX,CMS_SERVICE_KEY,CMS_BASE_URL,PROXY_SECRET,HEALTH_ARTICLES_KEY,HEALTHWIKI_BASE_URL,HEALTHWIKI_IMAGE_BUCKET,HEALTHWIKI_S3_ACCESS_KEY,HEALTHWIKI_S3_SECRET_KEY,WHATSAPP_BOT_BASE_URL,MCP_SERVICE_KEYS
+          envs: IMAGE,GHCR_TOKEN,ACTOR,DB_CONN,JWT_SECRET,JWT_ISSUER,JWT_AUDIENCE,OTP_PEPPER,SMTP_PW,TWILIO_SID,TWILIO_TOKEN,TWILIO_PHONE,WHATSAPP_TOKEN,WHATSAPP_ENABLED,WHATSAPP_API_URL,OPENAI_KEY,DEEPGRAM_KEY,GROQ_KEY,ABDM_CLIENT_ID,ABDM_CLIENT_SECRET,ABDM_PUBLIC_BASE_URL,ABDM_CALLBACK_SECRET,INVITATION_URL,STORAGE_PROVIDER,S3_SERVICE_URL,S3_ACCESS_KEY,S3_SECRET_KEY,S3_BUCKET,S3_PREFIX,CMS_SERVICE_KEY,CMS_BASE_URL,PROXY_SECRET,HEALTH_ARTICLES_KEY,HEALTHWIKI_BASE_URL,HEALTHWIKI_IMAGE_BUCKET,HEALTHWIKI_S3_ACCESS_KEY,HEALTHWIKI_S3_SECRET_KEY,WHATSAPP_BOT_BASE_URL,MCP_SERVICE_KEYS
           script: |
             set -e
             : "${DB_CONN:?DEV_DB_CONNECTION is empty}"
@@ -283,6 +292,8 @@ jobs:
             add 'Groq__ApiKey'                           "$GROQ_KEY"
             add 'Abdm__ABDM_ClientId_Dev'                "$ABDM_CLIENT_ID"
             add 'Abdm__ABDM_ClientSecret_Dev'            "$ABDM_CLIENT_SECRET"
+            add 'Abdm__PublicBaseUrl'                    "$ABDM_PUBLIC_BASE_URL"
+            add 'Abdm__CallbackSecret'                   "$ABDM_CALLBACK_SECRET"
             add 'Invitation__RegistrationBaseUrl'       "$INVITATION_URL"
             add 'Storage__Provider'                     "$STORAGE_PROVIDER"
             add 'Storage__S3__ServiceUrl'               "$S3_SERVICE_URL"
@@ -394,6 +405,8 @@ jobs:
           ABDM_GATEWAY_URL:   ${{ vars.ABDM_GATEWAY_BASE_URL_PROD }}
           ABDM_ABHA_URL:      ${{ vars.ABDM_ABHA_BASE_URL_PROD }}
           ABDM_CERT_URL:      ${{ vars.ABDM_CERT_URL_PROD }}
+          ABDM_PUBLIC_BASE_URL: ${{ vars.PROD_ABDM_PUBLIC_BASE_URL || 'https://1hms-api.nexeagle.com' }}
+          ABDM_CALLBACK_SECRET: ${{ secrets.ABDM_CALLBACK_SECRET_PROD }}
           INVITATION_URL:  ${{ vars.PROD_INVITATION_URL || 'http://151.185.45.67:81/user-onboarding?token=' }}
           STORAGE_PROVIDER: ${{ vars.STORAGE_PROVIDER || 'S3' }}
           S3_SERVICE_URL:  ${{ secrets.PROD_S3_SERVICE_URL }}
@@ -442,6 +455,8 @@ jobs:
           add 'Abdm__GatewayBaseUrlProd'                "$ABDM_GATEWAY_URL"
           add 'Abdm__AbhaBaseUrlProd'                   "$ABDM_ABHA_URL"
           add 'Abdm__CertUrlProd'                       "$ABDM_CERT_URL"
+          add 'Abdm__PublicBaseUrl'                     "$ABDM_PUBLIC_BASE_URL"
+          add 'Abdm__CallbackSecret'                    "$ABDM_CALLBACK_SECRET"
           add 'Invitation__RegistrationBaseUrl'       "$INVITATION_URL"
           add 'Storage__Provider'                     "$STORAGE_PROVIDER"
           add 'Storage__S3__ServiceUrl'               "$S3_SERVICE_URL"
