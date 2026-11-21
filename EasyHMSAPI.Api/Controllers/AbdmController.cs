@@ -71,6 +71,25 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // Links the saved facility ID to this software (our bridge) as HIP and HIU with ABDM's
+        // facility registry. Needed once per facility before any M2 or M3 call is accepted.
+        [HttpPost("facility/link-services")]
+        public async Task<ActionResult<LinkAbdmFacilityServicesResponseModel>> LinkFacilityServices([FromBody] LinkAbdmFacilityServicesRequestModel request)
+        {
+            try
+            {
+                request.CallerUserId = UserContextHelper.GetUserId(HttpContext.User) ?? Guid.Empty;
+                var response = await _mediator.Send(request);
+                if (!response.Success) return BadRequest(new { response.Message });
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error linking the facility to the bridge.");
+                return StatusCode(502, new { Message = ex.Message });
+            }
+        }
+
         // ---- M2: link OPD visits / IPD admissions to the patient's ABHA (care contexts) ----
 
         /// <summary>Starts linking and returns at once; the care context's LinkStatus says where it

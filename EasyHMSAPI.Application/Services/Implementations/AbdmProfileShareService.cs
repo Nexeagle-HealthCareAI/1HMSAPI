@@ -26,6 +26,8 @@ namespace EasyHMSAPI.Application.Services.Implementations
         private readonly string _gatewayBaseUrl;
         private readonly string _callbackBaseUrl;
         private readonly string _cmId;
+        private readonly string _registryBaseUrl;
+        private readonly string _bridgeId;
 
         public AbdmProfileShareService(HttpClient httpClient, IAbdmGatewayService gatewayService, IConfiguration configuration, IHostEnvironment environment, ILogger<AbdmProfileShareService> logger)
         {
@@ -39,6 +41,15 @@ namespace EasyHMSAPI.Application.Services.Implementations
             _gatewayBaseUrl = !string.IsNullOrWhiteSpace(gateway)
                 ? gateway.TrimEnd('/')
                 : !isProd ? "https://dev.abdm.gov.in/api/hiecm/gateway" : string.Empty;
+
+            // The facility registry (HFR/NHPR) is a different server from the gateway. On production
+            // its address must be configured; nothing is guessed.
+            var registry = configuration[isProd ? "Abdm:RegistryBaseUrlProd" : "Abdm:RegistryBaseUrl"];
+            _registryBaseUrl = !string.IsNullOrWhiteSpace(registry)
+                ? registry.TrimEnd('/')
+                : !isProd ? "https://apihspsbx.abdm.gov.in/v4/int" : string.Empty;
+            // Our bridge is our ABDM client ID.
+            _bridgeId = configuration[isProd ? "Abdm:ABDM_ClientId_Prod" : "Abdm:ABDM_ClientId_Dev"] ?? string.Empty;
 
             var callback = configuration["Abdm:HipCallbackBaseUrl"];
             _callbackBaseUrl = !string.IsNullOrWhiteSpace(callback) ? callback.TrimEnd('/') : _gatewayBaseUrl;
@@ -71,6 +82,31 @@ namespace EasyHMSAPI.Application.Services.Implementations
                 cancellationToken);
             var body = response.BodyText;
             return string.IsNullOrWhiteSpace(body) ? "Registered." : body;
+        }
+
+        public async Task<string> LinkFacilityServicesAsync(string facilityId, string facilityName, string hipName, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrEmpty(_registryBaseUrl))
+                throw new InvalidOperationException("Abdm:RegistryBaseUrlProd must be configured before linking a facility in Production.");
+            if (string.IsNullOrWhiteSpace(_bridgeId))
+                throw new InvalidOperationException("The ABDM client ID is not configured on this server.");
+
+            // One entry per role: a facility that shares and reads needs a HIP entry and an HIU entry.
+            var payload = new
+            {
+                facilityId,
+                facilityName,
+                HRP = new[]
+                {
+                    new { bridgeId = _bridgeId, hipName, type = "HIP", active = true },
+                    new { bridgeId = _bridgeId, hipName, type = "HIU", active = true },
+                }
+            };
+            var response = await AbdmHttp.SendAsync(_httpClient, _gatewayService, _logger,
+                () => BuildRequestAsync(HttpMethod.Post, $"{_registryBaseUrl}/v1/bridges/MutipleHRPAddUpdateServices", payload, cancellationToken),
+                cancellationToken);
+            var body = response.BodyText;
+            return string.IsNullOrWhiteSpace(body) ? "Linked." : body;
         }
 
         private async Task<HttpRequestMessage> BuildRequestAsync(HttpMethod method, string url, object payload, CancellationToken cancellationToken)
