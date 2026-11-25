@@ -688,6 +688,7 @@ namespace EasyHMSAPI.Api.Controllers
         // 200 when everything is gone (and every session is ended); 503 when some record files couldn't be removed yet — the rest is
         // already gone and the call can be repeated with the same session.
         [HttpDelete("patients/me")]
+        [EnableRateLimiting("PatientAuthPolicy")]
         public async Task<ActionResult<DeletePatientAccountResponseModel>> DeleteMyAccount(CancellationToken cancellationToken)
         {
             var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
@@ -832,27 +833,6 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 _logger.LogError(ex, "Error in PublicController.DeactivateMyAppDevice");
                 return StatusCode(500, new { Message = "An error occurred while signing out this device." });
-            }
-        }
-
-        // Patient-initiated account deletion (Apple guideline 5.1.1(v) requires it in the app). Removes everything the
-        // account owns and revokes every session; hospital visit records stay with the hospitals. 502 = some locker files
-        // could not be removed yet — the call is idempotent, so the client simply retries.
-        [HttpDelete("patients/me")]
-        [EnableRateLimiting("PatientAuthPolicy")]
-        public async Task<ActionResult<DeletePatientAccountResponseModel>> DeleteMyAccount(CancellationToken cancellationToken)
-        {
-            var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
-            if (!auth.IsValid || auth.Mobile == null) return Unauthorized(new { Message = auth.Reason ?? "Please log in again." });
-            try
-            {
-                var response = await _mediator.Send(new DeletePatientAccountRequestModel { Mobile = auth.Mobile }, cancellationToken);
-                return response.Success ? Ok(response) : StatusCode(response.StatusCode, response);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error in PublicController.DeleteMyAccount");
-                return StatusCode(500, new { Message = "An error occurred while deleting your account. Please try again." });
             }
         }
 

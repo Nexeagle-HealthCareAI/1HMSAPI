@@ -67,6 +67,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 if (auth != null)
                 {
                     auth.SessionEpoch += 1;
+                    auth.Otp = null;
+                    auth.OtpSentAt = null;
+                    auth.OtpExpireAt = null;
                     auth.UpdatedAt = DateTime.UtcNow;
                 }
             }
