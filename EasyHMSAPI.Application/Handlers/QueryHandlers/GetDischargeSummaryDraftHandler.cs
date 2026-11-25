@@ -83,57 +83,34 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                             DietInstructions = existing.DietInstructions,
                             ActivityRestrictions = existing.ActivityRestrictions,
                             AdditionalNotes = existing.AdditionalNotes,
+                            KeyInvestigations = existing.KeyInvestigations,
+                            WarningSigns = existing.WarningSigns,
+                            PatientAdviceTranslationsJson = existing.PatientAdviceTranslationsJson,
+                            SectionSourcesJson = existing.SectionSourcesJson,
                         },
                     };
                 }
 
                 // ── Fresh compose from source records ──────────────────────────────────
-                var roundNotes = await _context.RoundNote
-                    .Where(r => r.HospitalId == request.HospitalId && r.AdmissionId == request.AdmissionId)
-                    .OrderBy(r => r.NotedAt)
-                    .ToListAsync(cancellationToken);
+                var records = await DischargeStayRecords.LoadAsync(_context, request.HospitalId, request.AdmissionId, cancellationToken);
+                if (records == null)
+                    return new GetDischargeSummaryDraftResponseModel { Success = false, Message = "Admission not found." };
 
-                var courseInHospital = DischargeSummaryComposer.ComposeCourseInHospital(roundNotes);
-
-                var procedureOrders = await _context.ClinicalOrder
-                    .Where(o => o.HospitalId == request.HospitalId && o.AdmissionId == request.AdmissionId
-                        && o.OrderType == IpdConstants.ClinicalOrderType.Procedure)
-                    .ToListAsync(cancellationToken);
-                var procedureOrderIds = procedureOrders.Select(o => o.OrderId).ToList();
-                var procedureLines = procedureOrderIds.Count == 0
-                    ? new List<Domain.Entities.ClinicalOrderLine>()
-                    : await _context.ClinicalOrderLine
-                        .Where(l => procedureOrderIds.Contains(l.OrderId))
-                        .OrderBy(l => l.ScheduledAt ?? l.CreatedAt)
-                        .ToListAsync(cancellationToken);
-                var proceduresPerformed = DischargeSummaryComposer.ComposeProceduresPerformed(procedureLines);
-
-                var medicationOrders = await _context.ClinicalOrder
-                    .Where(o => o.HospitalId == request.HospitalId && o.AdmissionId == request.AdmissionId
-                        && o.OrderType == IpdConstants.ClinicalOrderType.Medication)
-                    .ToListAsync(cancellationToken);
-                var medicationOrderIds = medicationOrders.Select(o => o.OrderId).ToList();
-                var activeMedicationLines = medicationOrderIds.Count == 0
-                    ? new List<Domain.Entities.ClinicalOrderLine>()
-                    : await _context.ClinicalOrderLine
-                        .Where(l => medicationOrderIds.Contains(l.OrderId) && l.StatusCode == IpdConstants.ClinicalOrderLineStatus.Active)
-                        .ToListAsync(cancellationToken);
-                var dischargeMedications = DischargeSummaryComposer.ComposeDischargeMedications(activeMedicationLines);
-                var medicationRows = DischargeSummaryComposer.ComposeDischargeMedicationRows(activeMedicationLines);
-
-                return new GetDischargeSummaryDraftResponseModel
+                var draft = new DischargeSummaryDraftModel
                 {
-                    Success = true,
-                    Draft = new DischargeSummaryDraftModel
-                    {
-                        AdmittingDiagnosis = admission.AdmissionReason,
-                        ChiefComplaint = admission.Diagnosis,
-                        CourseInHospital = courseInHospital,
-                        ProceduresPerformed = proceduresPerformed,
-                        DischargeMedications = dischargeMedications,
-                        Medications = medicationRows,
-                    },
+                    // Admission.Diagnosis is the provisional diagnosis and AdmissionReason the
+                    // complaint/reason (as captured on the Admit Patient form) — these were swapped.
+                    AdmittingDiagnosis = admission.Diagnosis,
+                    ChiefComplaint = admission.AdmissionReason,
+                    CourseInHospital = DischargeSummaryComposer.ComposeCourseInHospital(records.RoundNotes),
+                    ProceduresPerformed = DischargeSummaryComposer.ComposeProceduresPerformed(records.ProcedureLines),
+                    KeyInvestigations = DischargeSummaryComposer.ComposeKeyInvestigations(records.Labs),
+                    DischargeMedications = DischargeSummaryComposer.ComposeDischargeMedications(records.ActiveMedicationLines),
+                    Medications = DischargeSummaryComposer.ComposeDischargeMedicationRows(records.ActiveMedicationLines),
                 };
+                draft.SectionSourcesJson = DischargeSummaryComposer.ComposeRecordSources(draft);
+
+                return new GetDischargeSummaryDraftResponseModel { Success = true, Draft = draft };
             }
             catch (Exception)
             {

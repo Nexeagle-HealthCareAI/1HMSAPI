@@ -2,6 +2,7 @@ using EasyHMSAPI.Application.Common;
 using EasyHMSAPI.Application.Handlers.QueryHandlers;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Data.Constants;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
@@ -68,6 +69,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     existing.DietInstructions = request.DietInstructions;
                     existing.ActivityRestrictions = request.ActivityRestrictions;
                     existing.AdditionalNotes = request.AdditionalNotes;
+                    ApplyAiAssistFields(existing, request);
                     existing.UpdatedAt = now;
                     existing.UpdatedBy = request.LoggedInUserName;
 
@@ -106,6 +108,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     UpdatedAt = now,
                     UpdatedBy = request.LoggedInUserName,
                 };
+                ApplyAiAssistFields(summary, request);
                 _context.DischargeSummary.Add(summary);
 
                 await SyncMedicationsAsync(summary.DischargeSummaryId, request.Medications, cancellationToken);
@@ -117,6 +120,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                 return new SaveDischargeSummaryResponseModel { Success = false, Message = "Error saving discharge summary." };
             }
         }
+
+        // The Nov 2026 fields: only touched when sent, and the two JSON columns are kept well-formed.
+        private static void ApplyAiAssistFields(DischargeSummary target, SaveDischargeSummaryRequestModel request)
+        {
+            if (request.KeyInvestigations != null) target.KeyInvestigations = NullIfEmpty(request.KeyInvestigations);
+            if (request.WarningSigns != null) target.WarningSigns = NullIfEmpty(request.WarningSigns);
+            if (request.PatientAdviceTranslationsJson != null)
+                target.PatientAdviceTranslationsJson = DischargeAiRules.NormalizeJsonObject(request.PatientAdviceTranslationsJson);
+            if (request.SectionSourcesJson != null)
+                target.SectionSourcesJson = DischargeAiRules.NormalizeSectionSources(request.SectionSourcesJson);
+        }
+
+        private static string? NullIfEmpty(string s) => string.IsNullOrWhiteSpace(s) ? null : s;
 
         private static (string? Name, string? Dose, string? Route, string? Frequency, string? Duration, string? Instructions) ToMedTuple(DischargeMedicationRequestModel m) =>
             (m.MedicineName, m.Dosage, m.Route, m.Frequency, m.Durations, m.Instructions);
