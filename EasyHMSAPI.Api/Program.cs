@@ -253,6 +253,7 @@ builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IBiometric
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Interfaces.IZktecoPushService, EasyHMSAPI.Application.Services.Implementations.ZktecoPushService>();
 
 builder.Services.AddHttpClient<ITranslationService, GroqTranslationService>();
+builder.Services.AddHttpClient<IClinicalAiClient, GroqClinicalAiClient>();
 builder.Services.AddHttpClient<IBillingInsightService, GroqBillingInsightService>();
 builder.Services.AddHttpClient<IPatientVolumeInsightService, GroqPatientVolumeInsightService>();
 builder.Services.AddHttpClient<IPatientChurnInsightService, GroqPatientChurnInsightService>();

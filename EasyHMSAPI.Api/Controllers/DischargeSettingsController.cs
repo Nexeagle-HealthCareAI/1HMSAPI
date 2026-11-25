@@ -1,3 +1,4 @@
+using EasyHMSAPI.Api.Common;
 using EasyHMSAPI.Application.RequestModels.CommandRequestModels;
 using EasyHMSAPI.Application.RequestModels.QueryRequestModels;
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
@@ -123,6 +124,65 @@ namespace EasyHMSAPI.Api.Controllers
             {
                 _logger.LogError(ex, "Error in UploadDischargeTemplate for doctorId: {DoctorId} & hospitalId: {HospitalId}", request.DoctorId, request.HospitalId);
                 return StatusCode(500, new { Message = "An error occurred while uploading the discharge letterhead template", Error = ex.Message });
+            }
+        }
+        // ── Hospital letterhead (admins) ───────────────────────────────────────────────────
+        // The hospital's own row (DoctorId = Guid.Empty). Every doctor who hasn't uploaded a
+        // letterhead of their own prints discharge summaries on this one.
+
+        [Authorize]
+        [RequiresPermission("admin_panel")]
+        [HttpGet("hospital")]
+        public async Task<ActionResult<GetDischargeSettingsResponseModel>> GetHospitalLetterhead([FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty) return BadRequest(new { Message = "HospitalId is required." });
+            try
+            {
+                return Ok(await _mediator.Send(new GetDischargeSettingsRequestModel { DoctorId = Guid.Empty, HospitalId = hospitalId }));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetHospitalLetterhead for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while retrieving the hospital letterhead" });
+            }
+        }
+
+        [Authorize]
+        [RequiresPermission("admin_panel")]
+        [HttpPut("hospital")]
+        public async Task<ActionResult<UpdateDischargeSettingsResponseModel>> UpdateHospitalLetterhead(UpdateDischargeSettingsRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty) return BadRequest(new { Message = "HospitalId is required." });
+            request.DoctorId = Guid.Empty;
+            if (Guid.TryParse(User.FindFirst("userId")?.Value, out var userId)) request.LoggedInUserId = userId;
+            try
+            {
+                return Ok(await _mediator.Send(request));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in UpdateHospitalLetterhead for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred while saving the hospital letterhead" });
+            }
+        }
+
+        [Authorize]
+        [RequiresPermission("admin_panel")]
+        [HttpPost("hospital/upload-template")]
+        [RequestSizeLimit(10 * 1024 * 1024)]
+        public async Task<ActionResult<UploadDischargeTemplateResponseModel>> UploadHospitalLetterhead([FromForm] UploadDischargeTemplateRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty) return BadRequest(new { Message = "HospitalId is required." });
+            request.DoctorId = Guid.Empty;
+            if (Guid.TryParse(User.FindFirst("userId")?.Value, out var userId)) request.LoggedInUserId = userId;
+            try
+            {
+                return Ok(await _mediator.Send(request));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in UploadHospitalLetterhead for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred while uploading the hospital letterhead" });
             }
         }
     }

@@ -40,7 +40,14 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
 
         private void SeedAccount(string mobile)
         {
-            _context.PublicPatientAuths.Add(new PublicPatientAuth { Mobile = mobile, SessionEpoch = 3 });
+            _context.PublicPatientAuths.Add(new PublicPatientAuth
+            {
+                Mobile = mobile,
+                SessionEpoch = 3,
+                Otp = "123456",
+                OtpSentAt = DateTime.UtcNow,
+                OtpExpireAt = DateTime.UtcNow.AddMinutes(5)
+            });
             _context.PatientAccountProfiles.Add(new PatientAccountProfile { Mobile = mobile, FullName = "Priya Kumari" });
             _context.PatientAppProfiles.Add(new PatientAppProfile { Mobile = mobile, PreferredLanguage = "hi" });
             _context.PatientAppDevices.Add(new PatientAppDevice { DeviceId = Guid.NewGuid(), Mobile = mobile, InstallationId = Guid.NewGuid().ToString(), Platform = "android", IsActive = true });
@@ -67,7 +74,11 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(await _context.PatientAppDevices.AnyAsync(d => d.Mobile == Mine), Is.False);
             Assert.That(await _context.PatientFamilyMembers.AnyAsync(m => m.OwnerMobile == Mine), Is.False);
             Assert.That(await _context.PatientHealthLockerDocuments.AnyAsync(d => d.Mobile == Mine), Is.False);
-            Assert.That((await _context.PublicPatientAuths.AsNoTracking().SingleAsync(a => a.Mobile == Mine)).SessionEpoch, Is.EqualTo(4));
+            var auth = await _context.PublicPatientAuths.AsNoTracking().SingleAsync(a => a.Mobile == Mine);
+            Assert.That(auth.SessionEpoch, Is.EqualTo(4));
+            Assert.That(auth.Otp, Is.Null);
+            Assert.That(auth.OtpSentAt, Is.Null);
+            Assert.That(auth.OtpExpireAt, Is.Null);
             _blob.Verify(b => b.DeleteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
 
             Assert.That(await _context.PatientAccountProfiles.AnyAsync(p => p.Mobile == Other), Is.True);
@@ -101,7 +112,9 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
             Assert.That(first.DocumentsPending, Is.EqualTo(1));
             Assert.That(await _context.PatientHealthLockerDocuments.CountAsync(d => d.Mobile == Mine), Is.EqualTo(1));
             Assert.That(await _context.PatientFamilyMembers.AnyAsync(m => m.OwnerMobile == Mine), Is.False);
-            Assert.That((await _context.PublicPatientAuths.AsNoTracking().SingleAsync(a => a.Mobile == Mine)).SessionEpoch, Is.EqualTo(3));
+            var auth = await _context.PublicPatientAuths.AsNoTracking().SingleAsync(a => a.Mobile == Mine);
+            Assert.That(auth.SessionEpoch, Is.EqualTo(3));
+            Assert.That(auth.Otp, Is.EqualTo("123456"));
 
             _blob.Setup(b => b.DeleteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
             var second = await Delete();

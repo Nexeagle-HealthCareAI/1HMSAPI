@@ -1,4 +1,5 @@
 using EasyHMSAPI.Application.ResponseModels.CommandResponseModels;
+using EasyHMSAPI.Application.Services;
 using EasyHMSAPI.Application.Services.Interfaces;
 using Microsoft.Extensions.Configuration;
 using System.Diagnostics.CodeAnalysis;
@@ -9,8 +10,9 @@ using System.Text.Json;
 namespace EasyHMSAPI.Application.Services.Implementations
 {
     /// <summary>
-    /// Voice Rx via OpenAI: Whisper for speech-to-text, then a chat model for structuring the
-    /// transcript into prescription fields. Keys/config come from the "OpenAI" appsettings section.
+    /// Voice Rx: Whisper speech-to-text, then a chat model that structures the transcript into
+    /// prescription fields. Runs on Groq (OpenAI-compatible API) — provider, key and models are
+    /// resolved by AiProviderConfig from the "Groq" appsettings section.
     /// </summary>
     [ExcludeFromCodeCoverage]
     public class VoiceRxService : IVoiceRxService
@@ -23,15 +25,19 @@ namespace EasyHMSAPI.Application.Services.Implementations
         private readonly string _deepgramApiKey;
         private readonly string _deepgramBaseUrl;
         private readonly string _deepgramModel;
+        private readonly string _notConfiguredMessage;
         private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
         public VoiceRxService(HttpClient httpClient, IConfiguration configuration)
         {
             _httpClient = httpClient;
-            _apiKey = configuration["OpenAI:ApiKey"] ?? string.Empty;
-            _baseUrl = (configuration["OpenAI:BaseUrl"] ?? "https://api.openai.com/v1").TrimEnd('/');
-            _whisperModel = configuration["OpenAI:WhisperModel"] ?? "whisper-1";
-            _structuringModel = configuration["OpenAI:StructuringModel"] ?? "gpt-4o-mini";
+            // Groq by default (OpenAI only as a fallback for older environments) — see AiProviderConfig.
+            var ai = AiProviderConfig.Resolve(configuration);
+            _apiKey = ai.ApiKey;
+            _baseUrl = ai.BaseUrl;
+            _whisperModel = ai.TranscriptionModel;
+            _structuringModel = ai.ChatModel;
+            _notConfiguredMessage = ai.NotConfiguredMessage;
             _deepgramApiKey = configuration["Deepgram:ApiKey"] ?? string.Empty;
             _deepgramBaseUrl = (configuration["Deepgram:BaseUrl"] ?? "https://api.deepgram.com/v1").TrimEnd('/');
             _deepgramModel = configuration["Deepgram:Model"] ?? "nova-2-medical";
@@ -40,7 +46,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
         public Task<string> TranscribeAsync(byte[] audio, string fileName, string? language, bool diarize, CancellationToken cancellationToken)
         {
             // Consultations (diarize) use Deepgram for speaker separation when it's configured;
-            // dictations — and any case where Deepgram isn't set up — use OpenAI Whisper.
+            // dictations — and any case where Deepgram isn't set up — use Whisper on Groq.
             if (diarize && !string.IsNullOrWhiteSpace(_deepgramApiKey))
                 return TranscribeWithDeepgramAsync(audio, fileName, language, cancellationToken);
             return TranscribeWithWhisperAsync(audio, fileName, language, cancellationToken);
@@ -49,7 +55,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
         private async Task<string> TranscribeWithWhisperAsync(byte[] audio, string fileName, string? language, CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(_apiKey))
-                throw new InvalidOperationException("Voice Rx is not configured (missing OpenAI API key).");
+                throw new InvalidOperationException(_notConfiguredMessage);
 
             using var content = new MultipartFormDataContent();
             var fileContent = new ByteArrayContent(audio);
@@ -166,7 +172,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
         public async Task<VoiceRxFieldsModel> StructureAsync(string transcript, string? mode, CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(_apiKey))
-                throw new InvalidOperationException("Voice Rx is not configured (missing OpenAI API key).");
+                throw new InvalidOperationException(_notConfiguredMessage);
             if (string.IsNullOrWhiteSpace(transcript))
                 return new VoiceRxFieldsModel();
 
@@ -234,7 +240,7 @@ namespace EasyHMSAPI.Application.Services.Implementations
         public async Task<string> NarrateAsync(string sourceMaterial, string sectionHint, CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(_apiKey))
-                throw new InvalidOperationException("AI narrative assist is not configured (missing OpenAI API key).");
+                throw new InvalidOperationException(_notConfiguredMessage);
             if (string.IsNullOrWhiteSpace(sourceMaterial))
                 return string.Empty;
 

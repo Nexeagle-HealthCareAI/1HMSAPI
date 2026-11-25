@@ -38,6 +38,17 @@ namespace EasyHMSAPI.Domain.Entities
         public string? ActivityRestrictions { get; set; }
         public string? AdditionalNotes { get; set; }
 
+        // Added Nov 2026 (alter_discharge_summary_ai_assist_2026_11.sql).
+        public string? KeyInvestigations { get; set; }
+        public string? WarningSigns { get; set; }          // "Come back at once if…" advice for the patient
+        // Patient-advice text translated into the hospital's second language, keyed by language
+        // code: {"hi":{"followUpInstructions":"…","dietInstructions":"…","activityRestrictions":"…","warningSigns":"…"}}.
+        // English stays the source of truth; this is only what is printed under it.
+        public string? PatientAdviceTranslationsJson { get; set; }
+        // Where each section's current text came from, for audit: {"courseInHospital":"AI",…}
+        // with values RECORDS / AI / DOCTOR (see DischargeAiRules.SectionSource).
+        public string? SectionSourcesJson { get; set; }
+
         public bool IsSigned { get; set; }
         public DateTime? SignedAt { get; set; }
         public string? SignedBy { get; set; }

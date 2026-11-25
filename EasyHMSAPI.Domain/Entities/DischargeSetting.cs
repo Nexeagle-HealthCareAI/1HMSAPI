@@ -40,5 +40,12 @@ namespace EasyHMSAPI.Domain.Entities
         // system-generated default regardless of URI, a deliberate choice rather than "nothing
         // uploaded", so switching back to an uploaded template doesn't require re-uploading it.
         public bool UseSystemDefaultLetterhead { get; set; }
+
+        // Hospital-wide discharge preferences live on the hospital's own row, the one with
+        // DoctorId = Guid.Empty (alter_discharge_settings_hospital_defaults_2026_11.sql). That row
+        // also holds the hospital letterhead every doctor falls back to.
+        [MaxLength(10)]
+        public string? PatientLanguage { get; set; }      // null = English only; "hi" = also print Hindi
+        public bool? AiAssistEnabled { get; set; }         // null/true = on; false = off for this hospital
     }
 }

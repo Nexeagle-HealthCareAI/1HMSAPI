@@ -688,6 +688,7 @@ namespace EasyHMSAPI.Api.Controllers
         // 200 when everything is gone (and every session is ended); 503 when some record files couldn't be removed yet — the rest is
         // already gone and the call can be repeated with the same session.
         [HttpDelete("patients/me")]
+        [EnableRateLimiting("PatientAuthPolicy")]
         public async Task<ActionResult<DeletePatientAccountResponseModel>> DeleteMyAccount(CancellationToken cancellationToken)
         {
             var auth = await _patientTokenValidator.ValidateAsync(Request.Headers.Authorization.ToString(), cancellationToken);
