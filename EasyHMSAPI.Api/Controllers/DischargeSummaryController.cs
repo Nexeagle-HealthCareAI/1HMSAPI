@@ -263,6 +263,85 @@ namespace EasyHMSAPI.Api.Controllers
             }
         }
 
+        // ── AI help (Groq) ─────────────────────────────────────────────────────────────────
+        // Review-and-apply: none of these save anything. Each re-reads the stay's records on the
+        // server and de-identifies text before it is sent to the AI provider.
+
+        private async Task<ActionResult<T>> RunAiAsync<T>(Func<Guid, Task<T>> send, Guid hospitalId, Guid admissionId, string what)
+            where T : class
+        {
+            if (hospitalId == Guid.Empty || admissionId == Guid.Empty)
+                return BadRequest(new { Message = "hospitalId and admissionId are required." });
+            var userId = UserContextHelper.GetUserId(HttpContext.User);
+            if (userId == null) return Unauthorized(new { Message = "Could not resolve the signed-in user." });
+            try
+            {
+                return Ok(await send(userId.Value));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in discharge AI {What} for admissionId: {AdmissionId}", what, admissionId);
+                return StatusCode(500, new { Message = "An error occurred while using AI help. Please try again." });
+            }
+        }
+
+        // Draft the narrative sections from the stay's records.
+        [HttpPost("ai/draft")]
+        public Task<ActionResult<DraftDischargeSectionsResponseModel>> AiDraft([FromBody] DraftDischargeSectionsRequestModel request) =>
+            RunAiAsync(uid => { request.CallerUserId = uid; return _mediator.Send(request); }, request.HospitalId, request.AdmissionId, "draft");
+
+        // Dictation (audio) → transcript → sorted into sections + medicine-change suggestions.
+        [HttpPost("ai/dictate")]
+        [RequestSizeLimit(30 * 1024 * 1024)]
+        public Task<ActionResult<DictateDischargeResponseModel>> AiDictate([FromForm] DictateDischargeRequestModel request) =>
+            RunAiAsync(uid => { request.CallerUserId = uid; return _mediator.Send(request); }, request.HospitalId, request.AdmissionId, "dictate");
+
+        // Rewrite one section: SHORTER / DETAIL / PATIENT.
+        [HttpPost("ai/rewrite")]
+        public Task<ActionResult<RewriteDischargeSectionResponseModel>> AiRewrite([FromBody] RewriteDischargeSectionRequestModel request) =>
+            RunAiAsync(uid => { request.CallerUserId = uid; return _mediator.Send(request); }, request.HospitalId, request.AdmissionId, "rewrite");
+
+        // Translate the patient-advice sections into the hospital's second print language.
+        [HttpPost("ai/translate-advice")]
+        public Task<ActionResult<TranslateDischargeAdviceResponseModel>> AiTranslateAdvice([FromBody] TranslateDischargeAdviceRequestModel request) =>
+            RunAiAsync(uid => { request.CallerUserId = uid; return _mediator.Send(request); }, request.HospitalId, request.AdmissionId, "translate");
+
+        // Hospital-wide discharge choices: second print language and the AI switch.
+        [HttpGet("hospital-preferences")]
+        public async Task<ActionResult<HospitalDischargePreferencesResponseModel>> GetHospitalPreferences([FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
+            try
+            {
+                return Ok(await _mediator.Send(new GetHospitalDischargePreferencesRequestModel { HospitalId = hospitalId }));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetHospitalPreferences for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while loading the discharge settings." });
+            }
+        }
+
+        [HttpPut("hospital-preferences")]
+        [RequiresPermission("admin_panel")]
+        public async Task<ActionResult<HospitalDischargePreferencesResponseModel>> UpdateHospitalPreferences([FromBody] UpdateHospitalDischargePreferencesRequestModel request)
+        {
+            if (request.HospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
+            var userId = UserContextHelper.GetUserId(HttpContext.User);
+            if (userId == null) return Unauthorized(new { Message = "Could not resolve the signed-in user." });
+            try
+            {
+                request.CallerUserId = userId.Value;
+                var response = await _mediator.Send(request);
+                return response.Success ? Ok(response) : BadRequest(new { response.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in UpdateHospitalPreferences for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred while saving the discharge settings." });
+            }
+        }
+
         // Personalized discharge-summary field layout (global per doctor): rename / reorder /
         // show-hide built-in fields and add custom fields. Mirrors EPrescriptionController's
         // configuration/field-layout routes — scoped per (doctorId, hospitalId).

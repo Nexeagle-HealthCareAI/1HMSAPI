@@ -37,11 +37,12 @@
 #     WHATSAPP_ACCESS_TOKEN WhatsApp:AccessToken  (also set var WHATSAPP_ENABLED=true;
 #                           WhatsApp:ApiUrl defaults to the Meta graph URL, override via
 #                           var WHATSAPP_API_URL if the phone-number-id differs)
-#     OPENAI_API_KEY        OpenAI:ApiKey         (Voice Rx)
-#     DEEPGRAM_API_KEY      Deepgram:ApiKey       (diarized transcription)
-#     GROQ_API_KEY          Groq:ApiKey           (AI narration/insights + prescription &
-#                           discharge-summary translation — without this, GroqTranslationService
-#                           falls back to a placeholder key and every translate call fails)
+#     GROQ_API_KEY          Groq:ApiKey           (ALL clinical AI: Voice Rx dictation (Whisper on
+#                           Groq), discharge drafting/dictation, narration/insights and
+#                           prescription & discharge-summary translation — without it these
+#                           features report "AI is not configured")
+#     OPENAI_API_KEY        OpenAI:ApiKey         (fallback only — used just when GROQ_API_KEY is unset)
+#     DEEPGRAM_API_KEY      Deepgram:ApiKey       (diarized transcription of recorded consultations)
 #     ABDM_CLIENTID_DEV      Abdm:ABDM_ClientId_Dev      (ABDM sandbox — dev.abdm.gov.in)
 #     ABDM_CLIENTSECRET_DEV  Abdm:ABDM_ClientSecret_Dev
 #     ABDM_CALLBACK_SECRET_DEV  Abdm:CallbackSecret — a long random value; it is the last part of the

@@ -30,14 +30,20 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             GetDischargeSettingsResponseModel response = new();
             try
             {
-                var existingDoctor = await _context.Doctors
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(d => d.DoctorID == request.DoctorId, cancellationToken);
-                if (existingDoctor == null)
+                // DoctorId = Guid.Empty asks for the hospital's own row (hospital letterhead and
+                // defaults, edited from Admin → Configuration); doctor checks apply otherwise.
+                var hospitalMode = request.DoctorId == Guid.Empty;
+                if (!hospitalMode)
                 {
-                    response.Success = false;
-                    response.Message = "Invalid doctor Id";
-                    return response;
+                    var existingDoctor = await _context.Doctors
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(d => d.DoctorID == request.DoctorId, cancellationToken);
+                    if (existingDoctor == null)
+                    {
+                        response.Success = false;
+                        response.Message = "Invalid doctor Id";
+                        return response;
+                    }
                 }
 
                 var existingHospital = await _context.Hospitals
@@ -50,7 +56,7 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     return response;
                 }
 
-                if (!await _doctorValidationHelper.ValidateDoctorAsync(request.HospitalId, request.DoctorId, cancellationToken))
+                if (!hospitalMode && !await _doctorValidationHelper.ValidateDoctorAsync(request.HospitalId, request.DoctorId, cancellationToken))
                 {
                     response.Success = false;
                     response.Message = "Doctor is not associated with the specified hospital.";
@@ -63,38 +69,9 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
 
                 if (dischargeSettings != null)
                 {
-                    DischargeSettingsDataModel data = new()
-                    {
-                        DischargeSettingId = dischargeSettings.DischargeSettingId,
-                        DoctorId = dischargeSettings.DoctorId,
-                        HospitalId = dischargeSettings.HospitalId,
-                        HeaderHeight = dischargeSettings.HeaderHeight ?? 0,
-                        FooterHeight = dischargeSettings.FooterHeight ?? 0,
-                        ContentLeftMargin = dischargeSettings.ContentLeftMargin ?? 0,
-                        ContentRightMargin = dischargeSettings.ContentRightMargin ?? 0,
-                        OverFlowPage = dischargeSettings.OverFlowPage ?? false,
-                        FontFamily = dischargeSettings.FontFamily,
-                        FontSize = dischargeSettings.FontSize ?? 0,
-                        FontWeight = dischargeSettings.FontWeight,
-                        TextColour = dischargeSettings.TextColour,
-                        URI = dischargeSettings.URI,
-                        CreatedAtUtc = dischargeSettings.CreatedAt,
-                        UpdatedAtUtc = dischargeSettings.UpdatedAt,
-                        UseSystemDefaultLetterhead = dischargeSettings.UseSystemDefaultLetterhead,
-                    };
-
-                    // Re-sign the template URL from its object key so it never goes stale
-                    // (S3/MinIO presigned URLs expire within 7 days; Azure returns it unchanged).
-                    // Key matches the upload key in UploadDischargeTemplateHandler: "{DoctorId}_{HospitalId}".
-                    data.URI = await _blobStorageService.RefreshUrlAsync(
-                        _templatesContainer,
-                        $"{dischargeSettings.DoctorId}_{dischargeSettings.HospitalId}",
-                        dischargeSettings.URI,
-                        cancellationToken);
-
                     response.Success = true;
                     response.Message = "Discharge settings retrieved successfully.";
-                    response.Data = data;
+                    response.Data = await ToDataAsync(dischargeSettings, cancellationToken);
                 }
                 else
                 {
@@ -103,6 +80,16 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
                     response.Success = true;
                     response.Message = "No discharge settings found for this doctor.";
                     response.Data = null;
+                }
+
+                // A doctor without a letterhead of their own prints on the hospital's letterhead.
+                if (!hospitalMode)
+                {
+                    var hospitalRow = await _context.DischargeSettings
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(ds => ds.DoctorId == Guid.Empty && ds.HospitalId == request.HospitalId, cancellationToken);
+                    if (hospitalRow != null && !string.IsNullOrWhiteSpace(hospitalRow.URI))
+                        response.HospitalDefault = await ToDataAsync(hospitalRow, cancellationToken);
                 }
             }
             catch (Exception ex)
@@ -113,6 +100,40 @@ namespace EasyHMSAPI.Application.Handlers.QueryHandlers
             }
 
             return response;
+        }
+
+        private async Task<DischargeSettingsDataModel> ToDataAsync(Domain.Entities.DischargeSetting row, CancellationToken cancellationToken)
+        {
+            DischargeSettingsDataModel data = new()
+            {
+                DischargeSettingId = row.DischargeSettingId,
+                DoctorId = row.DoctorId,
+                HospitalId = row.HospitalId,
+                HeaderHeight = row.HeaderHeight ?? 0,
+                FooterHeight = row.FooterHeight ?? 0,
+                ContentLeftMargin = row.ContentLeftMargin ?? 0,
+                ContentRightMargin = row.ContentRightMargin ?? 0,
+                OverFlowPage = row.OverFlowPage ?? false,
+                FontFamily = row.FontFamily,
+                FontSize = row.FontSize ?? 0,
+                FontWeight = row.FontWeight,
+                TextColour = row.TextColour,
+                URI = row.URI,
+                CreatedAtUtc = row.CreatedAt,
+                UpdatedAtUtc = row.UpdatedAt,
+                UseSystemDefaultLetterhead = row.UseSystemDefaultLetterhead,
+                IsHospitalLetterhead = row.DoctorId == Guid.Empty,
+            };
+
+            // Re-sign the template URL from its object key so it never goes stale
+            // (S3/MinIO presigned URLs expire within 7 days; Azure returns it unchanged).
+            // Key matches the upload key in UploadDischargeTemplateHandler: "{DoctorId}_{HospitalId}".
+            data.URI = await _blobStorageService.RefreshUrlAsync(
+                _templatesContainer,
+                $"{row.DoctorId}_{row.HospitalId}",
+                row.URI,
+                cancellationToken);
+            return data;
         }
     }
 }

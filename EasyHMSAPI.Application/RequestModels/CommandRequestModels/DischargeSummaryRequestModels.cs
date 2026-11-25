@@ -32,6 +32,15 @@ namespace EasyHMSAPI.Application.RequestModels.CommandRequestModels
         public string? DietInstructions { get; set; }
         public string? ActivityRestrictions { get; set; }
         public string? AdditionalNotes { get; set; }
+
+        // Nov 2026. Left unchanged when the client doesn't send them (null), so an older client
+        // can't wipe them; send "" to clear.
+        public string? KeyInvestigations { get; set; }
+        public string? WarningSigns { get; set; }
+        /// <summary>{"hi":{"dietInstructions":"…",…}} — the reviewed second-language patient advice.</summary>
+        public string? PatientAdviceTranslationsJson { get; set; }
+        /// <summary>{"courseInHospital":"AI",…} — RECORDS / AI / DOCTOR per section, for audit.</summary>
+        public string? SectionSourcesJson { get; set; }
     }
 
     // Structured discharge/home medication line item — field-for-field matching PrescriptionMedicine,

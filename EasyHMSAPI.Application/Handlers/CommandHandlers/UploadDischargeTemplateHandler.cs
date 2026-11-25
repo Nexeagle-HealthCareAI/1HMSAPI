@@ -29,14 +29,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             UploadDischargeTemplateResponseModel result = new();
             try
             {
-                var existingDoctor = await _context.Doctors
-                   .AsNoTracking()
-                   .FirstOrDefaultAsync(d => d.DoctorID == request.DoctorId, cancellationToken);
-                if (existingDoctor == null)
+                // DoctorId = Guid.Empty is the hospital's own row (hospital letterhead); only the
+                // admin-only /discharge-settings/hospital endpoints send it.
+                if (request.DoctorId != Guid.Empty)
                 {
-                    result.Success = false;
-                    result.Message = "Invalid doctor Id";
-                    return result;
+                    var existingDoctor = await _context.Doctors
+                       .AsNoTracking()
+                       .FirstOrDefaultAsync(d => d.DoctorID == request.DoctorId, cancellationToken);
+                    if (existingDoctor == null)
+                    {
+                        result.Success = false;
+                        result.Message = "Invalid doctor Id";
+                        return result;
+                    }
                 }
 
                 var existingHospital = await _context.Hospitals

@@ -25,14 +25,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             UpdateDischargeSettingsResponseModel response = new();
             try
             {
-                var existingDoctor = await _context.Doctors
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(d => d.DoctorID == request.DoctorId, cancellationToken);
-                if (existingDoctor == null)
+                // DoctorId = Guid.Empty is the hospital's own row (hospital letterhead); only the
+                // admin-only /discharge-settings/hospital endpoints send it.
+                if (request.DoctorId != Guid.Empty)
                 {
-                    response.Success = false;
-                    response.Message = "Invalid doctor Id";
-                    return response;
+                    var existingDoctor = await _context.Doctors
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(d => d.DoctorID == request.DoctorId, cancellationToken);
+                    if (existingDoctor == null)
+                    {
+                        response.Success = false;
+                        response.Message = "Invalid doctor Id";
+                        return response;
+                    }
                 }
 
                 var existingHospital = await _context.Hospitals
@@ -45,7 +50,7 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     return response;
                 }
 
-                if (!await _doctorValidationHelper.ValidateDoctorAsync(request.HospitalId, request.DoctorId, cancellationToken))
+                if (request.DoctorId != Guid.Empty && !await _doctorValidationHelper.ValidateDoctorAsync(request.HospitalId, request.DoctorId, cancellationToken))
                 {
                     response.Success = false;
                     response.Message = "Doctor is not associated with the specified hospital.";

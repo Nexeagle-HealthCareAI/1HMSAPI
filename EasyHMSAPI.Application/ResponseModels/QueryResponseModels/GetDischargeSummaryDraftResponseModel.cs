@@ -36,6 +36,10 @@ namespace EasyHMSAPI.Application.ResponseModels.QueryResponseModels
         public string? DietInstructions { get; set; }
         public string? ActivityRestrictions { get; set; }
         public string? AdditionalNotes { get; set; }
+        public string? KeyInvestigations { get; set; }
+        public string? WarningSigns { get; set; }
+        public string? PatientAdviceTranslationsJson { get; set; }
+        public string? SectionSourcesJson { get; set; }
     }
 
     [ExcludeFromCodeCoverage]
