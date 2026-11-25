@@ -306,6 +306,74 @@ namespace EasyHMSAPI.Api.Controllers
         public Task<ActionResult<TranslateDischargeAdviceResponseModel>> AiTranslateAdvice([FromBody] TranslateDischargeAdviceRequestModel request) =>
             RunAiAsync(uid => { request.CallerUserId = uid; return _mediator.Send(request); }, request.HospitalId, request.AdmissionId, "translate");
 
+        // Reusable discharge summary templates, shared by the hospital. Any signed-in member of the
+        // hospital who can write a discharge summary can save, use or delete one.
+        [HttpGet("templates")]
+        public async Task<ActionResult<DischargeTemplatesResponseModel>> GetTemplates([FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
+            try
+            {
+                return Ok(await _mediator.Send(new GetDischargeTemplatesRequestModel { HospitalId = hospitalId }));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetTemplates for hospitalId: {HospitalId}", hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while loading the discharge templates." });
+            }
+        }
+
+        [HttpPost("templates")]
+        public async Task<ActionResult<SaveDischargeTemplateResponseModel>> SaveTemplate([FromBody] SaveDischargeTemplateRequestModel request)
+        {
+            if (request == null || request.HospitalId == Guid.Empty) return BadRequest(new { Message = "hospitalId is required." });
+            var userId = UserContextHelper.GetUserId(HttpContext.User);
+            if (userId == null) return Unauthorized(new { Message = "Could not resolve the signed-in user." });
+            try
+            {
+                request.CallerUserId = userId.Value;
+                // A refusal (name taken, nothing to save) is a normal answer the screen shows, not an error.
+                return Ok(await _mediator.Send(request));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in SaveTemplate for hospitalId: {HospitalId}", request.HospitalId);
+                return StatusCode(500, new { Message = "An error occurred while saving the discharge template." });
+            }
+        }
+
+        [HttpDelete("templates/{templateId}")]
+        public async Task<ActionResult<SaveDischargeTemplateResponseModel>> DeleteTemplate(Guid templateId, [FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty || templateId == Guid.Empty) return BadRequest(new { Message = "hospitalId and templateId are required." });
+            var userId = UserContextHelper.GetUserId(HttpContext.User);
+            if (userId == null) return Unauthorized(new { Message = "Could not resolve the signed-in user." });
+            try
+            {
+                return Ok(await _mediator.Send(new DeleteDischargeTemplateRequestModel { HospitalId = hospitalId, DischargeTemplateId = templateId, CallerUserId = userId.Value }));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in DeleteTemplate {TemplateId} for hospitalId: {HospitalId}", templateId, hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while deleting the discharge template." });
+            }
+        }
+
+        [HttpPost("templates/{templateId}/used")]
+        public async Task<ActionResult<SaveDischargeTemplateResponseModel>> MarkTemplateUsed(Guid templateId, [FromQuery] Guid hospitalId)
+        {
+            if (hospitalId == Guid.Empty || templateId == Guid.Empty) return BadRequest(new { Message = "hospitalId and templateId are required." });
+            try
+            {
+                return Ok(await _mediator.Send(new MarkDischargeTemplateUsedRequestModel { HospitalId = hospitalId, DischargeTemplateId = templateId }));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in MarkTemplateUsed {TemplateId} for hospitalId: {HospitalId}", templateId, hospitalId);
+                return StatusCode(500, new { Message = "An error occurred while updating the discharge template." });
+            }
+        }
+
         // Hospital-wide discharge choices: second print language and the AI switch.
         [HttpGet("hospital-preferences")]
         public async Task<ActionResult<HospitalDischargePreferencesResponseModel>> GetHospitalPreferences([FromQuery] Guid hospitalId)

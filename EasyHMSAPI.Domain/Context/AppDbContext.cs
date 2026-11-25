@@ -114,6 +114,7 @@ namespace EasyHMSAPI.Domain.Context
         public DbSet<DoctorPrescriptionFieldConfig> DoctorPrescriptionFieldConfigs { get; set; }
         public DbSet<DoctorDischargeFieldConfig> DoctorDischargeFieldConfigs { get; set; }
         public DbSet<DischargeSetting> DischargeSettings { get; set; }
+        public DbSet<DischargeTemplate> DischargeTemplate { get; set; }
         public DbSet<UserStatus> UserStatuses { get; set; }
         public DbSet<UserHistory> UserHistories { get; set; }
         public DbSet<PrescriptionAttachment> PrescriptionAttachments { get; set; }
@@ -504,6 +505,11 @@ namespace EasyHMSAPI.Domain.Context
             modelBuilder.Entity<DoctorTimeOff>().HasKey(e => e.TimeOffID);
             modelBuilder.Entity<PrescriptionSetting>().HasKey(e => e.PrescriptionSettingId);
             modelBuilder.Entity<DischargeSetting>().HasKey(e => e.DischargeSettingId);
+            modelBuilder.Entity<DischargeTemplate>(entity =>
+            {
+                entity.ToTable("DischargeTemplate");
+                entity.HasKey(e => e.DischargeTemplateId);
+            });
 
             // Configure PrescriptionAttachment
             modelBuilder.Entity<PrescriptionAttachment>().ToTable("PrescriptionAttachment");
