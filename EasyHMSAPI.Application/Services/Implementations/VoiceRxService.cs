@@ -52,6 +52,58 @@ namespace EasyHMSAPI.Application.Services.Implementations
             return TranscribeWithWhisperAsync(audio, fileName, language, cancellationToken);
         }
 
+        public async Task<DictationTranscript> TranscribeDictationAsync(byte[] audio, string fileName, string? language, string? vocabularyHint, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(_apiKey))
+                throw new InvalidOperationException(_notConfiguredMessage);
+
+            using var content = new MultipartFormDataContent();
+            var fileContent = new ByteArrayContent(audio);
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+            content.Add(fileContent, "file", string.IsNullOrWhiteSpace(fileName) ? "audio.webm" : fileName);
+            content.Add(new StringContent(_whisperModel), "model");
+            // verbose_json carries per-segment confidence, used to point out what was hard to hear.
+            content.Add(new StringContent("verbose_json"), "response_format");
+            // Zero temperature: the same audio gives the same text, with no creative guesses.
+            content.Add(new StringContent("0"), "temperature");
+            if (!string.IsNullOrWhiteSpace(language))
+                content.Add(new StringContent(language), "language");
+            if (!string.IsNullOrWhiteSpace(vocabularyHint))
+                content.Add(new StringContent(vocabularyHint), "prompt");
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/audio/transcriptions") { Content = content };
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+
+            var response = await _httpClient.SendAsync(request, cancellationToken);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
+                throw new InvalidOperationException($"Transcription failed ({(int)response.StatusCode}).");
+
+            return ParseDictationTranscript(body);
+        }
+
+        /// <summary>Reads a Whisper verbose_json answer: the text, and the segments it was unsure of.</summary>
+        public static DictationTranscript ParseDictationTranscript(string body)
+        {
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            var text = root.TryGetProperty("text", out var t) ? (t.GetString() ?? string.Empty) : string.Empty;
+            var unclear = new List<string>();
+            if (root.TryGetProperty("segments", out var segments) && segments.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var segment in segments.EnumerateArray())
+                {
+                    if (segment.ValueKind != JsonValueKind.Object) continue;
+                    static double? Num(JsonElement e, string name) =>
+                        e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : null;
+                    if (!DictationAccuracyRules.IsUnclearSegment(Num(segment, "avg_logprob"), Num(segment, "no_speech_prob"), Num(segment, "compression_ratio"))) continue;
+                    var phrase = segment.TryGetProperty("text", out var st) ? (st.GetString() ?? string.Empty).Trim() : string.Empty;
+                    if (phrase.Length > 0 && unclear.Count < 10) unclear.Add(phrase);
+                }
+            }
+            return new DictationTranscript(text, unclear);
+        }
+
         private async Task<string> TranscribeWithWhisperAsync(byte[] audio, string fileName, string? language, CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(_apiKey))

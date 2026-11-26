@@ -22,6 +22,17 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public string? Note { get; set; }
         /// <summary>Name of the matching medicine already on the discharge list, if any.</summary>
         public string? MatchesMedicine { get; set; }
+        /// <summary>KNOWN (on record for this stay), CORRECTED (heard slightly wrong and fixed) or UNVERIFIED (not found — check the spelling).</summary>
+        public string? NameCheck { get; set; }
+        /// <summary>What was actually heard, when the name was corrected.</summary>
+        public string? HeardAs { get; set; }
+    }
+
+    [ExcludeFromCodeCoverage]
+    public class DictationCorrectionModel
+    {
+        public string Heard { get; set; } = string.Empty;
+        public string Corrected { get; set; } = string.Empty;
     }
 
     [ExcludeFromCodeCoverage]
@@ -33,6 +44,12 @@ namespace EasyHMSAPI.Application.ResponseModels.CommandResponseModels
         public Dictionary<string, string> Sections { get; set; } = new();
         public List<DischargeMedicationSuggestionModel> MedicationChanges { get; set; } = new();
         public int? FollowUpAfterDays { get; set; }
+        /// <summary>Medicine names in the transcript that were heard slightly wrong and corrected.</summary>
+        public List<DictationCorrectionModel> Corrections { get; set; } = new();
+        /// <summary>Phrases the transcriber itself was unsure of — worth a second look.</summary>
+        public List<string> UnclearPhrases { get; set; } = new();
+        /// <summary>Every dose figure heard, so the numbers can be checked at a glance.</summary>
+        public List<string> DosesToCheck { get; set; } = new();
     }
 
     [ExcludeFromCodeCoverage]
