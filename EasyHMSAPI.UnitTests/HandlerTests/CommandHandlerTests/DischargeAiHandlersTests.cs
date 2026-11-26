@@ -151,8 +151,8 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [Test]
         public async Task Dictate_KeepsChangesForListedMedicines_AndAdds_ButDropsUnknownStops()
         {
-            _voice.Setup(v => v.TranscribeAsync(It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<string?>(), false, It.IsAny<CancellationToken>()))
-                .ReturnsAsync("Stop ceftriaxone, stop warfarin, add pantoprazole forty once daily, follow up in one week");
+            _voice.Setup(v => v.TranscribeDictationAsync(It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new DictationTranscript("Stop ceftriaxone, stop warfarin, add pantoprazole forty once daily, follow up in one week", new List<string>()));
             _ai.Setup(a => a.CompleteJsonAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync("{\"followUpInstructions\":\"Review in OPD after one week.\",\"followUpAfterDays\":7,\"medicationChanges\":[" +
                               "{\"medicineName\":\"Ceftriaxone\",\"action\":\"STOP\"},{\"medicineName\":\"Warfarin\",\"action\":\"STOP\"}," +

@@ -104,23 +104,44 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     audio = ms.ToArray();
                 }
                 var language = request.Language is "en" or "hi" ? request.Language : null;
-                var transcript = (await _voice.TranscribeAsync(audio, request.Audio.FileName, language, false, cancellationToken)).Trim();
+                var currentMeds = await CurrentMedicineNamesAsync(records, cancellationToken);
+                // Every medicine on record for this stay: the discharge list plus what was given in the ward.
+                var knownMeds = currentMeds
+                    .Concat(records.ActiveMedicationLines.Select(l => l.ItemName))
+                    .Concat(records.StoppedMedicationLines.Select(l => l.ItemName))
+                    .Where(n => !string.IsNullOrWhiteSpace(n))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                // Tell the transcriber which medicines to expect, then fix any it still heard slightly wrong.
+                var heard = await _voice.TranscribeDictationAsync(audio, request.Audio.FileName, language,
+                    DictationAccuracyRules.BuildVocabularyHint(knownMeds), cancellationToken);
+                var checkedTranscript = DictationAccuracyRules.CorrectTranscript(heard.Text.Trim(), knownMeds);
+                var transcript = checkedTranscript.Text;
                 if (transcript.Length == 0)
                     return new() { Success = true, Message = "Nothing was heard in the recording.", Transcript = string.Empty };
 
-                var currentMeds = await CurrentMedicineNamesAsync(records, cancellationToken);
                 var context = "Current medicine list: " + (currentMeds.Count == 0 ? "none" : string.Join("; ", currentMeds)) +
                               "\n\nDictation:\n" + records.Redact(transcript);
                 var json = await _ai.CompleteJsonAsync(DischargeAiRules.BuildDictationSystemPrompt(), context, cancellationToken);
 
                 var changes = DischargeAiRules.ParseMedicationChanges(json)
-                    .Select(c => new DischargeMedicationSuggestionModel
+                    .Select(c =>
                     {
-                        MedicineName = c.MedicineName,
-                        Action = c.Action,
-                        NewDose = c.NewDose,
-                        Note = c.Note,
-                        MatchesMedicine = DischargeAiRules.MatchMedicine(c.MedicineName, currentMeds),
+                        // A medicine being added is checked against the stay's records: spelled as on
+                        // record when found, corrected when close, and marked unverified otherwise.
+                        var check = DictationAccuracyRules.CheckMedicineName(c.MedicineName, knownMeds);
+                        var name = c.Action == "ADD" ? check.Name : c.MedicineName;
+                        return new DischargeMedicationSuggestionModel
+                        {
+                            MedicineName = name,
+                            Action = c.Action,
+                            NewDose = c.NewDose,
+                            Note = c.Note,
+                            MatchesMedicine = DischargeAiRules.MatchMedicine(name, currentMeds),
+                            NameCheck = check.Status,
+                            HeardAs = check.HeardAs,
+                        };
                     })
                     // A change/stop for a medicine that isn't on the list can't be applied — drop it
                     // rather than guess; "ADD" is the only action that names a new medicine.
@@ -135,6 +156,9 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
                     Sections = DischargeAiRules.ParseSections(json, DischargeAiRules.DraftableSections.Keys),
                     MedicationChanges = changes,
                     FollowUpAfterDays = DischargeAiRules.ParseFollowUpDays(json),
+                    Corrections = checkedTranscript.Corrections.Select(c => new DictationCorrectionModel { Heard = c.Heard, Corrected = c.Corrected }).ToList(),
+                    UnclearPhrases = heard.UnclearPhrases.Select(records.Redact).ToList(),
+                    DosesToCheck = DictationAccuracyRules.DosesToCheck(transcript),
                 };
             }
             catch (InvalidOperationException ex)
