@@ -44,8 +44,24 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             try
             {
                 var answer = await _abdm.LinkFacilityServicesAsync(facilityId, AbdmFacilityRules.FacilityName(hospitalName), hipName, cancellationToken);
-                // ABDM says HTTP 200 even when it refuses; the refusal is inside the answer.
+                // ABDM says HTTP 200 even when it refuses; what it did is inside the answer, one entry per role.
                 var refusal = AbdmFacilityRules.LinkError(answer);
+                var linked = AbdmFacilityRules.LinkedTypes(answer);
+                if (linked.Count > 0)
+                {
+                    var missing = new[] { "HIP", "HIU" }.Where(t => !linked.Contains(t)).ToList();
+                    return new LinkAbdmFacilityServicesResponseModel
+                    {
+                        Success = true,
+                        Message = $"Facility {facilityId} is linked to this software as {string.Join(" and ", linked)}, shown to patients as \"{hipName}\"." +
+                            (missing.Count == 0 ? string.Empty
+                                : $" Not linked as {string.Join(" and ", missing)}" + (refusal == null ? "." : $": ABDM said \"{refusal.Value.Message}\"."))
+                            ,
+                        FacilityId = facilityId,
+                        HipName = hipName,
+                        AbdmResponse = answer
+                    };
+                }
                 if (refusal != null)
                     return new LinkAbdmFacilityServicesResponseModel
                     {
