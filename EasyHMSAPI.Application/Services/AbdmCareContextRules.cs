@@ -26,13 +26,18 @@ namespace EasyHMSAPI.Application.Services
         /// <summary>ABDM HI types for the records this visit actually holds, in a fixed order. Empty
         /// means there is nothing to link: a care context with no records behind it is a promise
         /// the next discovery cannot keep.</summary>
-        public static IReadOnlyList<string> HiTypes(bool prescription, bool vitals, bool labReport, bool dischargeSummary)
+        public static IReadOnlyList<string> HiTypes(bool prescription, bool vitals, bool labReport, bool dischargeSummary,
+            bool opConsultation = false, bool immunization = false, bool healthDocument = false, bool invoice = false)
         {
             var types = new List<string>();
+            if (opConsultation) types.Add("OPConsultation");
             if (prescription) types.Add("Prescription");
             if (labReport) types.Add("DiagnosticReport");
             if (dischargeSummary) types.Add("DischargeSummary");
             if (vitals) types.Add("WellnessRecord");
+            if (immunization) types.Add("ImmunizationRecord");
+            if (healthDocument) types.Add("HealthDocumentRecord");
+            if (invoice) types.Add("Invoice");
             return types;
         }
 

@@ -153,13 +153,15 @@ namespace EasyHMSAPI.Application.Services
             return requestCode == null || ours == null || requestCode == ours;
         }
 
-        /// <summary>A recorded date of birth may be a year out (ABDM often holds 1 January); an age
-        /// typed at the counter may be two.</summary>
+        /// <summary>NHA's USER_INIT_LINK_606 (M2 set, 21 Oct 2026): a year of birth within five
+        /// years either side of the one ABDM sends. Mobile, gender and a shared name word still have to agree.</summary>
+        public const int YearOfBirthTolerance = 5;
+
         public static bool YearAgrees(int? requestYear, AbdmDiscoveryCandidate candidate)
         {
             if (requestYear == null || candidate.YearOfBirth == null)
                 return true;
-            return Math.Abs(requestYear.Value - candidate.YearOfBirth.Value) <= (candidate.YearIsExact ? 1 : 2);
+            return Math.Abs(requestYear.Value - candidate.YearOfBirth.Value) <= YearOfBirthTolerance;
         }
 
         /// <summary>At least one name word of three letters or more in common.</summary>

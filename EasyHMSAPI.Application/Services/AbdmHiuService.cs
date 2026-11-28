@@ -103,7 +103,7 @@ namespace EasyHMSAPI.Application.Services
 
         public static readonly IReadOnlyList<string> KnownHiTypes = new[]
         {
-            "OPConsultation", "Prescription", "DiagnosticReport", "DischargeSummary", "ImmunizationRecord", "HealthDocumentRecord", "WellnessRecord"
+            "OPConsultation", "Prescription", "DiagnosticReport", "DischargeSummary", "ImmunizationRecord", "HealthDocumentRecord", "WellnessRecord", "Invoice"
         };
 
         private readonly AppDbContext _db;

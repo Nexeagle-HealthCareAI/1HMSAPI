@@ -43,7 +43,7 @@ namespace EasyHMSAPI.Application.Services
         private const string GenerateTokenPath = "/api/hiecm/v3/token/generate-token";
         private const string LinkCareContextPath = "/api/hiecm/hip/v3/link/carecontext";
         private const string ContextNotifyPath = "/api/hiecm/hip/v3/link/context/notify";
-        private const string SmsNotifyPath = "/api/hiecm/hip/v3/link/patient/links/sms/notify2";
+        public const string SmsNotifyPath = "/api/hiecm/hip/v3/link/patient/links/sms/notify2";
         /// <summary>Set to "false" to stop the SMS ABDM sends the patient after a visit is linked.</summary>
         public const string SendLinkSmsKey = "Abdm:SendLinkSms";
         /// <summary>How long after linking a care context is still checked for new kinds of record.</summary>
@@ -526,9 +526,24 @@ namespace EasyHMSAPI.Application.Services
 
         private async Task<IReadOnlyList<string>> HiTypesAsync(Guid hospitalId, string sourceType, Guid sourceId, CancellationToken cancellationToken)
         {
+            var invoice = await HasInvoiceAsync(hospitalId, sourceId, cancellationToken);
             if (sourceType == AbdmCareContextSource.Opd)
             {
-                var prescription = await _db.Prescription.AnyAsync(p => p.ApptId == sourceId && p.HospitalId == hospitalId, cancellationToken);
+                var rx = await _db.Prescription
+                    .Where(p => p.ApptId == sourceId && p.HospitalId == hospitalId)
+                    .OrderByDescending(p => p.UpdatedAt)
+                    .Select(p => new { p.PrescriptionId, p.ChiefComplaint, p.History, p.Comorbidity, p.Examination, p.SystemicExamination, p.Diagnosis, p.FollowUpDate, p.Immunizations })
+                    .FirstOrDefaultAsync(cancellationToken);
+                var prescription = rx != null;
+                var opConsultation = rx != null && (rx.FollowUpDate != null
+                    || new[] { rx.ChiefComplaint, rx.History, rx.Comorbidity, rx.Examination, rx.SystemicExamination, rx.Diagnosis }.Any(t => !string.IsNullOrWhiteSpace(t))
+                    || await _db.PrescriptionMedicine.AnyAsync(m => m.PrescriptionId == rx.PrescriptionId, cancellationToken));
+                var immunization = rx != null && Fhir.AbdmRecordSource.ParseVaccines(rx.Immunizations).Count > 0;
+                var attachmentNames = await _db.PrescriptionAttachments
+                    .Where(a => a.ApptId == sourceId && a.HospitalId == hospitalId && a.StorageUrl != null)
+                    .Select(a => a.FileName ?? a.ReportType)
+                    .ToListAsync(cancellationToken);
+                var healthDocument = attachmentNames.Any(n => Fhir.AbdmDocumentFiles.ContentTypeFor(n) != null);
                 var vitals = await _db.AppointmentVitals.AnyAsync(v => v.ApptId == sourceId && v.HospitalId == hospitalId, cancellationToken);
                 var encounterIds = await _db.Encounter
                     .Where(e => e.HospitalId == hospitalId && e.SourceId == sourceId)
@@ -536,13 +551,31 @@ namespace EasyHMSAPI.Application.Services
                     .ToListAsync(cancellationToken);
                 var labReport = encounterIds.Count > 0 && await _db.PathologyReport.AnyAsync(r => r.HospitalId == hospitalId
                     && _db.PathologyOrder.Any(o => o.OrderId == r.OrderId && encounterIds.Contains(o.EncounterId)), cancellationToken);
-                return AbdmCareContextRules.HiTypes(prescription, vitals, labReport, dischargeSummary: false);
+                return AbdmCareContextRules.HiTypes(prescription, vitals, labReport, dischargeSummary: false,
+                    opConsultation: opConsultation, immunization: immunization, healthDocument: healthDocument, invoice: invoice);
             }
 
             var discharge = await _db.DischargeSummary.AnyAsync(d => d.AdmissionId == sourceId && d.HospitalId == hospitalId && d.SignedAt != null, cancellationToken);
             var ipdLab = await _db.PathologyReport.AnyAsync(r => r.HospitalId == hospitalId
                 && _db.PathologyOrder.Any(o => o.OrderId == r.OrderId && o.AdmissionId == sourceId), cancellationToken);
-            return AbdmCareContextRules.HiTypes(prescription: false, vitals: false, labReport: ipdLab, dischargeSummary: discharge);
+            var documentNames = await _db.AdmissionDocument
+                .Where(d => d.AdmissionId == sourceId && d.HospitalId == hospitalId)
+                .Select(d => d.DocumentName)
+                .ToListAsync(cancellationToken);
+            var ipdDocuments = documentNames.Any(n => Fhir.AbdmDocumentFiles.ContentTypeFor(n) != null);
+            return AbdmCareContextRules.HiTypes(prescription: false, vitals: false, labReport: ipdLab, dischargeSummary: discharge,
+                healthDocument: ipdDocuments, invoice: invoice);
+        }
+
+        /// <summary>A finalised, uncancelled bill on the visit's or admission's encounter (the Invoice record).</summary>
+        private async Task<bool> HasInvoiceAsync(Guid hospitalId, Guid sourceId, CancellationToken cancellationToken)
+        {
+            var encounterIds = await _db.Encounter
+                .Where(e => e.HospitalId == hospitalId && e.SourceId == sourceId)
+                .Select(e => e.EncounterId)
+                .ToListAsync(cancellationToken);
+            return encounterIds.Count > 0 && await _db.BillingInvoice.AnyAsync(
+                i => i.HospitalId == hospitalId && encounterIds.Contains(i.EncounterId) && i.CancelledAt == null && i.FinalizedAt != null, cancellationToken);
         }
 
         private async Task<string?> FindUsableTokenAsync(Guid hospitalId, string abhaAddress, CancellationToken cancellationToken)

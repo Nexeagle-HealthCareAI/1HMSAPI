@@ -9,8 +9,28 @@ namespace EasyHMSAPI.Application.Services.Fhir
     public sealed record FhirFacility(string Id, string Name, string? HipId);
     public sealed record FhirMedicine(string? Name, string? Dosage, string? Frequency, string? Duration, string? Route, string? Instructions);
 
-    /// <summary>What every record needs: whose it is, who wrote it, where, when, and our reference.</summary>
-    public sealed record FhirContext(FhirPatient Patient, FhirAuthor Author, FhirFacility Facility, DateTime WhenUtc, string Reference);
+    /// <summary>What the printed (PDF) copy adds to a record's identity block. NHA's M2 workbook asks each
+    /// PDF to carry the patient's name, age, gender, mobile, ABHA number and ABHA address, and the
+    /// doctor's name and speciality.</summary>
+    public sealed record FhirPrint(string? Age, string? Mobile, string? DoctorQualification, string? DoctorSpeciality);
+
+    /// <summary>What every record needs: whose it is, who wrote it, where, when, and our reference.
+    /// With <see cref="Print"/> set, each record also carries its PDF copy.</summary>
+    public sealed record FhirContext(FhirPatient Patient, FhirAuthor Author, FhirFacility Facility, DateTime WhenUtc, string Reference, FhirPrint? Print = null);
+
+    public sealed record FhirConsultation(
+        string? ChiefComplaint, string? History, string? Examination, string? Diagnosis,
+        IReadOnlyList<FhirMedicine> Medicines, DateTime? FollowUpDate, string? FollowUpNotes, string? Advice);
+
+    /// <summary>A vaccine recorded on a visit. Status as the prescription pad stores it ("given", "advised"...).</summary>
+    public sealed record FhirVaccine(string Name, string? Status, DateTime? Date, int? DoseNumber, DateTime? NextDue);
+
+    /// <summary>A document already held as a file: an upload, a scan.</summary>
+    public sealed record FhirFile(string Title, string ContentType, byte[] Data, DateTime? CreatedUtc);
+
+    public sealed record FhirInvoiceLine(string Name, string? Category, decimal Quantity, decimal Rate, decimal Discount, decimal Cgst, decimal Sgst, decimal Igst);
+
+    public sealed record FhirInvoice(string Number, string? Kind, IReadOnlyList<FhirInvoiceLine> Lines, decimal Net, decimal Tax, decimal Gross);
 
     public sealed record FhirDischarge(
         string? ChiefComplaint, string? History, string? CourseInHospital, string? Procedures, string? FinalDiagnosis,
@@ -41,7 +61,7 @@ namespace EasyHMSAPI.Application.Services.Fhir
         private const string OurSystem = "https://nexeagle.com/1hms/";
         private const string NdhmIdentifierType = "https://nrces.in/ndhm/fhir/r4/CodeSystem/ndhm-identifier-type-code";
 
-        // ---- the four record types -----------------------------------------------------------
+        // ---- the eight record types ----------------------------------------------------------
 
         public static JsonObject Prescription(FhirContext context, IEnumerable<FhirMedicine> medicines, string? diagnosis)
         {
@@ -54,6 +74,15 @@ namespace EasyHMSAPI.Application.Services.Fhir
                 var condition = bundle.Add(Condition(bundle, diagnosis!, null, null));
                 foreach (var request in entries)
                     request["reasonReference"] = new JsonArray(bundle.ReferenceTo(condition));
+            }
+            if (context.Print != null)
+            {
+                var pdf = Pdf(context, "Prescription", new[]
+                {
+                    new AbdmPdfSection("Diagnosis", Lines(diagnosis)),
+                    new AbdmPdfSection("Medicines", medicines.Where(m => !string.IsNullOrWhiteSpace(m.Name)).Select(MedicineLine).ToList())
+                });
+                entries.Add(bundle.Add(Binary(pdf)));
             }
             bundle.Section("Prescription record", "440545006", "Prescription record", entries, null);
             return bundle.Build();
@@ -91,7 +120,18 @@ namespace EasyHMSAPI.Application.Services.Fhir
                 results.Add(bundle.ReferenceTo(bundle.Add(result)));
             }
             report["result"] = results;
-            bundle.Section("Diagnostic report", "721981007", "Diagnostic studies report", new List<JsonObject> { bundle.Add(report) }, null);
+            var reportEntries = new List<JsonObject> { bundle.Add(report) };
+            if (context.Print != null)
+            {
+                var pdf = Pdf(context, "Diagnostic Report", new[]
+                {
+                    new AbdmPdfSection("Report number", Lines(reportNumber)),
+                    new AbdmPdfSection("Tests", names),
+                    new AbdmPdfSection("Conclusion", Lines(conclusion))
+                });
+                reportEntries.Add(bundle.Add(PdfReference(bundle, "Diagnostic Report", pdf)));
+            }
+            bundle.Section("Diagnostic report", "721981007", "Diagnostic studies report", reportEntries, null);
             return bundle.Build();
         }
 
@@ -113,7 +153,7 @@ namespace EasyHMSAPI.Application.Services.Fhir
             var diagnosis = !string.IsNullOrWhiteSpace(discharge.FinalDiagnosis) ? discharge.FinalDiagnosis : discharge.Icd10Name;
             var history = JoinText(("History", discharge.History), ("Course in hospital", discharge.CourseInHospital), ("Condition at discharge", discharge.ConditionAtDischarge));
             if (!string.IsNullOrWhiteSpace(diagnosis))
-                bundle.Section("Medical history", "371529009", "History and physical report",
+                bundle.Section("Medical history", "1003642006", "Past medical history section",
                     new List<JsonObject> { bundle.Add(Condition(bundle, diagnosis!, discharge.Icd10Code, discharge.Icd10Name)) }, history);
 
             if (!string.IsNullOrWhiteSpace(discharge.Procedures))
@@ -122,12 +162,12 @@ namespace EasyHMSAPI.Application.Services.Fhir
                 procedure["status"] = "completed";
                 procedure["code"] = new JsonObject { ["text"] = discharge.Procedures!.Trim() };
                 procedure["subject"] = bundle.PatientReference();
-                bundle.Section("Procedures", "371525003", "Clinical procedure report", new List<JsonObject> { bundle.Add(procedure) }, null);
+                bundle.Section("Procedures", "1003640003", "History of past procedure section", new List<JsonObject> { bundle.Add(procedure) }, null);
             }
 
             var medicines = discharge.Medicines.Where(m => !string.IsNullOrWhiteSpace(m.Name)).Select(m => bundle.Add(MedicationRequest(bundle, m))).ToList();
             if (medicines.Count > 0)
-                bundle.Section("Medications", "721912009", "Medication summary document", medicines, null);
+                bundle.Section("Medications", "1003606003", "Medication history section", medicines, null);
 
             var plan = JoinText(("Follow-up", discharge.FollowUp), ("Diet", discharge.Diet), ("Activity", discharge.Activity));
             if (plan != null)
@@ -139,6 +179,22 @@ namespace EasyHMSAPI.Application.Services.Fhir
                 carePlan["description"] = plan;
                 carePlan["subject"] = bundle.PatientReference();
                 bundle.Section("Care plan", "734163000", "Care plan", new List<JsonObject> { bundle.Add(carePlan) }, null);
+            }
+
+            if (context.Print != null)
+            {
+                var pdf = Pdf(context, "Discharge Summary", new[]
+                {
+                    new AbdmPdfSection("Chief complaints", Lines(discharge.ChiefComplaint)),
+                    new AbdmPdfSection("History", Lines(discharge.History)),
+                    new AbdmPdfSection("Final diagnosis", Lines(JoinWords(diagnosis, string.IsNullOrWhiteSpace(discharge.Icd10Code) ? null : $"ICD-10 {discharge.Icd10Code}"))),
+                    new AbdmPdfSection("Course in hospital", Lines(discharge.CourseInHospital)),
+                    new AbdmPdfSection("Procedures", Lines(discharge.Procedures)),
+                    new AbdmPdfSection("Condition at discharge", Lines(discharge.ConditionAtDischarge)),
+                    new AbdmPdfSection("Medicines on discharge", discharge.Medicines.Where(m => !string.IsNullOrWhiteSpace(m.Name)).Select(MedicineLine).ToList()),
+                    new AbdmPdfSection("Advice", Lines(plan))
+                });
+                bundle.Section("Document Reference", "373942005", "Discharge summary", new List<JsonObject> { bundle.Add(PdfReference(bundle, "Discharge Summary", pdf)) }, null);
             }
             return bundle.Build();
         }
@@ -172,6 +228,171 @@ namespace EasyHMSAPI.Application.Services.Fhir
             AddQuantity(bundle, body, "ObservationBodyMeasurement", "vital-signs", vitals.Bmi, "39156-5", "Body mass index (BMI) [Ratio]", "kg/m2", "kg/m2");
             if (body.Count > 0)
                 bundle.Section("Body Measurement", null, null, body, null);
+
+            if (context.Print != null && (signs.Count > 0 || body.Count > 0))
+            {
+                var pdf = Pdf(context, "Wellness Record", new[] { new AbdmPdfSection("Vital signs and body measurements", VitalLines(vitals)) });
+                bundle.Section("Document Reference", null, null, new List<JsonObject> { bundle.Add(PdfReference(bundle, "Wellness Record", pdf)) }, null);
+            }
+            return bundle.Build();
+        }
+
+        public static JsonObject OPConsultation(FhirContext context, FhirConsultation consultation)
+        {
+            var bundle = new Builder(context, "OPConsultRecord", "371530004", "Clinical consultation report", "OP Consultation");
+            var encounter = Resource("Encounter", "Encounter");
+            encounter["identifier"] = new JsonArray(Identifier(OurSystem + "visit", context.Reference));
+            encounter["status"] = "finished";
+            encounter["class"] = new JsonObject { ["system"] = "http://terminology.hl7.org/CodeSystem/v3-ActCode", ["code"] = "AMB", ["display"] = "ambulatory" };
+            encounter["subject"] = bundle.PatientReference();
+            encounter["period"] = new JsonObject { ["start"] = Instant(context.WhenUtc) };
+            bundle.SetEncounter(bundle.Add(encounter));
+
+            if (!string.IsNullOrWhiteSpace(consultation.ChiefComplaint))
+                bundle.Section("Chief complaints", "422843007", "Chief complaint section",
+                    new List<JsonObject> { bundle.Add(Condition(bundle, consultation.ChiefComplaint!, null, null)) }, null);
+
+            var history = new List<JsonObject>();
+            if (!string.IsNullOrWhiteSpace(consultation.History))
+                history.Add(bundle.Add(Condition(bundle, consultation.History!, null, null)));
+            if (!string.IsNullOrWhiteSpace(consultation.Diagnosis))
+                history.Add(bundle.Add(Condition(bundle, consultation.Diagnosis!, null, null)));
+            bundle.Section("Medical history", "371529009", "History and physical report", history, null);
+
+            if (!string.IsNullOrWhiteSpace(consultation.Examination))
+            {
+                var exam = Resource("Observation", "Observation");
+                exam["status"] = "final";
+                exam["code"] = Concept(Snomed, "5880005", "Physical examination procedure");
+                exam["subject"] = bundle.PatientReference();
+                exam["effectiveDateTime"] = Instant(context.WhenUtc);
+                exam["performer"] = new JsonArray(bundle.AuthorReference());
+                exam["valueString"] = consultation.Examination!.Trim();
+                bundle.Section("Physical examination", "425044008", "Physical exam section", new List<JsonObject> { bundle.Add(exam) }, null);
+            }
+
+            var medicines = consultation.Medicines.Where(m => !string.IsNullOrWhiteSpace(m.Name)).Select(m => bundle.Add(MedicationRequest(bundle, m))).ToList();
+            bundle.Section("Medications", "721912009", "Medication summary document", medicines, null);
+
+            if (consultation.FollowUpDate != null)
+            {
+                var followUp = Resource("Appointment", "Appointment");
+                followUp["status"] = "proposed";
+                Put(followUp, "description", consultation.FollowUpNotes ?? "Follow-up visit");
+                followUp["start"] = Instant(consultation.FollowUpDate.Value);
+                followUp["end"] = Instant(consultation.FollowUpDate.Value.AddMinutes(15));
+                followUp["participant"] = new JsonArray(
+                    new JsonObject { ["actor"] = bundle.PatientReference(), ["status"] = "needs-action" },
+                    new JsonObject { ["actor"] = bundle.AuthorReference(), ["status"] = "needs-action" });
+                bundle.Section("Follow up", "390906007", "Follow-up encounter", new List<JsonObject> { bundle.Add(followUp) }, null);
+            }
+
+            // A consultation with nothing clinical in it is not a record.
+            if (!bundle.HasSections)
+                return bundle.Build();
+
+            if (context.Print != null)
+            {
+                var pdf = Pdf(context, "OP Consultation", new[]
+                {
+                    new AbdmPdfSection("Chief complaints", Lines(consultation.ChiefComplaint)),
+                    new AbdmPdfSection("History", Lines(consultation.History)),
+                    new AbdmPdfSection("Examination", Lines(consultation.Examination)),
+                    new AbdmPdfSection("Diagnosis", Lines(consultation.Diagnosis)),
+                    new AbdmPdfSection("Medicines", consultation.Medicines.Where(m => !string.IsNullOrWhiteSpace(m.Name)).Select(MedicineLine).ToList()),
+                    new AbdmPdfSection("Advice", Lines(consultation.Advice)),
+                    new AbdmPdfSection("Follow-up", Lines(JoinWords(consultation.FollowUpDate?.ToString("dd MMM yyyy", CultureInfo.InvariantCulture), consultation.FollowUpNotes)))
+                });
+                bundle.Section("Document Reference", "371530004", "Clinical consultation report", new List<JsonObject> { bundle.Add(PdfReference(bundle, "OP Consultation", pdf)) }, null);
+            }
+            return bundle.Build();
+        }
+
+        public static JsonObject ImmunizationRecord(FhirContext context, IEnumerable<FhirVaccine> vaccines)
+        {
+            var bundle = new Builder(context, "ImmunizationRecord", "41000179103", "Immunization record", "Immunization Record");
+            var given = vaccines.Where(v => !string.IsNullOrWhiteSpace(v.Name)).ToList();
+            var entries = new List<JsonObject>();
+            foreach (var vaccine in given)
+            {
+                var immunization = Resource("Immunization", "Immunization");
+                immunization["status"] = ImmunizationStatus(vaccine.Status);
+                immunization["vaccineCode"] = new JsonObject { ["text"] = vaccine.Name.Trim() };
+                immunization["patient"] = bundle.PatientReference();
+                immunization["occurrenceDateTime"] = Instant(vaccine.Date ?? context.WhenUtc);
+                immunization["primarySource"] = true;
+                immunization["performer"] = new JsonArray(new JsonObject { ["actor"] = bundle.AuthorReference() });
+                if (vaccine.DoseNumber is > 0)
+                    immunization["protocolApplied"] = new JsonArray(new JsonObject { ["doseNumberPositiveInt"] = vaccine.DoseNumber.Value });
+                if (!string.IsNullOrWhiteSpace(vaccine.Status))
+                    immunization["note"] = new JsonArray(new JsonObject { ["text"] = $"Recorded as: {vaccine.Status!.Trim()}" });
+                entries.Add(bundle.Add(immunization));
+            }
+            if (entries.Count > 0 && context.Print != null)
+            {
+                var pdf = Pdf(context, "Immunization Record", new[] { new AbdmPdfSection("Vaccines", given.Select(VaccineLine).ToList()) });
+                entries.Add(bundle.Add(PdfReference(bundle, "Immunization Record", pdf)));
+            }
+            bundle.Section("Immunization record", "41000179103", "Immunization record", entries, null);
+            return bundle.Build();
+        }
+
+        /// <summary>Documents held as files (uploads, scans) about this visit. Each travels as-is in a DocumentReference.</summary>
+        public static JsonObject HealthDocument(FhirContext context, IEnumerable<FhirFile> files)
+        {
+            var bundle = new Builder(context, "HealthDocumentRecord", "419891008", "Record artifact", "Health Document");
+            var entries = files.Where(f => f.Data.Length > 0)
+                .Select(f => bundle.Add(DocumentReference(bundle, f.Title, f.ContentType, f.Data, f.CreatedUtc ?? context.WhenUtc, f.Title)))
+                .ToList();
+            bundle.Section("Health Document", "419891008", "Record artifact", entries, null);
+            return bundle.Build();
+        }
+
+        /// <summary>The bill for the visit or admission. Invoice and its ChargeItems; amounts in INR.</summary>
+        public static JsonObject Invoice(FhirContext context, FhirInvoice invoice)
+        {
+            var bundle = new Builder(context, "InvoiceRecord", null, null, "Invoice Record");
+            var lines = invoice.Lines.Where(l => !string.IsNullOrWhiteSpace(l.Name)).ToList();
+            if (lines.Count == 0)
+                return bundle.Build();
+
+            var lineItems = new JsonArray();
+            var sequence = 1;
+            foreach (var line in lines)
+            {
+                var charge = Resource("ChargeItem", "ChargeItem");
+                charge["status"] = "billed";
+                var (code, display) = BillingCode(line.Category);
+                charge["code"] = new JsonObject { ["coding"] = new JsonArray(new JsonObject { ["system"] = BillingCodes, ["code"] = code, ["display"] = display }), ["text"] = line.Name.Trim() };
+                charge["subject"] = bundle.PatientReference();
+                charge["occurrenceDateTime"] = Instant(context.WhenUtc);
+                charge["performer"] = new JsonArray(new JsonObject { ["actor"] = bundle.AuthorReference() });
+                charge["quantity"] = new JsonObject { ["value"] = line.Quantity <= 0 ? 1 : line.Quantity };
+                charge["productCodeableConcept"] = new JsonObject { ["text"] = line.Name.Trim() };
+                bundle.Add(charge);
+
+                var components = new JsonArray(PriceComponent("base", "01", "Rate", line.Rate * (line.Quantity <= 0 ? 1 : line.Quantity)));
+                if (line.Discount > 0) components.Add(PriceComponent("discount", "02", "Discount", line.Discount));
+                if (line.Cgst > 0) components.Add(PriceComponent("tax", "03", "CGST", line.Cgst));
+                if (line.Sgst > 0) components.Add(PriceComponent("tax", "04", "SGST", line.Sgst));
+                // NRCeS's price components have no IGST code (00-04 only); the binding is extensible, so it goes as text.
+                if (line.Igst > 0) components.Add(PriceComponent("tax", null, "IGST", line.Igst));
+                lineItems.Add(new JsonObject { ["sequence"] = sequence++, ["chargeItemReference"] = bundle.ReferenceTo(charge), ["priceComponent"] = components });
+            }
+
+            var resource = Resource("Invoice", "Invoice");
+            resource["identifier"] = new JsonArray(Identifier(OurSystem + "invoice", invoice.Number));
+            resource["status"] = "issued";
+            var (kindCode, kindDisplay) = InvoiceKind(invoice.Kind);
+            resource["type"] = new JsonObject { ["coding"] = new JsonArray(new JsonObject { ["system"] = BillingCodes, ["code"] = kindCode, ["display"] = kindDisplay }) };
+            resource["subject"] = bundle.PatientReference();
+            resource["date"] = Instant(context.WhenUtc);
+            resource["participant"] = new JsonArray(new JsonObject { ["actor"] = bundle.AuthorReference() });
+            resource["issuer"] = bundle.FacilityReference();
+            resource["lineItem"] = lineItems;
+            resource["totalNet"] = Money(invoice.Net);
+            resource["totalGross"] = Money(invoice.Gross);
+            bundle.Section("Invoice details", null, null, new List<JsonObject> { bundle.Add(resource) }, null);
             return bundle.Build();
         }
 
@@ -276,6 +497,129 @@ namespace EasyHMSAPI.Application.Services.Fhir
             observation["valueQuantity"] = Quantity(value!.Value, unit, ucumCode);
             into.Add(bundle.Add(observation));
         }
+
+        // ---- the PDF copy --------------------------------------------------------------------
+
+        private const string BillingCodes = "https://nrces.in/ndhm/fhir/r4/CodeSystem/ndhm-billing-codes";
+        private const string PriceComponents = "https://nrces.in/ndhm/fhir/r4/CodeSystem/ndhm-price-components";
+
+        /// <summary>The identity block every printed record opens with (NHA M2 workbook, share case note 1).</summary>
+        public static IReadOnlyList<(string Label, string? Value)> Identity(FhirContext context)
+        {
+            var print = context.Print;
+            return new (string, string?)[]
+            {
+                ("Patient", context.Patient.Name),
+                ("Age", print?.Age),
+                ("Gender", FhirGender(context.Patient.Gender) is var g && g != "unknown" ? char.ToUpperInvariant(g[0]) + g[1..] : null),
+                ("Mobile", print?.Mobile),
+                ("ABHA number", context.Patient.AbhaNumber),
+                ("ABHA address", context.Patient.AbhaAddress),
+                ("Patient ID", context.Patient.PatientId),
+                ("Doctor", JoinWords(context.Author.Name, print?.DoctorQualification)),
+                ("Speciality", print?.DoctorSpeciality),
+                ("Registration no.", context.Author.RegistrationNumber),
+                ("Date", context.WhenUtc.AddHours(5.5).ToString("dd MMM yyyy, hh:mm tt", CultureInfo.InvariantCulture) + " IST")
+            };
+        }
+
+        private static byte[] Pdf(FhirContext context, string title, IEnumerable<AbdmPdfSection> sections) =>
+            AbdmPdf.Render(new AbdmPdfDocument(context.Facility.Name, title, Identity(context), sections.ToList()));
+
+        private static IReadOnlyList<string> Lines(string? text) =>
+            string.IsNullOrWhiteSpace(text) ? Array.Empty<string>() : new[] { text!.Trim() };
+
+        private static string MedicineLine(FhirMedicine m) =>
+            JoinWords(m.Name, m.Dosage, m.Frequency, m.Duration, m.Route, m.Instructions) ?? string.Empty;
+
+        private static string VaccineLine(FhirVaccine v) =>
+            JoinWords(v.Name, v.DoseNumber is > 0 ? $"dose {v.DoseNumber}" : null, v.Status,
+                v.Date?.ToString("dd MMM yyyy", CultureInfo.InvariantCulture),
+                v.NextDue == null ? null : "next due " + v.NextDue.Value.ToString("dd MMM yyyy", CultureInfo.InvariantCulture)) ?? string.Empty;
+
+        private static List<string> VitalLines(FhirVitals v)
+        {
+            var lines = new List<string>();
+            if (Has(v.Systolic) && Has(v.Diastolic)) lines.Add($"Blood pressure: {v.Systolic:0.#}/{v.Diastolic:0.#} mmHg");
+            if (Has(v.Pulse)) lines.Add($"Pulse: {v.Pulse:0.#} /min");
+            if (Has(v.RespiratoryRate)) lines.Add($"Respiratory rate: {v.RespiratoryRate:0.#} /min");
+            if (Has(v.TempC)) lines.Add($"Temperature: {v.TempC:0.#} C");
+            if (Has(v.Spo2)) lines.Add($"SpO2: {v.Spo2:0.#} %");
+            if (Has(v.HeightCm)) lines.Add($"Height: {v.HeightCm:0.#} cm");
+            if (Has(v.WeightKg)) lines.Add($"Weight: {v.WeightKg:0.#} kg");
+            if (Has(v.Bmi)) lines.Add($"BMI: {v.Bmi:0.#}");
+            return lines;
+        }
+
+        private static JsonObject PdfReference(Builder bundle, string typeText, byte[] pdf) =>
+            DocumentReference(bundle, typeText, "application/pdf", pdf, bundle.Context.WhenUtc, typeText);
+
+        private static JsonObject DocumentReference(Builder bundle, string typeText, string contentType, byte[] data, DateTime createdUtc, string title)
+        {
+            var reference = Resource("DocumentReference", "DocumentReference");
+            reference["status"] = "current";
+            reference["docStatus"] = "final";
+            reference["type"] = new JsonObject { ["text"] = typeText };
+            reference["subject"] = bundle.PatientReference();
+            reference["date"] = Instant(createdUtc);
+            reference["author"] = new JsonArray(bundle.AuthorReference());
+            reference["content"] = new JsonArray(new JsonObject
+            {
+                ["attachment"] = new JsonObject
+                {
+                    ["contentType"] = contentType,
+                    ["language"] = "en-IN",
+                    ["data"] = Convert.ToBase64String(data),
+                    ["title"] = title,
+                    ["creation"] = Instant(createdUtc)
+                }
+            });
+            return reference;
+        }
+
+        private static JsonObject Binary(byte[] pdf) => new()
+        {
+            ["resourceType"] = "Binary",
+            ["id"] = Guid.NewGuid().ToString(),
+            ["meta"] = new JsonObject { ["profile"] = new JsonArray(Nrces + "Binary") },
+            ["contentType"] = "application/pdf",
+            ["data"] = Convert.ToBase64String(pdf)
+        };
+
+        private static string ImmunizationStatus(string? status) => (status ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "not-done" or "not done" or "notdone" or "declined" or "refused" or "skipped" => "not-done",
+            _ => "completed"
+        };
+
+        private static (string Code, string Display) InvoiceKind(string? kind) => (kind ?? string.Empty).Trim().ToUpperInvariant() switch
+        {
+            "IPD" => ("02", "IPD"),
+            "PHARMACY" => ("01", "Pharmacy"),
+            "CONSULTATION" => ("00", "Consultation"),
+            _ => ("03", "OPD")
+        };
+
+        /// <summary>ChargeItem code from our charge category. Only codes we have seen in the NRCeS package are used;
+        /// anything else is "Others".</summary>
+        private static (string Code, string Display) BillingCode(string? category)
+        {
+            var c = (category ?? string.Empty).Trim().ToUpperInvariant();
+            if (c.Contains("CONSULT")) return ("00", "Consultation");
+            if (c.Contains("PHARM") || c.Contains("MEDIC") || c.Contains("DRUG")) return ("05", "Medicines");
+            return ("99", "Others");
+        }
+
+        private static JsonObject PriceComponent(string type, string? code, string display, decimal amount) => new()
+        {
+            ["type"] = type,
+            ["code"] = code == null
+                ? new JsonObject { ["text"] = display }
+                : new JsonObject { ["coding"] = new JsonArray(new JsonObject { ["system"] = PriceComponents, ["code"] = code, ["display"] = display }) },
+            ["amount"] = Money(amount)
+        };
+
+        private static JsonObject Money(decimal amount) => new() { ["value"] = decimal.Round(amount, 2), ["currency"] = "INR" };
 
         // ---- small pieces --------------------------------------------------------------------
 
@@ -426,6 +770,7 @@ namespace EasyHMSAPI.Application.Services.Fhir
             public JsonObject FacilityReference() => Reference(_facility, Context.Facility.Name);
             public JsonObject ReferenceTo(JsonObject resource) => Reference(resource, null);
             public void SetEncounter(JsonObject encounter) => _composition["encounter"] = Reference(encounter, null);
+            public bool HasSections => _sections.Count > 0;
 
             /// <summary>Adds a resource to the bundle and hands it back, so it can be put in a section.</summary>
             public JsonObject Add(JsonObject resource)

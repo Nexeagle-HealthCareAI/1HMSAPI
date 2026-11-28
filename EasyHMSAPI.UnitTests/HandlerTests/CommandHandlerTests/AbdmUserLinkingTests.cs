@@ -156,6 +156,17 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         }
 
         [Test]
+        public void Match_OnMobile_AllowsYearOfBirthWithinFiveYears_Usr606()
+        {
+            var request = AbdmDiscoveryRules.Parse(DiscoverBody(abhaNumber: null));
+
+            Assert.That(AbdmDiscoveryRules.Match(request, new[] { Candidate("P-1", "Asha Rao", year: 1995) }), Is.Not.Null);
+            Assert.That(AbdmDiscoveryRules.Match(request, new[] { Candidate("P-2", "Asha Rao", year: 1985) }), Is.Not.Null);
+            Assert.That(AbdmDiscoveryRules.Match(request, new[] { Candidate("P-3", "Asha Rao", year: 1996) }), Is.Null);
+            Assert.That(AbdmDiscoveryRules.Match(request, new[] { Candidate("P-4", "Asha Rao", year: 1984) }), Is.Null);
+        }
+
+        [Test]
         public void Match_ToTwoPatients_IsNoMatch_UnlessTheTypedPatientIdChooses()
         {
             var two = new[] { Candidate("P-1", "Asha Rao"), Candidate("P-2", "Asha Rao") };

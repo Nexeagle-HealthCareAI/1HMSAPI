@@ -227,6 +227,7 @@ builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.TrackingRete
 // Visit reminders and the after-visit message (Vita vision, Phase 4); off until the JobSettings row 'VisitMessages' is switched on.
 builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.VisitMessagesBackgroundService>();
 builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.AbdmHiuSweepBackgroundService>();
+builder.Services.AddHostedService<EasyHMSAPI.Api.BackgroundServices.AbdmAutoLinkBackgroundService>();
 // ABDM M1: ABHA creation (Aadhaar-OTP) + existing-ABHA login (Mobile/Aadhaar-OTP).
 // Own client with a 30 s timeout: the default 100 s turned a dead ABDM endpoint into a 100 s hang
 // at the counter. 30 s still leaves room for Aadhaar OTP calls, which go through UIDAI.
@@ -241,7 +242,9 @@ builder.Services.AddHttpClient<EasyHMSAPI.Application.Services.Interfaces.IAbdmP
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.IAbdmExchangeLog, EasyHMSAPI.Application.Services.AbdmExchangeLog>();
 builder.Services.AddHttpClient<EasyHMSAPI.Application.Services.Interfaces.IAbdmHieService, EasyHMSAPI.Application.Services.Implementations.AbdmHieService>(AbdmClient);
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.IAbdmLinkingService, EasyHMSAPI.Application.Services.AbdmLinkingService>();
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.IAbdmAutoLinkService, EasyHMSAPI.Application.Services.AbdmAutoLinkService>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.IAbdmUserLinkingService, EasyHMSAPI.Application.Services.AbdmUserLinkingService>();
+builder.Services.AddScoped<EasyHMSAPI.Application.Services.Fhir.IAbdmDocumentFiles, EasyHMSAPI.Application.Services.Fhir.AbdmDocumentFiles>();
 builder.Services.AddScoped<EasyHMSAPI.Application.Services.Fhir.IAbdmRecordSource, EasyHMSAPI.Application.Services.Fhir.AbdmRecordSource>();
 builder.Services.AddHttpClient<EasyHMSAPI.Application.Services.IAbdmDataPushClient, EasyHMSAPI.Application.Services.AbdmDataPushClient>(AbdmClient)
     .ConfigurePrimaryHttpMessageHandler(EasyHMSAPI.Application.Services.AbdmDataPushClient.CreateHandler);

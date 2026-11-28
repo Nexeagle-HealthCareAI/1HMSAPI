@@ -1,7 +1,9 @@
+using System.Globalization;
 using System.Text.Json;
 using EasyHMSAPI.Domain.Context;
 using EasyHMSAPI.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace EasyHMSAPI.Application.Services.Fhir
 {
@@ -22,14 +24,22 @@ namespace EasyHMSAPI.Application.Services.Fhir
         Task<AbdmBuiltRecords?> BuildAsync(AbdmCareContext careContext, IReadOnlyCollection<string> allowedHiTypes, CancellationToken cancellationToken);
     }
 
-    /// <summary>Reads a visit's or an admission's records and hands them to <see cref="AbdmFhir"/>.</summary>
+    /// <summary>Reads a visit's or an admission's records and hands them to <see cref="AbdmFhir"/>.
+    /// All eight ABDM record types, each structured and with its PDF copy (Invoice: structured only;
+    /// Health Document: the uploaded file itself).</summary>
     public sealed class AbdmRecordSource : IAbdmRecordSource
     {
         private readonly AppDbContext _db;
+        private readonly IAbdmDocumentFiles? _files;
+        private readonly string _attachmentsContainer;
+        private readonly string _admissionDocumentsContainer;
 
-        public AbdmRecordSource(AppDbContext db)
+        public AbdmRecordSource(AppDbContext db, IAbdmDocumentFiles? files = null, IConfiguration? configuration = null)
         {
             _db = db;
+            _files = files;
+            _attachmentsContainer = configuration?["BlobStorage:PrescriptionAttachmentsContainer"] ?? string.Empty;
+            _admissionDocumentsContainer = configuration?["BlobStorage:AdmissionDocumentsContainer"] ?? string.Empty;
         }
 
         public async Task<AbdmBuiltRecords?> BuildAsync(AbdmCareContext careContext, IReadOnlyCollection<string> allowedHiTypes, CancellationToken cancellationToken)
@@ -39,8 +49,10 @@ namespace EasyHMSAPI.Application.Services.Fhir
 
             var registration = await _db.PatientRegistrations.AsNoTracking()
                 .Where(p => p.HospitalId == hospitalId && p.PatientId == careContext.PatientId)
-                .Select(p => new { p.FullName, p.Sex, p.DateOfBirth })
+                .Select(p => new { p.FullName, p.Sex, p.DateOfBirth, p.Age, p.AgeUnit, p.Mobile })
                 .FirstOrDefaultAsync(cancellationToken);
+            var age = AgeText(registration?.DateOfBirth, registration?.Age, registration?.AgeUnit);
+            var mobile = AbdmCareContextRules.Mobile10(registration?.Mobile);
             var patient = new FhirPatient(careContext.PatientId, registration?.FullName, registration?.Sex, registration?.DateOfBirth, careContext.AbhaNumber, careContext.AbhaAddress);
 
             var hospitalName = await _db.Hospitals.AsNoTracking().Where(h => h.HospitalID == hospitalId).Select(h => h.Name).FirstOrDefaultAsync(cancellationToken);
@@ -62,25 +74,64 @@ namespace EasyHMSAPI.Application.Services.Fhir
                     .FirstOrDefaultAsync(cancellationToken);
                 if (appointment == null)
                     return null;
-                var context = new FhirContext(patient, await AuthorAsync(appointment.DoctorId, null, cancellationToken), facility, appointment.ApptDate, careContext.ReferenceNumber);
+                var (author, print) = await AuthorAsync(appointment.DoctorId, null, age, mobile, cancellationToken);
+                var context = new FhirContext(patient, author, facility, appointment.ApptDate, careContext.ReferenceNumber, print);
 
-                if (Allowed("Prescription"))
-                {
-                    var prescription = await _db.Prescription.AsNoTracking()
-                        .Where(p => p.ApptId == careContext.SourceId && p.HospitalId == hospitalId)
-                        .OrderByDescending(p => p.UpdatedAt)
-                        .Select(p => new { p.PrescriptionId, p.Diagnosis })
-                        .FirstOrDefaultAsync(cancellationToken);
-                    if (prescription != null)
+                var prescription = await _db.Prescription.AsNoTracking()
+                    .Where(p => p.ApptId == careContext.SourceId && p.HospitalId == hospitalId)
+                    .OrderByDescending(p => p.UpdatedAt)
+                    .Select(p => new
                     {
-                        var medicines = await _db.PrescriptionMedicine.AsNoTracking()
-                            .Where(m => m.PrescriptionId == prescription.PrescriptionId)
-                            .OrderBy(m => m.DisplayOrder)
-                            .Select(m => new FhirMedicine(m.MedicineName, m.Dosage, m.Frequency, m.Durations, m.Route, m.Instructions))
-                            .ToListAsync(cancellationToken);
-                        Add("Prescription", AbdmFhir.Prescription(context, medicines, prescription.Diagnosis));
-                    }
+                        p.PrescriptionId, p.Diagnosis, p.ChiefComplaint, p.History, p.Comorbidity, p.Examination, p.SystemicExamination,
+                        p.Immunizations, p.FollowUpDate, p.FollowUpNotes, p.NonPharmacologicalAdvice
+                    })
+                    .FirstOrDefaultAsync(cancellationToken);
+                var medicines = prescription == null
+                    ? new List<FhirMedicine>()
+                    : await _db.PrescriptionMedicine.AsNoTracking()
+                        .Where(m => m.PrescriptionId == prescription.PrescriptionId)
+                        .OrderBy(m => m.DisplayOrder)
+                        .Select(m => new FhirMedicine(m.MedicineName, m.Dosage, m.Frequency, m.Durations, m.Route, m.Instructions))
+                        .ToListAsync(cancellationToken);
+
+                if (prescription != null && Allowed("OPConsultation"))
+                {
+                    Add("OPConsultation", AbdmFhir.OPConsultation(context, new FhirConsultation(
+                        prescription.ChiefComplaint,
+                        JoinLines(prescription.History, string.IsNullOrWhiteSpace(prescription.Comorbidity) ? null : "Comorbidities: " + prescription.Comorbidity!.Trim()),
+                        JoinLines(prescription.Examination, prescription.SystemicExamination),
+                        prescription.Diagnosis, medicines, prescription.FollowUpDate, prescription.FollowUpNotes, prescription.NonPharmacologicalAdvice)));
                 }
+
+                if (prescription != null && Allowed("Prescription"))
+                    Add("Prescription", AbdmFhir.Prescription(context, medicines, prescription.Diagnosis));
+
+                if (prescription != null && Allowed("ImmunizationRecord"))
+                {
+                    var vaccines = ParseVaccines(prescription.Immunizations);
+                    if (vaccines.Count > 0)
+                        Add("ImmunizationRecord", AbdmFhir.ImmunizationRecord(context, vaccines));
+                }
+
+                if (Allowed("HealthDocumentRecord"))
+                {
+                    var attachments = await _db.PrescriptionAttachments.AsNoTracking()
+                        .Where(a => a.ApptId == careContext.SourceId && a.HospitalId == hospitalId && a.StorageUrl != null)
+                        .OrderBy(a => a.UploadedAt)
+                        .Select(a => new { a.AttachmentId, a.FileName, a.ReportType, a.StorageUrl, a.UploadedAt })
+                        .ToListAsync(cancellationToken);
+                    var files = new List<FhirFile>();
+                    foreach (var a in attachments)
+                    {
+                        var file = await ReadFileAsync(_attachmentsContainer, $"{a.AttachmentId}_", a.StorageUrl, a.ReportType ?? a.FileName ?? "Document", a.FileName, a.UploadedAt, cancellationToken);
+                        if (file != null) files.Add(file);
+                    }
+                    if (files.Count > 0)
+                        Add("HealthDocumentRecord", AbdmFhir.HealthDocument(context, files));
+                }
+
+                if (Allowed("Invoice"))
+                    await AddInvoicesAsync(context, hospitalId, careContext.SourceId, "OPD", Add, cancellationToken);
 
                 if (Allowed("WellnessRecord"))
                 {
@@ -123,9 +174,8 @@ namespace EasyHMSAPI.Application.Services.Fhir
                 .Where(d => d.AdmissionId == careContext.SourceId && d.HospitalId == hospitalId && d.SignedAt != null)
                 .OrderByDescending(d => d.SignedAt)
                 .FirstOrDefaultAsync(cancellationToken);
-            var ipdContext = new FhirContext(patient,
-                await AuthorAsync(discharge?.SignedByDoctorId ?? admission.PrimaryDoctorId, discharge?.SignedByDoctorName, cancellationToken),
-                facility, discharge?.SignedAt ?? admission.AdmittedAt, careContext.ReferenceNumber);
+            var (ipdAuthor, ipdPrint) = await AuthorAsync(discharge?.SignedByDoctorId ?? admission.PrimaryDoctorId, discharge?.SignedByDoctorName, age, mobile, cancellationToken);
+            var ipdContext = new FhirContext(patient, ipdAuthor, facility, discharge?.SignedAt ?? admission.AdmittedAt, careContext.ReferenceNumber, ipdPrint);
 
             if (discharge != null && Allowed("DischargeSummary"))
             {
@@ -148,7 +198,139 @@ namespace EasyHMSAPI.Application.Services.Fhir
                     .ToListAsync(cancellationToken);
                 await AddLabReportsAsync(ipdContext, hospitalId, orderIds, Add, cancellationToken);
             }
+
+            if (Allowed("HealthDocumentRecord"))
+            {
+                var documents = await _db.AdmissionDocument.AsNoTracking()
+                    .Where(d => d.AdmissionId == careContext.SourceId && d.HospitalId == hospitalId)
+                    .OrderBy(d => d.UploadedAt)
+                    .Select(d => new { d.DocumentId, d.DocumentName, d.StorageUrl, d.UploadedAt })
+                    .ToListAsync(cancellationToken);
+                var files = new List<FhirFile>();
+                foreach (var d in documents)
+                {
+                    var file = await ReadFileAsync(_admissionDocumentsContainer, $"{d.DocumentId}_", d.StorageUrl, d.DocumentName, d.DocumentName, d.UploadedAt, cancellationToken);
+                    if (file != null) files.Add(file);
+                }
+                if (files.Count > 0)
+                    Add("HealthDocumentRecord", AbdmFhir.HealthDocument(ipdContext, files));
+            }
+
+            if (Allowed("Invoice"))
+                await AddInvoicesAsync(ipdContext, hospitalId, careContext.SourceId, "IPD", Add, cancellationToken);
             return new AbdmBuiltRecords { WhenUtc = admission.AdmittedAt, Records = records };
+        }
+
+        /// <summary>Each finalised, uncancelled bill raised against this visit's or admission's encounter.</summary>
+        private async Task AddInvoicesAsync(FhirContext context, Guid hospitalId, Guid sourceId, string kind, Action<string, System.Text.Json.Nodes.JsonObject> add, CancellationToken cancellationToken)
+        {
+            var encounterIds = await _db.Encounter.AsNoTracking()
+                .Where(e => e.HospitalId == hospitalId && e.SourceId == sourceId)
+                .Select(e => e.EncounterId)
+                .ToListAsync(cancellationToken);
+            if (encounterIds.Count == 0)
+                return;
+            var invoices = await _db.BillingInvoice.AsNoTracking()
+                .Where(i => i.HospitalId == hospitalId && encounterIds.Contains(i.EncounterId) && i.CancelledAt == null && i.FinalizedAt != null)
+                .Select(i => new { i.InvoiceId, i.InvoiceNo, i.InvoiceDate })
+                .ToListAsync(cancellationToken);
+            foreach (var invoice in invoices)
+            {
+                var lines = await _db.BillingInvoiceChargeEvent.AsNoTracking()
+                    .Where(l => l.InvoiceId == invoice.InvoiceId)
+                    .Join(_db.BillingChargeEvent.AsNoTracking(), l => l.ChargeEventId, c => c.ChargeEventId, (l, c) => c)
+                    .Where(c => c.VoidedAt == null)
+                    .Select(c => new FhirInvoiceLine(c.DisplayName ?? "Charge", c.CategoryCode, c.Qty, c.UnitPrice, c.DiscountAmount ?? 0m, c.CgstAmount, c.SgstAmount, c.IgstAmount))
+                    .ToListAsync(cancellationToken);
+                if (lines.Count == 0)
+                    continue;
+                var (net, tax) = InvoiceTotals(lines);
+                add("Invoice", AbdmFhir.Invoice(context with { WhenUtc = invoice.InvoiceDate },
+                    new FhirInvoice(string.IsNullOrWhiteSpace(invoice.InvoiceNo) ? invoice.InvoiceId.ToString() : invoice.InvoiceNo!, kind, lines, net, tax, net + tax)));
+            }
+        }
+
+        public static (decimal Net, decimal Tax) InvoiceTotals(IReadOnlyCollection<FhirInvoiceLine> lines) =>
+            (lines.Sum(l => l.Rate * (l.Quantity <= 0 ? 1 : l.Quantity) - l.Discount), lines.Sum(l => l.Cgst + l.Sgst + l.Igst));
+
+        private async Task<FhirFile?> ReadFileAsync(string container, string keyPrefix, string? storedUrl, string title, string? fileName, DateTime? uploadedAt, CancellationToken cancellationToken)
+        {
+            if (_files == null || string.IsNullOrEmpty(container))
+                return null;
+            return await _files.ReadAsync(container, keyPrefix, storedUrl, title, fileName, uploadedAt, cancellationToken);
+        }
+
+        /// <summary>The vaccines on a prescription that were actually given. The pad stores a JSON array of
+        /// { name, status, date, nextDueDate, doseNumber }; "advised" or "due" ones are not a record of a dose.</summary>
+        public static List<FhirVaccine> ParseVaccines(string? json)
+        {
+            var vaccines = new List<FhirVaccine>();
+            if (string.IsNullOrWhiteSpace(json))
+                return vaccines;
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                    return vaccines;
+                foreach (var item in doc.RootElement.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.Object)
+                        continue;
+                    var name = Text(item, "name");
+                    var status = Text(item, "status");
+                    if (string.IsNullOrWhiteSpace(name) || !WasGiven(status))
+                        continue;
+                    var dose = Number(item, "doseNumber");
+                    vaccines.Add(new FhirVaccine(name!.Trim(), status, DateValue(item, "date"), dose is > 0 ? (int)dose.Value : null, DateValue(item, "nextDueDate")));
+                }
+            }
+            catch (JsonException)
+            {
+            }
+            return vaccines;
+        }
+
+        public static bool WasGiven(string? status) => (status ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "" or "given" or "completed" or "complete" or "administered" or "done" or "taken" => true,
+            _ => false
+        };
+
+        /// <summary>"36 years" from the date of birth, else the age typed at registration.</summary>
+        public static string? AgeText(DateTime? dateOfBirth, short? age, string? ageUnit)
+        {
+            if (dateOfBirth != null)
+            {
+                var today = DateTime.UtcNow.Date;
+                var years = today.Year - dateOfBirth.Value.Year - (today < dateOfBirth.Value.Date.AddYears(today.Year - dateOfBirth.Value.Year) ? 1 : 0);
+                if (years >= 1)
+                    return $"{years} years";
+                var months = (today.Year - dateOfBirth.Value.Year) * 12 + today.Month - dateOfBirth.Value.Month - (today.Day < dateOfBirth.Value.Day ? 1 : 0);
+                return months >= 1 ? $"{months} months" : $"{(today - dateOfBirth.Value.Date).Days} days";
+            }
+            if (age is > 0)
+                return $"{age} {(string.IsNullOrWhiteSpace(ageUnit) ? "years" : ageUnit!.Trim().ToLowerInvariant())}";
+            return null;
+        }
+
+        private static string? JoinLines(params string?[] parts)
+        {
+            var kept = parts.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p!.Trim()).ToList();
+            return kept.Count == 0 ? null : string.Join("\n", kept);
+        }
+
+        private static string? Text(JsonElement element, string name)
+        {
+            var value = Child(element, name);
+            return value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+        }
+
+        private static DateTime? DateValue(JsonElement element, string name)
+        {
+            var text = Text(element, name);
+            return !string.IsNullOrWhiteSpace(text) && DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var parsed)
+                ? parsed
+                : null;
         }
 
         private async Task AddLabReportsAsync(FhirContext context, Guid hospitalId, List<Guid> orderIds, Action<string, System.Text.Json.Nodes.JsonObject> add, CancellationToken cancellationToken)
@@ -174,27 +356,34 @@ namespace EasyHMSAPI.Application.Services.Fhir
                     .Select(r => r.Interpretation!)
                     .ToListAsync(cancellationToken);
 
-                var author = string.IsNullOrWhiteSpace(report.PathologistName)
-                    ? context.Author
-                    : new FhirAuthor(report.ReportId.ToString(), report.PathologistName, report.PathologistRegNo);
-                var reportContext = context with { Author = author, WhenUtc = report.ApprovedAt ?? report.GeneratedAt ?? report.CreatedAt };
+                var pathologist = !string.IsNullOrWhiteSpace(report.PathologistName);
+                var author = pathologist
+                    ? new FhirAuthor(report.ReportId.ToString(), report.PathologistName, report.PathologistRegNo)
+                    : context.Author;
+                var reportContext = context with
+                {
+                    Author = author,
+                    WhenUtc = report.ApprovedAt ?? report.GeneratedAt ?? report.CreatedAt,
+                    Print = context.Print == null ? null : pathologist ? context.Print with { DoctorQualification = null, DoctorSpeciality = "Pathology" } : context.Print
+                };
                 add("DiagnosticReport", AbdmFhir.DiagnosticReport(reportContext, report.ReportNo, testNames,
                     interpretations.Count == 0 ? null : string.Join("\n", interpretations)));
             }
         }
 
-        private async Task<FhirAuthor> AuthorAsync(Guid? doctorId, string? knownName, CancellationToken cancellationToken)
+        /// <summary>The doctor who wrote the record, and what their printed copy shows about them and the patient.</summary>
+        private async Task<(FhirAuthor Author, FhirPrint Print)> AuthorAsync(Guid? doctorId, string? knownName, string? age, string? mobile, CancellationToken cancellationToken)
         {
             if (doctorId == null || doctorId == Guid.Empty)
-                return new FhirAuthor("unknown", knownName, null);
+                return (new FhirAuthor("unknown", knownName, null), new FhirPrint(age, mobile, null, null));
             var doctor = await _db.Doctors.AsNoTracking()
                 .Where(d => d.DoctorID == doctorId)
-                .Select(d => new { d.UserID, d.LicenseNumber })
+                .Select(d => new { d.UserID, d.LicenseNumber, d.Qualification, Speciality = d.PrimaryMedicalSpeciality != null ? d.PrimaryMedicalSpeciality.Name : null })
                 .FirstOrDefaultAsync(cancellationToken);
             var name = knownName;
             if (string.IsNullOrWhiteSpace(name) && doctor != null)
                 name = await _db.UserProfiles.AsNoTracking().Where(u => u.UserID == doctor.UserID).Select(u => u.FullName).FirstOrDefaultAsync(cancellationToken);
-            return new FhirAuthor(doctorId.Value.ToString(), name, doctor?.LicenseNumber);
+            return (new FhirAuthor(doctorId.Value.ToString(), name, doctor?.LicenseNumber), new FhirPrint(age, mobile, doctor?.Qualification, doctor?.Speciality));
         }
 
         /// <summary>The vitals JSON saved with an appointment: Bp { Sys, Dia }, Pulse, TempC, Spo2,

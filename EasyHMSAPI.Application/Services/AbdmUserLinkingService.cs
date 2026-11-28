@@ -46,14 +46,16 @@ namespace EasyHMSAPI.Application.Services
         private readonly IAbdmHieService _hie;
         private readonly IAbdmLinkingService _linking;
         private readonly IWhatsAppMessagingService _whatsApp;
+        private readonly ISmsService? _sms;
         private readonly ILogger<AbdmUserLinkingService> _logger;
 
-        public AbdmUserLinkingService(AppDbContext db, IAbdmHieService hie, IAbdmLinkingService linking, IWhatsAppMessagingService whatsApp, ILogger<AbdmUserLinkingService> logger)
+        public AbdmUserLinkingService(AppDbContext db, IAbdmHieService hie, IAbdmLinkingService linking, IWhatsAppMessagingService whatsApp, ILogger<AbdmUserLinkingService> logger, ISmsService? sms = null)
         {
             _db = db;
             _hie = hie;
             _linking = linking;
             _whatsApp = whatsApp;
+            _sms = sms;
             _logger = logger;
         }
 
@@ -189,7 +191,19 @@ namespace EasyHMSAPI.Application.Services
                 catch (Exception ex)
                 {
                     // The OTP never appears in a log line.
-                    _logger.LogWarning(ex, "ABDM linking OTP could not be sent for transaction {TransactionId}.", transactionId);
+                    _logger.LogWarning(ex, "ABDM linking OTP could not be sent by WhatsApp for transaction {TransactionId}.", transactionId);
+                }
+                // A mobile with no WhatsApp still has to get the OTP (USER_INIT_LINK_605): fall back to SMS.
+                if (!sent && _sms != null)
+                {
+                    try
+                    {
+                        sent = await _sms.SendOtpSmsAsync(mobile!, otp);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "ABDM linking OTP could not be sent by SMS for transaction {TransactionId}.", transactionId);
+                    }
                 }
             }
             if (!sent)
