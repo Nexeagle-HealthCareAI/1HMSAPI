@@ -29,5 +29,19 @@ namespace EasyHMSAPI.UnitTests.HandlerTests.CommandHandlerTests
         [TestCase("Good Name 1", true)]
         public void AHipNameTypedByStaff_IsChecked(string name, bool ok) =>
             Assert.That(AbdmFacilityRules.IsValidHipName(name), Is.EqualTo(ok));
+
+        [Test]
+        public void LinkError_FindsTheRefusalInsideAn200Answer()
+        {
+            var refusal = AbdmFacilityRules.LinkError("[{\"error\":{\"code\":\"2500\",\"message\":\"facility id is not registered in HFR or invalid\"}}]");
+            Assert.That(refusal, Is.Not.Null);
+            Assert.That(refusal!.Value.Code, Is.EqualTo("2500"));
+            Assert.That(refusal.Value.Message, Is.EqualTo("facility id is not registered in HFR or invalid"));
+
+            Assert.That(AbdmFacilityRules.LinkError("{\"error\":{\"code\":1035}}")!.Value.Code, Is.EqualTo("1035"));
+            Assert.That(AbdmFacilityRules.LinkError("[{\"servicesLinked\":true,\"error\":null}]"), Is.Null);
+            Assert.That(AbdmFacilityRules.LinkError(""), Is.Null);
+            Assert.That(AbdmFacilityRules.LinkError("not json"), Is.Null);
+        }
     }
 }

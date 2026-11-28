@@ -44,6 +44,19 @@ namespace EasyHMSAPI.Application.Handlers.CommandHandlers
             try
             {
                 var answer = await _abdm.LinkFacilityServicesAsync(facilityId, AbdmFacilityRules.FacilityName(hospitalName), hipName, cancellationToken);
+                // ABDM says HTTP 200 even when it refuses; the refusal is inside the answer.
+                var refusal = AbdmFacilityRules.LinkError(answer);
+                if (refusal != null)
+                    return new LinkAbdmFacilityServicesResponseModel
+                    {
+                        Success = false,
+                        Message = $"ABDM refused to link facility {facilityId}: {refusal.Value.Message}" +
+                            (refusal.Value.Code == null ? "." : $" (code {refusal.Value.Code}).") +
+                            " Check that this is the facility ID registered in HFR for your ABDM client.",
+                        FacilityId = facilityId,
+                        HipName = hipName,
+                        AbdmResponse = answer
+                    };
                 return new LinkAbdmFacilityServicesResponseModel
                 {
                     Success = true,
